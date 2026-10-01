@@ -26,15 +26,9 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
     private val trainingEventRecognizer: TrainingEventRecognizer = TrainingEventRecognizer(game, game.imageUtils)
 
     /**
-     * The five-row Acupuncture choice this class last tapped, kept only until the screen it opens
-     * has been identified. Null whenever no such tap is outstanding, which is the normal state.
-     *
-     * No single mechanism is relied on to clear it. It is dropped by the bounded
-     * [ACUPUNCTURE_GATE_WINDOW_MILLIS] window, by the Main Screen early return in
-     * [handleTrainingEvent], and by the exact event-title and trainee-name identity checks in
-     * [decideAcupunctureGateAction], which discard it as soon as the screen contradicts the tap it
-     * was built from. A career resync happens to reconstruct this object as well (see
-     * [Campaign.reloadTraineeConfig]), but that is one more path, not the guarantee.
+     * The five-row Acupuncture choice last tapped, until the screen it opens is identified; null normally. Dropped by
+     * [ACUPUNCTURE_GATE_WINDOW_MILLIS], the Main Screen early return and the identity checks in
+     * [decideAcupunctureGateAction], so no single mechanism is relied on.
      */
     private var pendingAcupunctureTreatment: AcupuncturePendingTreatment? = null
 
@@ -103,13 +97,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             emptyMap()
         }
 
-    /**
-     * Skill-hint reward lines that should always win an event option choice over any alternative.
-     *
-     * Per the Trackblazer guide, Nimble Navigator and Uma Stan are the two scenario-event skill hints
-     * to always grab regardless of the other option's stat payoff. Lowercased so a single `.contains(...)`
-     * check against a lowercased reward line suffices.
-     */
+    /** Trackblazer skill hints (Nimble Navigator, Uma Stan) that always win an option choice; lowercased for a single contains check. */
     private val priorityScenarioSkillHints: List<String> =
         listOf(
             "nimble navigator",
@@ -143,53 +131,26 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
      */
     data class EventOverride(val selectedOption: String, val requiresConfirmation: Boolean)
 
-    /**
-     * A trusted option-row count and the capture that produced it.
-     *
-     * @property count The number of option rows, observed twice in a row.
-     * @property acceptedAtIndex Index into the observation sequence of the confirming capture, so
-     *   the caller can reuse that capture's coordinates rather than an earlier partial one.
-     */
+    /** [acceptedAtIndex] indexes the confirming capture so the caller reuses its coordinates, not an earlier partial one's. */
     data class StableOptionCount(val count: Int, val acceptedAtIndex: Int)
 
-    /** What to do with the option rows currently in hand when it is time to tap. */
     enum class OptionTapAction {
-        /** The selected option exists in the current list; tap that row. */
         USE_ROW,
 
-        /** The list cannot serve the selected option; refresh it and re-plan. */
         RESCAN,
 
-        /** Still short after a refresh: tap the last row that exists and report the shortfall. */
         CLAMP_TO_LAST_ROW,
 
-        /** No rows at all after a refresh; the caller falls back to a single retrying search. */
         NO_ROWS_AVAILABLE,
     }
 
-    /** [OptionTapAction] plus the row index it applies to (-1 when there is no row to use). */
     data class OptionTapPlan(val action: OptionTapAction, val rowIndex: Int)
 
-    /**
-     * Which option a special event ends up selecting.
-     *
-     * @property optionIndex The 0-based index to act on.
-     * @property usedCharacterOverride Whether a per-trainee override supplied the index.
-     * @property clamped Whether the requested index did not exist on the matched event's data.
-     */
     data class SpecialOptionDecision(val optionIndex: Int, val usedCharacterOverride: Boolean, val clamped: Boolean)
 
     /**
-     * A five-row Acupuncture treatment choice this class has just tapped, held only long enough to
-     * recognize the second screen the game answers it with.
-     *
-     * @property eventKey The matched event's data key, as the identity the next screen must repeat.
-     * @property traineeName The trainee the career was playing when the option was tapped.
-     * @property optionIndex The 0-based option that was asked for, so the log can name what was lost.
-     * @property expectedOptionCount How many options the five-row screen actually offered.
-     * @property tappedAtMillis When the option was tapped, bounding how long this may stay relevant.
-     * @property initialOptionTapped Whether the option tap was really issued; only ever true, and
-     *   checked anyway so a state that somehow says otherwise is discarded rather than acted on.
+     * A five-row Acupuncture choice just tapped, held to recognize the second screen the game answers with.
+     * [initialOptionTapped] is only ever true; checked so a state that says otherwise is discarded.
      */
     data class AcupuncturePendingTreatment(
         val eventKey: String,
@@ -200,7 +161,6 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         val initialOptionTapped: Boolean = true,
     )
 
-    /** What the screen in front of the bot looks like when a pending treatment tap is consulted. */
     data class AcupunctureGateInput(
         val eventKey: String,
         val traineeName: String,
@@ -208,15 +168,11 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         val nowMillis: Long,
     )
 
-    /** What a pending Acupuncture treatment tap says to do about the current screen. */
     enum class AcupunctureGateAction {
-        /** Nothing to decide here; ordinary handling continues and the pending state is untouched. */
         NONE,
 
-        /** The known gate is on screen: tap its decline row once, and drop the pending state. */
         DECLINE_AND_CLEAR,
 
-        /** The pending state cannot refer to this screen; drop it without acting on it. */
         CLEAR_STALE,
     }
 
@@ -283,39 +239,16 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             return (outcomes.sumOf { (weight, chance) -> weight * (chance?.toDouble() ?: shareOfRest) } / 100.0).toInt()
         }
 
-        /** How many captures the option-row read may take before giving up on a stable answer. */
         const val OPTION_ROW_MAX_CAPTURES = 4
 
-        /** Seconds between option-row captures. Four captures therefore add at most ~0.6s of waiting. */
+        /** Seconds between option-row captures; four captures add at most ~0.6s. */
         const val OPTION_ROW_CAPTURE_INTERVAL = 0.2
 
         /**
-         * Decides when a sequence of option-row observations may be trusted.
-         *
-         * Horseshoe matching runs on a single capture with no retries, and a partially rendered event
-         * screen genuinely reports fewer rows than it ends up having (the Unity Cup tutorial crashed
-         * on exactly that). The two directions of that error are not symmetric, so the rules are not
-         * either:
-         *
-         * - **Two or more rows** may be accepted as soon as two consecutive captures agree on the
-         *   count, provided no earlier capture saw MORE. Rows appear as a screen draws, they do not
-         *   vanish, so the largest count seen so far is a lower bound on the event's real shape and a
-         *   later smaller count is a dropped read rather than a new truth.
-         * - **One row** is only ever accepted when the whole capture budget has been spent and every
-         *   capture in it saw exactly one row. "One" is the reading a half-drawn two-option screen
-         *   produces, and it is also the reading that hands a normal race result to a one-option
-         *   card-specific event, so it demands the strongest evidence available: a count that never
-         *   moved across the entire observation window. Two early ones prove nothing, which is why
-         *   `[1,1,2,2]` settles on 2 and `[1,1,1,2]` settles on nothing at all.
-         *
-         * Zero never qualifies under either rule: an empty read is a failed capture, not a shape, so
-         * a window that starts with one cannot certify a one-option event.
-         *
-         * @param observations Row counts in capture order.
-         * @param requiredObservationCount How many captures the caller's budget allows; a count of one
-         *   is accepted only on a full window of that size.
-         * @return the accepted count with the index of the capture that confirmed it, or null when the
-         *   sequence proves nothing.
+         * A partially rendered event screen reports fewer rows than it ends up having (the Unity Cup tutorial crashed on it). Two or more
+         * rows are accepted once two consecutive captures agree and no earlier capture saw MORE (rows appear, they do not vanish). One row
+         * only when every capture of the full budget saw exactly one: it is also what a half-drawn two-option screen reads and what hands a
+         * race result to a one-option card event, so `[1,1,2,2]` settles on 2 and `[1,1,1,2]` on nothing. Zero never qualifies (a failed capture).
          */
         fun acceptStableOptionCount(observations: List<Int>, requiredObservationCount: Int = OPTION_ROW_MAX_CAPTURES): StableOptionCount? {
             // Counts of two or more: two consecutive agreeing captures, never below an earlier peak.
@@ -337,14 +270,8 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * Plans which on-screen row to tap for [selectedIndex] given [availableRows] currently known.
-         *
-         * The row list is read before OCR, so by tap time it can be short: rows that were still
-         * rendering then may have appeared since. Silently tapping row 0 in that case throws away
-         * the option the settings asked for and looks identical to success in the log, so a short
-         * list asks for one refresh first, and a still-short list is reported rather than hidden.
-         *
-         * @param rescanned Whether the list has already been refreshed once for this event.
+         * The row list is read before OCR, so it can be short by tap time; tapping row 0 would silently drop the configured
+         * option, so a short list gets one refresh and a still-short list is reported.
          */
         fun planOptionTap(selectedIndex: Int, availableRows: Int, rescanned: Boolean): OptionTapPlan =
             when {
@@ -354,12 +281,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                 else -> OptionTapPlan(OptionTapAction.NO_ROWS_AVAILABLE, -1)
             }
 
-        /**
-         * Whether a recognized event match is trustworthy enough to act on its option rewards.
-         * Returns false (caller falls back to the safe first-option default) when there are no
-         * rewards, or when a non-special match scored below the recognizer's confidence floor.
-         * Special events bypass the floor: they're matched by distinctive substrings, not fuzzy score.
-         */
+        /** False (safe first-option default) with no rewards or a non-special match below the confidence floor; special events bypass it, matched by distinctive substrings. */
         fun shouldActOnEventMatch(
             eventRewards: List<String>,
             specialEventHandled: Boolean,
@@ -370,11 +292,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             return specialEventHandled || confidence >= minimumConfidence
         }
 
-        /**
-         * Parses the 0-based option index out of a special override's selected option string
-         * ("Option 5: Energy +10" -> 4). "Default" is the first option. Returns null when the
-         * string carries no option number.
-         */
+        /** "Option 5: Energy +10" -> 4; "Default" is the first option; null with no option number. */
         fun parseSpecialOverrideOptionIndex(selectedOption: String): Int? {
             if (selectedOption == "Default") return 0
             val optionMatch = Regex("Option (\\d+)").find(selectedOption) ?: return null
@@ -382,18 +300,9 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * Resolves the option index for a special event from the two override sources and the matched
-         * event's own option count.
-         *
-         * Pure so the index path can be tested directly: a passing selection test proves the right
-         * data was chosen, but only this proves the configured option survives to the tap. Clamping
-         * here is a last-resort repair for data that disagrees with the settings, NOT the mechanism
-         * that picks between a one-option and a two-option copy of an event; that decision belongs to
-         * [TrainingEventRecognizer.selectSpecialEvent] and is made from the on-screen option count
-         * before this runs.
-         *
-         * @param eventOptionCount How many options the matched event data carries; 0 when unknown,
-         *   in which case the requested index passes through untouched.
+         * Pure so the index path is testable. Clamping is a last-resort repair for data disagreeing with the settings, NOT how a one- vs
+         * two-option copy is chosen: that is [TrainingEventRecognizer.selectSpecialEvent], from the on-screen option count. An
+         * [eventOptionCount] of 0 means unknown and passes the index through.
          */
         fun decideSpecialEventOption(specialOverrideIndex: Int, characterOverrideIndex: Int?, eventOptionCount: Int): SpecialOptionDecision {
             val requested = characterOverrideIndex ?: specialOverrideIndex
@@ -408,60 +317,33 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * The one shared training event known to answer an option tap with a second, differently
-         * shaped screen that repeats its own title: five treatment choices, then a two-row
-         * "Decline." / "Reconsider." gate.
-         *
-         * Matched by exact identity, never by the "Acupuncture" word the special-event pattern table
-         * searches for, because Sasami Anshinzawa's support events ("The Applications of
-         * Acupuncture", "An Accurate Acupuncturist ☆") carry that word too and are ordinary
-         * single-stage events that must keep their existing handling.
+         * The shared event whose option tap yields a second screen repeating its title: five treatments, then a two-row "Decline." /
+         * "Reconsider." gate. Matched by exact identity, not "Acupuncture": Sasami Anshinzawa's support events carry that word too and
+         * are ordinary single-stage events.
          */
         const val ACUPUNCTURE_TREATMENT_EVENT_KEY = "Acupuncture (Just an Acupuncturist, No Worries! ☆)"
 
-        /** Option rows the Acupuncture choice screen shows before any gate appears. */
         const val ACUPUNCTURE_TREATMENT_OPTION_COUNT = 5
 
-        /** Option rows its Decline/Reconsider gate shows. */
         const val ACUPUNCTURE_GATE_OPTION_COUNT = 2
 
         /**
-         * The gate row to tap. Row 0 is the row that ends the event: two careers on the previous
-         * build tapped it and the game committed immediately, for the event's documented decline
-         * payout. Row 1 is the one that returns to the five choices, which is exactly what the
-         * generic last-row repair was tapping.
+         * Row 0 ends the event (decline payout; the previous build tapped it and the game committed); row 1 returns to the
+         * five choices, which is what the generic last-row repair was tapping.
          */
         const val ACUPUNCTURE_GATE_DECLINE_ROW = 0
 
-        /**
-         * How long a tapped Acupuncture option may wait for its gate. Recorded cycles took about
-         * five and a half seconds from the option tap to the gate being recognized; a screen
-         * arriving much later belongs to something else and must not inherit this state.
-         */
+        /** Recorded cycles took about 5.5s from option tap to gate; a screen arriving much later belongs to something else. */
         const val ACUPUNCTURE_GATE_WINDOW_MILLIS = 15_000L
 
-        /** Whether a matched event key is exactly the shared multi-stage Acupuncture event. */
         fun isAcupunctureTreatmentEvent(eventTitle: String): Boolean =
             TrainingEventRecognizer.cleanTitle(eventTitle) == TrainingEventRecognizer.cleanTitle(ACUPUNCTURE_TREATMENT_EVENT_KEY)
 
         /**
-         * Decides what a pending Acupuncture treatment tap means for the screen now on display.
-         *
-         * The five-choice Acupuncture screen answers an option tap with a two-row
-         * "Decline." / "Reconsider." gate carrying the same title. Reconsider returns to the five
-         * choices, so the generic short-list repair (rescan, then clamp onto the last row) taps
-         * Reconsider and walks straight back into the choice it just made; three such cycles were
-         * recorded live before the event happened to resolve. A two-row screen proves nothing on its
-         * own, so the gate is only ever recognized against a tap this class itself made.
-         *
-         * Deliberately strict, and asymmetric about what it does with the state: anything that
-         * CONTRADICTS the pending tap (a different event, a different trainee, a shape that is
-         * neither the gate nor the choice list, an elapsed window) discards it, so it can never fire
-         * on a later event; anything merely UNPROVEN (an unreadable count) leaves it alone to be
-         * judged on the next look or to expire on its own.
-         *
-         * @param pending The outstanding treatment tap, or null when there is none.
-         * @param input What is on screen now.
+         * The gate answers an option tap with a two-row "Decline." / "Reconsider." screen carrying the same title; Reconsider returns to the
+         * five choices, so the generic short-list repair taps it and loops (three cycles recorded live). A two-row screen proves nothing alone,
+         * so the gate is only recognized against this class's own tap. Anything that CONTRADICTS the pending tap discards it; anything merely
+         * UNPROVEN (an unreadable count) leaves it for the next look or to expire.
          */
         fun decideAcupunctureGateAction(pending: AcupuncturePendingTreatment?, input: AcupunctureGateInput): AcupunctureGateAction {
             if (pending == null) return AcupunctureGateAction.NONE
@@ -740,22 +622,10 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /**
-     * The result of reading the event's option rows.
-     *
-     * @property trustedCount The row count confirmed by two consecutive captures, or null when the
-     *   reads never agreed. Null means "unknown", never "no options".
-     * @property locations Coordinates from the confirming capture, or from the last capture taken
-     *   when nothing was confirmed.
-     * @property observations Every row count seen, for diagnostics.
-     */
+    /** [trustedCount] null means unknown, never "no options"; [locations] come from the confirming capture, else the last one taken. */
     private data class OptionRowScan(val trustedCount: Int?, val locations: ArrayList<Point>, val observations: List<Int>)
 
-    /**
-     * Reads the event's option rows until two consecutive captures agree, up to
-     * [OPTION_ROW_MAX_CAPTURES]. Gathers frames only; the acceptance rule itself lives in the pure
-     * [acceptStableOptionCount] so it can be tested against exact capture sequences.
-     */
+    /** Gathers frames only; the acceptance rule lives in the pure [acceptStableOptionCount] so exact capture sequences can be tested. */
     private fun acquireStableOptionRows(): OptionRowScan {
         val observations = mutableListOf<Int>()
         val frames = mutableListOf<ArrayList<Point>>()
@@ -775,8 +645,6 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             MessageLog.v(TAG, "[TRAINING_EVENT] Option rows settled at ${accepted.count} after ${observations.size} capture(s) [$trace].")
             OptionRowScan(accepted.count, frames[accepted.acceptedAtIndex], observations)
         } else {
-            // Two or more rows settle as soon as two captures agree, so reaching here means either the
-            // reads disagreed or a one-row reading did not hold for the whole window.
             MessageLog.w(
                 TAG,
                 "[WARN] handleTrainingEvent:: Option row count never settled across ${observations.size} capture(s) [$trace]. " +
@@ -798,31 +666,24 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
         // Check if the bot is currently at the Main Screen.
         if (campaign.checkMainScreen()) {
-            // The event flow is over, so a treatment tap waiting for its gate can no longer be
-            // answered by anything and must not outlive this screen.
+            // The event flow is over; a pending treatment tap must not outlive this screen.
             pendingAcupunctureTreatment = null
             MessageLog.v(TAG, "[TRAINING_EVENT] Bot is at the Main Screen. Ending the Training Event process.")
             MessageLog.v(TAG, "********************")
             return
         }
 
-        // Read the option rows before recognition: the count is recognition input, not just tap
-        // geometry, because a one-option card-specific event (Gold City's race results) and the
-        // two-option graded common event share an on-screen title and only the number of rows says
-        // which one the game is showing. The read is repeated until two captures agree, since one
-        // capture of a still-rendering screen can report fewer rows than the screen ends up having.
-        // The 0.1s settle wait keeps its original purpose ahead of the first capture.
+        // Read option rows before recognition: the count is recognition input, since a one-option card-specific event (Gold City's race
+        // results) and the two-option graded common event share a title and only the row count says which is showing. Repeated until
+        // two captures agree, as one capture of a still-rendering screen can report fewer rows.
         game.wait(0.1)
         val optionRowScan = acquireStableOptionRows()
         val trainingOptionLocations: ArrayList<Point> = optionRowScan.locations
 
         val (eventRewards, confidence, eventTitle, characterOrSupportName) = trainingEventRecognizer.start(optionRowScan.trustedCount)
 
-        // The Acupuncture gate is answered before any option is chosen. Its two rows repeat the
-        // five-choice event's own title, so ordinary handling would ask for the configured option
-        // again and the short-list repair would clamp onto the last row, which is the row that
-        // returns to the five choices. Only a tap this class itself made can put the bot here, and
-        // that is what the pending state records; nothing else can enter this branch.
+        // Answer the Acupuncture gate before choosing any option: its two rows repeat the five-choice event's title, so ordinary handling
+        // would ask for the configured option again and the short-list repair would clamp onto the last row, which returns to the five choices.
         when (
             decideAcupunctureGateAction(
                 pendingAcupunctureTreatment,
@@ -841,8 +702,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                 val declineRow = trainingOptionLocations.getOrNull(ACUPUNCTURE_GATE_DECLINE_ROW)
                 if (declineRow != null) {
                     val configuredOption = (declined?.optionIndex ?: 0) + 1
-                    // The last of the five rows is "Energy +10", the same no-treatment result the
-                    // decline row gives, so reporting it as "not applied" there would be false.
+                    // The last of the five rows is "Energy +10", the same no-treatment result as decline, so "not applied" would be false.
                     val configuredNote =
                         if (declined?.optionIndex == ACUPUNCTURE_TREATMENT_OPTION_COUNT - 1) {
                             "configured Option $configuredOption is the no-treatment choice this row already gives"
@@ -882,9 +742,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         // Handle Tutorial events by detecting the number of options on screen.
         if (eventTitle == "Tutorial") {
             isTutorialEvent = true
-            // Detect the number of event options on the screen. Deliberately its own scan: the
-            // Tutorial's 2-vs-5 branch turns on an exact count, and this one is taken after the OCR
-            // pass above, giving a freshly opened tutorial panel more time to finish rendering.
+            // Its own scan: the Tutorial's 2-vs-5 branch turns on an exact count, and this runs after the OCR pass so a fresh tutorial panel has longer to render.
             val tutorialOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
             tutorialOptionCount = tutorialOptionLocations.size
 
@@ -913,28 +771,23 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         } else if (eventTitle == "A Team at Last") {
             // Handle "A Team at Last" Unity Cup event specially.
             MessageLog.i(TAG, "[TRAINING_EVENT] \"A Team at Last\" event detected for Unity Cup.")
-            // Its own scan for the same reason as the Tutorial branch: this event's option count
-            // varies from zero to five and the OCR pass above gives the panel time to settle.
+            // Its own scan for the same reason: this event's option count varies from zero to five and the OCR pass lets the panel settle.
             val teamNameOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
             optionSelected = selectUnityCupTeamNameEvent(teamNameOptionLocations)
             specialEventHandled = true
         } else if (specialEventResult != null) {
             val (selectedOptionIndex, _) = specialEventResult
 
-            // A per-trainee override is more specific than the generic special event pick, so it
-            // wins when both target this event: several presets deliberately diverge from their own
-            // shared special defaults (e.g. Maruzensky's Acupuncture pick). The special flow is
-            // kept for the confidence bypass and the confirmation tap; only the index source changes.
+            // A per-trainee override is more specific than the generic special pick and wins when both target this event (several presets
+            // diverge on purpose, e.g. Maruzensky's Acupuncture). The special flow stays for the confidence bypass and confirmation tap.
             val characterOverride = checkCharacterEventOverride(characterOrSupportName, eventTitle)
             val decision = decideSpecialEventOption(selectedOptionIndex, characterOverride, eventRewards.size)
             if (decision.usedCharacterOverride) {
                 MessageLog.v(TAG, "[TRAINING_EVENT] Character event override outranks the special event override for \"${eventTitle.replace("\n", " ")}\".")
             }
             if (decision.clamped) {
-                // Either the setting names an option this event genuinely does not have, or the
-                // matched copy is the wrong shape because the screen was not read confidently. Both
-                // are possible, so name both: attributing this to the setting alone once hid a
-                // recognition defect for an entire release.
+                // Either the setting names an option this event lacks, or the matched copy is the wrong shape from an unconfident read; name both:
+                // blaming the setting alone once hid a recognition defect for a release.
                 MessageLog.w(
                     TAG,
                     "[WARN] handleTrainingEvent:: Special event option ${(characterOverride ?: selectedOptionIndex) + 1} does not exist on the matched " +
@@ -1065,9 +918,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                 val bondWeight = if (formattedLine.contains("-")) -20 else 20
                                 lineWeight += bondWeight
                             } else if (priorityScenarioSkillHints.any { line.lowercase().contains(it) }) {
-                                // Per Trackblazer guide: always grab Nimble Navigator and Uma Stan hints. The
-                                // large bump beats stat-option alternatives while both options still compete on
-                                // their full weight sum.
+                                // Per Trackblazer guide: always grab Nimble Navigator and Uma Stan; the large bump beats stat-option alternatives.
                                 lineWeight += 500
                                 MessageLog.v(TAG, "[TRAINING_EVENT] Priority scenario-skill hint in option ${rewardIndex + 1}: +500 weight.")
                             } else if (line.lowercase().contains("hint")) {
@@ -1091,9 +942,8 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                         }
                                         sum
                                     } else {
-                                        // Guard against OCR leaving non-numeric chars the letter-stripping regex
-                                        // misses (e.g. the colon in "Skill points: 24"); otherwise the parse throws
-                                        // and crashes the turn. Fallback of 10 matches the slash-separated branch.
+                                        // OCR can leave non-numeric chars the letter-stripping regex misses (e.g. the colon in "Skill points: 24"); the parse would
+                                        // throw and crash the turn. The fallback of 10 matches the slash-separated branch.
                                         try {
                                             formattedLine.toInt()
                                         } catch (_: NumberFormatException) {
@@ -1198,9 +1048,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             }
         } else {
             if (!specialEventHandled) {
-                // Record why no match was accepted so an intermittent miss can be root-caused. A
-                // best-confidence just under threshold is a near-miss (minor OCR garble); a low one means
-                // bad OCR or an unknown event. Raw OCR'd title is on the recognizer's line above.
+                // Record why no match was accepted: a best confidence just under threshold is a near-miss (minor OCR garble), a low one bad OCR or an unknown event.
                 MessageLog.w(
                     TAG,
                     "[WARN] handleTrainingEvent:: No event match accepted; selecting first option. Best candidate was " +
@@ -1213,10 +1061,8 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             }
         }
 
-        // Validate the row list against the option that was actually chosen. The rows were read
-        // before OCR, so a row that was still rendering then may exist now; refreshing once is the
-        // difference between honoring the configured option and quietly tapping whatever row
-        // happened to be captured first.
+        // Validate the row list against the chosen option: rows read before OCR may still have been rendering, and one refresh separates
+        // honoring the configured option from tapping whatever row was captured first.
         var optionRows: ArrayList<Point> = trainingOptionLocations
         var tapPlan = planOptionTap(optionSelected, optionRows.size, rescanned = false)
         if (tapPlan.action == OptionTapAction.RESCAN) {
@@ -1306,10 +1152,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                 }
             }
         } else {
-            // Proceed with normal event handling. The plan already accounts for a refreshed row
-            // list; a shortfall that survived the refresh is reported rather than absorbed, because
-            // tapping a row the selection did not ask for is the failure this whole path exists to
-            // prevent and it is otherwise indistinguishable from success in the log.
+            // A shortfall that survived the refresh is reported, not absorbed: a tap on a row the selection did not ask for looks like success in the log.
             val selectedLocation: Point? =
                 when (tapPlan.action) {
                     OptionTapAction.USE_ROW -> optionRows[tapPlan.rowIndex]
@@ -1328,18 +1171,14 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                         IconTrainingEventHorseshoe.find(game.imageUtils, tries = 5).first
                     }
 
-                    // Re-planned above, so the list has already been refreshed by this point.
                     OptionTapAction.RESCAN -> null
                 }
 
             if (selectedLocation != null) {
                 game.tap(selectedLocation.x + game.imageUtils.relWidth(100), selectedLocation.y, IconTrainingEventHorseshoe.template.path)
 
-                // Remember a five-row Acupuncture choice so the two-row gate it opens is recognized
-                // on the next pass instead of being mistaken for a shorter copy of the same event.
-                // Only the full choice screen qualifies: the gate itself, a screen whose row count
-                // was never trusted, and a tap that had to be clamped all fail to establish that a
-                // treatment was actually chosen, and a state built on any of them could only mislead.
+                // Remember a five-row Acupuncture choice so the two-row gate it opens is recognized next pass. Only the full choice screen
+                // qualifies: the gate, an untrusted row count and a clamped tap all fail to show that a treatment was chosen.
                 if (tapPlan.action == OptionTapAction.USE_ROW &&
                     isAcupunctureTreatmentEvent(eventTitle) &&
                     optionRowScan.trustedCount == ACUPUNCTURE_TREATMENT_OPTION_COUNT &&

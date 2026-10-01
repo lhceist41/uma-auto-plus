@@ -1,18 +1,14 @@
 package com.steve1316.uma_android_automation.bot.shadowadvisor
 
 /**
- * Kotlin port of the Shadow Advisor S1 policy `raw-gain-ranker-v1` (`src/lib/shadowAdvisor/policy.ts`). A pure
- * function of one immutable [AdvisorDecisionContext] plus static config: it ranks a complete training contest by
- * weighted RAW stat gains minus a failure penalty and applies a state recovery guardrail. It reuses NONE of the
- * bot's scoring (no candidate utility score, no bot thresholds, no bot tie-break, no selected reason), touches no
- * filesystem/network/clock/RNG, and produces a deeply-equal result for the same (context, config). Every
- * advisor-visible number is formatted through [JsNumber] so reason strings and the serialized record match the
- * TypeScript authority byte-for-byte; that parity is pinned by checked-in golden fixtures shared with Jest.
+ * Kotlin port of the Shadow Advisor policy `raw-gain-ranker-v1` (`src/lib/shadowAdvisor/policy.ts`). Pure, and
+ * reuses none of the bot's scoring. Every advisor-visible number goes through [JsNumber] so reason strings and the
+ * serialized record match the TypeScript authority byte-for-byte, pinned by golden fixtures shared with Jest.
  */
 object ShadowAdvisorPolicy {
     /**
-     * Stable offline evidence omissions carried on every training recommendation. Factual disclosures (the advisor
-     * scored raw gains only), not apologies. Order mirrors OFFLINE_TRAINING_LIMITATIONS in policy.ts exactly.
+     * Offline evidence omissions carried on every training recommendation; order mirrors OFFLINE_TRAINING_LIMITATIONS
+     * in policy.ts exactly.
      */
     val OFFLINE_TRAINING_LIMITATIONS: List<String> =
         listOf(
@@ -31,7 +27,6 @@ object ShadowAdvisorPolicy {
         val perStat: Map<String, Double>,
     )
 
-    /** Rank of a mood token (AWFUL=0 .. GREAT=4), or null when the token is absent/unrecognized. */
     private fun moodRank(mood: String?): Int? {
         if (mood == null) return null
         val i = ADVISOR_MOOD_ORDER.indexOf(mood)
@@ -54,8 +49,7 @@ object ShadowAdvisorPolicy {
 
     private fun tieBreakIndex(id: String, tieBreak: List<String>): Int {
         val i = tieBreak.indexOf(id)
-        // Unknown ids sort last. A complete contest is always the five canonical facilities, so this only ever
-        // fires defensively; ADVISOR_FACILITIES all resolve to 0..4 and never overflow the compareTo chains below.
+        // Unknown ids sort last (defensive; a complete contest is always the five canonical facilities).
         return if (i < 0) Int.MAX_VALUE else i
     }
 
@@ -83,11 +77,6 @@ object ShadowAdvisorPolicy {
 
     private fun r1(value: Double): String = JsNumber.format(JsNumber.round1(value))
 
-    /**
-     * The pure S1 policy. Evaluation order: explicit unsupported-mechanic marker, then forced race-day
-     * suppression, then the state recovery guardrail (energy before mood), then training ranking, then the
-     * no-contest classification. Every branch returns an explicit status; nothing is guessed.
-     */
     fun recommend(context: AdvisorDecisionContext, config: ShadowPolicyConfig = DEFAULT_SHADOW_POLICY): ShadowRecommendation {
         fun base(
             status: RecommendationStatus,
@@ -112,7 +101,6 @@ object ShadowAdvisorPolicy {
             scoreBreakdown = scoreBreakdown,
         )
 
-        // 1. An explicit factual scenario-mechanic marker means S1 does not model this turn.
         val marker = context.unsupportedScenarioMechanic
         if (marker != null && marker.isNotEmpty()) {
             return base(
@@ -122,7 +110,6 @@ object ShadowAdvisorPolicy {
             )
         }
 
-        // 2. A forced race day (mandatory or scheduled) suppresses training/recovery advice entirely.
         val raceFlags = context.state.raceFlags
         if (raceFlags != null && (raceFlags.mandatory || raceFlags.scheduled)) {
             val which = if (raceFlags.mandatory) "mandatory" else "scheduled"
@@ -133,7 +120,6 @@ object ShadowAdvisorPolicy {
             )
         }
 
-        // 3. Recovery guardrail on factual state. Energy takes precedence over mood.
         val energy = context.state.energy
         if (energy != null && energy < config.restEnergyThreshold) {
             return base(
@@ -154,7 +140,6 @@ object ShadowAdvisorPolicy {
             )
         }
 
-        // 4. Training ranking over a proven complete contest.
         val tc = context.trainingContest
         if (tc != null) {
             if (!tc.complete) {
@@ -179,7 +164,6 @@ object ShadowAdvisorPolicy {
             return rankTraining(context, scored, config)
         }
 
-        // 5. No training contest and no recovery trigger. Distinguish "state unavailable" from "domain N/A".
         if (raceFlags == null) {
             return base(
                 RecommendationStatus.INSUFFICIENT_EVIDENCE,
@@ -190,7 +174,6 @@ object ShadowAdvisorPolicy {
         return base(RecommendationStatus.NOT_APPLICABLE, reasons = emptyList(), limitations = emptyList())
     }
 
-    /** Ranks a fully-scored complete contest and builds the TRAIN recommendation (or refuses per config). */
     private fun rankTraining(context: AdvisorDecisionContext, scored: List<ScoredFacility>, config: ShadowPolicyConfig): ShadowRecommendation {
         fun rec(
             status: RecommendationStatus,
@@ -231,7 +214,6 @@ object ShadowAdvisorPolicy {
         val comparator = if (allOverLimit) compareLeastRisk(config.trainingTieBreakOrder) else compareScored(config.trainingTieBreakOrder)
         val winner = pool.sortedWith(comparator).first()
 
-        // Best alternative for the margin: the highest-total facility other than the winner, always via compareScored.
         val secondBest = scored.filter { it.id != winner.id }.sortedWith(compareScored(config.trainingTieBreakOrder)).firstOrNull() ?: winner
         val margin = winner.total - secondBest.total
 

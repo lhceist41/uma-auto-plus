@@ -70,11 +70,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             null
         }
 
-    /**
-     * Card-specific variants of special events: family keys owned by exactly one character, like
-     * Gold City's "Victory!" or Maruzensky's "The Road to a Rad Victory!". They may only match for
-     * their own trainee; see [computeSingleOwnerSpecialFamilyKeys].
-     */
+    /** Card-specific family keys: they may only match their own trainee, see [computeSingleOwnerSpecialFamilyKeys]. */
     private val singleOwnerSpecialFamilyKeys: Set<String> by lazy { computeSingleOwnerSpecialFamilyKeys(characterEventData) }
 
     /** Whether to hide OCR comparison results in the log output. */
@@ -127,38 +123,21 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
     )
 
     /**
-     * How the chosen copy's option count relates to what was actually visible on screen.
-     *
-     * The count is the only evidence that separates a one-option card-specific event from the
-     * two-option graded common event that shares its title, so the verdict is carried out of the
-     * selection instead of being logged inside it (the selection stays pure and JVM-testable).
+     * The option count is the only evidence separating a one-option card event from the two-option graded common
+     * event sharing its title; the verdict is carried out of the selection so the selection stays pure and JVM-testable.
      */
     enum class OptionCountVerdict {
-        /** A positive on-screen count was available and the chosen copy has exactly that many options. */
         MATCHED,
 
-        /** A positive on-screen count was available and NO copy in the family has that many options. */
         MISMATCHED,
 
-        /** No usable count, and the family's copies disagree on option count, so the choice is unproven. */
+        /** No usable count, and the family's copies disagree on option count: the choice is unproven. */
         UNVERIFIED,
 
-        /** No usable count was needed: every copy in the family has the same option count. */
         NOT_APPLICABLE,
     }
 
-    /**
-     * The outcome of the deliberate special event selection.
-     *
-     * @property source Which data set supplied the copy: "scenario", "character", or "support".
-     * @property ownerName The scenario name, character name, or support card title the copy is attributed to.
-     * @property eventTitle The full data key of the chosen copy (grade token and condition line included).
-     * @property eventOptionRewards The chosen copy's option rewards.
-     * @property confidence The match confidence to report for the selection.
-     * @property optionCountVerdict Whether the on-screen option count corroborated the chosen copy.
-     * @property withheldCardEventKey A card-specific copy the active trainee owns that was refused
-     *   because no trusted option count backed it, or null when nothing was withheld.
-     */
+    /** The deliberate selection's outcome; [withheldCardEventKey] is a card-specific copy the trainee owns that was refused for lack of a trusted option count. */
     data class SpecialEventSelection(
         val source: String,
         val ownerName: String,
@@ -173,12 +152,8 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
         private val TAG: String = "[${MainActivity.loggerTag}]TrainingEventRecognizer"
 
         /**
-         * Map of special event matching patterns used to filter false positives during detection.
-         *
-         * Keyed by the canonical special event name; the values are distinctive substrings of the
-         * on-screen title. Every pattern must stay distinctive: the Etsuko entries carry their own
-         * "Elated" / "Exhaustive" markers because a shared bare "Etsuko" pattern once routed Elated
-         * screens into the Exhaustive data.
+         * Distinctive substrings of the on-screen title per canonical special event. The Etsuko entries carry their
+         * own "Elated" / "Exhaustive" markers: a shared bare "Etsuko" pattern once routed Elated screens into Exhaustive data.
          */
         val SPECIAL_EVENT_PATTERNS: Map<String, List<String>> =
             mapOf(
@@ -197,23 +172,15 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                 "A Team at Last" to listOf("A Team at Last", "Team at Last"),
             )
 
-        /** Grade-variant suffixes the data carries on graded copies of a common event. */
         private val GRADE_VARIANT_TOKENS = listOf("(G1)", "(G2/G3)", "(Pre/OP)")
 
-        /**
-         * Acceptance floor for matching a data owner name against the active trainee's name.
-         * Mirrors the launch navigator's trainee match threshold: the inputs have the same noise
-         * profile (preset names vs an OCR'd header name).
-         */
+        /** Same threshold as the launch navigator's trainee match: same noise profile (preset names vs an OCR'd header name). */
         private const val OWNER_MATCH_THRESHOLD = 0.86
 
-        /** Matches progression symbols like (❯), (❯❯), (❯❯❯) and their variations. */
         private val PROGRESSION_SYMBOL_REGEX = Regex("""\([❯❮]+\)""")
 
-        /** Ranking order for candidate sources within a family group: specific to generic. */
         private val SOURCE_RANK = mapOf("scenario" to 0, "character" to 1, "support" to 2)
 
-        /** Service for calculating string similarity in the special event selection. */
         private val specialSelectionSimilarityService = StringSimilarityServiceImpl(JaroWinklerStrategy())
 
         /**
@@ -227,12 +194,6 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             return cleanedProgression.replace("\n", "").replace(" ", "").replace("\r", "")
         }
 
-        /**
-         * Detects which special event, if any, an OCR'd title belongs to via its distinctive substrings.
-         *
-         * @param ocrResult The raw OCR'd event title.
-         * @return The canonical special event name, or null if no pattern matches.
-         */
         fun detectSpecialEvent(ocrResult: String): String? {
             for ((eventName, patterns) in SPECIAL_EVENT_PATTERNS) {
                 if (patterns.any { pattern -> ocrResult.contains(pattern) }) return eventName
@@ -241,13 +202,8 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
         }
 
         /**
-         * Whether a data key belongs to a special event's family: the key carries one of the special
-         * event's distinctive patterns, possibly decorated with a grade token ("Victory! (G1)\n1st"),
-         * a wrapper ("Failed training (Get Well Soon!)"), or a card-specific expansion ("The Road to
-         * a Rad Victory!", "The Applications of Acupuncture"). Patterns are matched instead of the
-         * canonical name because a family key need not carry the full name (every pattern is a
-         * substring of its canonical name, so this subsumes name containment). Compared on cleaned
-         * titles so spacing and newlines cannot break the containment.
+         * Patterns are matched, not the canonical name, because a family key may be decorated ("Victory! (G1)\n1st",
+         * "Failed training (Get Well Soon!)", card-specific expansions) and need not carry the full name. Compared on cleaned titles.
          */
         fun isSpecialFamilyKey(eventName: String, specialEventName: String): Boolean {
             val cleanedEventName = cleanTitle(eventName)
@@ -255,11 +211,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             return patterns.any { cleanedEventName.contains(cleanTitle(it)) }
         }
 
-        /**
-         * The screen-equivalent title of a data key: progression glyphs and condition lines dropped,
-         * trailing grade token stripped. Graded copies of one event collapse onto the same value while
-         * distinct events ("Extra Training" vs "Extra Training to Blow Off Steam") stay distinct.
-         */
+        /** Graded copies of one event collapse onto the same value while distinct events ("Extra Training" vs "Extra Training to Blow Off Steam") stay distinct. */
         fun stripVariantDecorations(eventName: String): String {
             val firstLine = firstTitleLine(eventName)
             for (token in GRADE_VARIANT_TOKENS) {
@@ -268,13 +220,11 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             return firstLine
         }
 
-        /** The grade token a data key carries ("(G1)", "(G2/G3)", "(Pre/OP)"), or null when it has none. */
         fun variantGradeToken(eventName: String): String? {
             val firstLine = firstTitleLine(eventName)
             return GRADE_VARIANT_TOKENS.firstOrNull { firstLine.endsWith(it) }
         }
 
-        /** The first non-blank line of a key after progression glyph removal (the on-screen title line). */
         private fun firstTitleLine(eventName: String): String =
             eventName
                 .replace(PROGRESSION_SYMBOL_REGEX, "")
@@ -283,10 +233,8 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                 ?.trim() ?: ""
 
         /**
-         * Maps the most recent race's grade onto the data's three grade families. FINALE and EX races
-         * reward at the top tier so they read as G1; DEBUT and MAIDEN sit in the Pre/OP family. An
-         * unknown grade defaults to G1: the graded copies only differ in displayed stat and skill
-         * point amounts, never in option structure, so a wrong default is cosmetic.
+         * FINALE and EX read as G1, DEBUT and MAIDEN as Pre/OP. An unknown grade defaults to G1: graded copies differ
+         * only in stat and skill amounts, never option structure, so a wrong default is cosmetic.
          */
         fun gradeVariantToken(grade: RaceGrade?): String =
             when (grade) {
@@ -296,12 +244,9 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             }
 
         /**
-         * Event keys that belong to a special event's family but are owned by exactly one character:
-         * card-specific variants such as Gold City's "Victory!" / "Solid Showing" / "Defeat" or
-         * Maruzensky's "The Road to a Rad Victory!". These may only match when their owner is the
-         * active trainee. Without that restriction, Gold City's 1-option exact-name copies outscore
-         * the graded 2-option copies every other trainee actually gets, which silently forced every
-         * configured race-result option back to Option 1.
+         * Card-specific variants (Gold City's "Victory!" / "Solid Showing" / "Defeat", Maruzensky's "The Road to a Rad
+         * Victory!") may only match their owner: otherwise Gold City's 1-option exact-name copies outscore the graded
+         * 2-option copies everyone else gets, which forced every configured race-result option back to Option 1.
          */
         fun computeSingleOwnerSpecialFamilyKeys(characterEventData: JSONObject?): Set<String> {
             if (characterEventData == null) return emptySet()
@@ -317,30 +262,19 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                 }.keys
         }
 
-        /** Whether a data owner name refers to the active trainee (outfit-aware fuzzy match). */
         fun ownerMatchesActiveTrainee(ownerName: String, activeTraineeName: String): Boolean =
             activeTraineeName.isNotEmpty() && TraineeNameMatcher.score(ownerName, activeTraineeName) >= OWNER_MATCH_THRESHOLD
 
         /**
-         * Whether an on-screen option count is trustworthy enough to decide anything.
-         *
-         * Callers pass a count that already survived
-         * [TrainingEvent.acceptStableOptionCount][TrainingEvent.Companion.acceptStableOptionCount],
-         * so anything positive arriving here was observed on two consecutive captures. A count that
-         * never settled arrives as null, exactly like a count that was never read: both mean
-         * "unknown", and neither is evidence about the shape of the screen.
+         * Callers pass a count that already survived acceptStableOptionCount; a count that never settled arrives as null, like
+         * one never read: both mean unknown and are no evidence about the screen.
          */
         fun isAuthoritativeOptionCount(visibleOptionCount: Int?): Boolean = visibleOptionCount != null && visibleOptionCount > 0
 
         /**
-         * Whether a card-specific (single-owner) copy may be considered at all: it must belong to the
-         * active trainee, and a trusted count must not contradict its shape.
-         *
-         * This is deliberately permissive about an unknown count, because most card-specific copies
-         * are the only candidate for their on-screen title (Maruzensky's "The Road to a Rad
-         * Victory!") and dropping them outright would push those events onto unrelated data. Where
-         * the copy actually competes against differently shaped data, the stricter
-         * [singleOwnerCopyIsCountConfirmed] governs instead.
+         * Permissive about an unknown count on purpose: most card-specific copies are the only candidate for their title, and
+         * dropping them would push those events onto unrelated data. [singleOwnerCopyIsCountConfirmed] governs where the copy
+         * competes against differently shaped data.
          */
         fun singleOwnerCopyIsEligible(
             ownerName: String,
@@ -353,14 +287,9 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
         }
 
         /**
-         * Whether a card-specific copy has AFFIRMATIVE evidence behind it: the active trainee owns it
-         * and a trusted count says the screen has exactly as many options as the copy does.
-         *
-         * Required wherever choosing the card copy means rejecting a differently shaped alternative.
-         * Gold City's one-option "Victory!" and the two-option graded common copy are both hers and
-         * share a title, so ownership cannot separate them; an absent, zero, or unsettled count is
-         * not evidence for the rarer one-option event, and inferring it from her identity alone is
-         * what silently clamped a configured Option 2 back to Option 1 on every race she ran.
+         * Affirmative evidence: the trainee owns the copy and a trusted count equals its option count. Gold City's one-option
+         * "Victory!" and the two-option graded copy share a title and owner, so an unknown count must not pick the rarer
+         * one-option event from identity alone: that clamped a configured Option 2 back to Option 1 on every race she ran.
          */
         fun singleOwnerCopyIsCountConfirmed(
             ownerName: String,
@@ -372,7 +301,6 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                 isAuthoritativeOptionCount(visibleOptionCount) &&
                 dataOptionCount == visibleOptionCount
 
-        /** One selectable copy of a special event, with enough context to rank it deterministically. */
         private data class SpecialEventCandidate(
             val source: String,
             val ownerName: String,
@@ -382,27 +310,11 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
         )
 
         /**
-         * Deliberately selects the data copy for a pattern-detected special event.
-         *
-         * The pattern pre-filter pins the event's identity by distinctive substring, so instead of a
-         * fuzzy scan (which cannot reach the graded keys from a bare on-screen title, and whose
-         * early-return depends on JSON iteration order) the copy is chosen in three steps:
-         * 1. Candidates: every data key in the special event's family, minus card-specific variants
-         *    that are not the active trainee's own, and minus card-specific variants whose option
-         *    count the screen contradicts (see [singleOwnerCopyIsEligible]).
-         * 2. Event: candidates are grouped by screen-equivalent title and the OCR'd title picks the
-         *    best-scoring group, so "Extra Training" and "Extra Training to Blow Off Steam" resolve
-         *    to the copy actually on screen.
-         * 3. Copy: within the group, [chooseWithinGroup] applies the on-screen option count first,
-         *    then ownership, then the race grade, then a deterministic tiebreak.
-         *
-         * [visibleOptionCount] is the number of option rows the caller actually saw on screen, or
-         * null when it could not be read; only a positive value is authoritative. It is the sole
-         * evidence separating a one-option card event from the two-option graded common event that
-         * shares its title, so it participates BEFORE the event key is chosen, never as an
-         * after-the-fact clamp.
-         *
-         * @return The selected copy, or null when the family has no data at all (e.g. "Tutorial").
+         * Selects the data copy for a pattern-detected special event: candidates are the family keys minus foreign or
+         * count-contradicted card-specific variants ([singleOwnerCopyIsEligible]); the OCR'd title picks the best group of
+         * screen-equivalent titles; [chooseWithinGroup] picks the copy. A fuzzy scan cannot reach graded keys from a bare title,
+         * and its early-return depends on JSON iteration order. A positive [visibleOptionCount] participates before the key is
+         * chosen, never as an after-the-fact clamp. Null when the family has no data (e.g. "Tutorial").
          */
         fun selectSpecialEvent(
             specialEventName: String,
@@ -447,9 +359,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                         if (!isSpecialFamilyKey(eventName, specialEventName)) return@forEach
                         val rewards = rewardsOf(characterEvents, eventName)
                         val soleOwner = ownerCounts[eventName] == 1
-                        // A card-specific variant is only real for its own trainee, and only when the
-                        // screen shows the number of options that copy actually has; everyone else,
-                        // and every contradicted count, falls through to the graded common copies.
+                        // A card-specific variant is only real for its own trainee and a matching option count; the rest fall through to the graded common copies.
                         if (soleOwner && !singleOwnerCopyIsEligible(characterKey, activeTraineeName, rewards.size, visibleOptionCount)) return@forEach
                         candidates.add(SpecialEventCandidate("character", characterKey, eventName, rewards, soleOwner))
                     }
@@ -477,9 +387,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                     .key
             val chosen = chooseWithinGroup(groups.getValue(bestGroupTitle), activeTraineeName, lastRaceGrade, visibleOptionCount)
 
-            // The pattern pre-filter already pinned the event identity, so a family match is trusted
-            // even when the data key wraps the on-screen title (a "Get Well Soon!" screen matches the
-            // "Failed training (Get Well Soon!)" key at a low raw string similarity).
+            // The pattern pre-filter pinned the identity, so a family match is trusted even when the key wraps the title ("Get Well Soon!" vs "Failed training (Get Well Soon!)").
             val confidence =
                 maxOf(
                     scoredGroups.getValue(bestGroupTitle),
@@ -497,21 +405,12 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             )
         }
 
-        /**
-         * A chosen candidate, what the on-screen option count had to say about it, and the
-         * card-specific copy that was refused for lack of count evidence (null when none was).
-         */
         private data class GroupChoice(val candidate: SpecialEventCandidate, val verdict: OptionCountVerdict, val withheldCardEventKey: String?)
 
         /**
-         * Picks one copy out of a screen-equivalent title group; see [selectSpecialEvent] step 3.
-         *
-         * Order matters. The on-screen option count runs FIRST, because a group can hold copies that
-         * are the same event by title and different events by shape: Gold City's one-option
-         * placement-conditioned "Victory!" sits in the same group as the two-option graded common
-         * "Victory! (G1)". Ownership alone cannot separate those two for Gold City herself, and
-         * deciding by ownership and repairing the option index afterwards is exactly the defect this
-         * ordering exists to prevent.
+         * The on-screen option count runs FIRST: a group can hold copies that share a title but differ in shape (Gold City's
+         * one-option "Victory!" vs the two-option graded "Victory! (G1)"); deciding by ownership and repairing the option
+         * index afterwards is the defect this order prevents.
          */
         private fun chooseWithinGroup(
             group: List<SpecialEventCandidate>,
@@ -519,9 +418,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             lastRaceGrade: RaceGrade?,
             visibleOptionCount: Int?,
         ): GroupChoice {
-            // Step 1: what is actually on screen. Only copies whose option count matches survive; if
-            // none does, the whole group stays in play and the verdict records that the evidence and
-            // the data disagree so the caller can say so.
+            // Step 1: keep copies whose option count matches the screen; if none does, keep the whole group and record the disagreement in the verdict.
             val authoritative = isAuthoritativeOptionCount(visibleOptionCount)
             val countMatched = if (authoritative) group.filter { it.rewards.size == visibleOptionCount } else emptyList()
             val pool = if (countMatched.isNotEmpty()) countMatched else group
@@ -533,11 +430,8 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                     else -> OptionCountVerdict.NOT_APPLICABLE
                 }
 
-            // Step 2: ownership, but only where it is allowed to decide. A card-specific copy may
-            // replace the common copies when nothing else in the pool has a different shape (the
-            // count could not have separated them anyway), or when a trusted count confirms its
-            // exact option count. Otherwise it is withheld: an unknown count must never promote the
-            // rare one-option card event on trainee identity alone.
+            // Step 2: ownership may decide only when nothing else in the pool has a different shape, or a trusted count confirms
+            // the card copy's option count; otherwise it is withheld (an unknown count must not promote the rare one-option card event).
             val cardCopy = pool.filter { it.soleOwner }.minByOrNull { it.eventName }
             val shapeAmbiguous = pool.distinctBy { it.rewards.size }.size > 1
             val countConfirmsCardCopy = cardCopy != null && authoritative && cardCopy.rewards.size == visibleOptionCount
@@ -545,8 +439,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                 return GroupChoice(cardCopy, verdict, withheldCardEventKey = null)
             }
 
-            // The card copy lost its claim; drop it so the later steps cannot hand it back, unless it
-            // is all there is.
+            // Drop the losing card copy so later steps cannot hand it back, unless it is all there is.
             val withheldCardEventKey = cardCopy?.eventName
             val remaining = if (cardCopy != null) pool.filterNot { it.soleOwner }.ifEmpty { pool } else pool
 
@@ -585,12 +478,8 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
         val activeTraineeName = resolveActiveTraineeName()
         val lastRaceGrade = (game.task as? Campaign)?.getLastRaceGrade()
 
-        // Filter false positives by checking against special event patterns first. A pattern hit
-        // pins the event's identity, so the data copy is selected deliberately instead of by the
-        // fuzzy scan below: the graded family keys ("Victory! (G1)\n1st") can never win a fuzzy
-        // comparison against a bare on-screen title. Not cached: the right copy depends on the
-        // active trainee, the last race's grade, and the on-screen option count, all of which change
-        // between events.
+        // A pattern hit pins the event identity, so the copy is selected deliberately: graded keys ("Victory! (G1)\n1st") can
+        // never win a fuzzy comparison against a bare title. Not cached: the copy depends on the trainee, last race grade and option count.
         val matchedSpecialEvent = detectSpecialEvent(ocrResult)
         if (matchedSpecialEvent != null) {
             MessageLog.i(TAG, "[TRAINING_EVENT_RECOGNIZER] Detected special event pattern: $matchedSpecialEvent. Will restrict search to this event's family.")
@@ -607,8 +496,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                     visibleOptionCount = visibleOptionCount,
                 )
             if (selection == null) {
-                // No data key belongs to this family (e.g. "Tutorial"); the caller's dedicated
-                // branches key off the special event name itself.
+                // No data key in this family (e.g. "Tutorial"); dedicated branches key off the special event name.
                 return MatchingResult(0.0, "", matchedSpecialEvent, "", arrayListOf(), "", special = true)
             }
             logOptionCountVerdict(selection, matchedSpecialEvent, ocrResult, activeTraineeName, lastRaceGrade, visibleOptionCount)
@@ -687,13 +575,9 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
                     eventOptions.add(eventOptionsArray.getString(i))
                 }
 
-                // A card-specific variant of a special event (Gold City's "Victory!", Maruzensky's
-                // "The Road to a Rad Victory!") needs affirmative evidence here, not merely an
-                // uncontradicted guess: this path runs on titles the pattern pre-filter could not
-                // place, so a garble plus an unreadable screen must not be enough to land on the
-                // one-option copy. Everything rejected here still competes as a normal fuzzy
-                // candidate through its owner's other events, and a weak overall match is caught by
-                // the confidence floor in TrainingEvent.
+                // A card-specific variant needs affirmative evidence here: this path runs on titles the pre-filter could not place, so a
+                // garble plus an unreadable screen must not land on the one-option copy. Rejected ones still compete as normal fuzzy
+                // candidates; the confidence floor in TrainingEvent catches weak matches.
                 if (eventName in singleOwnerSpecialFamilyKeys &&
                     !singleOwnerCopyIsCountConfirmed(characterKey, activeTraineeName, eventOptions.size, visibleOptionCount)
                 ) {
@@ -768,12 +652,8 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
     }
 
     /**
-     * Reports what the on-screen option count said about the chosen copy, when it said anything bad.
-     *
-     * A silent selection is fine when the screen corroborated the pick; the two cases worth a line
-     * are "the screen and the data disagree" and "there was nothing to check against and the family
-     * is shape-ambiguous", because both mean the option index that follows rests on weaker evidence
-     * than usual. Logging lives here rather than inside the selection so the selection stays pure.
+     * Logs only a bad verdict (screen and data disagree, or nothing to check in a shape-ambiguous family); both leave the
+     * option index on weaker evidence. Kept out of the selection so it stays pure.
      */
     private fun logOptionCountVerdict(
         selection: SpecialEventSelection,
@@ -804,8 +684,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             OptionCountVerdict.MATCHED, OptionCountVerdict.NOT_APPLICABLE -> Unit
         }
 
-        // Independent of the verdict: name the card-specific copy that was refused, so a career that
-        // should have taken one is diagnosable instead of just quietly taking the common event.
+        // Independent of the verdict: name the refused card-specific copy so a career that should have taken one is diagnosable.
         selection.withheldCardEventKey?.let { withheld ->
             MessageLog.w(
                 TAG,
@@ -816,14 +695,9 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
     }
 
     /**
-     * The character name of the trainee this career is actually playing. Preset applies record it
-     * (general.appliedPresetTrainee, kept in sync for rotation careers too, possibly outfit-bearing);
-     * the in-career header read is the fallback for careers started without one. Empty when neither
-     * is available, in which case card-specific event variants simply never match.
-     *
-     * Shared with [TrainingEvent] rather than duplicated there: its Acupuncture gate state compares
-     * the trainee across two screens, and a second copy of this resolution order could drift out of
-     * step with the one owner gating already uses.
+     * The trainee's character name: the applied preset trainee (kept in sync for rotation careers, possibly outfit-bearing),
+     * else the in-career header read; empty when neither exists, so card-specific variants never match. Shared with
+     * [TrainingEvent] so the Acupuncture gate compares the trainee across two screens with one resolution order.
      */
     internal fun resolveActiveTraineeName(): String {
         val applied = SettingsHelper.getStringSetting("general", "appliedPresetTrainee").trim()

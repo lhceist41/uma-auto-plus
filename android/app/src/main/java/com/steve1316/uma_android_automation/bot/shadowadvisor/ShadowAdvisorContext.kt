@@ -4,24 +4,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Builds one immutable [AdvisorDecisionContext] from a decision_trace record string and the matching-seq
- * career_state record string. This is the live, ReplayLab-independent twin of the offline `context.ts`
- * projection: it reads ONLY pre-decision facts (state condition/stats/race/scenario and the training candidates'
- * raw gains/failChance) and by construction cannot read `selected`, `selected.trainingSource`, `enteredRace`,
- * `recovery`, observed transitions, the final outcome, or any bot `candidate.score` as a policy input. Inputs are
- * fresh-parsed from immutable serialized strings, so there is zero aliasing with the production JSONObjects.
- *
- * Completeness reproduces the offline authority exactly: a training contest is complete only when all five
- * canonical facilities are present (ReplayLab's rule), and the policy separately fails the contest closed when any
- * present facility is missing factual gains or failChance.
+ * Live twin of the offline `context.ts` projection. Reads only pre-decision facts, never `selected`,
+ * `enteredRace`, `recovery`, outcomes or `candidate.score`; a training contest is complete only with all five facilities.
  */
 object ShadowAdvisorContext {
-    /**
-     * Parses the two serialized records into a context, or null when the trace carries no join seq (the only shape
-     * the caller must never shadow-record). [serializedState] is passed by the caller only when its retained seq
-     * already matched the trace seq; a null state yields all-null state facts, which the policy reports as
-     * insufficient evidence. Throws only on unparseable trace JSON, which the caller's isolation catches.
-     */
+    /** Returns null when the trace carries no join seq; a null [serializedState] yields all-null state facts. */
     fun buildContextFromRecords(serializedTrace: String, serializedState: String?): AdvisorDecisionContext? {
         val trace = JSONObject(serializedTrace)
         val seq = intOrNull(trace, "seq") ?: return null
@@ -30,8 +17,7 @@ object ShadowAdvisorContext {
         val stateObj = serializedState?.let { JSONObject(it) }
         val stateToken = stateObj?.let { asString(optObject(it, "identity"), "careerToken") }
         val careerToken = traceToken ?: stateToken ?: ""
-        // Career-token guard: reject a state row whose identity token is present and mismatched (defensive; the
-        // live retained state is always this career's). No turn fallback, no search for another row.
+        // Reject a state row whose identity token is present and mismatched; no turn fallback.
         val careerState = if (stateObj != null && !(stateToken != null && stateToken != careerToken)) stateObj else null
 
         return AdvisorDecisionContext(
@@ -103,8 +89,7 @@ object ShadowAdvisorContext {
             )
         }
         if (facilities.isEmpty()) return null
-        // Complete only when all five canonical facilities are present (matches ReplayLab's completeness authority);
-        // the per-facility gains/failChance nullity check lives in the policy, exactly as offline.
+        // Per-facility gains/failChance nullity is checked in the policy, as offline.
         val distinct = facilities.map { it.id }.filter { it in ADVISOR_FACILITIES }.toSet()
         val complete = ADVISOR_FACILITIES.all { it in distinct } && facilities.size >= 5
         return AdvisorTrainingContest(complete, facilities)
@@ -119,7 +104,7 @@ object ShadowAdvisorContext {
 
     private fun optObject(obj: JSONObject?, key: String): JSONObject? = obj?.optJSONObject(key)
 
-    /** Mirrors context.ts `asFiniteNumber`: accepts only an actual finite JSON number, never a numeric string. */
+    /** Mirrors context.ts `asFiniteNumber`. */
     private fun asFiniteNumber(obj: JSONObject?, key: String): Double? {
         val v = obj?.opt(key) ?: return null
         if (v !is Number) return null
@@ -127,7 +112,7 @@ object ShadowAdvisorContext {
         return if (d.isFinite()) d else null
     }
 
-    /** Mirrors context.ts `asString`: a non-empty JSON string, else null. */
+    /** Mirrors context.ts `asString`. */
     private fun asString(obj: JSONObject?, key: String): String? {
         val v = obj?.opt(key) ?: return null
         return if (v is String && v.isNotEmpty()) v else null

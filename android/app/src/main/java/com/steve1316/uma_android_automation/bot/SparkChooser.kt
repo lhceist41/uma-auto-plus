@@ -1,27 +1,13 @@
 package com.steve1316.uma_android_automation.bot
 
 /**
- * Pure decision layer for the career-end Spark Selection flow (the original-vs-rerolled choice
- * that follows a 30 TP reroll spend).
- *
- * Why this exists: the spend half of the reroll feature was live-proven (10 spends), but every
- * screen after the spend fell into the generic POST_RUN_RESULTS handler, which blind-clicked
- * Next/Confirm on whatever the game showed first. The pager's first page is the rerolled set,
- * so "keeps the redrawn set" was an accident of button position, not a decision, and no kept
- * record was written for spend careers at all (69 original / 55 kept / 0 rerolled corpus
- * records at the time of the fix).
- *
- * Everything in this file is total, Android-free, and JUnit-pinned: the set model, the
- * cross-frame scroll merge, the OCR text normalization, the page resolution, and the keep
- * policy. Pixel probing lives in [com.steve1316.uma_android_automation.utils.SparkScreenProbes];
- * the screen handling lives in the navigator.
+ * Pure, Android-free decision layer for the career-end Spark Selection flow (original vs rerolled after a 30 TP
+ * reroll). Pixel probing lives in [com.steve1316.uma_android_automation.utils.SparkScreenProbes]; screen handling in the navigator.
  */
 
-/** Sentinel name for a row whose OCR produced nothing. Matches the corpus convention. */
 const val SPARK_UNREADABLE_NAME = "unreadable"
 
-/** Row kind as the bar-color probe classifies it. [wire] is the corpus string and must never
- * change: existing records use stat/aptitude/unique/skill. */
+/** [wire] is the corpus string and must never change: existing records use stat/aptitude/unique/skill. */
 enum class SparkRowKind(val wire: String) {
     STAT("stat"),
     APTITUDE("aptitude"),
@@ -29,14 +15,12 @@ enum class SparkRowKind(val wire: String) {
     WHITE("skill"),
 }
 
-/** Refined classification of a WHITE row for the chooser. Race sparks are always relevant
- * (they regenerate at ~20% per distinct G1 won, and a specific 3-star race spark rarely
- * survives a redraw); skill whites are relevant only when planned; an unreadable name is
- * uncertainty, not neutral value. */
+/**
+ * Race sparks are always relevant (about 20% regenerate per distinct G1 won, and a specific 3-star race spark rarely
+ * survives a redraw); skill whites only when planned; an unreadable name is uncertainty, not neutral value.
+ */
 enum class SparkWhiteClass { SKILL, RACE, UNKNOWN }
 
-/** One spark row as read off a live list: OCR name, gold stars, bar kind, and (for whites)
- * the refined class the caller resolved via the skill catalog. */
 data class SparkRowFact(
     val name: String,
     val stars: Int,
@@ -47,38 +31,24 @@ data class SparkRowFact(
 }
 
 /**
- * How a complete-list scan ended. Only the two COMPLETE values prove the whole set was read;
- * everything else is a partial read that must never authorize a 30 TP spend or an automatic
- * choice. A scrollbar thumb at the bottom is deliberately NOT a termination signal (same
- * principle as the skill-scan terminations in ScrollList).
+ * Only the two COMPLETE values prove the whole set was read; anything else is a partial read that must never authorize
+ * a 30 TP spend or an automatic choice. A scrollbar thumb at the bottom is deliberately NOT a termination signal.
  */
 enum class SparkScanTermination {
-    /** The end-of-list marker was observed inside the visible window (white break or a
-     * starless, textless slot past the last real row). */
     COMPLETE_END_MARKER,
 
-    /** A scroll attempt produced a frame identical to the previous one: the list cannot move,
-     * so the last merged row is the last spark. */
     COMPLETE_NO_PROGRESS,
 
-    /** The scan budget (iterations or wall clock) ran out before either completion proof. */
     TIMED_OUT_PARTIAL,
 
-    /** A scrolled frame shared no consistent overlap with the merged rows: the scroll went
-     * past the window and rows may have been skipped. */
     ALIGNMENT_FAILED,
 
-    /** No spark rows could be read at all (wrong screen, mid-transition frame). */
     FAILED,
     ;
 
     val complete: Boolean get() = this == COMPLETE_END_MARKER || this == COMPLETE_NO_PROGRESS
 }
 
-/** A full set read: ordered rows, how the scan terminated, and how many scrolls it took.
- * [sameFrameRetries] counts merge failures that were given one fresh capture at the same scroll
- * position; [sameFrameRecoveries] counts how many of those the fresh capture rescued. Both ride
- * into the decision log so a degraded outcome can be told apart from a lucky one. */
 data class SparkSetReading(
     val rows: List<SparkRowFact>,
     val termination: SparkScanTermination,
@@ -90,32 +60,22 @@ data class SparkSetReading(
     val unreadableRowCount: Int get() = rows.count { it.unreadable }
 }
 
-/** Which side of the Spark Selection pager a set belongs to. [wire] is the corpus phase
- * string; "original" and "kept" predate this file and must not change. */
+/** [wire] is the corpus phase string; "original" and "kept" predate this file and must not change. */
 enum class SparkSetSide(val wire: String) {
     ORIGINAL("original"),
     REROLLED("rerolled"),
 }
 
 /**
- * The green set-name pill on a "Confirmation" dialog. THREE variants exist live, not two:
- * the post-reroll Spark Selection confirmation names the chosen side ("Original Sparks" /
- * "Rerolled Sparks"), while the ordinary keep confirmation raised by Confirm on the SPARKS
- * screen - the one every no-reroll career ends on - carries a plain "Sparks" pill.
- *
- * The plain variant was absent from the 2026-07-08 capture set (all post-spend), so the first
- * hardened build classified it as "not provably Original" and blocked a completed no-spend
- * career on 2026-07-19. [PLAIN] exists so that dialog is recognised positively instead of
- * being mistaken for an unreadable side name.
+ * Three variants exist live: the post-reroll confirmation names the side ("Original Sparks" / "Rerolled Sparks"), while
+ * the ordinary keep confirmation every no-reroll career ends on carries a plain "Sparks" pill. [PLAIN] exists so that
+ * dialog is recognised positively instead of being mistaken for an unreadable side name.
  */
 enum class SparkConfirmationPill {
-    /** "Sparks" - the ordinary keep confirmation; no reroll selection is in play. */
     PLAIN,
 
-    /** "Original Sparks" - post-reroll selection, original chosen. */
     ORIGINAL,
 
-    /** "Rerolled Sparks" - post-reroll selection, rerolled chosen. */
     REROLLED,
 
     /** No text recovered: the caller must not infer which dialog this is. */
@@ -123,19 +83,10 @@ enum class SparkConfirmationPill {
 }
 
 /**
- * Cross-frame merge for a scrolled spark list. Frames overlap by an unknown number of rows
- * (swipe distance is not pixel-exact and the list rubber-bands), so alignment is by content:
- * a suffix of the merged rows that matches a prefix of the new frame, comparing kind and stars
- * exactly and names tolerantly (an unreadable name matches anything).
- *
- * The merge is COLLISION-SAFE: it appends the new tail only when EXACTLY ONE overlap length
- * aligns. When runs of rows that share (kind, stars) straddle the frame boundary, several
- * overlap lengths can align at once - and because the two frames are then genuinely consistent
- * with lists of different lengths, any single guess (largest or smallest) can silently drop or
- * duplicate a row. Rather than guess, an ambiguous merge returns null, which the caller records
- * as ALIGNMENT_FAILED - an incomplete read that keeps the original set instead of comparing a
- * corrupt one. This is the conservative direction: over-reporting incompleteness costs a keep;
- * under-reporting it discards a spark the choice depended on.
+ * Cross-frame merge for a scrolled spark list, aligned by content (swipes are not pixel-exact): kind and stars exactly,
+ * names tolerantly. Runs of rows sharing (kind, stars) can make several overlap lengths align at once, so any single
+ * guess could silently drop or duplicate a row; an ambiguous merge returns null (ALIGNMENT_FAILED, keeps the original).
+ * Over-reporting incompleteness costs a keep; under-reporting it discards a spark the choice depended on.
  */
 object SparkScrollMerge {
     fun rowsAlign(a: List<SparkRowFact>, b: List<SparkRowFact>): Boolean {
@@ -148,27 +99,15 @@ object SparkScrollMerge {
     }
 
     /**
-     * True when [partial] agrees with the leading rows of [known] and adds nothing new.
-     *
-     * The spark list is read top-down, so a scan that dies partway through still holds the rows it
-     * did capture in list order. That makes "is this a prefix of the set I already read completely"
-     * the exact question worth asking: it can only ever confirm, never extend, so a partial read can
-     * corroborate a known set without ever being trusted to define one. An empty [partial] proves
-     * nothing and is rejected.
-     *
-     * NO LONGER AN AUTHORIZATION GATE. It used to decide whether the keep-original fallback was
-     * allowed, and because it compares through the exact-match [rowsAlign] it refused for the very
-     * same transient misread that made the read partial, ending the queue (2026-08-04). It now
-     * feeds [SparkPrefixEvidence.prefixAgreed] as diagnostics, which is useful precisely because it
-     * is the old rule: the log states whether that rule would have blocked.
+     * True when [partial] agrees with the leading rows of [known]. Diagnostic only: as an authorization gate it refused
+     * for the same transient misread that made the read partial, because it compares through the exact-match [rowsAlign].
+     * It feeds [SparkPrefixEvidence.prefixAgreed] so the log states whether the old rule would have blocked.
      */
     fun rowsAreConsistentPrefix(known: List<SparkRowFact>, partial: List<SparkRowFact>): Boolean {
         if (partial.isEmpty() || partial.size > known.size) return false
         return rowsAlign(known.subList(0, partial.size), partial)
     }
 
-    /** Merge [next] onto [merged], or null when no overlap aligns (no shared content) or more
-     * than one aligns (ambiguous - the frames fit lists of different lengths). */
     fun merge(merged: List<SparkRowFact>, next: List<SparkRowFact>): List<SparkRowFact>? {
         if (merged.isEmpty()) return next
         if (next.isEmpty()) return merged
@@ -185,22 +124,11 @@ object SparkScrollMerge {
         return merged + next.subList(chosenOverlap, next.size)
     }
 
-    /** Folds the OCR damage that is irrelevant to identifying a row, for the DIAGNOSTIC prefix
-     * comparison only. Deliberately separate from [rowsAlign]: this never decides an outcome,
-     * so loosening it cannot loosen any safety rule. */
+    /** Diagnostic prefix comparison only; separate from [rowsAlign] so loosening it cannot loosen a safety rule. */
     private fun foldName(name: String): String =
         name.lowercase().replace('0', 'o').replace('1', 'i').replace('l', 'i').filter { it.isLetterOrDigit() }
 
-    /**
-     * Describes how a partial read of a page compares with the set already known to be on it.
-     *
-     * This is OBSERVABILITY, not authorization. The 2026-08-04 halt happened because the
-     * keep-original fallback gated on [rowsAreConsistentPrefix], which reuses the exact-match
-     * [rowsAlign] and therefore fails for exactly the same transient reason that produced the
-     * partial read in the first place; the refusal path then logged no row detail, so which
-     * field disagreed was not even recoverable afterwards. The evidence is now computed and
-     * logged, and the decision no longer depends on it.
-     */
+    /** Observability only: the fallback decision does not depend on it. */
     fun describePrefix(known: List<SparkRowFact>, partial: List<SparkRowFact>): SparkPrefixEvidence {
         val compared = minOf(known.size, partial.size)
         var firstDiffering: Int? = null
@@ -221,28 +149,22 @@ object SparkScrollMerge {
             comparedRowCount = compared,
             missingRowCount = maxOf(0, known.size - partial.size),
             extraRowCount = maxOf(0, partial.size - known.size),
-            // Tolerant: names are folded, so this names a row that GENUINELY disagrees rather
-            // than one that merely lost a glyph.
+            // Tolerant: names a row that genuinely disagrees, not one that lost a glyph.
             firstDifferingRow = firstDiffering,
             firstDifference = detail,
-            // Strict, and deliberately the very predicate the old gate used: logging it says
-            // outright whether that gate would have blocked here. It decides nothing now.
+            // Strict (the old gate's predicate): says whether that gate would have blocked.
             prefixAgreed = rowsAreConsistentPrefix(known, partial),
         )
     }
 }
 
-/**
- * Diagnostic comparison of a partial page read against the set already known to be on that page.
- * Logged with the fallback decision; never an input to whether the fallback is allowed.
- */
+/** Logged with the fallback decision; never an input to whether the fallback is allowed. */
 data class SparkPrefixEvidence(
     val knownRowCount: Int,
     val partialRowCount: Int,
     val comparedRowCount: Int,
     val missingRowCount: Int,
     val extraRowCount: Int,
-    /** 0-based index of the first row that disagreed, or null when none did. */
     val firstDifferingRow: Int?,
     val firstDifference: String?,
     val prefixAgreed: Boolean,
@@ -254,31 +176,22 @@ data class SparkPrefixEvidence(
 }
 
 /**
- * The closed vocabularies a structural name repair may draw from.
- *
- * Blue (stat) and pink (aptitude) rows are the only kinds whose entire name space is known up
- * front, and that is exactly what makes a repair provable instead of a guess: a name either
- * resolves to one of these or it does not. White rows carry open-vocabulary race names and the
- * skill catalog, and unique rows are per-character, so neither is ever repaired.
+ * Blue (stat) and pink (aptitude) rows are the only kinds with a name space known up front, which is what makes a
+ * repair provable. White and unique names are open vocabulary and are never repaired.
  */
 val SPARK_STAT_NAMES: List<String> = listOf("Speed", "Stamina", "Power", "Guts", "Wit")
 
 val SPARK_APTITUDE_NAMES: List<String> =
     listOf("Sprint", "Mile", "Medium", "Long", "Turf", "Dirt", "Front Runner", "Pace Chaser", "Late Surger", "End Closer")
 
-/** Which read supplied the content the chooser scored for one side. */
 enum class SparkReadAuthority {
-    /** The two reads corroborated structurally and every comparable name already agreed. */
     PAGER_UNCHANGED,
 
-    /** The two reads corroborated structurally and at least one stat/aptitude name was repaired. */
     PAGER_WITH_STRUCTURAL_NAME_REPAIR,
 
-    /** No corroboration was available, or it was refused; the pager read stands alone. */
     PAGER_ONLY,
 }
 
-/** Why a structural corroboration was unavailable or refused. [wire] is the telemetry string. */
 enum class SparkReconcileRefusal(val wire: String) {
     NONE("none"),
     NO_EARLIER_CAPTURE("no_earlier_capture"),
@@ -292,9 +205,7 @@ enum class SparkReconcileRefusal(val wire: String) {
     VALID_NAME_CONTRADICTION("valid_name_contradiction"),
 }
 
-/** One repaired row: the pager's damaged name replaced, for scoring only, by the earlier
- * capture's exact closed-vocabulary name. Both spellings are kept so the corpus never loses
- * what the pager actually read. */
+/** Keeps both spellings so the corpus never loses what the pager actually read. */
 data class SparkNameRepair(
     val rowIndex: Int,
     val kind: SparkRowKind,
@@ -303,13 +214,8 @@ data class SparkNameRepair(
 )
 
 /**
- * An earlier capture of one side, tagged with the transaction and side it provably belongs to.
- *
- * The tags are what make "same set, same side" a checked precondition rather than an assumption.
- * In production they are structurally guaranteed (the transaction state machine admits
- * `captureOriginal` only from IDLE on the SPARKS screen and `captureRerolled` only from
- * SPEND_CONFIRMED on the result screen, and a new career replaces the whole transaction), so the
- * two mismatch refusals below are defense in depth against a future caller, not live conditions.
+ * Tagged with the transaction and side it belongs to. Production guarantees this structurally, so the mismatch
+ * refusals below are defense in depth.
  */
 data class SparkSideCapture(
     val reading: SparkSetReading,
@@ -317,18 +223,13 @@ data class SparkSideCapture(
     val transactionId: String,
 )
 
-/** The read-authority outcome for one side: both raw reads, the read actually scored, and why. */
 data class SparkReadAuthorityResult(
     val side: SparkSetSide,
-    /** The earlier result-screen capture, when one existed at all (raw, never mutated). */
     val earlier: SparkSetReading?,
-    /** The pager read exactly as the pager produced it (raw, never mutated). */
     val pager: SparkSetReading,
-    /** What the chooser scores: the pager read, with at most the listed names replaced. */
     val effective: SparkSetReading,
     val authority: SparkReadAuthority,
     val repairs: List<SparkNameRepair>,
-    /** Row count, order, kinds and stars all matched between the two reads. */
     val structurallyAgreed: Boolean,
     val refusal: SparkReconcileRefusal,
 ) {
@@ -348,35 +249,14 @@ data class SparkReadAuthorityResult(
 }
 
 /**
- * Reconciles the pager read of one side against the earlier capture of that same side.
- *
- * Why this exists (2026-08-06 live defect). The pager reads the same immutable set the result
- * screen already showed, but its name OCR is systematically worse: across the 15-career batch of
- * 2026-08-05/06, all ten pager-side reads of the five reroll careers disagreed with their earlier
- * captures while all twenty earlier reads were clean, and the damage was always a lost or
- * corrupted LEADING glyph (`Speed` -> `peed`, `Sprint` -> `print`, `Late Surger` -> `ate Surger`).
- * Stars, kinds, row counts and row order agreed every time. Because [SparkKeepPolicy] resolves
- * the blue target by exact name, one lost glyph demoted a configured target to rank -1 and the
- * chooser discarded a 17-star rerolled set holding Speed 2* and Sprint 2* for a 9-star original.
- *
- * THE AUTHORITY SPLIT IS LOAD-BEARING. The pager remains the sole authority for side identity,
- * page navigation and which side is confirmed - it is the surface the Confirm tap lands on. The
- * earlier capture may repair CONTENT NAMES ONLY, and only where the two reads corroborate each
- * other structurally: same transaction, same side, both complete, equal row count and order, and
- * identical kind and stars at every index. Under those conditions the two reads describe the same
- * list row for row, so a name difference is by construction a misread on one side.
- *
- * The repair is further confined to stat and aptitude rows, whose vocabularies are closed
- * ([SPARK_STAT_NAMES], [SPARK_APTITUDE_NAMES]), and only in the one direction that adds
- * information: the earlier name resolves exactly, the pager name does not. Two names that both
- * resolve to DIFFERENT valid entries are a contradiction, not a repair - it breaks the same-set
- * premise, so the whole side falls back to the pager read.
- *
- * Pure and total: no bitmaps, no gestures, no clock, no I/O, single pass, no retries.
+ * The pager's name OCR is systematically worse than the earlier result-screen capture of the same immutable set: it
+ * loses leading glyphs (`Speed` -> `peed`), which demoted a configured blue target to rank -1 under exact-name matching.
+ * The pager stays the authority for side identity and navigation. The earlier capture may repair CONTENT NAMES ONLY, on
+ * stat and aptitude rows (closed vocabularies), only when both reads match structurally (same transaction, side, row
+ * count, order, kind and stars), and only where the earlier name resolves and the pager name does not. Two different
+ * valid names are a contradiction, so the whole side falls back to the pager read.
  */
 object SparkReadReconcile {
-    /** The canonical spelling for [name] within [kind]'s closed vocabulary, or null when the
-     * kind has no closed vocabulary or the name does not resolve. */
     fun canonicalNameFor(kind: SparkRowKind, name: String): String? =
         when (kind) {
             SparkRowKind.STAT -> SPARK_STAT_NAMES.firstOrNull { SparkTextNorm.namesEqual(it, name) }
@@ -411,20 +291,14 @@ object SparkReadReconcile {
         val earlierRows = earlier.reading.rows
         val pagerRows = pager.rows
         if (earlierRows.size != pagerRows.size) return pagerOnly(SparkReconcileRefusal.ROW_COUNT_MISMATCH)
-        // Rows are compared strictly by index. That does NOT by itself prove the two reads are in
-        // the same order: swapping two rows that share a kind and a star count would pass this
-        // check. It is safe anyway, for reasons that hold outside this loop. A generated set
-        // carries exactly one stat row and one aptitude row, so no repairable row can be swapped
-        // with another repairable row of its own kind; the list reader works top-down and the
-        // scroll merge only ever appends, so it cannot invert order; white rows, the only kind
-        // that repeats, are never repaired; and the scoring below sums and counts same-kind rows,
-        // so it is permutation-invariant over them.
+        // Index comparison does not prove order (swapping two rows with equal kind and stars would pass), but that is safe: a
+        // set has one stat and one aptitude row, the list reader and scroll merge preserve order, whites are never repaired,
+        // and scoring is permutation-invariant.
         for (i in pagerRows.indices) {
             if (earlierRows[i].kind != pagerRows[i].kind) return pagerOnly(SparkReconcileRefusal.KIND_MISMATCH)
             if (earlierRows[i].stars != pagerRows[i].stars) return pagerOnly(SparkReconcileRefusal.STAR_MISMATCH)
         }
 
-        // Structurally corroborated from here: same length, same kind and stars at every index.
         val repairs = mutableListOf<SparkNameRepair>()
         for (i in pagerRows.indices) {
             val kind = pagerRows[i].kind
@@ -433,8 +307,7 @@ object SparkReadReconcile {
             val earlierCanonical = canonicalNameFor(kind, earlierRows[i].name)
             val pagerCanonical = canonicalNameFor(kind, pagerRows[i].name)
             if (earlierCanonical != null && pagerCanonical != null && earlierCanonical != pagerCanonical) {
-                // Both reads name a DIFFERENT valid spark. They cannot be the same row of the same
-                // set, so nothing here is repairable and no partial repair may leak out.
+                // Different valid names cannot be the same row of the same set: nothing is repairable and no partial repair leaks out.
                 return pagerOnly(SparkReconcileRefusal.VALID_NAME_CONTRADICTION, structurallyAgreed = true)
             }
             if (earlierCanonical != null && pagerCanonical == null) {
@@ -455,8 +328,7 @@ object SparkReadReconcile {
             )
         }
 
-        // The effective read is the PAGER read with names substituted in place: row count, order,
-        // kind, stars, white class, scan termination and the scan counters all stay the pager's.
+        // Only names are substituted; count, order, kind, stars, white class and scan counters stay the pager's.
         val repairedRows = pagerRows.toMutableList()
         for (repair in repairs) {
             repairedRows[repair.rowIndex] = repairedRows[repair.rowIndex].copy(name = repair.repairedName)
@@ -474,40 +346,26 @@ object SparkReadReconcile {
     }
 }
 
-/** What the pager should do about the two page reads it holds. */
 enum class SparkSelectionAction {
-    /** Commit the Original page (the set the career already earned). */
     CHOOSE_ORIGINAL,
 
-    /** Commit the Rerolled page. Only ever reachable from a certain comparison. */
     CHOOSE_REROLLED,
 
-    /** Re-read the page currently on screen once more before deciding. */
     RESCAN_CURRENT_PAGE,
 
-    /** Stop and leave the selection to the operator. */
     HALT,
 }
 
-/** Everything the pager decision depends on. Pure data: no bitmaps, no gestures, no clock. */
 data class SparkSelectionInputs(
     val originalTermination: SparkScanTermination,
     val rerolledTermination: SparkScanTermination,
-    /** The page resolved from BOTH heading and dots, or null when unreadable or contradictory. */
     val currentPageSide: SparkSetSide?,
-    /** The Original page was independently proven on screen by a verified pager repaint. */
     val originalPageVerifiedByNavigation: Boolean,
-    /** False only once the bot has actually looked for the Confirm control and not found it. */
     val originalControlAvailable: Boolean,
-    /** This page still has its one full rescan available. */
     val currentPageRescanAvailable: Boolean,
     val prefix: SparkPrefixEvidence? = null,
 ) {
-    /**
-     * Whether the bot knows it is looking at the Original page. Two independent routes, both
-     * two-signal: the page resolved as ORIGINAL from heading AND dots on this very pass, or a
-     * pager swipe to ORIGINAL repainted and was verified the same way.
-     */
+    /** Both routes need two signals: ORIGINAL resolved from heading AND dots this pass, or a verified pager swipe to ORIGINAL. */
     val originalIdentityTrusted: Boolean
         get() = currentPageSide == SparkSetSide.ORIGINAL || originalPageVerifiedByNavigation
 
@@ -520,7 +378,6 @@ data class SparkSelectionInputs(
             }
 }
 
-/** The decided action, with everything needed to explain it in one log line. */
 data class SparkSelectionDecision(
     val action: SparkSelectionAction,
     val side: SparkSetSide?,
@@ -530,21 +387,14 @@ data class SparkSelectionDecision(
 )
 
 /**
- * Decides what the Spark Selection pager does once it holds a read of both pages.
- *
- * The safety invariant this encodes, proven by two live queue halts (2026-07-22 and
- * 2026-08-04): an incomplete EVALUATION is not a reason to stop. Keeping the Original set is
- * safe no matter how little the bot managed to read, because it is the set the career already
- * earned and the 30 TP is spent either way. What is genuinely unsafe is committing a page whose
- * IDENTITY is not proven, because that commits the rerolled set irreversibly. So content
- * uncertainty degrades the choice, and only identity or control uncertainty halts.
- *
- * Pure: it inspects nothing and touches nothing. The caller performs the action.
+ * Safety invariant: an incomplete EVALUATION is not a reason to stop. Keeping the Original set is safe however little
+ * was read (the career already earned it and the 30 TP is spent either way); what is unsafe is committing a page whose
+ * IDENTITY is not proven, which commits the rerolled set irreversibly. Content uncertainty degrades the choice; only
+ * identity or control uncertainty halts.
  */
 object SparkSelectionPolicy {
     fun decide(choice: SparkChoice, inputs: SparkSelectionInputs): SparkSelectionDecision {
         if (choice.certain) {
-            // Both pages read completely: the comparison stands exactly as before.
             return SparkSelectionDecision(
                 action = if (choice.side == SparkSetSide.ORIGINAL) SparkSelectionAction.CHOOSE_ORIGINAL else SparkSelectionAction.CHOOSE_REROLLED,
                 side = choice.side,
@@ -556,7 +406,6 @@ object SparkSelectionPolicy {
 
         val terminations = "original ${inputs.originalTermination.name}, rerolled ${inputs.rerolledTermination.name}"
 
-        // One more look at the page in front of us before giving up on comparing.
         if (inputs.currentPageIncomplete && inputs.currentPageRescanAvailable) {
             return SparkSelectionDecision(
                 action = SparkSelectionAction.RESCAN_CURRENT_PAGE,
@@ -605,17 +454,11 @@ object SparkSelectionPolicy {
     }
 }
 
-/**
- * OCR text normalization for the chooser's screen text. All matching is substring-based after
- * folding the usual OCR damage (casing, 0-for-o, 1/l-for-i), because ML Kit reliably delivers
- * the word cores while mangling individual glyphs.
- */
+/** Substring matching after folding usual OCR damage (casing, 0-for-o, 1/l-for-i): ML Kit keeps word cores but mangles glyphs. */
 object SparkTextNorm {
     private fun fold(text: String): String = text.lowercase().replace('0', 'o').replace('1', 'i').replace('l', 'i')
 
-    /** Pager heading ("Rerolled Sparks" / "Original Sparks") to a side, or null. Checked on
-     * the pager and on the Confirmation dialog's set-name band. "rero" and "rigina" survive
-     * the fold distinctly ("reroiied"/"originai"), so the two sides cannot be confused. */
+    /** "rero" and "rigina" survive the fold distinctly ("reroiied"/"originai"), so the two sides cannot be confused. */
     fun headingSide(text: String?): SparkSetSide? {
         if (text == null) return null
         val folded = fold(text)
@@ -626,10 +469,8 @@ object SparkTextNorm {
         }
     }
 
-    /** Whether a title read matches the "Sparks Rerolled" result screen. */
     fun isSparksRerolledTitle(text: String?): Boolean = text != null && fold(text).contains("rero")
 
-    /** Whether a title read matches the "Spark Selection" intro dialog. */
     fun isSparkSelectionTitle(text: String?): Boolean {
         if (text == null) return false
         val folded = fold(text)
@@ -637,10 +478,8 @@ object SparkTextNorm {
     }
 
     /**
-     * Classify a Confirmation dialog's green set-name pill. A side name wins over the plain
-     * form (the side variants also contain the word "Sparks"); text that contains neither a
-     * side name nor the word "spark" is [SparkConfirmationPill.UNREADABLE] rather than being
-     * forced into a variant, so a mangled read can never be mistaken for the ordinary dialog.
+     * A side name wins over the plain form (side variants also contain "Sparks"); text with neither is UNREADABLE, so a
+     * mangled read is never mistaken for the ordinary dialog.
      */
     fun confirmationPill(text: String?): SparkConfirmationPill {
         if (text.isNullOrBlank()) return SparkConfirmationPill.UNREADABLE
@@ -651,8 +490,7 @@ object SparkTextNorm {
         }
     }
 
-    /** Canonical pink-spark style name for a settings value ("Front", "Pace Chaser", ...), or
-     * null when the value maps to no style. Pink aptitude sparks use the full style names. */
+    /** Pink aptitude sparks use the full style names ("Front", "Pace Chaser"). */
     fun canonicalStyleName(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
         val folded = fold(raw)
@@ -665,7 +503,6 @@ object SparkTextNorm {
         }
     }
 
-    /** Loose equality for spark/skill/stat names across OCR fuzz. */
     fun namesEqual(a: String?, b: String?): Boolean {
         if (a == null || b == null) return false
         val fa = fold(a).filter { it.isLetterOrDigit() }
@@ -676,13 +513,9 @@ object SparkTextNorm {
     fun nameInList(name: String?, list: Collection<String>): Boolean = list.any { namesEqual(name, it) }
 
     /**
-     * Same-row name comparison for two reads OF THE SAME LIST (SPARKS screen vs the keep
-     * dialog). Tolerant one step past [namesEqual]: an unreadable side matches anything (the
-     * merge's rule), and one folded form containing the other counts as the same name when the
-     * shorter form is long enough to be distinctive. That absorbs single-glyph OCR fuzz such
-     * as the live "Unity CupP" vs "Unity Cup" (2026-07-21) without letting a genuinely
-     * different name pass: two different sparks in the same row position never differ by a
-     * contained prefix alone.
+     * Same-row comparison for two reads of the same list. Tolerant one step past [namesEqual]: an unreadable side matches
+     * anything, and one folded form containing the other matches when the shorter is long enough to be distinctive
+     * (absorbs "Unity CupP" vs "Unity Cup").
      */
     fun namesCompatible(a: String?, b: String?): Boolean {
         if (a.isNullOrBlank() || b.isNullOrBlank()) return true
@@ -702,45 +535,25 @@ object SparkTextNorm {
     }
 }
 
-/** Per-row star evidence the keep-dialog read carries alongside its facts: the counted stars
- * plus how many slots were too ambiguous to classify. Kept probe-free so the verdict stays a
- * pure function. */
 data class SparkStarEvidence(val stars: Int, val ambiguousSlots: Int)
 
-/** Outcome of one keep-dialog verification pass. */
 sealed class SparkKeepVerdict {
-    /** Every row matches the original read exactly: confirm. */
     object Confirm : SparkKeepVerdict()
 
-    /** Names, kinds, order, and count all match and the only unresolved differences are star
-     * counts on rows whose evidence was ambiguous after every retry: confirm, logging the star
-     * check as corroborative. [rows] are the 1-based rows confirmed on semantics. */
+    /** Only star counts on ambiguous rows differ after every retry: confirm, logging the star check as corroborative. [rows] are the 1-based rows confirmed on semantics. */
     data class ConfirmCorroborative(val rows: List<Int>) : SparkKeepVerdict()
 
-    /** A star mismatch with retry budget left: rescan a fresh frame before judging. */
     object Retry : SparkKeepVerdict()
 
-    /** A proven contradiction: never confirm. [reason] is the exact block message. */
     data class Block(val reason: String) : SparkKeepVerdict()
 }
 
 /**
- * Evidence-fusion verdict for the ordinary keep confirmation (SPARKS_KEEP_CONFIRMATION only:
- * the plain-"Sparks" dialog cannot switch sides, and the original set was already read
- * completely on the SPARKS screen, so row names, kinds, order, and count are the primary
- * confirmation evidence and star counts corroborate).
- *
- * Semantic evidence is judged first and blocks outright: a different row count, a kind
- * mismatch, or a readable-name mismatch means the dialog is not showing the set this career
- * rolled. Star mismatches alone are retried on fresh frames ([SparkKeepVerdict.Retry]) while
- * budget remains - a single frame's star read has a proven transient failure mode (the
- * 2026-07-21 Medium 3*-as-2* block) - and only a mismatch that REPRODUCES after every retry
- * with unambiguous slot evidence blocks. A mismatch whose rows still carry ambiguous slots
- * after the retries confirms corroboratively instead: names, order, kinds, and count match a
- * set this career provably rolled, and the game offers no second set a keep could lose.
- *
- * The selected-side Original-vs-Rerolled confirmation deliberately does NOT use this rule:
- * there a star misread can select the wrong side, so its strict verification stays.
+ * Verdict for the ordinary keep confirmation only: the plain-"Sparks" dialog cannot switch sides and the original was
+ * read completely, so names, kinds, order and count are primary evidence and stars corroborate. A semantic mismatch
+ * blocks outright. Star mismatches are retried on fresh frames (a single frame can misread 3* as 2*) and block only if
+ * they reproduce with unambiguous slot evidence; with ambiguous slots they confirm corroboratively. The side-selected
+ * Original-vs-Rerolled confirmation does NOT use this rule: there a star misread can select the wrong side.
  */
 fun keepDialogVerdict(
     original: List<SparkRowFact>,
@@ -780,24 +593,17 @@ fun keepDialogVerdict(
     )
 }
 
-/** The pager page the bot is actually looking at, resolved from BOTH signals. */
 sealed class SparkPagerResolution {
-    /** Heading and page indicator agree. */
     data class Resolved(val side: SparkSetSide) : SparkPagerResolution()
 
-    /** Heading and page indicator disagree: never act on a contradictory page. */
     object Contradictory : SparkPagerResolution()
 
-    /** One or both signals were unreadable. */
     object Unreadable : SparkPagerResolution()
 }
 
 /**
- * Resolve the current pager page. The heading names the CONTENT; the active page dot gives the
- * POSITION, mapped through the observed page order (page 1 = Rerolled Sparks, page 2 =
- * Original Sparks on the live 2026-07-08 captures). Both signals are required and must agree:
- * the page is never assumed, and a disagreement (layout change, misread) blocks instead of
- * confirming a set the bot cannot prove it is looking at.
+ * The heading names the CONTENT, the lit page dot the POSITION (page 1 = Rerolled, page 2 = Original). Both must agree:
+ * a disagreement blocks instead of confirming a set the bot cannot prove it is looking at.
  */
 fun resolvePagerSide(headingSide: SparkSetSide?, activeDotIndex: Int?): SparkPagerResolution {
     val dotSide = sparkPagerDotSide(activeDotIndex)
@@ -808,8 +614,6 @@ fun resolvePagerSide(headingSide: SparkSetSide?, activeDotIndex: Int?): SparkPag
     }
 }
 
-/** Map a lit page-dot index to its side under the live-proven page order (dot 1 = Rerolled,
- * dot 2 = Original). Anything else -- no lit dot, both lit -- is unreadable. */
 fun sparkPagerDotSide(activeDotIndex: Int?): SparkSetSide? =
     when (activeDotIndex) {
         1 -> SparkSetSide.REROLLED
@@ -817,10 +621,8 @@ fun sparkPagerDotSide(activeDotIndex: Int?): SparkSetSide? =
         else -> null
     }
 
-/** The gesture the pager planner asks the navigator to dispatch. */
 enum class SparkPagerAction { NONE, SWIPE_LEFT, SWIPE_RIGHT }
 
-/** One planned pager gesture: endpoints in screen pixels plus the page it must land on. */
 data class SparkPagerSwipePlan(
     val action: SparkPagerAction,
     val startX: Float,
@@ -832,48 +634,29 @@ data class SparkPagerSwipePlan(
 )
 
 /**
- * Plans the Spark Selection pager's page-change gesture.
- *
- * The pager is paged with a horizontal drag across its central content, never with a tap on
- * the edge chevrons. The 2026-07-20 supervised run aimed two taps at the right chevron's own
- * measured pixels (990, 228) and the page never moved while every mid-screen tap in the same
- * minute landed: the thin chevron outline is a poor dispatch target, and the floating overlay
- * bubble rides the same screen edge and can swallow edge taps outright. The Scenario Select
- * carousel has paged reliably with a central drag since it shipped; the pager follows that
- * precedent.
- *
- * Page order is live-proven (page 1 = Rerolled Sparks, page 2 = Original Sparks), so moving
- * Rerolled -> Original drags the content leftward (finger travels right-to-left, the same
- * forward drag the carousel uses) and Original -> Rerolled drags back. A wrong direction
- * cannot mis-confirm anything: the pager has no page 0/3 to land on, the drag rubber-bands,
- * and the repaint verification reads UNCHANGED.
+ * The pager is paged with a horizontal central drag, never an edge chevron tap: the thin chevron outline is a poor
+ * dispatch target (two taps at its measured pixels never moved the page) and the floating overlay bubble rides the same
+ * screen edge and can swallow edge taps. Rerolled -> Original drags leftward. A wrong direction cannot mis-confirm: the
+ * pager has no page 0/3 and the repaint check reads UNCHANGED.
  */
 object SparkPagerNav {
-    /** The measured layout every coordinate below is anchored to (see SparkScreenProbes).
-     * Plans scale linearly to the actual capture size. */
+    /** Measured layout the coordinates are anchored to (see SparkScreenProbes); plans scale linearly to the capture size. */
     const val REFERENCE_WIDTH = 1080
     const val REFERENCE_HEIGHT = 1920
 
-    // Exclusion zones, in reference pixels. Swipe endpoints must clear every one of them.
-    // The floating overlay bubble snaps to EITHER screen edge and the user can drag it along
-    // that edge, so both full-height edge strips are out of bounds, not just the bubble's
-    // last seen position. The spark list's scrollbar rides the list's right edge inside the
-    // right strip. The bottom band holds the wide Confirm (center 540,1769) that irreversibly
-    // commits the visible page; the top band holds the chevrons (y=228), heading, and page
-    // dots (y=272).
+    // Swipe endpoints must clear both full-height edge strips (the overlay bubble snaps to either edge and can be dragged
+    // along it; the list scrollbar rides the right edge), the bottom band (the Confirm at 540,1769 irreversibly commits the
+    // page) and the top band (chevrons y=228, heading, page dots y=272).
     const val EDGE_OVERLAY_WIDTH = 100
     const val SCROLLBAR_MIN_X = 1015
     const val CONFIRM_ZONE_MIN_Y = 1650
     const val HEADER_ZONE_MAX_Y = 300
 
-    /** A vertical component would scroll the spark list instead of paging; planned swipes
-     * are flat, and anything at or above this delta is a planning bug. */
+    /** A vertical component would scroll the list instead of paging; a delta at or above this is a planning bug. */
     const val LIST_SCROLL_DY_LIMIT = 24
 
-    // Safe lanes: horizontal bands across the row region, far from every zone above. Lane 1
-    // mirrors the carousel's proven 80% -> 20% drag at mid-list height; the retry uses a
-    // different band and a longer, slower drag in case the first release point sat somewhere
-    // inert.
+    // Safe lanes across the row region. Lane 1 mirrors the carousel's proven 80% -> 20% drag; the retry uses a different
+    // band and a longer, slower drag in case the first release point was inert.
     const val LANE1_Y = 900
     const val LANE1_NEAR_X = 864
     const val LANE1_FAR_X = 216
@@ -907,30 +690,22 @@ object SparkPagerNav {
     }
 }
 
-/** Post-gesture verdict on the pager page, from a FRESH capture's heading and page dot. */
 enum class SparkPagerRepaint {
-    /** Both signals independently name the target page: the repaint is proven. */
     VERIFIED,
 
-    /** Both signals still name the starting page: the gesture did not take. The screen is
-     * provably in a known state, so exactly one more attempt is safe. */
+    /** Both signals still name the starting page: the gesture did not take and the screen is in a known state, so one more attempt is safe. */
     UNCHANGED,
 
-    /** The heading OCR yielded no side. */
     HEADING_UNREADABLE,
 
-    /** The page-dot probe yielded no single lit dot. */
     DOTS_UNREADABLE,
 
-    /** The signals disagree with each other. Never act on a contradictory page. */
     CONTRADICTION,
 }
 
 /**
- * Classify what a fresh post-gesture capture proves. Success is deliberately narrow: the
- * heading OCR and the lit page dot must BOTH name the target page. A settle timer is never
- * proof, a single signal is never proof, and anything unreadable or contradictory blocks
- * upstream instead of being swiped again toward a blind Confirm.
+ * Success is deliberately narrow: heading OCR and lit dot must BOTH name the target page. A settle timer or a single
+ * signal is never proof; anything unreadable or contradictory blocks instead of swiping again toward a blind Confirm.
  */
 fun classifySparkPagerRepaint(
     headingSide: SparkSetSide?,
@@ -949,38 +724,22 @@ fun classifySparkPagerRepaint(
     }
 }
 
-/**
- * Why a 30 TP redraw was not priced, in precedence order. The live 2026-07-19 decline logged
- * "spark rows: unexpected layout, scan: missing, transaction: missing" - three clauses for one
- * cause, two of them misleading: no scan had been SKIPPED rather than failed, and the row
- * layout was never actually inspected because the transaction was already gone. Each
- * prerequisite is now reported independently and only the first genuine blocker is named.
- */
+/** Why a 30 TP redraw was not priced, in precedence order. Only the first genuine blocker is named, so a log never claims a stage failed that was never reached. */
 enum class SparkSpendBlocker(val wire: String) {
-    /** All prerequisites met; the EV policy decides. */
     NONE("none"),
 
-    /** No live career transaction, so nothing may be read, priced, or spent. */
     TRANSACTION_MISSING("transaction_missing"),
 
-    /** The career-end stats snapshot is absent or short; the redraw cannot be priced. */
     STATS_SNAPSHOT_MISSING("stats_snapshot_missing"),
 
-    /** The complete-list scan never ran (a prior blocker short-circuited it). */
     ORIGINAL_READ_SKIPPED("original_read_skipped"),
 
-    /** The scan ran but terminated without proving it saw the whole set. */
     ORIGINAL_READ_INCOMPLETE("original_read_incomplete"),
 
-    /** The set was read completely but does not lead stat / aptitude / unique. */
     LAYOUT_UNEXPECTED("layout_unexpected"),
 }
 
-/**
- * One spend-decision prerequisite report. Pure and total: [blocker] names the FIRST genuine
- * problem in precedence order, and every field states its own fact independently so a log
- * line can never claim a downstream stage failed when it was simply never reached.
- */
+/** [blocker] names the FIRST genuine problem; every field states its own fact independently. */
 data class SparkSpendDiagnostics(
     val transactionPresent: Boolean,
     val statsSnapshotSize: Int?,
@@ -1002,7 +761,6 @@ data class SparkSpendDiagnostics(
 
     val spendAllowed: Boolean get() = blocker == SparkSpendBlocker.NONE
 
-    /** Greppable one-liner: the blocker first, then every prerequisite's own honest state. */
     fun format(): String {
         val scan = scanTermination?.name ?: "not attempted"
         val stats = statsSnapshotSize?.toString() ?: "missing"
@@ -1012,12 +770,9 @@ data class SparkSpendDiagnostics(
     }
 }
 
-/** Everything the keep policy knows about the career's build. Missing fields degrade
- * gracefully (a null axis matches nothing; empty targets score every blue as non-target). */
 data class SparkChooserProfile(
     val traineeIdentity: String?,
     val objective: String?,
-    /** Ordered blue-spark target stats, highest priority first (training.focusOnSparkStatTarget). */
     val blueTargetsOrdered: List<String>,
     val preferredDistance: String?,
     val preferredStyle: String?,
@@ -1025,10 +780,8 @@ data class SparkChooserProfile(
     val plannedSkillNames: List<String>,
 )
 
-/** Per-side score breakdown, kept structured so the choice record can persist it verbatim. */
 data class SparkSideBreakdown(
     val targetBlueStars: Int,
-    /** Index of the blue's stat in the ordered targets, or -1 when not a target / unreadable. */
     val blueTargetRank: Int,
     val rawBlueStars: Int,
     val matchedPinkStars: Int,
@@ -1044,7 +797,7 @@ data class SparkSideBreakdown(
     val unreadableRows: Int,
     val complete: Boolean,
 ) {
-    /** Flat map for the telemetry record. Key names are part of the corpus schema. */
+    /** Key names are part of the corpus schema. */
     fun toRecordMap(): Map<String, Any> =
         linkedMapOf(
             "target_blue_stars" to targetBlueStars,
@@ -1063,8 +816,6 @@ data class SparkSideBreakdown(
         )
 }
 
-/** The policy's decision: which side to keep, why, and whether it was a real comparison
- * ([certain]) or the conservative keep-original fallback for an uncertain read. */
 data class SparkChoice(
     val side: SparkSetSide,
     val decidedBy: String,
@@ -1075,44 +826,21 @@ data class SparkChoice(
 )
 
 /**
- * Keep-original-vs-keep-rerolled comparison. Separate from [SparkRerollPolicy] on purpose:
- * that object prices "should 30 TP be spent" from expected redraw odds BEFORE the redraw
- * exists; this one compares two ACTUAL sets row by row AFTER it does.
+ * Compares two ACTUAL sets after the redraw ([SparkRerollPolicy] prices the spend before it). Lexicographic, no weights:
+ *  R1 three-star protection: per-class 3-star holdings [target blue, desired pink, relevant white] compared in order; a
+ *     side is never discarded while it uniquely holds a 3-star of a class the other cannot match. An unreadable-name
+ *     3-star white protects the ORIGINAL side only: uncertainty protects a holding, it never earns redraw credit.
+ *  T1 blue (target-stat stars, earlier target rank, raw stars), T2 pink (profile-matched, raw), T3 unique stars,
+ *  T4 summed stars of relevant whites (irrelevant ones are excluded so they never outweigh a better blue),
+ *  T5 total stars, then row count. Tie: ORIGINAL (keeping it is free; the rerolled set must be earned).
  *
- * Deliberately a conservative lexicographic policy with no numeric weights. The tier order is
- * the farm program's value order and each tier is a plain integer comparison:
+ * Every race spark counts as relevant, not gated on the career's objective. It sits in T4 and the lowest R1 slot, so it
+ * never outranks a target blue or matching pink, but can hold a set together when neither side has one. Known
+ * limitation: a spark for a G1 the account will never breed toward is protected like a targeted one; over-protecting
+ * is the safe error.
  *
- *  R1 three-star protection: compare the per-class 3-star holdings [target blue, desired
- *     pink, relevant white] lexicographically. A side is never discarded while it uniquely
- *     holds a 3-star of a class the other side cannot match at that class or above. An
- *     unreadable-name 3-star white counts protectively for the ORIGINAL side only:
- *     uncertainty protects a holding, it never earns the redraw credit.
- *  T1 blue: target-stat stars, then earlier target rank, then raw stars. Blues outrank
- *     everything because spark farming exists for blue floors.
- *  T2 pink: profile-matched stars, then raw stars.
- *  T3 unique: stars.
- *  T4 relevant whites: summed stars over race sparks and planned skill sparks. Irrelevant
- *     whites are deliberately excluded here so they can never outweigh a better blue.
- *  T5 total stars, then row count.
- *  Tie: ORIGINAL (keeping the original is free; keeping the rerolled must be earned).
- *
- * On race-spark relevance: every race spark is treated as relevant, not gated on the career's
- * objective or on any target-parent race loop. This is deliberate and conservative. A race
- * spark is inheritance material a farm career exists to collect, and a redraw of the same
- * career cannot lose the original, so the only real cost of protecting one is the 30 TP already
- * spent. Because race protection lives in T4 and in the LOWEST slot of the R1 vector (below both
- * target blue and desired pink), a race spark can never outrank a superior target-blue or
- * matching-pink holding of the other side - a 3-star target blue always beats a 3-star race
- * white, since the R1 vector compares target blue first. It can, however, hold a set together
- * when neither side has a better blue/pink to show (the 2026-07-08 anchor is exactly this: a
- * 3-star race white with no 3-star blue or pink on either side). The known limitation, left for
- * a future parent-loop model rather than guessed at here: a race spark for a G1 the account will
- * never breed toward is protected the same as a targeted one. Over-protecting a rare holding is
- * the safe error; discarding an exceptional one is not.
- *
- * An incomplete or empty reading on either side short-circuits to keep-original with
- * [SparkChoice.certain] = false: the caller may only act on that fallback when it can verify
- * the Original page and the final confirmation header, and must block otherwise.
+ * An incomplete or empty read on either side short-circuits to keep-original with [SparkChoice.certain] = false: the
+ * caller may act on that only when it can verify the Original page and the final confirmation header.
  */
 object SparkKeepPolicy {
     fun breakdown(reading: SparkSetReading, profile: SparkChooserProfile, protectUnknownWhites: Boolean): SparkSideBreakdown {

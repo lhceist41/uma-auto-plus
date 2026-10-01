@@ -13,24 +13,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The read-only Veteran roster scan record types (`type:"roster_scan"` header + `type:"roster_entry"`
- * rows): one header and N entry rows per roster walk through the first card and Details chevrons. Pure model,
- * assembler, and serializer - [com.steve1316.uma_android_automation.VeteranRosterScanner] drives the
- * screen and reads the pixels, this turns the observations into the durable records, and the offline
- * `src/lib/parentLab/roster.ts` reads them back.
- *
- * Two things are kept strictly apart, because collapsing them is how a roster snapshot starts lying:
- * an **observation** is what the screen showed, and the derived identity/completeness is computed
- * from it. Nothing here infers a field it did not read - an unread field stays null and is named in
- * `unresolvedFields`, and a scan whose enumerated count disagrees with the account's own
- * `Registered used/capacity` is INCOMPLETE no matter how clean every individual entry read.
+ * Read-only Veteran roster scan records (`roster_scan` header plus `roster_entry` rows), read back offline by
+ * `src/lib/parentLab/roster.ts`. An observation is what the screen showed; identity and completeness are derived from
+ * it. An unread field stays null and is named in `unresolvedFields`, and a scan whose enumerated count disagrees with
+ * the account's `Registered used/capacity` is INCOMPLETE however clean each entry read.
  */
 const val ROSTER_SCAN_SCHEMA_VERSION: Int = 1
 
-/** Why the walk stopped. Recorded verbatim: the reason is what decides whether a short scan is a
- * legitimate bounded run or a failure, and the two must never be confused offline. */
+/** Why the walk stopped, recorded verbatim so a legitimate bounded run is never confused with a failure offline. */
 enum class RosterScanTermination {
-    /** The displayed count was reached without a verified return to the first Details identity. */
     COUNT_REACHED,
 
     /** Legacy diagnostic value; a disabled chevron is not a Veteran pager completion proof. */
@@ -51,31 +42,24 @@ enum class RosterScanTermination {
     /** A required advance did not produce a settled new complete identity. */
     STALLED,
 
-    /** The operator-set bounded development limit (the 5-entry and 20-entry validation runs). */
+    /** The operator-set bounded development limit. */
     ENTRY_LIMIT_REACHED,
 
-    /** The hard bound (capacity + slack) fired before any other condition. Always a failure. */
+    /** The hard bound (capacity + slack) fired first. Always a failure. */
     HARD_BOUND_REACHED,
 
-    /** A required Details screen or stable final roster list could not be verified. */
     UNEXPECTED_SCREEN,
 
-    /** A precondition (roster list, Registered count, or Filters OFF unreadable)
-     * failed before the first tap. Zero entries, zero gestures. */
+    /** A precondition (roster list, Registered count, Filters OFF) was unreadable before the first tap. */
     PRECONDITION_FAILED,
 }
 
-/** Whether the snapshot may be treated as the account's current roster - the retention verdict, equal
- * to `enumerationComplete && identityComplete`. Anything short of TRUSTED_COMPLETE is barred from
- * transfer analysis downstream - see [assembleRosterScan]. This is deliberately NOT the same fact as
- * "the walk covered the whole roster": a scan can enumerate all 257 positions cleanly (enumeration
- * complete) yet leave some entries unidentified (identity incomplete), and collapsing the two is how a
- * count-complete walk gets mislabelled as if it had missed entries. [VeteranRosterScan] carries the
- * two component facts separately for exactly that reason. */
+/** Whether the snapshot may be treated as the account's current roster, equal to `enumerationComplete && identityComplete`.
+ * Anything short of TRUSTED_COMPLETE is barred from transfer analysis. Distinct from "the walk covered the whole
+ * roster": a scan can enumerate every position yet leave entries unidentified. */
 enum class RosterScanCompleteness { TRUSTED_COMPLETE, INCOMPLETE }
 
-/** The roster list status bar as read before the walk. Every field is nullable because "unread" and
- * "read as absent" are different facts and the preconditions depend on telling them apart. */
+/** The roster list status bar as read before the walk; "unread" and "read as absent" are different facts. */
 data class RosterListState(
     val registeredUsed: Int?,
     val registeredCapacity: Int?,
@@ -84,8 +68,7 @@ data class RosterListState(
     val sortDirection: String?,
 )
 
-/** The Career Info block for one entry, when that pass ran. Absent (null observation) is different
- * from present-but-unread (a non-null observation with null fields). */
+/** The Career Info block for one entry; a null observation differs from a non-null one with null fields. */
 data class RosterCareerInfoObservation(
     val races: Int?,
     val wins: Int?,
@@ -96,34 +79,26 @@ data class RosterCareerInfoObservation(
 )
 
 /**
- * What the readers saw before the parsers turned it into (or refused to turn it into) a value.
- *
- * This is evidence, never identity. Nothing here feeds [entryFingerprint], the unresolved-field
- * list, or the completeness verdict, and no consumer may promote a raw string or a near-miss
- * candidate into a field the parser rejected: a raw stat OCR of "1" is a dropped-digit artifact, not
- * a stat of 1. It exists so an unresolved immutable field can be diagnosed from the corpus instead
- * of costing another blind walk of the whole roster.
- *
- * [rawStatOcr] is positional in [STAT_KEYS] order, like [RosterEntryObservation.stats].
+ * What the readers saw before parsing. Evidence only: it never feeds [entryFingerprint], the unresolved-field list
+ * or completeness, and a raw string or near-miss must not be promoted into a field the parser rejected (a raw stat
+ * OCR of "1" is a dropped digit). [rawStatOcr] is positional in [STAT_KEYS] order.
  */
 data class RosterEntryDiagnostics(
     val rawNameOutfitOcr: String? = null,
     val rawRatingOcr: String? = null,
     val rawStatOcr: List<String?> = emptyList(),
-    /** Which costume the name/outfit read came closest to inside the resolved trainee, and how close. */
+    /** Which costume the name/outfit read came closest to, and how close. */
     val outfitCandidate: String? = null,
     val outfitScore: Double? = null,
     val outfitSecondCandidate: String? = null,
     val outfitSecondScore: Double? = null,
-    /** How the outfit was accepted: "strong", "margin", or "reject" (PL-R1b). Lets a margin accept be
-     * counted and audited offline without re-deriving it from the scores. */
+    /** How the outfit was accepted: "strong", "margin" or "reject". */
     val outfitAcceptancePath: String? = null,
-    /** The rank medal's colour family, best-correlating tier, and the two template scores. */
     val rankFamily: String? = null,
     val rankChosen: String? = null,
     val rankBestScore: Double? = null,
     val rankSecondScore: Double? = null,
-    /** How the rank tier was accepted: "strong", "margin", or "reject" (PL-R1b). */
+    /** How the rank tier was accepted: "strong", "margin" or "reject". */
     val rankAcceptancePath: String? = null,
     val rawListRatingOcr: String? = null,
     val listRating: Int? = null,
@@ -138,13 +113,9 @@ data class RosterEntryDiagnostics(
 )
 
 /**
- * One entry exactly as the detail dialog showed it. [stats] and [statGrades] are positional in
- * [STAT_KEYS] order; [aptitudes] is positional in [APTITUDE_ROLES] order. [favoriteState] is the
- * saturation classification of the favorite glyph ("not_set" when the glyph is the pure-grayscale
- * outline, "unknown" when it is a saturated icon this stage deliberately does not identify).
- *
- * [diagnostics] is deliberately outside every derivation below: identity, completeness, and the
- * fingerprint are computed from the parsed fields alone, exactly as they were before it existed.
+ * One entry exactly as the detail dialog showed it. [stats], [statGrades] and [aptitudes] are positional in
+ * [STAT_KEYS] / [APTITUDE_ROLES] order. [favoriteState] is "not_set" for the pure-grayscale outline, "unknown" for a
+ * saturated icon. [diagnostics] stays outside identity, completeness and the fingerprint.
  */
 data class RosterEntryObservation(
     val character: String?,
@@ -339,14 +310,7 @@ fun boundFilteredFingerprint(filtered: RosterEntryObservation, roster: Assembled
     return recomputed.takeIf { it == candidate.rosterFingerprint }
 }
 
-/**
- * One assembled entry: the observation plus what can be derived from it and nothing else.
- *
- * [rosterFingerprint] is non-null only when every immutable-identity feeder read cleanly, so an
- * entry can be counted without being identified. [identityMultiplicity] is how many entries in the
- * SAME scan carry this fingerprint; > 1 is preserved as evidence of a real duplicate or a stalled
- * chevron and is never collapsed (PL-R1 design doc Part 4).
- */
+/** One assembled entry. [rosterFingerprint] is null unless every identity feeder read cleanly; [identityMultiplicity] > 1 is kept as evidence of a duplicate or stalled chevron, never collapsed. */
 data class RosterScanEntry(
     val scanIndex: Int,
     val observedAt: Long,
@@ -357,7 +321,6 @@ data class RosterScanEntry(
     val identityMultiplicity: Int,
 )
 
-/** The scan header: the account-level counts, the view state the walk ran under, and the verdict. */
 data class VeteranRosterScan(
     val schemaVersion: Int,
     val scanId: String,
@@ -371,30 +334,20 @@ data class VeteranRosterScan(
     val duplicateFingerprintCount: Int,
     val countDiscrepancy: Int?,
     val terminationReason: RosterScanTermination,
-    /** The walk covered exactly the account's own roster: filters confirmed off, the Registered used
-     * count read, that many entries enumerated, and a positive cycle or special-case termination.
-     * True even when some of those entries did not identify - enumeration is about coverage, not
-     * identity. This is the fact the transfer-analysis bar was hiding when only [completeness] existed. */
+    /** The walk covered exactly the account's own roster (filters off, used count read, that many entries, positive end proof). Coverage, not identity. */
     val enumerationComplete: Boolean,
-    /** Every enumerated entry resolved to a distinct identity: at least one entry, none unidentified,
-     * no repeated fingerprint. Independent of [enumerationComplete] - a bounded 5-entry run can be
-     * identity-complete without being enumeration-complete, and the full walk here is the reverse. */
+    /** Every entry resolved to a distinct identity: at least one, none unidentified, no repeated fingerprint. */
     val identityComplete: Boolean,
-    /** The retention verdict, `enumerationComplete && identityComplete`. Kept as the [completeness]
-     * enum for wire and reader back-compat; this boolean names it as the doc's `trustedForRetention`. */
+    /** The retention verdict, `enumerationComplete && identityComplete`; kept alongside the [completeness] enum for wire compatibility. */
     val trustedForRetention: Boolean,
     val completeness: RosterScanCompleteness,
-    /** How many failure-evidence crops the walk wrote for this scan. Zero when the diagnostic was
-     * not armed, and zero on a clean walk even when it was: crops are written only for an entry's
-     * unresolved immutable fields. Reported so a scan can never look like it preserved evidence it
-     * did not. */
+    /** Failure-evidence crops written for this scan; zero unless an entry had unresolved immutable fields. */
     val evidenceCropCount: Int,
     val appVersion: String,
     val screenWidth: Int,
     val screenHeight: Int,
 )
 
-/** The assembled scan: one header plus its entries, ready for serialization. */
 data class AssembledRosterScan(val header: VeteranRosterScan, val entries: List<RosterScanEntry>)
 
 fun rosterBindingDigest(scan: AssembledRosterScan): String? {
@@ -411,9 +364,7 @@ fun rosterBindingDigest(scan: AssembledRosterScan): String? {
     return contentHash128("parent_lab_roster_binding_v1\n$used\n${fingerprints.sorted().joinToString("\n")}\n")
 }
 
-/** The identity feeders. An entry missing any of these cannot be fingerprinted at all. Public so the
- * walk can decide which fields are worth preserving failure evidence for without re-deriving the
- * list and drifting from it. */
+/** The identity feeders: an entry missing any cannot be fingerprinted. Public so the walk shares the list. */
 fun identityUnresolved(o: RosterEntryObservation): List<String> =
     buildList {
         if (o.character == null) add("character")
@@ -424,7 +375,7 @@ fun identityUnresolved(o: RosterEntryObservation): List<String> =
         o.aptitudes.forEachIndexed { i, v -> if (v == null) add("aptitude_${APTITUDE_ROLES.getOrElse(i) { i.toString() }}") }
     }
 
-/** Everything else that was attempted. Missing here degrades completeness but not identity. */
+/** Missing here degrades completeness but not identity. */
 private fun auxiliaryUnresolved(o: RosterEntryObservation): List<String> =
     buildList {
         o.statGrades.forEachIndexed { i, v -> if (v == null) add("statGrade_${STAT_KEYS.getOrElse(i) { i.toString() }}") }
@@ -437,14 +388,10 @@ private fun auxiliaryUnresolved(o: RosterEntryObservation): List<String> =
         if (c.dateAcquired == null) add("careerDateAcquired")
     }
 
-/** Total fields the reader attempted for this observation, used as the completeness denominator. */
 private fun attemptedFieldCount(o: RosterEntryObservation): Int =
     4 + o.stats.size + o.statGrades.size + o.aptitudes.size + if (o.careerInfo != null) 6 else 0
 
-/**
- * The entry's immutable identity fingerprint, or null when any feeder is unread. Delegates to the
- * shared [rosterFingerprint] so the device hash stays byte-identical to the offline one.
- */
+/** The immutable identity fingerprint, or null when any feeder is unread; shared with the offline hash. */
 fun entryFingerprint(o: RosterEntryObservation): String? {
     if (identityUnresolved(o).isNotEmpty()) return null
     return rosterFingerprint(
@@ -459,15 +406,7 @@ fun entryFingerprint(o: RosterEntryObservation): String? {
     )
 }
 
-/**
- * Assembles the durable scan from the observations the walk collected, in traversal order.
- *
- * Completeness is decided structurally, never by how the walk "felt": the scan is TRUSTED_COMPLETE
- * only when filters were confirmed off, the account's displayed used count was read, the walk
- * enumerated exactly that many entries, every entry was identified, no fingerprint repeated, and the
- * walk stopped for a reason consistent with reaching the end. A bounded development run therefore
- * reports INCOMPLETE by construction, which is the point.
- */
+/** Assembles the durable scan: TRUSTED_COMPLETE only when filters were off, the used count was read and fully enumerated, every entry identified, no fingerprint repeated, and the walk ended for a reason consistent with reaching the end. */
 fun assembleRosterScan(
     scanId: String,
     startedAt: Long,
@@ -511,12 +450,7 @@ fun assembleRosterScan(
         RosterScanTermination.EMPTY_LIST -> used == 0
         else -> false
     }
-    // Two orthogonal facts, never one. Enumeration is about coverage (did the walk visit exactly the
-    // account's own count of positions, under a confirmed filter state, with cycle proof);
-    // identity is about resolution (did every visited position resolve to a distinct Veteran). The
-    // retention verdict needs both, but each is recorded on its own so a count-complete walk with
-    // unread fields reads as enumeration-complete rather than being lumped in with a walk that
-    // actually missed entries.
+    // Enumeration is coverage, identity is resolution; both are recorded separately so a count-complete walk with unread fields is not lumped in with one that missed entries.
     val enumerationComplete = finalStateVerified && list.filtersOff == true && used != null && enumerated == used && terminatedAtEnd
     val identityComplete = enumerated > 0 && unidentified == 0 && duplicates == 0 &&
         observations.map { rankFreeRosterIdentity(it.second) }.let { identities -> identities.all { it != null } && identities.filterNotNull().toSet().size == enumerated }
@@ -550,7 +484,6 @@ fun assembleRosterScan(
     )
 }
 
-/** Serializes the scan header to its durable `type:"roster_scan"` record. */
 fun serializeRosterScanHeader(h: VeteranRosterScan): JSONObject =
     JSONObject().apply {
         put("type", "roster_scan")
@@ -580,7 +513,6 @@ fun serializeRosterScanHeader(h: VeteranRosterScan): JSONObject =
         put("screenHeight", h.screenHeight)
     }
 
-/** Serializes one assembled entry to its durable `type:"roster_entry"` record. */
 fun serializeRosterScanEntry(scanId: String, e: RosterScanEntry): JSONObject {
     val o = e.observation
     return JSONObject().apply {
@@ -606,9 +538,7 @@ fun serializeRosterScanEntry(scanId: String, e: RosterScanEntry): JSONObject {
             JSONObject().apply { APTITUDE_ROLES.forEachIndexed { i, k -> o.aptitudes.getOrNull(i)?.let { put(k, it) } } },
         )
         put("favoriteState", o.favoriteState)
-        // Protection is deliberately never inferred from the favorite glyph: a memo also protects a
-        // Veteran and is not visible here, so the only positive answer comes from the PL-R1e filter
-        // partition. Until that runs, unknown means protected (PL-R1 design doc Part 6).
+        // Protection is never inferred from the favorite glyph: a memo also protects a Veteran and is not visible here. Unknown means protected.
         put("protectionState", "unknown")
         o.careerInfo?.let { c ->
             put(
@@ -624,10 +554,7 @@ fun serializeRosterScanEntry(scanId: String, e: RosterScanEntry): JSONObject {
             )
         }
         e.rosterFingerprint?.let { put("rosterFingerprint", it) }
-        // Failure evidence, plus the margin-accepted rows (PL-R1b). A strong, fully-resolved entry
-        // needs none - emitting raw OCR for all 257 rows would bury the rows that matter. But a margin
-        // accept resolved BELOW the absolute floor, so its scores are the audit trail that lets a
-        // strong-vs-margin count and a wrong-margin-decision review happen offline without another walk.
+        // Only failure evidence and margin-accepted rows carry raw OCR; emitting it for every row would bury the rows that matter.
         val marginAccepted = o.diagnostics?.let { it.outfitAcceptancePath == "margin" || it.rankAcceptancePath == "margin" } == true
         if (identityUnresolved(o).isNotEmpty() || marginAccepted || o.diagnostics?.bindingStatus == "accepted") {
             o.diagnostics?.let { d -> put("diagnostics", serializeRosterEntryDiagnostics(d)) }
@@ -638,8 +565,7 @@ fun serializeRosterScanEntry(scanId: String, e: RosterScanEntry): JSONObject {
     }
 }
 
-/** Serializes the read evidence. Every field is omitted when absent, so the record carries only what
- * was actually observed and an unread field is never rendered as an empty string. */
+/** Serializes the read evidence; absent fields are omitted, never rendered as empty strings. */
 fun serializeRosterEntryDiagnostics(d: RosterEntryDiagnostics): JSONObject =
     JSONObject().apply {
         d.rawNameOutfitOcr?.let { put("rawNameOutfitOcr", it) }

@@ -6,9 +6,8 @@ import com.steve1316.uma_android_automation.MainActivity
 import org.json.JSONObject
 
 /**
- * One Grand Concert cumulative fan goal: reach [targetFans] fans by career turn [deadlineTurn].
- * These come from the game's master-route fan-count goals and are already filtered to the ones that
- * apply to Grand Concert before they reach the runtime asset.
+ * One cumulative fan goal: [targetFans] by career turn [deadlineTurn], already filtered to Grand Concert in the runtime
+ * asset.
  */
 data class GrandConcertFanGoal(val deadlineTurn: Int, val targetFans: Int)
 
@@ -16,8 +15,8 @@ data class GrandConcertFanGoal(val deadlineTurn: Int, val targetFans: Int)
 data class GrandConcertGateOption(val raceName: String, val fansNeeded: Int)
 
 /**
- * A mandatory-race turn's fan entry gate. A choice turn ([isChoice]) carries more than one option,
- * and those options may require different fan counts, so callers must not assume one exact number.
+ * A mandatory-race turn's fan entry gate. A choice turn ([isChoice]) can carry options with different fan requirements,
+ * so callers must not assume one number.
  */
 data class GrandConcertMandatoryGate(val turn: Int, val isChoice: Boolean, val options: List<GrandConcertGateOption>) {
     /** The lowest option threshold: the fans that make at least one option enterable. */
@@ -26,8 +25,10 @@ data class GrandConcertMandatoryGate(val turn: Int, val isChoice: Boolean, val o
     /** The highest option threshold: the fans that make every option enterable. */
     val maxFansNeeded: Int get() = options.maxOf { it.fansNeeded }
 
-    /** The single shared threshold when every option agrees, or null when a choice turn's options
-     * differ (an ambiguous gate a telemetry reader must not collapse to one exact number). */
+    /**
+     * The shared threshold when every option agrees, or null when a choice turn's options differ (telemetry must not
+     * collapse an ambiguous gate to one number).
+     */
     val sharedFansNeeded: Int? get() = options.map { it.fansNeeded }.distinct().singleOrNull()
 }
 
@@ -38,15 +39,12 @@ data class GrandConcertCharacterFanFacts(
 )
 
 /**
- * The committed Grand Concert fan facts, parsed from the generated `gc_fan_runtime.json` asset (see
- * `scripts/generate-gc-fan-runtime-data.mjs`). This is the read-only, deterministic source of the
- * fan target/deadline, the mandatory-race entry gates, and the universal completed-race payout floor
- * that a fan-pressure calculation needs. It reads no pixels and makes no defer/force decision.
- *
- * Runtime trainee identity is matched conservatively: an exact canonical-name hit first, then a
- * deterministic normalization that only accepts a UNIQUE canonical match, and otherwise UNKNOWN. No
- * fuzzy best-candidate is used for fan safety - an unmatched name yields UNKNOWN and the caller
- * keeps its fail-safe behaviour.
+ * Read-only, deterministic parse of the generated `gc_fan_runtime.json` asset (see
+ * `scripts/generate-gc-fan-runtime-data.mjs`): fan targets and deadlines, mandatory-race entry gates, and the
+ * completed-race payout floor. Makes no defer/force decision.
+ * Trainee identity is matched conservatively: an exact canonical-name hit, then a normalization that accepts only a
+ * UNIQUE canonical match, otherwise UNKNOWN. No fuzzy best guess is used for fan safety, so the caller keeps its
+ * fail-safe behaviour.
  */
 class GrandConcertFanFacts private constructor(
     val schemaVersion: Int,
@@ -57,7 +55,6 @@ class GrandConcertFanFacts private constructor(
     private val byNormalizedName: Map<String, List<String>> =
         byCanonicalName.keys.groupBy { normalize(it) }
 
-    /** The outcome of resolving a runtime trainee name to committed fan facts. */
     sealed class Match {
         /** A unique canonical match. [exact] is true for a verbatim hit, false for a normalized one. */
         data class Matched(val canonicalName: String, val facts: GrandConcertCharacterFanFacts, val exact: Boolean) : Match()
@@ -70,8 +67,8 @@ class GrandConcertFanFacts private constructor(
     }
 
     /**
-     * Resolves a runtime [rawName] (as OCR'd from the Details dialog) to committed fan facts using
-     * exact-then-unique-normalized matching. Never returns a fuzzy best guess.
+     * Exact-then-unique-normalized match of a runtime [rawName] (as OCR'd from the Details dialog); never a fuzzy
+     * guess.
      */
     fun match(rawName: String): Match {
         val trimmed = rawName.trim()
@@ -96,15 +93,15 @@ class GrandConcertFanFacts private constructor(
         /** The only payload shape this reader understands; an unsupported version parses to null. */
         const val SUPPORTED_SCHEMA_VERSION: Int = 1
 
-        /** Deterministic identity normalization: lowercase and drop every non-alphanumeric character,
-         * so "T.M. Opera O" and "TM Opera O" collapse to one key. Only ever used to find a UNIQUE
-         * canonical match; it never scores or ranks candidates. */
+        /**
+         * Lowercases and drops every non-alphanumeric character so "T.M. Opera O" and "TM Opera O" collapse to one key.
+         * Only used to find a UNIQUE canonical match; it never scores candidates.
+         */
         fun normalize(name: String): String = name.lowercase().filter { it.isLetterOrDigit() }
 
         /**
-         * Parses the runtime asset text. Returns null (never throws) on malformed JSON, a missing
-         * field, or an unsupported [schemaVersion], so a bad asset degrades to UNKNOWN rather than
-         * crashing a career.
+         * Returns null (never throws) on malformed JSON, a missing field, or an unsupported [schemaVersion], so a bad
+         * asset degrades to UNKNOWN instead of crashing a career.
          */
         fun parse(json: String): GrandConcertFanFacts? {
             return try {
@@ -139,9 +136,8 @@ class GrandConcertFanFacts private constructor(
                                     val option = optionsArray.getJSONObject(j)
                                     GrandConcertGateOption(option.getString("raceName"), option.getInt("fansNeeded"))
                                 }
-                            // A gate with no options is malformed: minFansNeeded/maxFansNeeded would throw
-                            // in the pressure calculation. Fail the whole parse closed to null (UNKNOWN)
-                            // rather than let an empty list reach minOf/maxOf. The generator never emits one.
+                            // A gate with no options is malformed (minFansNeeded/maxFansNeeded would throw): fail the
+                            // whole parse closed to null. The generator never emits one.
                             check(options.isNotEmpty()) { "mandatory gate at turn ${gate.getInt("turn")} has no options" }
                             GrandConcertMandatoryGate(gate.getInt("turn"), gate.getBoolean("isChoice"), options)
                         }
@@ -155,9 +151,8 @@ class GrandConcertFanFacts private constructor(
         }
 
         /**
-         * Loads and parses the asset from the APK's assets. Returns null (never throws) when the
-         * asset is missing or unreadable, so a packaging or I/O failure degrades to UNKNOWN rather
-         * than crashing a career.
+         * Returns null (never throws) when the asset is missing or unreadable, so a packaging or I/O failure degrades
+         * to UNKNOWN.
          */
         fun loadFromAssets(context: Context, assetName: String = ASSET_NAME): GrandConcertFanFacts? {
             return try {

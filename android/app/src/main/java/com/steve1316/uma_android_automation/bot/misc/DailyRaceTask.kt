@@ -32,81 +32,41 @@ import com.steve1316.uma_android_automation.components.LabelRunnerSelection
 import com.steve1316.uma_android_automation.components.Region
 
 /**
- * Misc automation task for the Daily Races mode.
+ * Misc task for Daily Races: Home, Race tab, Daily Program, Daily Races, race and difficulty, Race Details, then one
+ * Race! tap. With Multi-Race: On the game chains all remaining tickets (reset daily at server reset), so there is no
+ * per-race loop.
  *
- * ## Flow
- *
- * ```
- * Home Screen
- *   └► Race tab (bottom nav)
- *        └► Daily Program tile
- *             └► Daily Races tile
- *                  └► Pick race (Moonlight Sho / Jupiter Cup)
- *                       └► Pick difficulty (VERY HARD / HARD / NORMAL / EASY)
- *                            └► Race Details screen
- *                                 ├─ Ensure Multi-Race: On
- *                                 └─ Click Race!
- *                                      └─ Game auto-runs remaining tickets in sequence
- *                                           └─ Terminal: back on Daily Races screen
- * ```
- *
- * ## Built-in game features we rely on
- *
- * - Multi-Race: On (set on Race Details) makes the game chain all remaining daily tickets
- *   into one sequence, so we verify the toggle once, commit a single `Race!` tap, and wait
- *   for the whole sequence - no per-race loop in the bot.
- * - Daily Race tickets (N/3) reset each day at server reset.
- *
- * ## Configuration (via [SettingsHelper], namespace `"miscDailyRace"`)
- *
- * - `targetRace` (string): `"Moonlight Sho"` | `"Jupiter Cup"`. Default `"Moonlight Sho"`
- *   (Monies, useful at every stage of the game).
- * - `targetDifficulty` (string): `"VERY_HARD"` | `"HARD"` | `"NORMAL"` | `"EASY"`.
- *   Default `"VERY_HARD"` for max rewards.
- * - `ensureMultiRaceOn` (bool): default true. False runs races one at a time, for debugging.
- *
- * @property game The [Game] instance used for bot interaction.
+ * Settings (namespace "miscDailyRace"): targetRace ("Moonlight Sho" default | "Jupiter Cup"), targetDifficulty (default
+ * "VERY_HARD" for max rewards), ensureMultiRaceOn (default true; false runs races one at a time for debugging).
  */
 class DailyRaceTask(game: Game) : MiscTask(game) {
-    /** Finite-state machine states for the Daily Races flow. */
     enum class DailyRaceScreenState {
-        /** Game main menu with bottom nav visible. Bot needs to click Race tab. */
         HOME_SCREEN,
 
-        /** Race tab open showing 4 mode tiles (Team Trials / Race Events / Daily Program / Exhibition). */
         RACE_TAB,
 
-        /** Inside Daily Program showing Daily Races + Daily Legend Races tiles. */
         DAILY_PROGRAMS_CONTAINER,
 
-        /** Inside Daily Races showing the rotation (Moonlight Sho / Jupiter Cup). */
         DAILY_RACES_RACE_PICK,
 
-        /** Difficulty tier list for the picked race (VERY HARD / HARD / NORMAL / EASY). */
         DAILY_RACES_DIFFICULTY_PICK,
 
-        /** Horse-picker step between difficulty and race details. Bot just clicks Confirm; the user pre-sets their runner by running manually once. */
+        /** Bot just clicks Confirm; the user pre-sets their runner by running manually once. */
         RUNNER_SELECTION,
 
-        /** Multi-Race popup asking how many races to run. Bot clicks Race! to commit the default 3/3. */
+        /** Bot clicks Race! to commit the default 3/3. */
         MULTI_RACE_POPUP,
 
-        /** Daily Sale popup after races complete. Bot dismisses via Cancel; user decides what to buy. */
         DAILY_SALE_POPUP,
 
-        /** Race Details confirmation screen with Multi-Race toggle and Race! button. */
         RACE_DETAILS,
 
-        /** Race cinematic / race-in-progress / between-race auto-confirm screen. */
         IN_RACE,
 
-        /** Post-race results sequence. Bot keeps tapping Next until back to a known screen. */
         POST_RACE_RESULTS,
 
-        /** Terminal success: back on Daily Races screen with (possibly) zero tickets left. */
         COMPLETE,
 
-        /** Screen could not be identified. Triggers safety bailout after N consecutive. */
         UNKNOWN,
     }
 
@@ -119,7 +79,6 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
     private val ensureMultiRaceOn: Boolean =
         SettingsHelper.getBooleanSetting("miscDailyRace", "ensureMultiRaceOn", true)
 
-    /** Tracks whether we've already committed the Race! tap this session. */
     private var raceSequenceCommitted: Boolean = false
 
     override fun process(): TaskResult? {
@@ -131,7 +90,6 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
 
         MessageLog.v(TAG, "[STATE] iter=$iterationsCompleted state=$currentState")
 
-        // Dismiss any incidental popup before dispatching. Cheap if nothing's there.
         if (handleIncidentalPopups()) {
             return null
         }
@@ -182,7 +140,6 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             }
 
             DailyRaceScreenState.IN_RACE -> {
-                // Just poll; with Multi-Race: On the game auto-skips between races.
                 game.wait(3.0)
                 null
             }
@@ -200,51 +157,39 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             }
 
             DailyRaceScreenState.UNKNOWN -> {
-                // Wait before retrying so transient states (loading spinners, cutscenes) can
-                // resolve. trackProgress already counts these toward the bailout.
                 game.wait(1.5)
                 null
             }
         }
     }
 
-    /**
-     * Classify the current screen, most discriminating templates first.
-     *
-     * Order matters: prefer templates that are unique to their screen and fast to match.
-     * Reuse the single [sourceBitmap] where possible to avoid re-screenshotting.
-     */
+    /** Most discriminating templates first; reuses [sourceBitmap] to avoid re-screenshotting. */
     private fun detectScreenState(
         sourceBitmap: android.graphics.Bitmap,
     ): DailyRaceScreenState {
-        // Race Details is the goal screen before racing - check first for fast-path exits.
         if (LabelRaceDetails.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
             return DailyRaceScreenState.RACE_DETAILS
         }
 
-        // Multi-Race popup overlays Runner Selection after Confirm; check before Runner
-        // Selection since its (dimmed) header is still visible beneath the popup.
+        // Multi-Race popup overlays Runner Selection, whose dimmed header is still visible beneath; check it first.
         if (LabelMultiRacePopup.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             return DailyRaceScreenState.MULTI_RACE_POPUP
         }
 
-        // Daily Sale popup appears after races finish; check before other screens since the
-        // Runner Selection header is still visible beneath it.
+        // Daily Sale popup appears after races finish with the Runner Selection header still visible beneath; check it
+        // first.
         if (LabelDailySale.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             return DailyRaceScreenState.DAILY_SALE_POPUP
         }
 
-        // Runner Selection - horse-picker screen between difficulty and Race Details.
         if (LabelRunnerSelection.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
             return DailyRaceScreenState.RUNNER_SELECTION
         }
 
-        // Daily Races screen group - detect by the purple "Daily Races" header banner. Distinct
-        // from the [ButtonDailyRaces] tile (dark-purple text on white) on the Daily Programs
-        // container, which is used for clicks.
+        // Purple "Daily Races" header banner; distinct from the dark-purple-on-white [ButtonDailyRaces] tile used for
+        // clicks.
         if (LabelDailyRacesHeader.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
-            // The header shows on both the race-pick and difficulty-pick screens. A visible
-            // Moonlight Sho or Jupiter Cup tile logo means we're on the race-pick screen.
+            // The header shows on both race-pick and difficulty-pick; a visible race tile logo means race-pick.
             val onRacePick =
                 ButtonDailyRacesMoonlightSho.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
                     ButtonDailyRacesJupiterCup.check(game.imageUtils, sourceBitmap = sourceBitmap)
@@ -255,25 +200,20 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             }
         }
 
-        // Daily Programs container - detect by the green "Daily Programs" banner, which only
-        // appears here (NOT on the Race tab).
+        // Green "Daily Programs" banner, which only appears here.
         if (LabelDailyPrograms.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             return DailyRaceScreenState.DAILY_PROGRAMS_CONTAINER
         }
 
-        // Race tab - Race nav tab selected, showing the 4 mode tiles. The menubar check is the
-        // fast path here.
         if (ButtonMenuBarRaceSelected.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.bottomHalf)) {
             return DailyRaceScreenState.RACE_TAB
         }
 
-        // Home Screen - bottom nav's Home tab is selected.
         if (ButtonMenuBarHomeSelected.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.bottomHalf)) {
             return DailyRaceScreenState.HOME_SCREEN
         }
 
-        // Post-race results - a summary screen with a Next button. Gate on raceSequenceCommitted
-        // so we only treat a Next button as results after we've actually started the sequence.
+        // Gated on raceSequenceCommitted so a Next button only counts as results once the sequence started.
         if (raceSequenceCommitted &&
             (
                 ButtonNext.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
@@ -290,10 +230,7 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
     // Per-state handlers
     // ------------------------------------------------------------------------
 
-    /**
-     * Navigate from Home to the Race tab via the bottom-nav Race button. Click the
-     * *unselected* variant: if it were already selected we'd be on the Race tab, not Home.
-     */
+    /** Click the *unselected* Race nav variant: if it were selected we would already be on the Race tab. */
     private fun handleHomeScreen() {
         MessageLog.v(TAG, "[STATE] handleHomeScreen:: clicking Race tab in bottom nav.")
         if (ButtonMenuBarRaceUnselected.click(game.imageUtils, region = Region.bottomHalf)) {
@@ -304,9 +241,6 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         }
     }
 
-    /**
-     * On the Race tab with 4 mode tiles visible: click the Daily Program tile.
-     */
     private fun handleRaceTab() {
         MessageLog.v(TAG, "[STATE] handleRaceTab:: clicking Daily Program tile.")
         if (ButtonDailyProgramTile.click(game.imageUtils)) {
@@ -317,9 +251,6 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         }
     }
 
-    /**
-     * Click the Daily Races tile (or Daily Legend Races tile, once that task exists).
-     */
     private fun handleDailyProgramsContainer() {
         MessageLog.v(TAG, "[STATE] handleDailyProgramsContainer:: looking for Daily Races tile.")
         if (ButtonDailyRaces.click(game.imageUtils)) {
@@ -331,10 +262,8 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
     }
 
     /**
-     * Click the configured race tile (Moonlight Sho or Jupiter Cup).
-     *
-     * Returns a [TaskResult] if the configured race isn't present (rotation changed or
-     * the ticket counter is zero, causing the tile to be hidden). Otherwise null to continue.
+     * Returns a [TaskResult] when the configured race tile is absent (rotation changed or zero tickets hid it); null to
+     * continue.
      */
     private fun handleRacePick(): TaskResult? {
         val tile =
@@ -349,7 +278,6 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             }
 
         if (!tile.check(game.imageUtils)) {
-            // Tile not present on this rotation OR 0 tickets remaining (tile hidden).
             MessageLog.w(TAG, "[WARN] handleRacePick:: $targetRaceName tile not visible. Rotation changed or tickets exhausted.")
             return TaskResult.Success(
                 TaskResultCode.TASK_RESULT_COMPLETE,
@@ -368,11 +296,8 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
     }
 
     /**
-     * Click the configured difficulty tier.
-     *
-     * Each difficulty row is at a stable y position on the 1080x1920 render. Computing
-     * coordinates as display-dimension ratios avoids 4 per-tier templates that would be
-     * fragile under cosmetic UI refreshes; the ratios come from a calibration capture.
+     * Difficulty rows sit at stable display-ratio positions from a calibration capture, avoiding 4 per-tier templates
+     * that are fragile under UI refreshes.
      */
     private fun handleDifficultyPick() {
         val ratioY: Double =
@@ -396,16 +321,12 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
     }
 
     /**
-     * Multi-Race popup - click Race! at fixed coordinates.
-     *
-     * The popup defaults to all held tickets (e.g. 3/3), which is what we want, so just commit
-     * Race!. Coordinate tap rather than template: the button's dynamic "Consumes N" subtitle
-     * makes template matching fragile.
+     * Coordinate tap rather than template: the button's dynamic "Consumes N" subtitle makes matching fragile. The popup
+     * defaults to all held tickets.
      */
     private fun handleMultiRacePopup() {
-        // Race! is centered in the dialog, not at the screen bottom. Bottom-anchored coords
-        // tapped through the backdrop onto the Runner Selection Confirm behind it, causing a
-        // close-reopen loop. Ratios are the dialog button center at 1080x1920.
+        // Race! is centered in the dialog; bottom-anchored coords tapped through the backdrop onto the Runner Selection
+        // Confirm behind it and looped close-reopen.
         val x: Double = SharedData.displayWidth * 0.722
         val y: Double = SharedData.displayHeight * 0.651
         MessageLog.v(TAG, "[STATE] handleMultiRacePopup:: clicking Race! (3/3) at ($x, $y).")
@@ -414,10 +335,7 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         game.wait(3.0)
     }
 
-    /**
-     * Daily Sale popup - dismiss via Cancel. It advertises limited-time purchases after races
-     * finish; always cancel and leave shopping to the user.
-     */
+    /** Always cancel the limited-time purchase advert; shopping is left to the user. */
     private fun handleDailySalePopup() {
         MessageLog.v(TAG, "[STATE] handleDailySalePopup:: dismissing via Cancel (user decides shopping).")
         if (ButtonCancel.click(game.imageUtils, region = Region.bottomHalf)) {
@@ -428,10 +346,7 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         }
     }
 
-    /**
-     * Runner Selection - click Confirm to accept the preselected runner. The user is expected
-     * to have run the race manually once so their preferred horse is already selected here.
-     */
+    /** Accepts the preselected runner; the user is expected to have run the race manually once. */
     private fun handleRunnerSelection() {
         MessageLog.v(TAG, "[STATE] handleRunnerSelection:: clicking Confirm to accept preset runner.")
         if (ButtonConfirm.click(game.imageUtils, region = Region.bottomHalf)) {
@@ -442,16 +357,10 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         }
     }
 
-    /**
-     * Verify the Multi-Race toggle, fix if needed, then commit Race!.
-     *
-     * The game only blocks Race! at 0 tickets, and at 0 tickets the race tile is hidden
-     * upstream so we'd never reach this state - any ticket count we see here is raceable.
-     */
+    /** At 0 tickets the race tile is hidden upstream, so any ticket count seen here is raceable. */
     private fun handleRaceDetails() {
         if (raceSequenceCommitted) {
-            // Already committed Race!; shouldn't be on Race Details again. Wait for the game
-            // to transition and let the state machine redetect.
+            // Already committed; wait for the game to transition and redetect.
             MessageLog.w(TAG, "[WARN] handleRaceDetails:: race already committed but still on Race Details. Redetecting.")
             game.wait(2.0)
             return
@@ -465,7 +374,6 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             }
             if (!ButtonMultiRaceOn.check(game.imageUtils)) {
                 MessageLog.w(TAG, "[WARN] handleRaceDetails:: Could not verify Multi-Race: On after toggle.")
-                // Continue anyway; may be a transient state.
             }
         }
 
@@ -480,12 +388,10 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
     }
 
     /**
-     * Tap through post-race result screens. The Multi-Race chain emits one result screen per
-     * ticket plus a final summary, each with some Next/OK/Confirm/Close button; click whichever
-     * is present until the state machine reaches COMPLETE (back on the race-pick screen).
+     * The Multi-Race chain emits a result screen per ticket plus a summary; click whichever advance button is present
+     * until COMPLETE.
      */
     private fun handlePostRaceResults() {
-        // Try each advance button in rough order of frequency on post-race screens.
         val advanceButtons =
             listOf(
                 "Next" to ButtonNext,

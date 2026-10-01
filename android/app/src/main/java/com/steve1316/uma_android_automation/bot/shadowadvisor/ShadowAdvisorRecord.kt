@@ -3,14 +3,7 @@ package com.steve1316.uma_android_automation.bot.shadowadvisor
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Serializes a [ShadowRecommendation] into the append-only `outcomes/shadow_advisor.jsonl` record (schema v1). It
- * duplicates NONE of the committed bot action, selected training, trainingSource, candidate.score, enteredRace, or
- * final outcome: the offline comparison recovers those by joining the decision_trace on (careerToken, seq).
- * Optional fields are omitted, never null-filled. Numeric leaves are stored as doubles; org.json (both the Android
- * runtime and the JVM test dependency) renders an integer-valued double without a trailing `.0` and keeps a
- * half-step decimal, matching the TypeScript authority's JS number formatting.
- */
+/** Append-only `outcomes/shadow_advisor.jsonl` record; omits fields the decision_trace join already carries (by careerToken, seq). Optional fields are omitted, never null-filled. */
 object ShadowAdvisorRecord {
     const val SCHEMA: String = "shadow_advisor"
     const val SCHEMA_VERSION: Int = 1

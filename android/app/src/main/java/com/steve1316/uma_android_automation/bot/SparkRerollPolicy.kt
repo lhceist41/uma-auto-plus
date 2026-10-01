@@ -3,25 +3,11 @@ package com.steve1316.uma_android_automation.bot
 import java.util.Locale
 
 /**
- * Keep-vs-reroll pricing for the career-end sparks screen (the 30 TP redraw).
- *
- * Replaces the old ">= 1100 core stat" gate, which predates the corrected spark model and could
- * never pass on URA farm careers (the account's URA best is 1089). Verified odds (2026-07-11,
- * ~9,770-factor JP sample cross-checked against two databases):
- *  - The blue spark picks its stat UNIFORMLY AT RANDOM among the five, then that stat's final
- *    value sets the star odds: <600 -> 90/10/0 (expected 1.10 stars, 3-star impossible),
- *    600-1099 -> ~50/45/5.5 (expected 1.555), 1100+ -> ~20/70/10.5 (expected 1.905).
- *  - Pink rerolls flat ~20/70/10 among A/S aptitudes (expected 1.90).
- *  - Green/unique star behavior is unverified; assumed the same flat draw, discounted.
- *  - Whites regenerate from the same sources on a redraw (~20% per distinct G1 won), so their
- *    count is EV-neutral; only a visible 3-star white is a holding a redraw would likely lose.
- *
- * Shape of the rule: the blue's redraw upside is credited in full (blues are what the farm
- * program exists for), while pink/unique/white value counts only as a HOLDING to protect -
- * chasing pink upside is not the program, but losing a 3-star pink to a blue gamble is real.
- * Consequences: a 2/3-star blue is always kept (a redraw's expected blue tops out at 1.905),
- * and a 1-star blue rerolls unless the redraw pool is dead (every stat under 600) or the set
- * holds jackpot pinks/whites.
+ * Keep-vs-reroll pricing for the career-end sparks screen (the 30 TP redraw). Odds from a ~9,770-factor
+ * JP sample: a blue picks its stat uniformly among the five, and that stat's final value sets the star
+ * odds (<600 -> expected 1.10 stars, 600-1099 -> 1.555, 1100+ -> 1.905); pink redraws flat ~20/70/10.
+ * Blue upside is credited in full; pink/unique/white count only as holdings to protect. Whites regenerate
+ * from the same sources, so only a visible 3-star white is worth protecting.
  */
 object SparkRerollPolicy {
     /** Expected redraw stars for a blue landing on a stat with this final value. */
@@ -39,23 +25,18 @@ object SparkRerollPolicy {
     /** Expected stars of a fresh pink (flat 20/70/10). */
     private const val FRESH_PINK_STARS = 1.90
 
-    /** Unique/green holdings weigh half: the star rule is unverified and its breeding value is
-     * secondary to blues. */
+    /** Unique/green star odds are unverified, so their holdings weigh half. */
     private const val UNIQUE_HOLDING_WEIGHT = 0.5
 
-    /** Value protected per visible 3-star white - the specific spark rarely survives a redraw. */
+    /** Value protected per visible 3-star white: the specific spark rarely survives a redraw. */
     private const val WHITE_THREE_STAR_HOLDING = 0.75
 
-    /** The redraw must clear this net gain before spending 30 TP, so ties don't churn. */
+    /** Net gain a redraw must clear before spending 30 TP, so ties don't churn. */
     private const val MARGIN = 0.05
 
     data class Verdict(val reroll: Boolean, val reason: String)
 
-    /**
-     * Prices keeping the visible set against a fresh redraw. Star counts come from the row
-     * color samples (no OCR involved); [pinkStars]/[uniqueStars] may be null when those rows
-     * were unreadable - unknown holdings price neutral rather than blocking the decision.
-     */
+    /** Star counts come from row color samples; null pink/unique stars (unreadable rows) price neutral. */
     fun decide(
         blueStars: Int,
         pinkStars: Int?,

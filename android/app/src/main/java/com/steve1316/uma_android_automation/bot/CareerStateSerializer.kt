@@ -5,58 +5,25 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Serializes an immutable [CareerState] into one append-only `career_state` v1 JSON record.
- *
- * This is a **separate durable record type** from `decision_trace`. CareerState captures the
- * pre-decision world facts the engine sees immediately before `decideNextAction()`; DecisionTrace
- * captures the turn-open state plus the decision evidence. They are joined offline by
- * `careerToken + seq`, never by observed turn/date. Keeping them in separate files
- * ([OutcomeCorpus.CAREER_STATE_PATH] vs [OutcomeCorpus.DECISIONS_PATH]) preserves each parser's
- * right to reject the other record type.
- *
- * Honesty rules mirror [CareerState] and [DecisionTrace]:
- * - A group that was never read this career ([CareerState.stats] / [CareerState.skillPoints] /
- *   [CareerState.aptitudes] / [CareerState.race] null) is OMITTED, never filled with a placeholder.
- * - Date components appear only when the date was actually read (`dayObserved`).
- * - Fans are deliberately absent: [CareerState] excludes them because no per-field read flag exists,
- *   so a default fan count could not be labelled observed.
- * - No candidate/score/selection evidence appears here; that stays DecisionTrace-owned.
- *
- * Pure and Context-free: it reads only the supplied immutable [CareerState], seq, and timestamp. It
- * does no OCR, no settings read, no mutable runtime read, no tap, and no file I/O of its own. The
- * append belongs to [Campaign], which passes the record to `OutcomeCorpus.append`. Identical input
- * (excluding the caller-supplied timestamp) yields byte-identical JSON.
+ * Serializes an immutable [CareerState] into one append-only `career_state` v1 JSON record, joined to
+ * `decision_trace` offline by `careerToken + seq`. Groups never read are omitted, never placeholder-filled;
+ * fans are absent because no per-field read flag exists. Pure: no OCR, settings, tap or file I/O.
  */
 object CareerStateSerializer {
-    /** Record type discriminator; a `career_state` reader accepts only this. */
+    /** Record type discriminator. */
     const val SCHEMA: String = "career_state"
 
-    /**
-     * Schema version. Bump only on a change a reader cannot absorb by tolerating new fields (renaming
-     * or removing a field, or changing an existing field's meaning/units). Additive fields keep v1.
-     */
+    /** Bump only on a change a reader cannot absorb by tolerating new fields. */
     const val SCHEMA_VERSION: Int = 1
 
-    /**
-     * Byte cap for the `career_state` file, matching [DecisionTrace.MAX_FILE_BYTES] (one local factual
-     * career-state corpus record per decision turn, comparable volume; it can record during normal
-     * release play when Record Decision Data is enabled). Past it the writer drops records rather than
-     * filling the device; nothing is rotated or deleted.
-     */
+    /** Byte cap matching [DecisionTrace.MAX_FILE_BYTES]; past it the writer drops records rather than filling the device. */
     const val MAX_FILE_BYTES: Long = 32L * 1024 * 1024
 
     /** Fixed stat order, matching [DecisionTrace] so every corpus reads stat maps the same way. */
     private val STAT_KEYS: List<Pair<StatName, String>> =
         listOf(StatName.SPEED to "spd", StatName.STAMINA to "sta", StatName.POWER to "pwr", StatName.GUTS to "grt", StatName.WIT to "wit")
 
-    /**
-     * Builds the `career_state` record for one logical decision turn.
-     *
-     * @param careerState The immutable snapshot built at the pre-decision boundary.
-     * @param seq This turn's per-career monotonic decision sequence (positive; the join key with `decision_trace`).
-     * @param timestamp Wall-clock epoch milliseconds at build time.
-     * @return The record, ready to append as one JSONL line.
-     */
+    /** Builds the `career_state` record for one decision turn; [seq] is the join key with `decision_trace`. */
     fun buildRecord(careerState: CareerState, seq: Int, timestamp: Long): JSONObject {
         val record = JSONObject()
         record.put("type", SCHEMA)
@@ -133,11 +100,7 @@ object CareerStateSerializer {
             put("goalRibbon", race.goalRibbonDay)
         }
 
-    /**
-     * Scenario extension with an explicit discriminator, or null for scenarios that carry no persistent
-     * state at this boundary (URA, Unity Cup) - the caller then omits the field entirely, so an absent
-     * `scenario` unambiguously means "no extension".
-     */
+    /** Scenario extension with an explicit discriminator, or null when the scenario carries no persistent state (URA, Unity Cup). */
     private fun buildScenario(scenario: ScenarioState?): JSONObject? =
         when (scenario) {
             null -> null

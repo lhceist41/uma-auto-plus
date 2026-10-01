@@ -59,42 +59,15 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Handles the Grand Concert scenario ("Brighter Together Our Grand Concert", community name
- * "Grand Live"), added to Global on 2026-07-22 22:00 UTC.
- *
- * What is automated: everything the shared [Campaign] loop already does. A Grand Concert career
- * uses the same career screen, date band, training menu, racing flow, training events, skill
- * purchasing, and career-end handling as URA Finale, and all of those were verified against
- * launch-night captures of the real screens (Scenario Select through the first career turn).
- * The only shared-layer adjustment the scenario needs is its stat caps, which live in
- * [com.steve1316.uma_android_automation.bot.Training.getScenarioStatCap].
- *
- * What else is automated here: the Lesson shop. Each career turn the campaign opens the shop,
- * reads the trio and balances, scores them with the researched strategy weights
- * ([GrandConcertPolicy]), and buys through a verify-or-cancel gate that taps Learn only when the
- * confirmation dialog names exactly the intended card ([attemptLearn]). On the Complete Career
- * screen it drains the leftover points the same way before opening Skills. Concerts are driven by
- * [runConcertEscort]. From there the ordinary career-end path takes over: the finalize gate
- * approves the Complete Career click and CareerLaunchNavigator walks results, sparks, and the
- * post-run To Home dialog, none of which is scenario-gated, so a full career needs no input
- * (proven end to end 2026-07-25, A+ 14176). The handoffs below are the fallback for a screen this
- * class cannot identify: they preserve the career rather than let a generic Confirm/Next/OK fall
- * through onto it, because a stray tap there can spend points or skip a concert, and neither is
- * recoverable.
- *
- * The handoff boundary is also why this class exists at all rather than reusing [UraFinale]:
- * a scenario whose unknown screens are LIVE needs its unknown-screen response to be "stop and
- * ask the player", not the relaunch ladder that a dead game deserves.
- *
- * @property game The [Game] instance for interacting with the game state.
+ * Grand Concert scenario ("Grand Live"): the shared [Campaign] loop plus the Lesson shop, concert escort, and
+ * career-end drain.
+ * Unknown screens end in a career-preserving handoff, not a relaunch: the game is alive, and a stray Confirm/Next/OK
+ * can spend points or skip a concert irrecoverably.
  */
 class GrandConcert(game: Game) : Campaign(game) {
-    /** No finale-win banner is claimed: the Grand Concert finale has not been captured, so the
-     * career ledger must not record a win/lose signal it cannot actually read. */
+    /** No finale-win banner is claimed: the finale has not been captured, so no win/lose signal is recorded. */
     override val capturesFinaleWins: Boolean = false
 
-    /** Set once so the player is told what supervision this scenario needs, without spamming a
-     * line every turn. */
     private var announcedSupportLevel = false
 
     /** Reads the live Lesson list into telemetry. Never taps - navigation stays here in the campaign. */
@@ -104,75 +77,57 @@ class GrandConcert(game: Game) : Campaign(game) {
     private val statPriority: List<StatName>
         get() = training.statPrioritization
 
-    /** The committed Grand Concert fan facts (goals, mandatory gates, payout floor), loaded once from
-     * the packaged asset. Null when the asset is missing or malformed, which the fan-pressure snapshot
-     * degrades to an UNKNOWN telemetry line without affecting the fail-safe policy. */
+    /**
+     * Committed fan facts, loaded once; null when missing or malformed (fan-pressure telemetry then reports UNKNOWN).
+     */
     private val fanFacts: GrandConcertFanFacts? by lazy { GrandConcertFanFacts.loadFromAssets(game.myContext) }
 
-    /** How many Lesson-shop visits this run has performed, capped by [MAX_LESSON_VISITS_PER_RUN]. */
     private var lessonVisitsThisRun = 0
 
-    /** The last turn whose shop visit found nothing to buy. The offer only changes when the turn
-     * advances or a purchase restocks it, so re-opening on later ticks of the same turn only burns
-     * the visit budget (observed live: 2-3 opens per turn would exhaust the run cap by mid-career).
-     * day<=1 (date not read yet) never blocks, so the catch-up visit after a bot restart always runs. */
+    /**
+     * Last turn whose shop visit found nothing to buy: the offer only changes on a new turn or a restock. day<=1 (date
+     * not read yet) never blocks.
+     */
     private var lastNoBuyVisitDay = -1
 
-    /** Songs BOUGHT by the spend loop in the current concert cycle. Resets when the turn counter
-     * crosses a concert boundary. Blind to songs granted free or bought manually before the bot
-     * attached, so it is a floor on the true cycle count, which is the safe direction: the
-     * deadline term can only overestimate urgency, never suppress it. */
+    /**
+     * Songs bought this concert cycle: a floor on the true count (blind to free or pre-attach songs), so the deadline
+     * term can only overestimate urgency.
+     */
     private var songsBoughtThisCycle = 0
 
-    /** Songs BOUGHT by the spend loop across the whole career, for the 16/18-song milestone
-     * telemetry. Same restart blindness as the cycle counter: a floor on the true total. */
+    /**
+     * Songs bought across the career (milestone telemetry); a floor on the true total, like the cycle
+     * counter.
+     */
     private var songsBoughtThisCareer = 0
 
-    /** The concert boundary [songsBoughtThisCycle] was last reset at, from [CONCERT_TURNS]. */
     private var lastConcertBoundary = 0
 
     /**
-     * Escort attempts spent on the concert currently pending, reset once one succeeds.
-     *
-     * This used to be a one-shot boolean, so a single unrecognised frame ended the run AND the
-     * whole queue: the game has one career slot, so a preserved career blocks every later run
-     * (2026-07-26 23:45, 6h21m dead with 2 runs unplayed). A give-up here is a recognition miss,
-     * not a timeout - successful concerts finish in 28-37s against a budget of about 100s - so the
-     * screen is usually driveable a moment later. Re-entering costs a few minutes and cannot
-     * corrupt anything: the escort only ever taps screens it has positively identified.
+     * Escort attempts spent on the pending concert. A give-up is a recognition miss, not a timeout (concerts finish in
+     * 28-37s of a ~100s budget), and re-entering is safe because the escort only taps identified screens.
      */
     private var concertEscortAttempts = 0
 
-    /** The cheapest unscheduled song the shop last offered with a fully readable cost, remembered
-     * across turns so the training scorer can steer point income toward its per-type deficit.
-     * Refreshed on every settled list read; a trio with no readable song keeps the previous
-     * target (the offer does not expire, so the remembered cost stays actionable). */
+    /**
+     * Cheapest unscheduled song with a readable cost, kept across turns so the training scorer can steer point income.
+     */
     private var lastSongTargetCost: PerformancePointVector? = null
     private var lastSongTargetTitle: String? = null
 
-    /** The cheapest readable, unscheduled TECHNIQUE cost on the last settled lesson read, and whether
-     * that read showed any readable unscheduled SONG. Together they let the training scorer add
-     * gate-advancing-technique colors to the demand set while the song gate is closed (no song on
-     * offer) - the phase the old current-song-only demand went blind on. Null technique cost when the
-     * read showed no readable technique. */
+    /**
+     * Cheapest readable unscheduled technique cost, and whether a readable song was on offer: lets the scorer demand
+     * gate-advancing technique colors while the song gate is closed.
+     */
     private var lastGateTechniqueCost: PerformancePointVector? = null
     private var lastOfferHadSong: Boolean = false
 
-    /** Titles of the songs bought this career (observation only, recorded at the purchase site). Used
-     * to find the cheapest UNPURCHASED next song in the current-stage catalog for the one-step
-     * cumulative-behind lookahead; it does not influence what is bought. Per-career (the campaign is
-     * rebuilt each career), so it starts empty and only grows. */
+    /** Titles of songs bought this career (observation only), used for the next-song lookahead. */
     private val purchasedSongTitles = mutableSetOf<String>()
 
-    /** Set once the end-of-career Lessons drain has run, so skill-screen entry retries never
-     * repeat it. */
     private var careerEndDrainDone = false
 
-    /**
-     * Announces the scenario's support level the first time the campaign runs a turn. Kept
-     * cheap and idempotent: this is the only per-run scenario-specific behavior that exists
-     * until real Lesson and concert fixtures land.
-     */
     fun announceSupportLevelOnce() {
         if (announcedSupportLevel) return
         announcedSupportLevel = true
@@ -187,9 +142,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Builds the typed stop for a Grand Concert screen the bot cannot drive. The caller stops
-     * the bot with this rather than clicking: the game is alive, so a relaunch would destroy a
-     * recoverable situation, and a generic Confirm could spend points the player cannot get back.
+     * Typed stop for a screen the bot cannot drive: stop rather than relaunch or tap a generic Confirm that could spend
+     * points.
      */
     fun handOffToPlayer(reason: GrandConcertHandoffReason, screenNote: String? = null, evidenceScreenshot: String? = null): GrandConcertHandoff {
         val handoff = GrandConcertHandoff(reason, screenNote, evidenceScreenshot)
@@ -198,15 +152,9 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Career-end detection includes the scenario's own Complete Career pixel probe alongside the
-     * shared complete_career button template. The two detectors race on the screen's fade-in: the
-     * probe reads the banner and icon cells before the button template clears its 0.8 confidence
-     * gate (measured 2026-07-26: the template scored 0.963 on the settled frame but missed 1.2s
-     * earlier, while the probe hit). When the probe won that race it used to reach the
-     * campaign-specific fallback below, which drained lessons and then handed the career to the
-     * player with 1132 skill points unspent. Routing both detectors through this check sends
-     * every career-end frame down the one good path: drain, careerComplete plan, finalize gate,
-     * navigator.
+     * Includes the scenario's pixel probe beside the shared complete_career template: the probe can hit the fade-in
+     * frame before the template clears its 0.8 gate, and the old fallback then handed the career off with skill points
+     * unspent.
      */
     override fun checkEndScreen(): Boolean {
         if (super.checkEndScreen()) return true
@@ -220,22 +168,13 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Campaign-specific screen check, reached once every shared screen check has missed. Owns the
-     * concert-pending screen: the escort runs the concert, and any unrecognized state inside that
-     * flow ends in a career-preserving handoff.
-     *
-     * The Complete Career screen is deliberately NOT handled here anymore: [checkEndScreen]
-     * recognises it (template or pixel probe) earlier in the main loop, so the shared career-end
-     * path owns it end to end. The old fallback here could win the fade-in race against the
-     * button template and hand the career off with every skill point unspent (2026-07-26).
+     * Owns the concert-pending screen; any unrecognized escort state ends in a career-preserving handoff. Complete
+     * Career is handled earlier by [checkEndScreen].
      */
     override fun checkCampaignSpecificConditions(): Boolean {
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
-        // The concert-pending screen: run the concert through the escort. Every escort tap is
-        // gated on a probe for the exact screen it belongs to, and any unrecognized state ends in
-        // the same career-preserving handoff that used to fire immediately.
         if (grandConcertConcertPendingScreenPresent(sampler)) {
             concertEscortAttempts++
             MessageLog.i(
@@ -248,9 +187,6 @@ class GrandConcert(game: Game) : Campaign(game) {
                 return true
             }
             if (concertEscortAttempts < MAX_CONCERT_ESCORT_ATTEMPTS) {
-                // Returning true hands the turn back to the main loop, which re-detects the pending
-                // screen and calls the escort again with a fresh capture. Nothing is tapped on the
-                // way out, so the career is exactly where it was.
                 MessageLog.w(
                     TAG,
                     "[GRAND_CONCERT] [CONCERT] Escort attempt $concertEscortAttempts did not finish the concert. " +
@@ -267,29 +203,18 @@ class GrandConcert(game: Game) : Campaign(game) {
             throw CampaignBreakpointException(handoff.playerMessage())
         }
 
-        // No concert pending: whatever the escort was struggling with is off screen (the main loop
-        // or its unknown-screen ladder owns it now), so the next concert starts with a full budget
-        // rather than inheriting a spent attempt from this one.
+        // No concert pending: reset the budget so the next concert does not inherit a spent attempt.
         concertEscortAttempts = 0
         return false
     }
 
     /**
-     * The concert escort: runs one concert from the pending screen back to a screen the main
-     * loop can drive. Built from the maintainer's screen-by-screen captures of the 3rd Concert
-     * (fixtures concert_confirm / concert_playback / concert_success_banner / concert_overview).
-     *
-     * The discipline is the same as the lesson spend loop's: every tap is gated on a probe for
-     * the exact screen that owns the control, unrecognized frames only wait, and the wait budget
-     * ends in false so the caller can hand off with the career preserved. The flow is linear
-     * (confirm -> playback -> result screens -> career), with one branch: a Late Dec concert is
-     * followed by the next turn's New Year trainee event, which belongs to the MAIN loop's event
-     * handler, so meeting a Training Event screen is a successful exit, not an anomaly.
+     * Runs one concert from the pending screen back to a screen the main loop can drive. Every tap is gated on a probe
+     * for its screen, unrecognized frames only wait, and an exhausted budget returns false for a career-preserving
+     * handoff. A Training Event (New Year after a Late Dec concert) is a successful exit.
      */
     private fun runConcertEscort(): Boolean {
-        // The one number that decides the result tier, logged where the analysis scripts can
-        // find it: the 2026-07-26 careers missed Great Success on roughly two of five concerts
-        // and the count had to be reconstructed from purchase logs to even see it.
+        // Logged for the analysis scripts: this count decides the result tier.
         MessageLog.i(
             TAG,
             "[GRAND_CONCERT] [CONCERT] Entering the concert with $songsBoughtThisCycle new song(s) this cycle " +
@@ -350,9 +275,7 @@ class GrandConcert(game: Game) : Campaign(game) {
                     game.wait(1.5)
                 }
                 grandConcertBonusesUpdatedPresent(sampler) -> {
-                    // The queued-bonus activation notice that follows a concert. Close DISMISSES
-                    // it; Confirm opens the Active Concert Bonuses detail panel (the escort once
-                    // confirmed itself onto that panel and had to hand off).
+                    // Close dismisses the queued-bonus notice; Confirm opens the Active Concert Bonuses panel.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Bonuses Updated acknowledgment; closing.")
                     game.tapCoordinate(GrandConcertEscort.BONUSES_CLOSE_X.toDouble(), GrandConcertEscort.BONUSES_CLOSE_Y.toDouble(), "gc_concert_bonuses_close")
                     game.wait(1.2)
@@ -364,15 +287,13 @@ class GrandConcert(game: Game) : Campaign(game) {
                     game.wait(1.2)
                 }
                 grandConcertOnStagePresent(sampler) -> {
-                    // The Grand's "ON STAGE!" huddle (observed live at the finale, where it
-                    // exhausted the first escort's budget); one tap on the medallion proceeds.
+                    // The Grand's "ON STAGE!" huddle: one tap on the medallion proceeds.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] ON STAGE huddle; tapping to proceed.")
                     game.tapCoordinate(GrandConcertEscort.ON_STAGE_TAP_X.toDouble(), GrandConcertEscort.ON_STAGE_TAP_Y.toDouble(), "gc_concert_on_stage")
                     game.wait(2.0)
                 }
                 grandConcertConcertConfirmPresent(sampler) -> {
-                    // The start confirmation back mid-flow means an earlier tap was swallowed or
-                    // an interstitial bounced the game back to it (seen at the Grand finale).
+                    // Start confirmation back mid-flow: a tap was swallowed or an interstitial bounced the game back.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Start confirmation reappeared; driving it again.")
                     if (!startConcertFromConfirm()) return false
                 }
@@ -385,14 +306,9 @@ class GrandConcert(game: Game) : Campaign(game) {
                     return true
                 }
                 IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = bitmap) -> {
-                    // A mandatory race day can land on the very turn a concert ends: Sakura
-                    // Bakushin O's CBC Sho followed her turn-60 concert (2026-07-26 23:45), the
-                    // career screen swapped its Training layout for the Race Day banner,
-                    // checkMainScreen missed that variant, and the escort burned its whole
-                    // budget on a perfectly ordinary screen before handing off. The main loop
-                    // owns race days, so this is a successful exit exactly like the Training
-                    // Event one. The icon check is used directly because the full
-                    // checkMandatoryRacePrepScreen can tap Back as a side effect.
+                    // A mandatory race day can land on the turn a concert ends and swaps the Training
+                    // layout for the Race Day banner; the main loop owns it, so exit successfully. The icon
+                    // check is used directly because checkMandatoryRacePrepScreen can tap Back.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Concert complete; a mandatory race day follows and the main loop owns it.")
                     return true
                 }
@@ -416,11 +332,9 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Drives an open start confirmation to completion. On the Grand finale's variant the
-     * cutscene-skip checkbox is checked first (verified by the glyph turning green) so the full
-     * cinematic never plays; then Start is tapped and the dialog is confirmed gone before
-     * reporting success. Every tap is re-verified because the Grand's heavier dialog swallowed
-     * the escort's single fire-and-forget Start tap on the second validation career.
+     * Drives an open start confirmation to completion: checks the cutscene-skip box (verified by the green
+     * glyph) on the Grand finale variant, taps Start, and confirms the dialog is gone. The heavier dialog
+     * swallowed a single fire-and-forget Start tap.
      */
     private fun startConcertFromConfirm(): Boolean {
         for (attempt in 1..4) {
@@ -444,12 +358,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * GC career-end skill-screen entry. The URA Learn-button template does not exist on the
-     * Complete Career screen (observed 2026-07-24: six template misses, and only the
-     * unspent-skill-points finalize guard kept the career from completing with 500 SP unspent).
-     * On the GC layout this drains the leftover performance points through Lessons once, then
-     * opens the skill screen via the screen's own Skills button; on any other layout it falls
-     * back to the shared template entry.
+     * The URA Learn-button template does not exist on the Complete Career screen: drain leftover points through Lessons
+     * once, then open Skills via the screen's own button. Other layouts use the shared entry.
      */
     override fun openCareerEndSkillScreen() {
         val bitmap = game.imageUtils.getSourceBitmap()
@@ -461,11 +371,8 @@ class GrandConcert(game: Game) : Campaign(game) {
         if (!careerEndDrainDone) {
             MessageLog.i(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] Draining leftover performance points before the skill purchase.")
             val spent = drainLessonsAtCareerComplete()
-            // A drain that never saw the list leaves the flag unset: with the probe now part of
-            // checkEndScreen, the first entry attempt can run on a fade-in frame where the
-            // Lessons tap lands on nothing, and the bounded career-end entry retry in
-            // Campaign.process deserves a real second drain instead of a silent skip that
-            // expires the leftover points.
+            // Leave the flag unset when the drain never saw the list (the first attempt can run on a fade-in frame) so
+            // the bounded retry in Campaign.process gets a real second drain.
             careerEndDrainDone = spent >= 0
             game.wait(1.0)
         }
@@ -474,15 +381,9 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Reads the open lesson list, re-reading while the trio is incomplete.
-     *
-     * The list paints top-down, so a read taken too early returns the first card and leaves the
-     * other two entirely blank (no title, kind or cost). That is indistinguishable from a genuinely
-     * short offer at the scoring layer, and it cost a real career-end drain: the only card the
-     * reader saw was an unaffordable song, so the stop rule fired and the run finalized with
-     * Da 85 / Pa 23 / Vo 35 / Vi 33 / Co 18 unspent while affordable techniques sat in the two
-     * slots it never read (2026-07-25). Keeps the best attempt so a genuinely short list still
-     * proceeds after the retries rather than blocking.
+     * Re-reads while the trio is incomplete: the list paints top-down, so an early read returns one card and blanks,
+     * which looks like a short offer and once ended a drain with points unspent. Keeps the best attempt so a genuinely
+     * short list still proceeds.
      */
     private fun readLessonListSettled(): LessonList? {
         var best: LessonList? = null
@@ -505,11 +406,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         return best
     }
 
-    /** Remembers the training scorer's point-steering inputs from a settled lesson read: the cheapest
-     * readable, unscheduled SONG cost (the current target; absent or unreadable keeps the previous
-     * target), whether any readable unscheduled song was on offer (the song-gate state), and the
-     * cheapest readable, unscheduled TECHNIQUE cost (the gate-advancing purchase while the gate is
-     * closed). Reads only; it buys nothing and changes no purchase decision. */
+    /** Remembers the scorer's point-steering inputs from a settled read. Reads only; changes no purchase decision. */
     private fun rememberLessonState(list: LessonList) {
         val readableUnscheduled = list.cards.filter { it.readable && it.scheduled != true }
         val song = readableUnscheduled.filter { it.kind == LessonCardKind.SONG }.minByOrNull { it.cost.total() ?: Int.MAX_VALUE }
@@ -528,26 +425,17 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * The end-of-career Lessons drain, entered from the Complete Career screen's own Lessons
-     * button. Runs the same guarded spend loop as the mid-career visit, but in career-complete
-     * scoring mode (compounding and queued bonuses are residual, deadlines moot) and with the
-     * stop line at 1: expiring points have zero opportunity cost, so anything with positive value
-     * beats losing them. Always claws back to the Complete Career screen afterwards.
-     *
-     * Returns the number of lessons learned, or [DRAIN_LIST_NEVER_SEEN] when the list never
-     * appeared at all - the caller uses that to keep its drain retryable rather than treating a
-     * missed tap as a completed drain.
+     * End-of-career Lessons drain: the guarded spend loop in career-complete scoring with stop line 1 (expiring points
+     * have no opportunity cost), then back to Complete Career. Returns lessons learned, or [DRAIN_LIST_NEVER_SEEN] so
+     * the caller keeps the drain retryable.
      */
     private fun drainLessonsAtCareerComplete(): Int {
         game.tapCoordinate(GrandConcertCareerComplete.LESSONS_X.toDouble(), GrandConcertCareerComplete.LESSONS_Y.toDouble(), "gc_career_complete_lessons")
         game.wait(1.5)
         val list = readLessonListSettled()
         if (list == null) {
-            // "Did not open" is an inference from an empty read, and the two causes need opposite
-            // fixes: a tap that missed the button, or a list that opened but this layout cannot be
-            // parsed. Nothing distinguished them on 2026-07-25, when the drain gave up with 0/3
-            // cards readable on all three attempts and 300 points expired unspent. Capture the frame
-            // so the next occurrence answers it instead of costing another career's leftovers.
+            // "Did not open" is inferred from an empty read; a missed tap and an unparseable layout need opposite
+            // fixes, so capture the frame to tell them apart.
             val shot =
                 try {
                     val filename = "gc_drain_no_lessons_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}"
@@ -580,9 +468,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Shadow CareerState scenario payload (Phase A). Performance-point balances are intentionally
-     * omitted: they are unknown at the main-screen boundary (read only during training-screen
-     * analysis), so surfacing them here would fabricate state.
+     * Performance-point balances are omitted: they are only read during training-screen analysis, so surfacing them
+     * here would fabricate state.
      */
     override fun scenarioStateSnapshot(): ScenarioState {
         return GrandConcertState(
@@ -593,15 +480,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Grand Concert per-turn hook: the Lesson-shop visit. When the Lessons button is unlocked on
-     * the career screen, open the shop, read the offered list, and run the guarded spend loop:
-     * score the trio, and while the best affordable card clears the buy threshold, learn it
-     * through [attemptLearn]'s verify-or-cancel gate. Everything is logged per purchase, and any
-     * read failure, verification mismatch, or unexpected screen aborts the visit without another
-     * tap - the shop's own Back is always the way out.
-     *
-     * Bounded to [MAX_LESSON_VISITS_PER_RUN] visits per run and [MAX_PURCHASES_PER_VISIT] buys per
-     * visit so a misbehaving scorer is bounded by construction.
+     * Per-turn Lesson-shop visit. Any read failure, mismatch, or unexpected screen aborts without another tap; the
+     * shop's own Back is the way out. Bounded by [MAX_LESSON_VISITS_PER_RUN] and [MAX_PURCHASES_PER_VISIT].
      */
     override fun onBeforeMainScreenUpdate() {
         if (lessonVisitsThisRun >= MAX_LESSON_VISITS_PER_RUN) return
@@ -630,11 +510,8 @@ class GrandConcert(game: Game) : Campaign(game) {
             lessonReader.logLessonList(list)
             logLessonScores(list, context)
             val outcome = spendVisit(list, context, MAX_PURCHASES_PER_VISIT, GrandConcertPolicy.SPEND_MIN_SCORE)
-            // A no-buy or gate-advance-only visit blocks this turn's later ticks; a real (at-or-
-            // above-gate) purchase leaves the door open for the restocked offer. Gate advances
-            // already forced their restocks inside the visit, and chaining them across ticks
-            // would drain points into junk techniques. An unreadable list never blocks: that is
-            // a transient to retry.
+            // A no-buy or gate-advance-only visit blocks later ticks this turn; a real purchase leaves the door open
+            // for the restock. Chaining gate advances would drain points into junk techniques.
             lastNoBuyVisitDay = if (outcome.purchases > outcome.gateAdvances) -1 else visitDay
         } else {
             MessageLog.w(TAG, "[GRAND_CONCERT] [LESSON_READ] Lesson list did not open or was unreadable; clawing back to the career screen.")
@@ -643,25 +520,14 @@ class GrandConcert(game: Game) : Campaign(game) {
         exitLessonShop()
     }
 
-    /**
-     * Builds the scoring context from the turn counter: which concert cycle this is, how close the
-     * next concert is (arms the per-cycle deadline term), the post-activation runway for queued
-     * concert bonuses, and the current energy. Also rolls the per-cycle song counter when the turn
-     * crosses a concert boundary.
-     */
     private fun buildLessonContext(): LessonScoreContext {
         val day = date.day
-        // GameDate initializes day to 1 and the visit hook runs BEFORE the turn's date read, so
-        // the first visit after a bot start sees day=1. A real turn 1 can never reach the shop
-        // (Lessons unlocks later), so day<=1 always means "not read yet": score without turn
-        // context rather than as pre-1st-concert (which inflated a song to 365 on restart).
+        // day<=1 means the date is not read yet (a real turn 1 cannot reach the shop): score without turn context, not
+        // as pre-1st-concert, which inflated a song to 365.
         if (day <= 1) {
             return LessonScoreContext(songsLearnedThisCycle = songsBoughtThisCycle, energyPercent = trainee.energy, statPriority = statPriority)
         }
-        // STRICTLY-before: the concert turn itself still belongs to the ENDING cycle. With <=,
-        // the first context built on the concert day (the training recommendation runs before
-        // the concert fires) reset the counter early, and the 09:50 validation concert entered
-        // logging "0 new song(s)" with 2 actually bought.
+        // STRICTLY before: the concert turn still belongs to the ending cycle; with <= the counter reset early.
         val boundary = CONCERT_TURNS.lastOrNull { it < day } ?: 0
         if (boundary != lastConcertBoundary) {
             lastConcertBoundary = boundary
@@ -689,36 +555,27 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * The training scorer's point-economy context: cycle state from [buildLessonContext] (which
-     * also rolls the per-cycle song counter, so a context requested before the cycle's first shop
-     * visit still sees a fresh count), caps computed from the concerts already performed (200
-     * base, +50 each, research-confirmed on any success tier; never OCR'd), and the per-type
-     * deficit toward the remembered cheapest song. A type whose balance or cost is unreadable is
-     * omitted from the deficit so the scorer never biases on a guess.
+     * Point-economy context for the training scorer: caps from concerts performed (200 base, +50 each,
+     * research-confirmed, never OCR'd) and the per-type deficit toward the cheapest song. A type with an unreadable
+     * balance or cost is omitted so the scorer never biases on a guess.
      */
     override fun grandConcertPointContext(balances: Map<PerformancePointType, Int?>?): GrandConcertPointContext? {
         val lessonContext = buildLessonContext()
         val day = date.day
         if (day <= 1) return null
-        // Strictly-before, matching buildLessonContext: on the concert day itself the caps have
-        // not risen yet and the cycle target is still the ending cycle's.
         val concertsPassed = CONCERT_TURNS.count { it < day }
         val caps = PerformancePointType.entries.associateWith { 200 + 50 * concertsPassed }
         val balancesMap = balances ?: emptyMap()
         val expectedSongsByNow = GrandConcertPolicy.PURCHASED_SONG_TARGETS.take(concertsPassed).sum()
 
-        // Widened per-color demand (see [GrandConcertPointDemand] and [GrandConcertPointContext]): the
-        // current-song-only demand went blind during technique-gate phases (no song on offer) and did
-        // not prepare for the next song while the career trailed the cadence. The next-song lookahead
-        // is a bounded one step (the cheapest unpurchased song in the current stage catalog), taken
-        // only while behind the cadence; the gate technique fills in when the song gate is closed.
+        // The current-song-only demand went blind in technique-gate phases and did not prepare for the next song when
+        // behind cadence. The lookahead is one step (cheapest unpurchased song in the stage catalog), only while
+        // behind.
         val behindTotal = songsBoughtThisCareer < expectedSongsByNow
         val nextSongCost =
             if (behindTotal) {
-                // Exclude the current song target while it is actually on offer: it is still
-                // "unpurchased" until bought, so without this the next-song lookahead could return the
-                // same song and double-count its colors. During a gate phase (no song on offer) the
-                // stale target is NOT excluded - it may legitimately be the next song after the gate.
+                // Exclude the current target while it is on offer (still "unpurchased" until bought) so the lookahead
+                // does not double-count it; in a gate phase the stale target may be the next song.
                 val excludeCurrent = lastSongTargetTitle.takeIf { lastOfferHadSong }
                 GrandConcertSongCatalog.cheapestUnpurchasedInStage(concertsPassed + 1, purchasedSongTitles, excludeCurrent)?.cost
             } else {
@@ -738,15 +595,12 @@ class GrandConcert(game: Game) : Campaign(game) {
             caps = caps,
             deficit = demand.deficit,
             songsBoughtThisCycle = songsBoughtThisCycle,
-            // The bias chases the cycle's milestone target (3-4-4-3-3), not just the Great
-            // Success floor: wanting a fourth song means wanting the income for it too.
             purchasedFloor = GrandConcertPolicy.songTargetForCycle(concertsPassed),
             turnsUntilConcert = lessonContext.turnsUntilConcert,
             songTargetTitle = lastSongTargetTitle,
             songsBoughtThisCareer = songsBoughtThisCareer,
-            // The cadence total a healthy run has by the START of this cycle (the sum of the
-            // 3-4-4-3-3 purchased targets for concerts already performed). Behind this, the bias
-            // stays armed on the total even after the current cycle floor is met.
+            // Cadence total a healthy run has by the start of this cycle; behind it, the bias stays armed after the
+            // cycle floor is met.
             expectedSongsByNow = expectedSongsByNow,
             currentSongDemand = demand.currentSongDemand,
             gateTechniqueDemand = demand.gateTechniqueDemand,
@@ -755,42 +609,21 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Grand Concert fan-vs-training deferral. A detected fan requirement is normally raced the turn
-     * it appears; here it MAY instead yield to a training turn when [GrandConcertFanPolicy] can
-     * prove enough schedule slack, because Grand Concert makes its performance points only by
-     * training. Concert turns can add some fans through events, but that gain is variable and is not
-     * treated as a guaranteed fan source for this policy.
-     *
-     * Fail-closed by construction, and deliberately so even though the reader is reviewed and its
-     * calendar windows are corrected (a mandatory-gate turn no longer counts as its own race slot).
-     * The committed data ([GrandConcertFanFacts]) carries the fan target/deadline, the mandatory-race
-     * entry gates, and a universal payout floor, and [GrandConcertFanPressure] turns them into an exact
-     * factual snapshot. But the two policy proof inputs stay null via
-     * [GrandConcertFanPressure.reviewGatedPolicyInputs], so the policy still resolves to a fail-safe
-     * race. The reason is not that the facts are unread: no authoritative data proves a deferral that
-     * is both safe and useful. Single-mode fans come only from races; Grand Concert concerts award no
-     * fans, so there is no guaranteed non-race credit to shrink a deficit, and the conservative race
-     * bounds available (the universal floor and the stronger per-race curve minima) are far too weak to
-     * ever permit a defer -- the best guaranteed-minimum race every Junior turn totals only about 398
-     * fans against a 3000-fan target. Activation needs a guaranteed-fan or per-race conservative-reward
-     * data foundation that does not yet exist.
-     * The [GC_FAN] line records the full corrected snapshot and the decision every turn. Only the fan
-     * arm is eligible; a trophy or goal-points requirement always races. The goal-deadline OCR
-     * ([com.steve1316.uma_android_automation.utils.CustomImageUtils.determineTurnsRemainingBeforeNextGoal])
-     * remains stood down for this scenario and is not consulted here.
+     * A fan requirement may yield to a training turn when [GrandConcertFanPolicy] proves enough slack. Fail-closed: the
+     * policy proof inputs stay null via [GrandConcertFanPressure.reviewGatedPolicyInputs], so it still resolves to a
+     * fail-safe race.
+     * Concerts award no fans and the guaranteed race minima (about 398 fans per Junior turn against a 3000 target) are
+     * far too weak to permit a defer; activation needs a guaranteed-fan data foundation that does not yet exist. Only
+     * the fan arm is eligible; [GC_FAN] logs the snapshot and decision every turn.
      */
     override fun considerFanRaceDeferral(): Boolean {
         if (!racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement) return false
         val concertBehindPace = grandConcertPointContext(null)?.behindPace ?: false
 
-        // Factual fan-pressure snapshot from the committed runtime data. Telemetry only: it never
-        // feeds the policy in this build.
         val snapshot = GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
 
-        // The policy proof inputs are held to null even when the snapshot knows an exact deadline and
-        // deficit, so a real fan requirement fail-safe races exactly as it did before this reader
-        // existed. Only an independent review may replace reviewGatedPolicyInputs with the snapshot's
-        // figures.
+        // Policy proof inputs stay null even when the snapshot knows the deadline; only an independent review may
+        // replace them.
         val policyInputs = GrandConcertFanPressure.reviewGatedPolicyInputs(snapshot)
         val decision =
             GrandConcertFanPolicy.decide(
@@ -804,35 +637,21 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Grand Concert's fan requirement comes from the committed route facts, not the dead
-     * `race_criteria_fans` template (verified missing live): the earliest goal-or-gate period at or
-     * after this turn, active only while its threshold is unmet at the current fan count. Reuses the
-     * already-loaded [fanFacts], the trainee identity, and the tracked fan count, and
-     * makes no screen reads. Racing.checkRacingRequirements applies the result as the authoritative
-     * per-turn `hasFanRequirement`.
+     * Fan requirement from the committed route facts, not the dead race_criteria_fans template: the earliest
+     * goal-or-gate period at or after this turn, active while its threshold is unmet. No screen reads.
      */
     override fun currentFanRequirementFromScenarioFacts(): GrandConcertFanRequirement.Result =
         GrandConcertFanRequirement.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
 
     /**
-     * The greedy-with-stop-rule spend loop over an open lesson list. Buys the best affordable
-     * offer at or above [minScore], re-reads the refreshed trio, and repeats until the stop rule
-     * fires, a purchase attempt aborts, or [maxPurchases] is reached.
-     *
-     * Two concert-protection rules sit ahead of the plain greedy pick (both added 2026-07-26
-     * after the songs-per-cycle measurement showed two of five concerts missing Great Success):
-     * [GrandConcertPolicy.chooseSongFirst] buys any affordable song while the cycle is below the
-     * three-song floor, and [GrandConcertPolicy.chooseSpend]'s technique reserve keeps the point
-     * pool from being drained below [GrandConcertPolicy.TECH_RESERVE_TOTAL] while a future
-     * concert remains. The technique-only-trio stall the first live run hit is handled by
-     * [GrandConcertPolicy.chooseGateAdvance].
+     * Greedy spend loop with a stop rule over an open lesson list. Two concert protections precede the greedy pick:
+     * [GrandConcertPolicy.chooseSongFirst] under the three-song floor, and the technique reserve
+     * [GrandConcertPolicy.TECH_RESERVE_TOTAL] while a concert remains.
      */
     private fun spendVisit(initialList: LessonList, context: LessonScoreContext, maxPurchases: Int, minScore: Int): SpendVisitOutcome {
-        // Pre-concert hold: with the cycle's Great Success songs secured and the concert next
-        // turn, buying anything is a net loss. A revealed song left unbought survives the concert
-        // and counts as the new cycle's first lesson credit ("song-saving", research-confirmed),
-        // while any purchase refreshes the whole trio away; and un-revealed technique progress
-        // resets at the concert regardless, so a last technique buys nothing that survives.
+        // Pre-concert hold: with the Great Success songs secured and the concert next turn, a purchase is a net loss:
+        // an unbought revealed song survives as the next cycle's first credit, a purchase refreshes the trio away, and
+        // technique progress resets at the concert.
         if (!context.careerComplete &&
             (context.songsLearnedThisCycle ?: 0) >= GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value &&
             (context.turnsUntilConcert ?: Int.MAX_VALUE) <= 1
@@ -849,10 +668,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         var gateAdvances = 0
         var list = initialList
         while (purchases < maxPurchases) {
-            // A partially readable offer no longer vetoes the visit: the ranking only contains
-            // readable cards and affordability must be proven per card, so buying among the
-            // readable ones is safe. (The first live run stalled for whole turns because one
-            // flaky card row vetoed everything.)
+            // A partially readable offer does not veto the visit: affordability is proven per card.
             if (!list.complete) {
                 MessageLog.i(
                     TAG,
@@ -860,14 +676,9 @@ class GrandConcert(game: Game) : Campaign(game) {
                 )
             }
             val report = GrandConcertPolicy.describeLessonOffer(list, HypeTier.UNKNOWN, context)
-            // Deadline pressure widens the gate-advance cost cap: with the cycle floor unmet and
-            // the concert close, an expensive gate technique beats arriving a song short.
             val urgent =
                 (context.songsLearnedThisCycle ?: 0) < GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value &&
                     (context.turnsUntilConcert ?: Int.MAX_VALUE) <= 5
-            // The technique reserve holds whenever a future concert remains and this is not the
-            // career-end drain: mid-career techniques must not spend the pool below what the
-            // next songs need. Song purchases and gate advances are exempt by design.
             val reserveActive = !context.careerComplete && context.turnsUntilConcert != null
             var gateAdvance = false
             val cycleTarget = context.cycleSongTarget ?: GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value
@@ -928,17 +739,12 @@ class GrandConcert(game: Game) : Campaign(game) {
             if (intended.kind == LessonCardKind.SONG) {
                 songsBoughtThisCycle++
                 songsBoughtThisCareer++
-                // Record the purchased title (observation only) so the training scorer's next-song
-                // lookahead can skip songs already bought. It changes no purchase decision.
                 intended.title?.let { purchasedSongTitles.add(it) }
             }
 
             game.wait(1.2)
-            // Re-read through the same settle loop the visit's first read uses. A single read here
-            // ended a whole career-end drain after ONE purchase on 2026-07-26, leaving 461 points to
-            // expire: the list repaints top-down after a buy, so a read taken too early returns
-            // nothing and the visit gave up rather than waiting. That is the exact failure the
-            // settle helper was written for, and it was guarding only the way in.
+            // Re-read through the settle loop: the list repaints top-down after a buy, and a single early read ended a
+            // career-end drain after one purchase.
             val next = readLessonListSettled()
             if (next == null) {
                 MessageLog.w(TAG, "[GRAND_CONCERT] [LESSON_BUY] The list did not return after learning; ending the visit.")
@@ -955,16 +761,11 @@ class GrandConcert(game: Game) : Campaign(game) {
         return SpendVisitOutcome(purchases, gateAdvances)
     }
 
-    /** Outcome of one shop visit: total purchases, and how many were gate advances (bought below
-     * the score gate purely to force a restock). */
     private data class SpendVisitOutcome(val purchases: Int, val gateAdvances: Int)
 
     /**
-     * The transactional Learn: tap the card, read the confirmation dialog, verify it names exactly
-     * the intended card, and only then tap Learn. Every other outcome cancels: a Schedule dialog
-     * (the card was not actually affordable), an unreadable dialog, or a title/kind mismatch. The
-     * one non-negotiable rule is that the affirmative button is tapped only after EXACT_MATCH, so
-     * a mis-tap or a mis-read can cost at most a Cancel.
+     * Tap the card, verify the confirmation dialog names exactly the intended card, and only then tap Learn. Every
+     * other outcome cancels, so a mis-tap or mis-read costs at most a Cancel.
      */
     private fun attemptLearn(intended: LessonListCard, score: Int): Boolean {
         MessageLog.i(
@@ -1016,9 +817,10 @@ class GrandConcert(game: Game) : Campaign(game) {
         game.wait(0.8)
     }
 
-    /** The purchase receipt: for every balance where the before, cost, and after values all read,
-     * before minus cost must equal after. A mismatch is logged, never acted on - OCR noise on one
-     * cell must not poison an otherwise verified purchase. */
+    /**
+     * Purchase receipt: where before, cost, and after all read, before minus cost must equal after. A mismatch is
+     * logged, never acted on, so OCR noise cannot poison a verified purchase.
+     */
     private fun verifyReceipt(before: LessonList, bought: LessonListCard, after: LessonList) {
         for (type in PerformancePointType.entries) {
             val b = before.balances[type] ?: continue
@@ -1035,11 +837,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Returns to the career screen from the Lesson list without spending anything. Taps the list's own
-     * Back button first, then falls back to the generic Back/Cancel/Close in case a stray tap left a
-     * confirmation dialog up - none of Back/Cancel/Close ever confirm a learn or schedule. The base
-     * [handleMainScreen] re-checks [checkMainScreen] after this hook and bails safely if we are somehow
-     * not back yet, so the main loop always re-converges.
+     * Returns to the career screen from the Lesson list without spending: the list's Back, then generic
+     * Back/Cancel/Close (none confirm a learn or schedule).
      */
     private fun exitLessonShop() {
         game.tapCoordinate(GrandConcertLessonGeometry.LIST_BACK_X.toDouble(), GrandConcertLessonGeometry.LIST_BACK_Y.toDouble(), "gc_lesson_back")
@@ -1053,16 +852,9 @@ class GrandConcert(game: Game) : Campaign(game) {
         game.wait(0.5)
     }
 
-    /**
-     * Logs the strategy scorer's ranking of the offer that was just read, in the SAME context the
-     * spend decision uses, so a logged score is the score the picker saw (the first live run's
-     * energy technique printed 31 from a blank context while the decision correctly saw 8).
-     */
     private fun logLessonScores(list: LessonList, context: LessonScoreContext) {
         val report = GrandConcertPolicy.describeLessonOffer(list, HypeTier.UNKNOWN, context)
         report.ranked.forEach { line ->
-            // Log the actual per-type point cost as read off the card (never a score-derived
-            // stand-in), so the next real career can measure what songs truly cost against balances.
             val costText =
                 line.rawCost?.let { c ->
                     PerformancePointType.entries.joinToString(",") { "${it.displayName.take(2)}:${c[it] ?: "?"}" }
@@ -1079,35 +871,37 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     companion object {
-        /** The five concert turns (Junior Late Dec through Senior Late Dec), used to derive the
-         * cycle boundaries, the deadline countdown, and the concert segment. JP_CONFIRMED spacing
-         * corroborated by this fork's own live careers. */
+        /**
+         * The five concert turns (Junior Late Dec through Senior Late Dec); JP_CONFIRMED spacing corroborated by live
+         * careers.
+         */
         private val CONCERT_TURNS = listOf(24, 36, 48, 60, 72)
 
-        /** Final career turn for the queued-bonus runway estimate: GameDate runs 1-72 plus the
-         * 73-75 finale season. */
+        /** Final career turn for the runway estimate: GameDate runs 1-72 plus the 73-75 finale season. */
         private const val CAREER_END_TURN = 75
 
         /** How many times a lesson-list read is retried while the trio is still incomplete. */
         private const val LESSON_LIST_READ_ATTEMPTS = 3
 
-        /** Runaway guard on Lesson-shop visits per run. The per-turn no-buy gate keeps the normal
-         * rate near one visit per turn, so a full 75-turn career stays well under this; 40 proved
-         * too tight live (2-3 same-turn opens burned it by mid-career, silently starving the
-         * late concerts of songs). */
+        /**
+         * Runaway guard on shop visits per run (40 proved too tight live; the per-turn no-buy gate keeps the normal
+         * rate near one per turn).
+         */
         private const val MAX_LESSON_VISITS_PER_RUN = 120
 
-        /** Per-visit purchase bound for the mid-career spend loop. A turn's point income funds a
-         * couple of purchases at most, so anything past this is a scorer misbehaving. */
+        /** Per-visit purchase bound for the mid-career loop. */
         private const val MAX_PURCHASES_PER_VISIT = 4
 
-        /** Purchase bound for the end-of-career drain, which legitimately empties the whole pool.
-         * Sized for the worst observed leftover (227 of one type funds nine cheap techniques);
-         * this is a runaway backstop, not a target - the stop rule ends real drains. */
+        /**
+         * Purchase bound for the career-end drain, sized for the worst observed leftover (227 of one type funds nine
+         * cheap techniques); a runaway backstop.
+         */
         private const val MAX_PURCHASES_CAREER_COMPLETE = 30
 
-        /** [drainLessonsAtCareerComplete] sentinel: the Lessons list never appeared, so the drain
-         * did not happen at all and the caller must keep it retryable. */
+        /**
+         * [drainLessonsAtCareerComplete] sentinel: the list never appeared, so the caller must keep the drain
+         * retryable.
+         */
         private const val DRAIN_LIST_NEVER_SEEN = -1
 
         /** Escort loop budget: playback plus a handful of result screens fits well inside this. */
@@ -1116,9 +910,8 @@ class GrandConcert(game: Game) : Campaign(game) {
         private const val MAX_PLAYBACK_MENU_TAPS = 3
 
         /**
-         * Escort re-entries allowed for one pending concert before handing the career to the player.
-         * Three attempts cost a few minutes at worst; the alternative measured in production was a
-         * queue dead for hours, because a preserved career blocks the game's single career slot.
+         * Escort re-entries per pending concert before handing over: a preserved career blocks the single career slot,
+         * so a give-up once left a queue dead for hours.
          */
         private const val MAX_CONCERT_ESCORT_ATTEMPTS = 3
 

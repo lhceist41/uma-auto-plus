@@ -39,12 +39,10 @@ class SkillDatabase(private val game: Game) {
         private val CHECK_TYPE_PATTERN = Regex("(running_style|distance_type|ground_type)==(\\d+)")
 
         /**
-         * Derives a skill's aptitude affinity ("checkType") from its activation condition and precondition strings, for the estimated-rank skill scoring. Reproduces UmaTools'
-         * `affinity_role` for ~97% of skills. Returns "" when the skill has no aptitude affinity, in which case it scores its flat base.
-         *
-         * @param condition The skill's activation condition string, e.g. "running_style==3&up_slope_random==1".
-         * @param precondition The skill's precondition string, which can carry affinity tokens too.
-         * @return The affinity roles joined with "/", ordered surface then distance then style, e.g. "Dirt/Mile" - or "" for none.
+         * Derives a skill's aptitude affinity ("checkType") from its condition and precondition strings, for
+         * estimated-rank scoring; reproduces UmaTools' `affinity_role` for ~97% of skills. Returns the roles joined
+         * with "/" (surface, distance, style; e.g. "Dirt/Mile"), or "" when there is none and the skill scores its flat
+         * base.
          */
         fun deriveCheckType(condition: String, precondition: String): String {
             val surface = LinkedHashSet<String>()
@@ -183,9 +181,8 @@ class SkillDatabase(private val game: Game) {
             val versionResults: MutableList<String> = mutableListOf()
 
             while (currentId != null) {
-                // Direct lookup instead of getSkillName(): a chain whose next version is not yet
-                // released on Global has no entry, and that is an expected end-of-chain, not a
-                // data error worth a warning per skill per scan.
+                // Direct lookup instead of getSkillName(): a chain whose next version is not yet released on Global has
+                // no entry, an expected end of chain rather than a data error.
                 val name: String = skillIdToName[currentId] ?: break
                 val tmpData: SkillData? = getSkillData(name)
                 if (tmpData == null) {

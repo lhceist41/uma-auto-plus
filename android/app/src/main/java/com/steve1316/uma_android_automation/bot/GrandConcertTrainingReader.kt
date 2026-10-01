@@ -7,34 +7,15 @@ import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.grandConcertPerformancePanelPresent
 import com.steve1316.uma_android_automation.utils.selectedTrainingPerformanceRows
 
-/**
- * Reads the Grand Concert training screen's Performance Points panel off a facility's analysis
- * frame: the five balances, and the "+N" gain annotation(s) of the currently selected facility.
- *
- * This is the runtime half of the panel layer, same split as [GrandConcertLessonReader]: the
- * probes in GrandConcertProbes supply the Android-free structure (panel presence, which rows
- * carry a gain glyph), and this class is the only place that binds them to a live [Bitmap] and
- * the OCR path. It never taps. Because the training analysis loop selects every facility in
- * turn, calling [readFacilityPanel] on each facility's own analysis frame yields the full
- * per-facility (type, amount) income preview for the turn with no extra navigation.
- *
- * Amount reads are best-effort: a row whose glyph is detected but whose "+N" resists OCR keeps
- * its TYPE with a null amount (the scorer substitutes a conservative default), because the type
- * is the dominant signal and the glyph's warm-gradient fill over arbitrary background art makes
- * the number the fragile part.
- */
+/** Reads the Grand Concert training screen's Performance Points panel (five balances and the selected facility's "+N" gains) off an analysis frame; never taps. */
 class GrandConcertTrainingReader(private val game: Game) {
-    /** One facility's panel read: the five balances (null components where OCR failed) and the
-     * selected facility's per-type gains (null amount where only the glyph, not the number, was
-     * readable). */
+    /** Null components where OCR failed; a gain with a null amount had a readable glyph but not a readable number. */
     data class FacilityPanelRead(
         val balances: Map<PerformancePointType, Int?>,
         val gains: Map<PerformancePointType, Int?>,
     )
 
-    /** Reads the panel off [sourceBitmap], or null when the panel is not structurally present
-     * (event overlay, dialog, non-training screen), which callers must treat as "no data" rather
-     * than zeros. */
+    /** Null when the panel is not structurally present (event overlay, dialog, other screen): callers treat it as no data, not zeros. */
     fun readFacilityPanel(sourceBitmap: Bitmap): FacilityPanelRead? {
         val sampler = SparkPixelSampler { x, y -> sourceBitmap.getPixel(x, y) }
         if (!grandConcertPerformancePanelPresent(sampler)) return null
@@ -47,11 +28,8 @@ class GrandConcertTrainingReader(private val game: Game) {
 
         val gains = LinkedHashMap<PerformancePointType, Int?>()
         for (row in selectedTrainingPerformanceRows(sampler)) {
-            // The pixel digit reader recognises the warm "+N" glyph directly and is both far more
-            // reliable than general OCR on this stylised number and range-bounded by construction;
-            // it falls back to the OCR path only on the reads it declines, preserving prior behaviour
-            // there. Observed per-training gains run 7..30; the first live run OCR'd a "+99" out of
-            // glyph noise, so the OCR sanity band stays just above the plausible ceiling.
+            // The pixel digit reader handles the stylised warm "+N" glyph far better than OCR, which is the fallback.
+            // Gains run 7..30, so the OCR sanity band stays just above that (a live OCR read "+99" from glyph noise).
             val amount =
                 GrandConcertGainDigits.readGainAmount(sampler, row)
                     ?: ocrNumber(sourceBitmap, GrandConcertTrainingGeometry.perfGainAmountOcrRegion(row), "gc_train_gain_$row")?.takeIf { it in 1..40 }
@@ -60,8 +38,7 @@ class GrandConcertTrainingReader(private val game: Game) {
         return FacilityPanelRead(balances = balances, gains = gains)
     }
 
-    /** OCRs one number, retrying under the lower binarisation threshold the lesson reader
-     * established for digits that the default 230 cutoff blacks out entirely. */
+    /** Retries at the lower threshold for digits the default 230 cutoff blacks out. */
     private fun ocrNumber(bmp: Bitmap, region: IntArray, debugName: String): Int? {
         parseNumber(ocr(bmp, region, debugName))?.let { return it }
         return parseNumber(ocr(bmp, region, "${debugName}_lowthresh", thresholdIncrement = GREY_FIELD_THRESHOLD_DELTA))
@@ -80,8 +57,7 @@ class GrandConcertTrainingReader(private val game: Game) {
                 thresholdIncrement = thresholdIncrement,
             ).trim()
 
-    /** Digits only ("+23" reads 23, "13 /300" would read garbage so the balance region
-     * deliberately excludes the cap line). Null when nothing numeric remains. */
+    /** Digits only; the balance region excludes the cap line because "13 /300" would read garbage. */
     private fun parseNumber(text: String): Int? {
         val digits = text.filter { it.isDigit() }
         if (digits.isEmpty()) return null
@@ -89,8 +65,7 @@ class GrandConcertTrainingReader(private val game: Game) {
     }
 
     companion object {
-        /** Same measured offset as GrandConcertLessonReader: 230 - 100 = 130 sits under grey or
-         * mid-tone fills and above dark digit strokes. */
+        /** 230 - 100 = 130: under grey or mid-tone fills, above dark digit strokes (same as GrandConcertLessonReader). */
         private const val GREY_FIELD_THRESHOLD_DELTA = -100.0
     }
 }

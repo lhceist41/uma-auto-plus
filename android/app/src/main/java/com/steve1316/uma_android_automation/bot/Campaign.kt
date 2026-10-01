@@ -146,15 +146,7 @@ enum class MainScreenAction {
     NONE,
 }
 
-/**
- * Result of [Campaign.handleRaceEventFallback]. Carries the existing mandatory-race stop signal plus
- * whether the fallback actually advanced to a new logical turn (it trained or recovered) as opposed to
- * merely backing out onto the same turn. The RACE branch uses [turnAdvanced] to rearm the shadow
- * CareerState latch when a fallback advances, so the next decision turn is not left without a snapshot.
- *
- * @property shouldStopForMandatoryRace True when a mandatory race was detected and the bot must stop.
- * @property turnAdvanced True when the fallback performed a turn-advancing action (training or recovery).
- */
+/** [turnAdvanced] lets the RACE branch rearm the shadow CareerState latch when the fallback trained or recovered instead of just backing out. */
 data class RaceFallbackOutcome(
     val shouldStopForMandatoryRace: Boolean,
     val turnAdvanced: Boolean,
@@ -183,27 +175,19 @@ abstract class Campaign(game: Game) : Task(game) {
     /** A Campaign is one career, so a pill that would not leave Off is left alone until the next one. */
     private val skipFix = InCareerSkipFix()
 
-    /** Lazily-built [SkillList] used only for career-end screen detection in [process]. Lazy and
-     * shared because the constructor generates the full skill entries map from the database. */
+    /** Lazy: constructing a SkillList generates the full skill entries map from the database. */
     private val careerEndScreenChecker: SkillList by lazy { SkillList(game, this) }
 
-    /** Set once the careerComplete skill plan has run this career, so the End-screen handler and
-     * the direct Learn-screen handler do not re-enter the list and run the full plan twice. */
+    /** Stops the End-screen and Learn-screen handlers from running the careerComplete plan twice. */
     private var bCareerEndSkillsHandled: Boolean = false
 
-    /** Set true the moment the bot confirms a force-end it can actually observe at its source: a lost
-     * mandatory race the game will not let us retry past. Read by [careerEndLedgerLine] to emit
-     * outcome=FORCE_END. Most force-ends (fan / Result-Pts checkpoint misses) are NOT observable at
-     * their trigger and stay outcome=COMPLETED (only `turn` distinguishes those from a win); this
-     * flag only catches the mandatory-race-loss class. A fresh Campaign instance runs each career, so
-     * the false default is the per-career reset. */
+    /** Set on a lost mandatory race the game will not let us retry. Other force-ends (fan / Result-Pts checkpoint misses) are not observable at their
+     * trigger and stay outcome=COMPLETED; only `turn` distinguishes them from a win. */
     private var careerForceEnded: Boolean = false
 
-    /** Reason paired with [careerForceEnded] (e.g. "MANDATORY_RACE_LOST"), emitted in the ledger. */
     private var forceEndReason: String? = null
 
-    /** Record a confirmed career force-end once. Idempotent - keeps the first reason so a later
-     * dialog redraw on the same failure cannot overwrite it. */
+    /** Idempotent: keeps the first reason so a later dialog redraw cannot overwrite it. */
     private fun markCareerForceEnded(reason: String) {
         if (!careerForceEnded) {
             careerForceEnded = true
@@ -211,95 +195,58 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
-    /** Finale-race results observed this career, for the outcome ledger's win/lose signal. The URA
-     * finale (days 73-75, any race tagged RaceGrade.FINALE) runs through the mandatory-race path, so
-     * [Racing.finalizeRaceResults] reports each result here via [noteFinaleRaceResult]. [finaleRaces]
-     * counts finale races seen; [finaleRaces1st] how many were taken at 1st place (the Congratulations
-     * banner). A swept URA arc reads 3/3 (=> quality WIN); a COMPLETED career with finaleRaces==0 never
-     * reached a finale; finaleRaces1st < finaleRaces means it reached the finale but lost a race. A
-     * fresh Campaign runs each career, so the zero default is the per-career reset. */
+    /** Finale-race results for the ledger win/lose signal: finaleRaces == 0 never reached a finale, finaleRaces1st < finaleRaces lost one. */
     private var finaleRaces: Int = 0
     private var finaleRaces1st: Int = 0
 
-    /** Record one finale-race result. Called from [Racing.finalizeRaceResults] on a FINALE-grade race. */
     fun noteFinaleRaceResult(won: Boolean) {
         finaleRaces++
         if (won) finaleRaces1st++
     }
 
-    /** Whether this scenario's FINALE-graded races show the 1st-place "Congratulations" banner that
-     * [Racing.finalizeRaceResults] reads for the win/lose ledger signal. Only URA Finale is verified.
-     * Trackblazer also tags its Twinkle Star Climax races RaceGrade.FINALE (Trackblazer.kt) but uses a
-     * different result UI, so recording there could mislabel a good Climax career FINALE_LOST. Off by
-     * default; a scenario opts in only once its finale banner is confirmed on a live device. */
+    /** Whether FINALE-graded races show the 1st-place banner [Racing.finalizeRaceResults] reads. Only URA Finale is verified: Trackblazer's Climax
+     * races use a different result UI and would mislabel a good career FINALE_LOST. */
     open val capturesFinaleWins: Boolean = false
 
-    /** Attempts made to actively exit the career-end skill screen after the plan already ran. */
     private var careerEndExitAttempts: Int = 0
 
-    /** Bound for [careerEndExitAttempts] before stopping with a diagnostic capture. */
     private val maxCareerEndExitAttempts: Int = 5
 
-    /** Attempts made to open the career-end "Learn" skill screen from the result screen. The
-     * Learn screen can take several seconds to load after the click, so the buy is routed through
-     * the screen-confirmed checkCareerEndSkillListScreen branch rather than a single fixed wait in
-     * the End-screen branch (a slow career-end otherwise dropped 544 SP). Bounded so a
-     * missing/abnormal Learn button completes the career instead of looping. */
+    /** The Learn screen can take several seconds to load, so entry is screen-confirmed rather than a fixed wait (a slow career-end once dropped 544 SP).
+     * Bounded so an abnormal Learn button completes the career instead of looping. */
     private var careerEndEntryAttempts: Int = 0
 
-    /** Bound for [careerEndEntryAttempts] before completing the career without the careerComplete plan. */
     private val maxCareerEndEntryAttempts: Int = 6
 
-    /** Whether the finalization guard's one controlled re-run of the careerComplete plan has
-     * been spent. Exactly one retry per career: the first large-balance verdict re-opens the
-     * Learn screen through the existing entry machinery; the second verdict is terminal. */
+    /** One controlled re-run of the careerComplete plan per career; the second large-balance verdict is terminal. */
     private var careerEndSpendRetryUsed: Boolean = false
 
     private var careerEndLastKnownStats: List<String> = emptyList()
 
-    /** Fallback nonce, used only when this Campaign is running outside a real career task (the
-     * debug harness, or a helper instance) and no career identity was installed at run start.
-     * The normal path reads the identity the career task created - see [careerFinalizeNonce].
-     * Deliberately NOT the primary identity: construction time is not career identity, and
-     * throwaway Campaign objects must never mint one. */
+    /** Fallback when running outside a real career task (debug harness, helper instance); throwaway Campaigns must never mint the primary identity. */
     private val fallbackFinalizeNonce: String = java.util.UUID.randomUUID().toString().substring(0, 8)
 
-    /** This career's finalization nonce: the one the real career task installed at run start,
-     * or the local fallback when there is none. */
     private val careerFinalizeNonce: String
         get() = CareerFinalizeGate.context?.nonce ?: fallbackFinalizeNonce
 
-    /** Consecutive process() ticks resolved ONLY by the misc back-press. A long unbroken streak
-     * means the press is not changing the screen and the loop would otherwise spin forever (10+
-     * minutes of back-presses observed on a wedged career-end skill screen). */
+    /** A long streak means the back-press changes nothing (10+ minutes observed on a wedged career-end skill screen). */
     private var consecutiveMiscBackPresses: Int = 0
 
-    /** Bound for [consecutiveMiscBackPresses] (~75s at the observed tick rate) before stopping. */
+    /** Stop bound, ~75s at the observed tick rate. */
     private val maxConsecutiveMiscBackPresses: Int = 25
 
-    /** Tick-local marker: this tick was handled by the misc back-press branch. */
     private var bMiscBackPressedThisTick: Boolean = false
 
     /** Required instance of the Trainee class. */
     val trainee: Trainee = Trainee()
 
-    /** Required instance of the Training class. Reassignable so [reloadTraineeConfig] can rebuild it
-     * onto a resynced preset - both Training and TrainingEvent cache their config at construction. */
+    /** Reassignable so [reloadTraineeConfig] can rebuild it onto a resynced preset; Training and TrainingEvent cache their config at construction. */
     var training: Training = Training(game, this)
 
-    /** Required instance of the TrainingEvent class. Reassignable; see [reloadTraineeConfig]. */
     protected var trainingEvent: TrainingEvent = TrainingEvent(game, this)
 
-    /**
-     * Rebuilds [training] and [trainingEvent] from the current settings DB. Called after the rotation
-     * mismatch guard resyncs onto a different trainee's snapshot: both classes cache their config
-     * (stat priorities/targets, failure cap, the four event-override maps) at construction, so a
-     * mid-flight snapshot swap would otherwise leave the career running the wrong preset's cached
-     * values for the rest of the run (the pre-2026-07-10 defect that ran Winning Ticket under Symboli
-     * Rudolf's config). The resync fires at the umamusume_details dialog - ~turn 1 on a fresh career,
-     * or immediately on a re-entered one - before any training decision, and both constructors are
-     * pure config reads whose per-tick caches reset to empty harmlessly.
-     */
+    /** Rebuilds [training] and [trainingEvent] after a rotation resync: both cache their config at construction, so a mid-flight snapshot swap
+     * would otherwise leave the career on the wrong preset. */
     private fun reloadTraineeConfig() {
         // The Trainee and this Campaign outlive the swap, so re-read every preset-owned setting they cache.
         trainee.setStatTargetsByDistances()
@@ -309,36 +256,22 @@ abstract class Campaign(game: Game) : Task(game) {
         resolvedSkillThreshold = resolveAndLogSkillThreshold()
         training = Training(game, this)
         trainingEvent = TrainingEvent(game, this)
-        // Racing and SkillPlan construction-cache career-shaping config too (the curated racing
-        // plan, fan-farming policy, the skill plans map) - a resync that misses them races and
-        // buys skills on the wrong preset. Reconstruction resets their per-career heuristics
-        // (e.g. the consecutive-race counter) to a fresh start, which is acceptable at the
-        // turn-1/re-entry point the resync fires at and strictly better than wrong config.
+        // Racing and SkillPlan also cache career-shaping config at construction. Reconstruction resets their per-career heuristics (e.g. the
+        // consecutive-race counter), acceptable at the turn-1/re-entry point where the resync fires.
         racing = Racing(game, this)
         skillPlan = SkillPlan(game, this)
-        // The outcome record must report the config the career actually RUNS on from here out -
-        // without this refresh a resynced career plays correctly but fingerprints as the old arm.
+        // Refresh so the outcome record fingerprints the config the career now runs on.
         outcomeConfigSnapshot = buildOutcomeConfigSnapshot()
     }
 
-    /**
-     * Fingerprint of rotation slot [index]'s STORED snapshot (its rot{i}_-prefixed settings rows),
-     * over the same key set as the live fingerprint. Null when the slot has no stored scenario
-     * (no snapshot captured), so callers skip the comparison instead of warning on noise.
-     */
+    /** Null when the slot has no stored scenario, so callers skip the comparison instead of warning on noise. */
     private fun rotationSlotFingerprint(index: Int): String? {
         if (index < 0) return null
         val slotScenario = SettingsHelper.getStringSetting("rot${index}_general", "scenario").ifEmpty { return null }
         return outcomeConfigFingerprint(BuildConfig.VERSION_NAME, buildOutcomeConfigSnapshot("rot${index}_", slotScenario))
     }
 
-    /**
-     * Compares the LIVE config fingerprint against rotation slot [slotIndex]'s stored snapshot and
-     * logs the verdict under [CONFIG_DRIFT]. The explicit OK line is deliberate - it is the
-     * observable proof that a career is running the intended preset (silence proves nothing in a
-     * rotated-away log). A mismatch means the settings DB no longer holds what the slot's preset
-     * captured: the wrong-preset class of failure that ran Winning Ticket under Rudolf's config.
-     */
+    /** The explicit OK line is the observable proof a career runs the intended preset; silence proves nothing in a rotated-away log. */
     private fun warnOnTraineeConfigDrift(slotIndex: Int, context: String) {
         val slotFp = rotationSlotFingerprint(slotIndex) ?: return
         val liveFp = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, buildOutcomeConfigSnapshot())
@@ -356,56 +289,26 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Required instance of the GameDate class. */
     var date: GameDate = GameDate(day = 1)
 
-    /**
-     * Whether the operator opted into recording the lightweight factual per-turn decision corpus
-     * (`decision_trace` + `career_state`) during normal play. Independent of Debug Mode: it records
-     * the machine-readable corpus without the heavy debug diagnostics. Defaults on.
-     */
+    /** Operator opt-in for the lightweight per-turn decision corpus (decision_trace + career_state), independent of Debug Mode. */
     private val recordDecisionData: Boolean = SettingsHelper.getBooleanSetting("misc", "recordDecisionData", true)
 
-    /**
-     * Debug-diagnostics gate: a debug build or Debug Mode. Enables the full heavy bundle (the
-     * multi-line human Decision Report, fixture capture, the shadow_advisor stream). Named once here
-     * so the factual-corpus gate and the debug-only gates read from one expression.
-     */
+    /** A debug build or Debug Mode: enables the heavy bundle (Decision Report, fixture capture, shadow_advisor stream). */
     private val debugDiagnosticsEnabled: Boolean = com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode
 
-    /**
-     * Effective gate for the factual per-turn corpus: records when the operator opted in OR any debug
-     * diagnostics are active (historical Debug Mode behavior preserved as a superset). Both
-     * `decision_trace` and `career_state` read this one gate so they record together and stay joinable.
-     */
+    /** Opted in or debug active; decision_trace and career_state share this gate so they stay joinable. */
     private val factualCorpusEnabled: Boolean = DecisionCorpusGate.factualCorpusEnabled(recordDecisionData, debugDiagnosticsEnabled)
 
-    /**
-     * Per-turn structured decision logger. Records WHY each turn's action / training / race / skill
-     * decision was made. Non-null whenever the factual corpus records, so the machine-readable
-     * `decision_trace` companion can be appended during normal release play; every `decisionTracer?.…`
-     * call still compiles to a null-safe no-op when the corpus is off. The heavy multi-line human
-     * Decision Report block is a debug-only diagnostic, written only under [debugDiagnosticsEnabled]
-     * (mirroring the fixture-capture gate), so a corpus-only run records the trace without the report.
-     */
+    /** Non-null whenever the factual corpus records; the heavy Decision Report block is written only under [debugDiagnosticsEnabled]. */
     val decisionTracer: DecisionTracer? =
         if (factualCorpusEnabled) DecisionTracer(humanReportEnabled = DecisionCorpusGate.humanReportEnabled(debugDiagnosticsEnabled)) else null
 
     init {
-        // Machine-readable companion to the Decision Report block: the same evidence, appended as
-        // one JSON line per turn. Attaching the sink is the only side effect - the lambda body runs
-        // inside emit(), which fires AFTER the turn's action has already executed, so no failure in
-        // it can reach the decision path. The sink shares the tracer's factual-corpus gate, so a
-        // normal release build may record when Record Decision Data is enabled; the human/debug
-        // Decision Report stays separately gated on Debug Mode.
+        // emit() fires after the turn's action has executed, so a failure in this sink cannot reach the decision path.
         decisionTracer?.traceSink = { evidence -> appendDecisionTrace(evidence) }
     }
 
-    /**
-     * Live Shadow Advisor S3 sink: observational only. After each factual decision_trace append it evaluates the
-     * static S1 policy from the immutable serialized decision_trace plus the retained same-seq career_state, and
-     * appends a separate `shadow_advisor.jsonl` record. Debug-only: it stays on the Debug Mode gate
-     * ([debugDiagnosticsEnabled]) even though the tracer now records on the broader corpus gate, so a
-     * corpus-only run never writes it. It never influences any decision/execution and swallows all of
-     * its own failures, so it can never change a turn. Null (no-op) in release without Debug Mode.
-     */
+    /** Observational only. Stays on the debug gate even though the tracer records on the broader corpus gate; never influences a decision and
+     * swallows its own failures. */
     val shadowAdvisorSink: com.steve1316.uma_android_automation.bot.shadowadvisor.ShadowAdvisorSink? =
         if (debugDiagnosticsEnabled) {
             com.steve1316.uma_android_automation.bot.shadowadvisor.ShadowAdvisorSink()
@@ -413,24 +316,12 @@ abstract class Campaign(game: Game) : Task(game) {
             null
         }
 
-    /**
-     * The exact serialized `career_state` JSON string and its seq, retained when the state is appended so the
-     * Shadow Advisor sink can pair the immutable pre-decision state to this turn's decision_trace by matching seq.
-     * Immutable strings only, never read by any gameplay path.
-     */
+    /** Retained so the Shadow Advisor sink can pair the serialized pre-decision state to this turn's decision_trace by seq. */
     private var retainedShadowCareerStateJson: String? = null
     private var retainedShadowCareerStateSeq: Int? = null
 
-    /**
-     * Appends one turn's [DecisionTrace] record to the on-device corpus.
-     *
-     * Identity is read at emit time from the sources the other corpus records already use, so a
-     * decision trace joins the career_finalize and career-outcome rows on `careerToken` and `fp`
-     * rather than needing an identifier of its own. Nothing here reads the screen.
-     *
-     * Failures propagate to [DecisionTracer.emit], which swallows them behind a single bounded
-     * warning; [OutcomeCorpus.append] already absorbs its own I/O errors.
-     */
+    /** Failures propagate to [DecisionTracer.emit], which swallows them. Identity is read at emit time so the trace joins the career_finalize and
+     * career-outcome rows on `careerToken` and `fp`. */
     private fun appendDecisionTrace(evidence: TurnEvidence) {
         val preset: String = SettingsHelper.getStringSetting("general", "appliedPresetTrainee").trim()
         val traineeIdentity: String = preset.ifEmpty { trainee.name }
@@ -446,19 +337,14 @@ abstract class Campaign(game: Game) : Task(game) {
                 preset = preset,
                 careerToken = buildCareerFinalizeToken(traineeIdentity, game.scenario, queueRun.takeIf { it > 0 }, careerFinalizeNonce),
                 queueRun = queueRun.takeIf { it > 0 },
-                // The retained current-turn seq, joining this trace to its career_state record. Omitted
-                // (null) when no CareerState was built this turn. Not read from post-action latch state.
+                // Joins this trace to its career_state record; null when no CareerState was built this turn.
                 seq = careerStateSeq.current(),
-                // The race that actually completed this turn, or null when none did. Cleared before the
-                // decision, written only by a proven completion tail, so only a RACE turn carries it.
+                // Null unless a proven completion tail recorded a race this turn.
                 enteredRace = pendingEnteredRace.current(),
             )
         OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.DECISIONS_PATH, DecisionTrace.MAX_FILE_BYTES)
 
-        // Shadow Advisor S3: the ONLY live invocation, strictly AFTER the factual decision_trace append. It reads the
-        // immutable serialized trace string plus the retained same-seq career_state string, evaluates the static S1
-        // policy, and appends its own observational record. It cannot influence this or any later turn; every failure
-        // mode is isolated inside the sink. Passing record.toString() hands over an immutable copy, never the JSONObject.
+        // Shadow Advisor: invoked strictly after the factual append and isolated from the turn; record.toString() hands over an immutable copy.
         shadowAdvisorSink?.onDecisionTraceAppended(
             context = game.myContext,
             serializedTrace = record.toString(),
@@ -468,27 +354,16 @@ abstract class Campaign(game: Game) : Task(game) {
         )
     }
 
-    /**
-     * Appends one turn's `career_state` record to the separate on-device corpus, at the pre-decision
-     * boundary. Pure serialization ([CareerStateSerializer]) plus the shared [OutcomeCorpus.append],
-     * which swallows its own I/O errors; the enclosing build block swallows a serialization fault. So a
-     * telemetry failure here can never change a turn, matching the Phase A shadow policy.
-     */
+    /** Pure serialization plus [OutcomeCorpus.append]; a telemetry failure here can never change a turn. */
     private fun appendCareerState(careerState: CareerState, seq: Int) {
         val record = CareerStateSerializer.buildRecord(careerState, seq, System.currentTimeMillis())
-        // Retain the exact appended JSON string for the Shadow Advisor sink's same-seq pairing, before the append so
-        // it is captured regardless of the write result. Immutable string; nothing else reads it.
+        // Retained before the append so it is captured regardless of the write result.
         retainedShadowCareerStateJson = record.toString()
         retainedShadowCareerStateSeq = seq
         OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.CAREER_STATE_PATH, CareerStateSerializer.MAX_FILE_BYTES)
     }
 
-    /**
-     * Build the shadow [CareerState] for this turn (Phase A). Pure over live in-memory state: reuses
-     * the same identity derivation as [appendDecisionTrace] and copies date/trainee/race values via
-     * [CareerStateBuilder]. Triggers no OCR, screenshot, navigation, scoring, or tap. Shadow-only -
-     * the returned object is not consulted by any decision path.
-     */
+    /** Pure over live in-memory state: no OCR, screenshot, navigation or tap. Shadow-only: no decision path reads it. */
     protected fun buildCareerState(): CareerState {
         val presetRaw: String = SettingsHelper.getStringSetting("general", "appliedPresetTrainee").trim()
         val queueRunRaw: Int = CareerFinalizeGate.context?.queueRun ?: SettingsHelper.getIntSetting("queueState", "currentRun", 0)
@@ -512,18 +387,12 @@ abstract class Campaign(game: Game) : Task(game) {
         )
     }
 
-    /**
-     * Debug-only, non-fatal shadow comparison of [careerState] against the DecisionTracer turn-open
-     * snapshot, delegating the field-by-field logic to the pure [CareerStateShadow.compare]. Emits one
-     * compact `[CAREER_STATE]` line; no object dumps, and nothing here can alter gameplay.
-     */
+    /** Debug-only and non-fatal; emits one compact `[CAREER_STATE]` line. */
     private fun compareCareerStateToTracer(careerState: CareerState) {
         val turnLabel: String = careerState.date.observedTurn?.toString() ?: "?"
         val scenarioName = careerState.scenario?.let { it::class.simpleName } ?: "none"
-        // Only compare when the DecisionTracer opened a window THIS turn. Its startTurn is gated on a
-        // date change / unread stats, which does not fire when date OCR failed - and this shadow now
-        // builds on those turns too. Comparing against the tracer's earlier-turn snapshot would
-        // manufacture a mismatch, so report the build with the comparison unavailable instead.
+        // Compare only when the tracer opened a window this turn: its startTurn is skipped when date OCR failed, and an earlier-turn snapshot would
+        // manufacture a mismatch.
         val open = if (careerStateLatch.tracerWindowFresh()) decisionTracer?.turnEvidence()?.state else null
         if (open == null) {
             MessageLog.i(TAG, "[CAREER_STATE] turn=$turnLabel built compare=unavailable scenario=$scenarioName")
@@ -552,19 +421,8 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Flag to track if the bot should force a specific target mood during recovery. */
     var forcedTargetMood: Mood? = null
 
-    /**
-     * Configurable mood floor: bot recovers mood when current mood drops below this level.
-     *
-     * Values: "Normal", "Good", "Great". Default "Good" matches historical
-     * `shouldRecoverMood` behavior (`mood < Mood.GOOD`). Setting to "Great" is the strict
-     * guard for trainees with single-option mood-trap events (e.g. Agnes Tachyon's
-     * "Report: A Clear Gaze" event redirects the objective race to NHK Mile Cup if mood
-     * is Normal or worse on the trigger date — running with a Great floor keeps mood
-     * at or above Good across the trigger window).
-     *
-     * Trade-off: stricter floors burn more turns on Recreation/Date and reduce training
-     * pixels. Only enable when the trainee actually has the trap event.
-     */
+    /** Recovers mood below this floor ("Normal", "Good", "Great"). "Great" guards trainees with single-option mood-trap events (e.g. Agnes Tachyon's
+     * NHK Mile redirect), at the cost of more Recreation/Date turns. */
     protected var moodFloor: Mood = readMoodFloor()
         private set
 
@@ -576,34 +434,15 @@ abstract class Campaign(game: Game) : Task(game) {
             else -> Mood.GOOD
         }
 
-    /**
-     * Pre-career deck validation: when enabled, the first time aptitudes are read for a
-     * career run, the bot checks that the trainee's preferred-distance and preferred-style
-     * aptitudes meet [deckValidationMinAptitude]. If the deck is below the floor, the bot
-     * logs a high-visibility MessageLog warning so the user knows the trainee/scenario
-     * combo will fight the chosen race lineup.
-     *
-     * Validation is informational — it does NOT halt the run. The user can interrupt and
-     * pick a better deck if they care, or let it ride.
-     */
+    /** Informational pre-career check that the preferred-distance/style aptitudes meet [deckValidationMinAptitude]; warns, never halts the run. */
     protected val enableDeckValidation: Boolean = SettingsHelper.getBooleanSetting("training", "enableDeckValidation", true)
 
-    /**
-     * Config snapshot for the outcome corpus (see PLAN_OUTCOME_MEASUREMENT.md Stage 3), captured
-     * at construction while THIS run's settings are live - a rotation switch rewrites the active
-     * settings between runs, so reading them at task end could tag the record with the NEXT
-     * trainee's config. The set is enumerated deliberately: the tunables that shape play quality.
-     * A field added here changes every fingerprint, deliberately starting new arms.
-     */
+    /** Captured at construction while THIS run's settings are live: a rotation switch rewrites the active settings between runs. A field added
+     * here changes every fingerprint, deliberately starting new arms. */
     private var outcomeConfigSnapshot: Map<String, String> = buildOutcomeConfigSnapshot()
 
-    /**
-     * Builds the enumerated config snapshot from the settings DB. With [categoryPrefix] set (e.g.
-     * "rot2_") it reads a rotation slot's STORED snapshot rows instead of the live settings, over
-     * the identical key set - which makes the two fingerprints directly comparable for the
-     * [CONFIG_DRIFT] check. [scenarioForKeys] gates the scenario-conditional keys (the slot's own
-     * scenario for slot reads; the live scenario otherwise).
-     */
+    /** With [categoryPrefix] (e.g. "rot2_") reads a rotation slot's stored snapshot over the identical key set, so the two fingerprints compare
+     * directly for [CONFIG_DRIFT]. */
     private fun buildOutcomeConfigSnapshot(categoryPrefix: String = "", scenarioForKeys: String = game.scenario): Map<String, String> {
         val training = "${categoryPrefix}training"
         val racing = "${categoryPrefix}racing"
@@ -627,8 +466,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "disableRaceRetries" to SettingsHelper.getBooleanSetting(racing, "disableRaceRetries").toString(),
                 "skillPointCheck" to SettingsHelper.getIntSetting(skills, "skillPointCheck").toString(),
             )
-        // The plan CONTENT matters, not just the flag: editing a curated racing plan changes how
-        // the career races, so it must split arms. A digest keeps the record small.
+        // Plan content, not just the flag, shapes how the career races, so it must split arms.
         val racingPlan = SettingsHelper.getStringSetting(racing, "racingPlan")
         cfg["racingPlanDigest"] = if (racingPlan.isEmpty()) "none" else shortSha1(racingPlan)
         if (scenarioForKeys == "Trackblazer") {
@@ -639,132 +477,57 @@ abstract class Campaign(game: Game) : Task(game) {
         return cfg
     }
 
-    /**
-     * Minimum aptitude letter required for the trainee's preferred distance and running
-     * style to clear deck validation. Default "B" matches the in-game soft requirement
-     * for race-bonus uplift; "A" is the strict meta-deck floor.
-     */
+    /** "B" matches the in-game soft requirement for race-bonus uplift; "A" is the strict meta-deck floor. */
     private val deckValidationMinString: String = SettingsHelper.getStringSetting("training", "deckValidationMinAptitude", "B")
 
-    /** Resolved Aptitude floor for deck validation. Falls back to B on unrecognized strings. */
     protected val deckValidationMinAptitude: Aptitude = Aptitude.fromName(deckValidationMinString) ?: Aptitude.B
 
-    /**
-     * Set once after the first successful aptitude read so the validation check fires only
-     * once per career run (not on every aptitude refresh).
-     */
     private var bDeckValidationChecked: Boolean = false
 
-    /**
-     * Set once after the rotation trainee verify runs so it fires only once per career run.
-     * Independent of [bDeckValidationChecked]: the verify must run regardless of the deck-validation
-     * setting. A fresh Campaign is built per queue run, so this resets to false each career.
-     */
+    /** Independent of [bDeckValidationChecked]: the verify runs regardless of the deck-validation setting. */
     private var bRotationTraineeVerified: Boolean = false
 
-    /**
-     * Jaro-Winkler floor (over de-outfitted names) for the rotation trainee verify to treat two
-     * names as the same character. A clear read of the correct trainee scores ~1.0; a different
-     * character scores well under this. Deliberately near the navigator's select threshold (0.86)
-     * but slightly lenient, because a STOP halts the whole unattended queue.
-     */
+    /** Jaro-Winkler floor for the rotation trainee verify; slightly lenient versus the navigator's 0.86 select threshold because a STOP halts the
+     * whole unattended queue. */
     private val rotationVerifyMatchThreshold: Double = 0.85
 
-    /**
-     * Number of consecutive process() ticks that ended without detecting any known screen. Drives
-     * [recoverFromUnknownScreen]'s escalation instead of blind-tapping a fixed point forever. Reset
-     * to 0 whenever any known screen or dialog is handled.
-     */
+    /** Drives [recoverFromUnknownScreen]'s escalation; reset when any known screen or dialog is handled. */
     private var consecutiveUnknownScreenCount: Int = 0
 
-    /** Consecutive process() ticks that resolved as "a dialog was handled". A dialog normally
-     * clears in a tick or two; a long streak means the taps are not landing (MuMu's
-     * enabled-but-dispatch-dead mode) while the dialog stays up. Mirrors the
-     * recoverFromUnknownScreen 13/19/25 ladder. Reset on any non-dialog tick. */
+    /** A long streak means taps are not landing (MuMu's enabled-but-dispatch-dead mode); mirrors the 13/19/25 ladder of recoverFromUnknownScreen. */
     private var consecutiveDialogTicks: Int = 0
 
-    /**
-     * Home-lobby re-entry attempts used within the current unknown-screen streak. A mid-career bounce
-     * to the game's outer lobby (daily-reset reload) is re-entered in place via the navigator, but if
-     * that cannot advance (e.g. silently dead gesture dispatch) it is capped at [maxLobbyReentryAttempts]
-     * so the loop falls through to the standard stop instead of thrashing. Reset with
-     * [consecutiveUnknownScreenCount].
-     */
+    /** A mid-career bounce to the outer lobby is re-entered in place; capped so dead gesture dispatch falls through to the stop instead of thrashing. */
     private var lobbyReentryAttempts: Int = 0
 
-    /**
-     * True once this task has recognized in-career UI (a Main training screen tick). Gates the
-     * Home-lobby re-entry: a bot STARTED with the game parked at the lobby (no career in flight)
-     * must fall through to the normal ladder/stop instead of driving the launch flow - an
-     * interrupted queue can leave a stale trainee target armed there, and reusing it would silently
-     * start a career for the wrong trainee (2026-07-09: El Condor selected instead of the applied
-     * Rudolf preset). A daily-reset bounce always happens after main-screen ticks, so the gate
-     * never blocks the case this recovery exists for.
-     */
+    /** True once in-career UI was seen. A bot started at the lobby must not drive the launch flow: a stale trainee target could silently start a
+     * career for the wrong trainee. */
     private var careerScreenObservedThisTask: Boolean = false
 
-    /**
-     * Upper bound on [consecutiveUnknownScreenCount] before the bot stops with a diagnostic rather
-     * than loop on an unrecognized screen forever. ~25 ticks is roughly a minute of being stuck.
-     */
+    /** ~25 ticks is roughly a minute of being stuck. */
     private val maxUnknownScreenBeforeStop: Int = 25
 
-    /** Max in-place Home-lobby re-entries per unknown-screen streak (see [lobbyReentryAttempts]). */
     private val maxLobbyReentryAttempts: Int = 3
 
-    /**
-     * Stuck-cycle counts at which [recoverFromUnknownScreen] force-rebinds the Accessibility Service.
-     * MuMu can silently kill gesture dispatch while leaving the service "enabled" in secure settings,
-     * so the per-tick [Game.ensureAccessibilityService] string check passes and every blind tap
-     * no-ops - the bot then loops to [maxUnknownScreenBeforeStop] and stops. These thresholds sit
-     * above the observed healthy-transition max (~12 unknown cycles for a long event animation) so
-     * a normal transition never triggers an unnecessary rebind, but a real gesture-death self-heals
-     * well before the stop.
-     */
+    /** MuMu can silently kill gesture dispatch while the service still reads "enabled", so blind taps no-op. These sit above the observed
+     * healthy-transition max (~12 unknown cycles for a long event animation). */
     private val gestureRebindThresholds: Set<Int> = setOf(13, 19)
 
-    /**
-     * Stuck-cycle count at which [recoverFromUnknownScreen] relaunches the whole game as a last resort.
-     * Sits AFTER both gesture rebinds (13, 19) - so it only fires once a dead-dispatch rebind has
-     * demonstrably not helped - and BEFORE the stop (25), so there is room for the relaunch + a fresh
-     * cycle before giving up. This is the rung for a game-side soft-lock (an un-driveable screen that
-     * is not MuMu gesture death), e.g. a race the account has never run that wedged before the play
-     * path could handle it (2026-07-11).
-     */
+    /** Relaunch rung for a game-side soft-lock that is not gesture death: after both rebinds (13, 19), before the stop (25). */
     private val gameRestartThreshold: Int = 22
 
-    /**
-     * How many [Game.restartGame] attempts this stuck episode has already used. Reset to 0 whenever a
-     * known screen is handled (progress made). Bounded by [maxGameRestartAttempts] so a relaunch that
-     * does not restore a driveable screen cannot loop into a relaunch storm - once the budget is spent
-     * the episode falls through to the stop, which is then flagged game-unrecoverable so the queue
-     * pauses instead of marching the next run onto a dead/foreign screen. A retry (rather than the old
-     * one-shot) exists because the first relaunch can be dropped or race the game's own teardown; each
-     * attempt gets a fresh unknown-screen budget (the counter resets on relaunch), i.e. ~a minute+ for
-     * a cold boot to land before the next attempt.
-     */
+    /** Bounded so a relaunch that restores no driveable screen cannot storm; once spent, the stop is flagged game-unrecoverable so the queue pauses.
+     * Each attempt gets a fresh unknown-screen budget so a cold boot can land. */
     private var gameRestartAttemptsThisEpisode: Int = 0
 
-    /** Max [Game.restartGame] attempts per stuck episode before the run stops as game-unrecoverable. */
     private val maxGameRestartAttempts: Int = 3
 
     private var unresponsiveGameReopens: Int = 0
 
-    /**
-     * Cap on [consecutiveUnknownScreenCount] while a story-event intro cutscene is being tapped
-     * through (Skip pill present). Higher than [maxUnknownScreenBeforeStop] because a support-card
-     * chain event (e.g. "Both High and Low") can run 20+ dialogue bubbles before its choices render;
-     * the choices end the cutscene well before this, so reaching it means the cutscene is genuinely
-     * frozen. Without this path the generic cap fired mid-intro and stopped the run before the
-     * choices ever appeared.
-     */
+    /** Higher than [maxUnknownScreenBeforeStop]: a support-card chain event can run 20+ dialogue bubbles before its choices render. */
     private val maxCutsceneAdvanceBeforeStop: Int = 50
 
-    /**
-     * Counts at which the cutscene-advance path force-rebinds the Accessibility Service once, in case
-     * gesture dispatch silently died (taps no-op so the dialogue never moves). Two attempts leave room
-     * for a revived dispatch to clear the intro before [maxCutsceneAdvanceBeforeStop].
-     */
+    /** Two rebind attempts in case gesture dispatch silently died and the dialogue never moves. */
     private val cutsceneRebindThresholds: Set<Int> = setOf(15, 30)
 
     /** The rebinds each stuck ladder asked for in its current episode, for its stop reason and the ledger. */
@@ -795,9 +558,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
     private fun readMustRestBeforeSummer(): Boolean = SettingsHelper.getBooleanSetting("training", "mustRestBeforeSummer")
 
-    /** The applied preset's skill-spend objective (Phase 2A). Preset-owned - stamped on every
-     * preset apply, so a preset that never set it reads back `rank`, which keeps both dynamic
-     * triggers inert and the behavior V1-identical. Manual mode ignores it entirely. */
+    /** Preset-owned; a preset that never set it reads back `rank`, which keeps both dynamic triggers inert. Manual mode ignores it. */
     internal var skillSpendObjective: SkillSpendObjective = readSkillSpendObjective()
         private set
 
@@ -818,27 +579,19 @@ abstract class Campaign(game: Game) : Task(game) {
     protected val skillPointsRequired: Int
         get() = resolvedSkillThreshold.value
 
-    /** Phase 2A per-career trigger state. All instance fields, so a new career resets them
-     * naturally - none of this may ever move to the companion. */
+    /** Instance fields so a new career resets them; never move these to the companion. */
 
-    /** This turn's mandatory-goal reading. Valid only while its `turn` equals `date.day`;
-     * produced at most once per turn by [produceGoalSnapshotIfDue]. */
+    /** Valid only while its `turn` equals `date.day`. */
     private var currentGoalSnapshot: GoalDeadlineSnapshot? = null
 
-    /** The race turn a CRITICAL_RACE session already handled (both arms share this key), so
-     * firing at 2 turns out suppresses the 1-turn re-fire for the same race. */
+    /** Both CRITICAL_RACE arms share this key, so firing 2 turns out suppresses the 1-turn re-fire. */
     private var lastCriticalRaceTurnHandled: Int? = null
 
-    /** Observed planned-skill availability/prices behind PLANNED_SKILL_AFFORDABLE. Fed by
-     * SkillPlan after every successful skill-screen parse. */
     internal val plannedSkillEvidence = PlannedSkillEvidenceStore()
 
-    /** Trigger rationale for the in-flight skill session, consumed by SkillPlan's telemetry.
-     * Set immediately before a Phase 2A session opens and cleared right after it returns. */
     internal var activeTriggerContext: SkillTriggerContext? = null
 
-    /** All race names (plain + formatted) from the on-device races table, for goal-text
-     * matching. Loaded once per career, empty on any failure so the matcher stays inert. */
+    /** Empty on any failure so the matcher stays inert. */
     private val goalRaceNameCandidates: Set<String> by lazy { loadGoalRaceNameCandidates() }
 
     private fun loadGoalRaceNameCandidates(): Set<String> {
@@ -901,11 +654,8 @@ abstract class Campaign(game: Game) : Task(game) {
     /** The total outings in the active support card's recreation chain (Team Sirius 7, Heirs to the Throne 5). */
     protected val recreationTotalOutings: Int = SettingsHelper.getIntSetting("general", "recreationTotalOutings", 7)
 
-    /** Whether the recreation chain is complete for this run - no more dates are available. Latched true once the in-game
-     * complete label is seen and never reset. Distinct from [recreationDateCompleted] on purpose: that flag means "a date
-     * was handled TODAY" and resets every turn (it short-circuits re-checks within one recovery sequence), while this one
-     * is the run-lifetime chain state the schedule keys on. Upstream overloads one flag for both; our per-turn reset is
-     * load-bearing for the recovery paths, so the two meanings get two fields. */
+    /** Run-lifetime chain state the schedule keys on. Distinct from [recreationDateCompleted], which means "handled TODAY" and resets every turn
+     * (load-bearing for the recovery paths); upstream overloads one flag for both. */
     protected var recreationChainComplete: Boolean = false
 
     /** The number of recreation outings actually started this run. Used to hold the final outing for the Pure Passion turn. */
@@ -914,9 +664,7 @@ abstract class Campaign(game: Game) : Task(game) {
     /** The group-event chain length as last read from the game's "X/Y" progress, or the configured fallback until the partner dialog is first read. */
     protected var recreationTotalOutingsKnown: Int = recreationTotalOutings
 
-    /** Latch: a scheduled recreation attempt backed out without starting an outing this turn (no rows, held final, dead
-     * pill). Backing out does not advance the game turn, so without this the decision loop would re-choose DATE and
-     * reopen the same dialog forever (the Staticwitt-reported livelock). Cleared when the date actually advances. */
+    /** Backing out does not advance the game turn, so without this latch the decision loop would re-choose DATE and reopen the same dialog forever. */
     protected var recreationAttemptFailedThisTurn: Boolean = false
 
     /** The turn number when the stop-at-date check first started. */
@@ -941,31 +689,15 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     protected var bHasHandledSkillPointCheck: Boolean = false
 
-    /** The number of consecutive failed attempts at handling the skill point check for this run.
-     * Used in conjunction with [skillPointCheckMaxAttempts] to prevent an infinite retry loop
-     * if [handleSkillListScreen] repeatedly fails to respond (e.g. UI state we never recover from).
-     * Reset when skill points drop below the threshold or when the check succeeds.
-     */
     protected var skillPointCheckAttempts: Int = 0
 
-    /** The maximum number of consecutive failed attempts at handling the skill point check
-     * before we give up for this run and allow normal turn execution to resume.
-     */
     protected val skillPointCheckMaxAttempts: Int = 3
 
     /** Flag indicating if the pre-finals check has been handled. */
     protected var bHasHandledPreFinalsCheck: Boolean = false
 
-    /** The number of consecutive failed attempts at handling the pre-finals skill purchase for this run.
-     * Used in conjunction with [preFinalsCheckMaxAttempts] to prevent an infinite retry loop if
-     * [handleSkillListScreen] repeatedly fails (e.g. UI state we never recover from while the bot keeps
-     * clicking ButtonSkills on a wrong screen). Resets when the check succeeds or run advances past day 72.
-     */
     protected var preFinalsCheckAttempts: Int = 0
 
-    /** The maximum number of consecutive failed attempts at handling the pre-finals skill purchase before
-     * we give up for this run and allow normal turn execution to resume.
-     */
     protected val preFinalsCheckMaxAttempts: Int = 3
 
     /** Flag indicating if the bot has checked for a maiden race today. */
@@ -977,92 +709,39 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     protected var bHasCheckedDateThisTurn: Boolean = false
 
-    /**
-     * Per-turn caches for race-day detection. Computed once at the top of [handleMainScreen]
-     * (where we already have a fresh main-screen bitmap from [performTurnStartUpdates]) and
-     * reused by [decideNextAction] and the post-decision tail of [handleMainScreen]. Prevents
-     * three separate template-match scans per turn for the same two checks.
-     *
-     * Lifetime: same as [bHasCheckedDateThisTurn]. Reset to false at the start of every fresh
-     * turn so that stale results from a prior turn never leak into the new turn's decisions.
-     */
+    /** Computed once at the top of [handleMainScreen] and reused, avoiding three template-match scans per turn; reset on every fresh turn. */
     protected var cachedScheduledRaceDay: Boolean = false
     protected var cachedMandatoryRaceDay: Boolean = false
 
-    /**
-     * Per-turn cache of the goal-ribbon ([IconGoalRibbon]) detection. Kept separate from
-     * [cachedMandatoryRaceDay] on purpose: the goal ribbon stays visible on the Main screen for an
-     * active objective (see [checkMandatoryRacePrepScreen]), so it is NOT safe to feed into the
-     * forced-RACE branch of [decideNextAction]. This flag exists solely as a cache backup for the
-     * Trackblazer irregular-training gate, whose live mandatory check is `IconRaceDayRibbon ||
-     * IconGoalRibbon` — so a single missed goal-ribbon read on a real goal day cannot let irregular
-     * training hijack the turn. Over-blocking the gate is conservative; only the gate reads it.
-     * Lifetime: same as [cachedMandatoryRaceDay].
-     */
+    /** Separate from [cachedMandatoryRaceDay]: the goal ribbon stays visible for any active objective, so it must not feed the forced-RACE branch.
+     * Backs only the Trackblazer irregular-training gate, where over-blocking is conservative. */
     protected var cachedGoalRibbonDay: Boolean = false
 
-    /**
-     * Canonical CareerState v1 (Phase A) - shadow-only. The most recent pre-decision main-screen
-     * snapshot, replaced once per turn. Read by NO gameplay path: only the debug shadow comparison
-     * and the unit tests observe it. See [buildCareerState] and [CareerState].
-     */
+    /** Shadow-only: the latest pre-decision main-screen snapshot, read by no gameplay path. */
     var shadowCareerState: CareerState? = null
         private set
 
-    /** Once-per-turn guard so the multi-tick [handleMainScreen] loop builds exactly one [shadowCareerState] per turn. */
     private val careerStateLatch = CareerStateTurnLatch()
 
-    /**
-     * Per-career CareerState decision-sequence holder: the `careerToken + seq` join authority between
-     * the separate `career_state` and `decision_trace` streams (never the observed turn number). Scoped
-     * to this Campaign instance, so a fresh career/resume restarts at seq 1 under a new career token.
-     */
+    /** The `careerToken + seq` join authority between the career_state and decision_trace streams; restarts at seq 1 per Campaign. */
     private val careerStateSeq = CareerStateDecisionSequence()
 
-    /**
-     * Per-turn holder for the pending entered-race identity fact ([EnteredRace]). Cleared at the start
-     * of each decision turn (before [decideNextAction]) and written only from a proven race-completion
-     * tail, so a completed-race fact never leaks into a turn that completed no race. Read once at
-     * trace-emit time by [appendDecisionTrace]. Scoped to this Campaign (one career).
-     */
+    /** Cleared at the start of each decision turn and written only from a proven race-completion tail, so a completed-race fact never leaks into a
+     * turn that completed no race. */
     private val pendingEnteredRace = PendingEnteredRace()
 
-    /**
-     * Record the identity of a race that just COMPLETED this turn, for the decision trace. Called from
-     * the race-completion tails ([Racing] and scenario overrides) only after both the race run and the
-     * results finalization succeeded for the same entry; a considered/planned/aborted race records
-     * nothing. A later completion in the same turn overwrites an earlier one (last-write-wins), which a
-     * scenario override uses to replace the base path's weaker identity with its own stronger one.
-     *
-     * Observability only: it stores one nullable reference and is read solely at trace-emit time, so it
-     * cannot reach any decision path. Present regardless of build, but only the debug-gated trace sink
-     * ever reads it.
-     */
+    /** Last write wins, so a scenario override can replace the base path's weaker identity. Observability only: read solely at trace-emit time. */
     fun recordEnteredRace(entry: EnteredRace) {
         pendingEnteredRace.record(entry)
         StatusBoard.raceRun()
     }
 
-    /**
-     * This turn's committed-action decision sequence, or null when no CareerState was built this turn
-     * (release/non-debug, or a swallowed build). It is the SAME per-career monotonic seq that
-     * [appendDecisionTrace] stamps on `decision_trace` and [appendCareerState] on `career_state`, read
-     * from the same [careerStateSeq] holder, so a scenario telemetry line that carries it joins those
-     * streams on `careerToken + seq`. Read-only: exposing it cannot allocate or advance the sequence.
-     *
-     * Read during [executeAction] (after the turn's build/retain, before the next turn's allocate), so
-     * it returns the current turn's seq. Grand Concert's `[GC_PP_INCOME]` uses it to disambiguate the
-     * several Pre-Debut trainings that share one canonical turn number.
-     */
+    /** The same per-career seq stamped on decision_trace and career_state, read-only so it cannot advance the sequence. Grand Concert's
+     * `[GC_PP_INCOME]` uses it to tell apart Pre-Debut trainings that share one canonical turn number. */
     fun currentDecisionSeq(): Int? = careerStateSeq.current()
 
-    /**
-     * Rearm the CareerState build latch for a new main-screen decision turn. Invariant: every
-     * turn-advancing path that resets [bHasCheckedDateThisTurn] must also rearm CareerState here, or
-     * that turn produces no shadow snapshot. [executeAction]'s own advancing branches do this inline;
-     * a scenario override that bypasses [executeAction] (e.g. Trackblazer's TRAIN fast path) calls
-     * this directly. Shadow-only: it touches nothing but the latch and never affects gameplay.
-     */
+    /** Every turn-advancing path that resets [bHasCheckedDateThisTurn] must also rearm CareerState, or that turn produces no shadow snapshot.
+     * [executeAction] does this inline; overrides that bypass it (e.g. Trackblazer's TRAIN fast path) call this directly. */
     protected fun armCareerStateForNewTurn() {
         careerStateLatch.armForNewTurn()
     }
@@ -1129,10 +808,7 @@ abstract class Campaign(game: Game) : Task(game) {
         MessageLog.i(TAG, "[TEST] [RESTART-TEST] Result $reopen: ${reopenOutcomeWords(reopen)}. Start the bot normally to resume a career in progress.")
     }
 
-    /**
-     * Debug test for rainbow-training detection. Run this while on the Training screen: it repeatedly detects the rainbow glow ring on each support face circle for ~5 seconds,
-     * logs the per-support hue metrics and the derived rainbow count, and saves an annotated crop of the support region for calibrating the geometry and thresholds.
-     */
+    /** Debug: samples rainbow-ring detection on the Training screen for ~5s and saves an annotated crop for calibration. */
     open fun startRainbowDetectionTest() {
         MessageLog.i(TAG, "\n[TEST] Now beginning the Rainbow Detection test. Point the game at the Training screen so the support face circles are visible.")
         val passes = 5
@@ -1144,32 +820,19 @@ abstract class Campaign(game: Game) : Task(game) {
         MessageLog.i(TAG, "[TEST] Rainbow Detection test complete. Check the logged metrics and the saved debugRainbowDetection.png crop to calibrate geometry/thresholds.")
     }
 
-    /**
-     * Read-only Trainee Select OCR diagnostic for rotation calibration. Reuses the running bot's
-     * image utils and logs what the header detector + name-banner color OCR read (plus the computed
-     * grid tap targets) without tapping anything. Park the game on Trainee Select before running.
-     */
+    /** Read-only Trainee Select OCR diagnostic: logs the header detector and name-banner reads without tapping. Park on Trainee Select first. */
     open fun startTraineeSelectTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Trainee Select OCR diagnostic...")
         CareerLaunchNavigator(game.myContext).debugTraineeSelectRead(game.imageUtils)
     }
 
-    /**
-     * Read-only support-deck composition diagnostic for calibrating the [DECK] concentration read.
-     * Reuses the running bot's image utils and logs each stat-type count off the deck screen without
-     * tapping anything. Park the game on the deck-selection screen (Start Career! / Perks) first.
-     */
+    /** Read-only deck composition diagnostic: logs stat-type counts off the deck screen. Park on the deck-selection screen first. */
     open fun startDeckStatReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only deck composition OCR diagnostic...")
         CareerLaunchNavigator(game.myContext).debugDeckStatRead(game.imageUtils)
     }
 
-    /**
-     * Read-only "Deck N" selector diagnostic for calibrating the explicit-deck gate's number read.
-     * Reuses the running bot's image utils and logs the raw OCR + parsed deck number off the
-     * career-start Support Formation screen without tapping anything. Park the game on that screen
-     * (the one with the Deck N label + left/right deck arrows) first.
-     */
+    /** Read-only diagnostic: logs the raw OCR and parsed deck number off the career-start Support Formation screen. */
     open fun startDeckNumberReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Deck-number OCR diagnostic...")
         CareerLaunchNavigator(game.myContext).debugDeckNumberRead(game.imageUtils)
@@ -1189,28 +852,14 @@ abstract class Campaign(game: Game) : Task(game) {
         MessageLog.i(TAG, "[HOST-INPUT] scope=${report.scope.wire} transport=${report.execution.status.wire} foreground=${report.execution.foreground} movement=${report.movement} result=${report.execution.detailCode}")
     }
 
-    /**
-     * Read-only Veteran Roster / Umamusume Details calibration diagnostic (PL-R1a). Reuses the
-     * running bot's image utils and logs every field it can read off the currently parked screen
-     * without tapping, swiping, or changing tabs. Park the game on the Veteran Roster list (Home ->
-     * Enhance -> Veteran Umamusume -> List) or an open Umamusume Details dialog first.
-     */
+    /** Read-only Veteran Roster / Umamusume Details diagnostic: logs every readable field off the parked screen without tapping. */
     open fun startVeteranRosterReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Roster OCR diagnostic...")
         VeteranRosterReader(game.imageUtils, VeteranIdentityCatalog.loadFromAssets(game.myContext)).debugRead()
     }
 
-    /**
-     * Read-only Veteran Roster enumeration (PL-R1b). Park the game on the Veteran Roster list with
-     * Filters: OFF, then start the bot: it opens the first card once and walks the roster with the
-     * detail dialog's next chevron, reading each entry's identity fields and writing one roster_scan
-     * header plus its roster_entry rows to outcomes/roster_scan.jsonl. It taps only the first card,
-     * the next chevron, and Close; every coordinate is checked against the deny list at runtime, and
-     * a missing Registered count or an unconfirmed filter state stops it before the first gesture.
-     *
-     * `veteranRosterScanLimit` caps how many entries are read - the bounded 5-entry and 20-entry
-     * validation runs - and 0 walks the whole roster.
-     */
+    /** Read-only roster enumeration: opens the first card once, walks the next chevron, and writes a roster_scan header plus roster_entry rows to
+     * outcomes/roster_scan.jsonl. Every coordinate is checked against the deny list; `veteranRosterScanLimit` caps entries (0 = whole roster). */
     open fun startVeteranRosterScanTest() {
         val selected = requireNotNull(game.diagnosticSelection)
         val limit = selected.rosterLimit
@@ -1222,28 +871,15 @@ abstract class Campaign(game: Game) : Task(game) {
         VeteranRosterScanner(game).runScan(limit, evidence)
     }
 
-    /**
-     * Read-only Veteran Inspiration calibration diagnostic (PL-R1c). Park the game on an open
-     * `Umamusume Details` dialog for the Veteran you want read; it selects the Inspiration tab if
-     * another tab is showing, walks the Sparks + Legacy Origin panel with bounded swipes inside the
-     * panel, and logs every factor name, kind, and star count it read tagged `[INSPIRATION-TEST]`.
-     * It persists nothing and taps no control other than the Inspiration tab.
-     */
+    /** Read-only: logs every Inspiration factor name, kind and star count off an open Umamusume Details dialog, tagged `[INSPIRATION-TEST]`.
+     * Swipes only inside the panel and persists nothing. */
     open fun startVeteranInspirationReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Inspiration diagnostic...")
         VeteranInspirationReader(game, com.steve1316.uma_android_automation.utils.VeteranFactorDomain.loadFromAssets(game.myContext)).debugRead()
     }
 
-    /**
-     * Read-only Veteran Inspiration capture (PL-R1c). Park the game on the Veteran Roster list with
-     * Filters: OFF, then start the bot: it walks the roster with the detail dialog's next chevron and
-     * reads each Veteran's Inspiration panel, writing one `veteran_inspiration` record per Veteran
-     * plus a `veteran_inspiration_scan` header to outcomes/veteran_inspiration.jsonl.
-     *
-     * `veteranInspirationScanLimit` caps how many Veterans are captured - the staged 1 / 3 / 20
-     * validation runs - and 0 walks the whole roster. `veteranInspirationScanStartIndex` resumes a
-     * stopped crawl: the walk chevron-advances past that many entries before it starts capturing.
-     */
+    /** Read-only: walks the roster with the next chevron and writes veteran_inspiration records plus a scan header to outcomes/veteran_inspiration.jsonl.
+     * `veteranInspirationScanLimit` caps captures (0 = all); `veteranInspirationScanStartIndex` resumes a stopped crawl. */
     open fun startVeteranInspirationScanTest() {
         val selected = requireNotNull(game.diagnosticSelection)
         val limit = selected.inspirationLimit
@@ -1255,109 +891,57 @@ abstract class Campaign(game: Game) : Task(game) {
         VeteranInspirationScanner(game).runScan(limit, startIndex)
     }
 
-    /**
-     * Read-only Veteran protection probe (PL-R2a). Park the game on the Veteran Roster list with
-     * Filters: OFF, then start the bot: it opens Display Settings > Filter and probes whether any
-     * Veteran is favorited and whether any has a memo (the two markers that block a release), reading
-     * the game's own "OK disabled when the selection is empty" signal WITHOUT applying a filter. It
-     * writes one `veteran_protection` record to outcomes/veteran_protection.jsonl and leaves through
-     * Cancel, so the roster stays Filters: OFF. It never favorites, memos, releases, or transfers.
-     */
+    /** Read-only: probes via Display Settings > Filter whether any Veteran is favorited or has a memo (the markers that block a release), using the
+     * game's "OK disabled when the selection is empty" signal without applying a filter. Writes outcomes/veteran_protection.jsonl and leaves through Cancel. */
     open fun startVeteranProtectionScanTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Veteran protection probe...")
         VeteranProtectionScanner(game).runScan()
     }
 
-    /**
-     * Support-deck selector rehearsal diagnostic. Park the game on the career-start Support Formation
-     * screen and set Required Support Deck (runQueue.supportDeckIndex) to 1..10 first: the diagnostic
-     * runs the EXACT production saved-deck selector -- real OCR reads and real arrow taps -- to select
-     * and positively verify the requested deck, then stops. It never borrows, never presses Start
-     * Career, and spends no TP. Tagged [DECK-REHEARSAL] in the log.
-     */
+    /** Rehearses the production saved-deck selector (real OCR and arrow taps) for runQueue.supportDeckIndex, then stops. Never borrows, never presses
+     * Start Career, spends no TP. Tagged `[DECK-REHEARSAL]`. */
     open fun startSupportDeckRehearsalTest() {
         MessageLog.i(TAG, "\n[TEST] Running support-deck selector rehearsal diagnostic...")
         CareerLaunchNavigator(game.myContext).rehearseRequiredSupportDeck(game.imageUtils)
     }
 
-    /**
-     * Smart Borrow rehearsal diagnostic. Park the game on the career-start Support Formation screen
-     * with Required Support Deck (runQueue.supportDeckIndex) set to 1..10 AND already showing on that
-     * screen, and the Friends slot empty, then start the bot: it runs the production Smart Borrow
-     * sub-flow (open the friend slot, pick, replace a duplicate/trainee-conflict borrow) through the
-     * shared boundary the launch uses, then verifies the required deck is still active on a fresh
-     * post-borrow read. It never presses Start Career and spends no TP. Tagged [BORROW-REHEARSAL].
-     */
+    /** Runs the production Smart Borrow sub-flow on the Support Formation screen, then verifies the required deck is still active. Never presses
+     * Start Career, spends no TP. Tagged `[BORROW-REHEARSAL]`. */
     open fun startSmartBorrowRehearsalTest() {
         MessageLog.i(TAG, "\n[TEST] Running Smart Borrow rehearsal diagnostic...")
         CareerLaunchNavigator(game.myContext).rehearseSmartBorrowForRequiredDeck(game.imageUtils)
     }
 
-    /**
-     * Read-only Smart Borrow LOCATE rehearsal (DeckLab Smart Borrow 2.0, Stage A). Push the offline
-     * borrow intent to outcomes/smart_borrow_intent.json, park the game on the career-start Support
-     * Formation screen with the Friends slot EMPTY, then start the bot: it reads the intent, opens the
-     * Borrow Card picker, reads every visible row, resolves which live row is the recommended card by
-     * canonical character + outfit + limit break, and reports it. It taps NO card, selects nothing,
-     * never presses Start Career, and spends nothing. Tagged [BORROW-LOCATE].
-     */
+    /** Read-only: reads the offline borrow intent, opens the Borrow Card picker and reports which live row is the recommended card. Taps no card,
+     * spends nothing. Tagged `[BORROW-LOCATE]`. */
     open fun startSmartBorrowLocateTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Smart Borrow locate rehearsal...")
         CareerLaunchNavigator(game.myContext).apply { attachLiveGame(game) }.locateSmartBorrowIntentReadOnly(game.imageUtils)
     }
 
-    /**
-     * Borrow "Remove" behaviour probe (DeckLab Smart Borrow 2.0 enabler). Manually borrow ANY
-     * throwaway card first, park the game on the career-start Support Formation screen, then start the
-     * bot: it opens the picker via the friend-slot banner, taps the Remove control, and records whether
-     * the Friends slot returned to empty. This is the only DeckLab borrow diagnostic that mutates
-     * anything (it removes the throwaway card the operator placed); it spends nothing and never presses
-     * Start Career. Tagged [BORROW-REMOVE-PROBE].
-     */
+    /** Probes the picker's Remove control on a throwaway card the operator borrowed first; the only borrow diagnostic that mutates anything. Never
+     * presses Start Career. Tagged `[BORROW-REMOVE-PROBE]`. */
     open fun startBorrowRemoveProbeTest() {
         MessageLog.i(TAG, "\n[TEST] Running Borrow Remove behaviour probe...")
         CareerLaunchNavigator(game.myContext).probeBorrowRemoveBehavior(game.imageUtils)
     }
 
-    /**
-     * Smart Borrow SELECT-verify-rollback rehearsal (DeckLab Smart Borrow 2.0, Stage B/C). Push the
-     * offline borrow intent to outcomes/smart_borrow_intent.json, park the game on the career-start
-     * Support Formation with the Friends slot EMPTY, then start the bot: it locates the intent's row,
-     * taps exactly it, verifies the committed friend slot is that card via the reopened picker's
-     * "Selected" marker, Removes it, confirms the slot is empty, then repeats the cycle once. It taps a
-     * borrow row and Removes it (both reversible); it never presses Start Career and spends nothing.
-     * Tagged [BORROW-SELECT].
-     */
+    /** Selects the intent's row, verifies the committed slot via the picker's "Selected" marker, Removes it and confirms the slot is empty, twice.
+     * Both steps are reversible; never presses Start Career. Tagged `[BORROW-SELECT]`. */
     open fun startSmartBorrowSelectRollbackTest() {
         MessageLog.i(TAG, "\n[TEST] Running Smart Borrow select-verify-rollback rehearsal...")
         CareerLaunchNavigator(game.myContext).apply { attachLiveGame(game) }.rehearseSmartBorrowSelectAndRollback(game.imageUtils)
     }
 
-    /**
-     * The build-aware launch-gate dry-run. Push a BUILD_AWARE intent to outcomes/smart_borrow_intent.json,
-     * park the game on the career-start Support Formation with the required deck showing and the Friends
-     * slot EMPTY, then start the bot: it runs the PRODUCTION build-aware launch transaction (fresh pool
-     * re-scan for staleness, exact intent-bound borrow selection, committed-slot identity verification,
-     * owned-deck integrity) to the final READY_TO_START_CAREER gate and then deliberately DOES NOT press
-     * Start Career -- it rolls the borrow back via Remove and confirms the empty slot. Fails closed with no
-     * legacy fallback. Never presses Start Career and spends nothing. Tagged [LAUNCH-GATE].
-     */
+    /** Dry-runs the production build-aware launch transaction to READY_TO_START_CAREER, then rolls the borrow back via Remove instead of pressing
+     * Start Career. Fails closed with no legacy fallback. Tagged `[LAUNCH-GATE]`. */
     open fun startBuildAwareLaunchGateTest() {
         MessageLog.i(TAG, "\n[TEST] Running build-aware launch-gate dry-run...")
         CareerLaunchNavigator(game.myContext).apply { attachLiveGame(game) }.dryRunBuildAwareLaunchGate(game.imageUtils)
     }
 
-    /**
-     * Read-only Borrow Card pool census (DeckLab Phase 2B). Park the game on the career-start Support
-     * Formation screen with the Friends slot EMPTY, then start the bot: it opens the borrow picker,
-     * reads every visible row (name, rarity, level, limit-break pips, provenance, redacted owner),
-     * pages with the launch's bounded walker, and closes the picker. It NEVER taps a row, selects a
-     * borrow, presses Start Career, changes a formation, or spends anything. Records go to the local
-     * outcomes/borrow_pool.jsonl. Tagged [BORROW-POOL].
-     *
-     * `borrowPoolScanLimit` caps distinct rows for the staged Stage A/B/C runs (0 = whole visible
-     * pool); `borrowPoolScanEvidence` turns on per-field raw-read logging for calibration.
-     */
+    /** Read-only census of the Borrow Card pool into outcomes/borrow_pool.jsonl; never taps a row or presses Start Career. `borrowPoolScanLimit`
+     * caps rows (0 = all); `borrowPoolScanEvidence` enables raw-read logging. Tagged `[BORROW-POOL]`. */
     open fun startBorrowPoolScanTest() {
         val limit = SettingsHelper.getIntSetting("debug", "borrowPoolScanLimit", 0)
         val evidence = SettingsHelper.getBooleanSetting("debug", "borrowPoolScanEvidence", false)
@@ -1679,11 +1263,7 @@ abstract class Campaign(game: Game) : Task(game) {
                     trainee.readName(game.imageUtils)
                 }
 
-                // Rotation backstop: confirm this career's trainee matches the preset the queue
-                // loaded for it. This is the ONLY trainee check on the resume path (a resume
-                // re-enters a career without going through Trainee Select), and it completes the
-                // match-or-stop guarantee for every rotation career. Once per career, independent
-                // of the deck-validation setting.
+                // Rotation backstop: the only trainee check on the resume path (no Trainee Select). Runs once per career regardless of deck validation.
                 if (!bRotationTraineeVerified) {
                     verifyRotationTrainee()
                     bRotationTraineeVerified = true
@@ -1694,9 +1274,6 @@ abstract class Campaign(game: Game) : Task(game) {
                     trainee.bHasSetRunningStyle = false
                 }
 
-                // First-pass deck validation: warn the user if the trainee's preferred
-                // distance/style aptitude is below the configured floor. Runs once per
-                // career so we don't spam the log on every aptitude refresh.
                 if (enableDeckValidation && !bDeckValidationChecked && trainee.bHasUpdatedAptitudes) {
                     runDeckValidation()
                     bDeckValidationChecked = true
@@ -1730,12 +1307,8 @@ abstract class Campaign(game: Game) : Task(game) {
         return false
     }
 
-    /**
-     * Opens the career-end skill purchase screen from the career-end result screen. The default
-     * is the URA-style Learn button; a campaign whose career-end layout differs (Grand Concert's
-     * Complete Career screen) overrides this with its own entry, and may run scenario steps that
-     * must precede the skill spend.
-     */
+    /** The default is the URA-style Learn button; Grand Concert's Complete Career screen overrides it and may run scenario steps that must precede
+     * the skill spend. */
     open fun openCareerEndSkillScreen() {
         ButtonCareerEndSkills.click(game.imageUtils)
     }
@@ -1853,9 +1426,7 @@ abstract class Campaign(game: Game) : Task(game) {
         val shouldProceed = forceRace || shouldAllowConsecutiveRace(args)
 
         if (shouldProceed) {
-            // Proceeding (or deferring to re-check) is NOT a reason to suppress racing — clear the gate so a
-            // downstream race-entry abort that doesn't advance the day can still retry this turn. The old
-            // unconditional `= true` left it set and silently blocked the legitimate same-turn retry.
+            // Clear the gate so a downstream race-entry abort that does not advance the day can still retry this turn.
             racing.raceRepeatWarningCheck = false
             // If the bot hasn't checked the date yet, it usually means it started on the prep screen or it is the Finale season.
             // If we are explicitly overriding the warning (mandatory race), we should proceed even if the date check hasn't finished.
@@ -1876,7 +1447,6 @@ abstract class Campaign(game: Game) : Task(game) {
                 game.wait(2.0)
             }
         } else {
-            // Declined on the warning — suppress further extra-race attempts this turn.
             racing.raceRepeatWarningCheck = true
             MessageLog.i(TAG, "[RACE] Consecutive race warning! Aborting racing...")
             racing.clearRacingRequirementFlags()
@@ -1957,12 +1527,7 @@ abstract class Campaign(game: Game) : Task(game) {
         return
     }
 
-    /**
-     * Scenario-specific decision state for the shadow [CareerState] snapshot, or null when the
-     * scenario carries no persistent decision-relevant state at the main-screen boundary. Subclasses
-     * override this to build their payload from their own fields, so no private scenario field is
-     * widened. Called by [buildCareerState] only; reads fields, never touches the screen.
-     */
+    /** Null when the scenario carries no persistent decision state; subclasses build it from their own fields. */
     open fun scenarioStateSnapshot(): ScenarioState? {
         return null
     }
@@ -2005,9 +1570,6 @@ abstract class Campaign(game: Game) : Task(game) {
             }
         }
 
-        // Recover when current mood is strictly below the configured floor.
-        // Default floor is GOOD which preserves historical behavior. A "Great" floor
-        // is the strict guard for trap-event trainees like Agnes Tachyon (NHK Mile).
         return (trainee.mood < moodFloor)
     }
 
@@ -2022,20 +1584,7 @@ abstract class Campaign(game: Game) : Task(game) {
         return recoverMood(sourceBitmap, targetMood = targetMood)
     }
 
-    /**
-     * One-shot deck validation: log a high-visibility warning if the trainee's preferred
-     * distance and running-style aptitudes are below [deckValidationMinAptitude].
-     *
-     * Called from the `umamusume_details` dialog handler the first time aptitudes are
-     * successfully read. The check is informational only — it does not halt the run.
-     *
-     * Logs:
-     *  - INFO when both aptitudes meet the floor (one line: "deck OK").
-     *  - WARN with the specific shortfall (distance, style, or both) when below the floor.
-     *
-     * Subclasses MAY override to extend the check (e.g. add scenario-specific terrain
-     * checks for Trackblazer's mixed turf/dirt schedule), but should call super() first.
-     */
+    /** Informational only. Subclasses may extend it (e.g. Trackblazer's mixed turf/dirt schedule) but should call super() first. */
     protected open fun runDeckValidation() {
         val distance = trainee.trackDistance
         val style = trainee.runningStyle
@@ -2067,15 +1616,8 @@ abstract class Campaign(game: Game) : Task(game) {
             )
         }
 
-        // Prediction-visibility check. This replaces the old "Junior fan-farm impossible if
-        // Sprint+Mile both <B" warning, which was wrong on the mechanism twice over: Junior year
-        // has Medium/Long races too (a Medium=A trainee can clear the 3000-fan checkpoint off
-        // Kyoto Junior Stakes and Hopeful Stakes alone), and the race finder is not aptitude-gated
-        // but prediction-gated — the game computes prediction stars from stats AND aptitudes at
-        // runtime. The real risk: a trainee with no strong distance aptitude draws single-star
-        // predictions across its whole early pool. Those races are enterable via the fan-emergency
-        // policy near goal deadlines, but placements and fan payouts will be weak, so the
-        // checkpoint can still be missed. Runs for every trainee, not just decks below the floor.
+        // Prediction visibility, not aptitude, gates the race finder (the game computes prediction stars from stats AND aptitudes): a trainee with no
+        // strong distance aptitude draws single-star predictions across its early pool, so the fan checkpoint can still be missed. Runs for every trainee.
         val bestDistAptitude = trainee.trackDistanceAptitudes.values.maxOrNull() ?: Aptitude.G
         if (bestDistAptitude < Aptitude.B) {
             MessageLog.w(
@@ -2089,30 +1631,11 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
-    /**
-     * Rotation backstop: confirm the trainee actually in this career matches the preset the queue
-     * loaded for it. The Trainee Select handler already verifies the trainee it picks, but a resume
-     * after a process death re-enters a career WITHOUT going through Trainee Select, so this is the
-     * only check on that path — and it completes the match-or-stop guarantee for every rotation
-     * career.
-     *
-     * The in-career name ([Trainee.readName]) is the bare character name (no "[Outfit]" prefix); the
-     * rotation target is stored as "[Outfit] Name". Matching de-outfits both sides so the comparison
-     * is character-level. Outfit-level discrimination is impossible from the in-career name and is
-     * left to the phase-aware resume that loads the correct snapshot index.
-     *
-     * Conservative by design, because a STOP halts the whole unattended queue:
-     *  - loaded preset's trainee matches the career     -> pass.
-     *  - career CONFIDENTLY matches a DIFFERENT roster
-     *    trainee than the one loaded                    -> RESYNC the rotation onto her entry and
-     *    continue (an externally interrupted queue restarted from entry 0 while the game resumed
-     *    the old in-flight career); STOP only when the resync itself fails (snapshot missing).
-     *  - nothing matches well (unreadable / off-roster) -> WARN and continue; never halt on noise.
-     *
-     * When the same character appears at multiple rotation slots (different outfits), the resync
-     * is refused and the queue stops: outfit-level discrimination is impossible from the bare
-     * in-career name, and guessing the wrong slot would apply the wrong preset.
-     */
+    /** The only trainee check on the resume path (a resume after process death skips Trainee Select). Names are compared de-outfitted because the
+     * in-career name has no "[Outfit]" prefix; outfit-level discrimination is impossible there. Conservative because a STOP halts the whole
+     * unattended queue: a match passes; a confident match to a different roster trainee resyncs the rotation onto her entry (stop only if the
+     * snapshot is missing or the character holds several slots, where a wrong guess would apply the wrong preset); an unreadable or off-roster
+     * name warns and continues. */
     private fun verifyRotationTrainee() {
         if (!SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) return
 
@@ -2125,8 +1648,7 @@ abstract class Campaign(game: Game) : Task(game) {
         val target = SettingsHelper.getStringSetting("queueState", "currentTrainee", "").trim()
         if (target.isEmpty()) return // No rotation target recorded for this career; nothing to check against.
 
-        // De-outfit so the bare in-career name compares character-to-character; also score the full
-        // form in case a screen ever does include the outfit, and take the better of the two.
+        // De-outfit, and also score the full form in case a screen includes the outfit.
         fun matchScore(candidate: String): Double =
             maxOf(
                 TraineeNameMatcher.score(inCareer, candidate),
@@ -2136,16 +1658,12 @@ abstract class Campaign(game: Game) : Task(game) {
         val targetScore = matchScore(target)
         if (targetScore >= rotationVerifyMatchThreshold) {
             MessageLog.i(TAG, "[ROTATION] Trainee verify OK: career '$inCareer' matches the loaded preset for '$target' (score=${"%.2f".format(targetScore)}).")
-            // Identity matched - now verify the SETTINGS did too. Identity and config can diverge
-            // (a resume that re-applied the wrong slot, a stale Home preset overwrite): the
-            // fingerprint comparison catches what the name check structurally cannot.
+            // Identity and config can diverge (a resume that re-applied the wrong slot); the fingerprint comparison catches what the name check cannot.
             warnOnTraineeConfigDrift(StartModule.loadRotationConfig().inGameNames.indexOf(target), "career-start check")
             return
         }
 
-        // The loaded preset doesn't clearly match. Act only if the career CONFIDENTLY matches some
-        // OTHER roster trainee — the unambiguous "wrong preset loaded" case. A name that matches its
-        // own (noisy) target best, or nothing well, is treated as OCR noise: warn, don't halt.
+        // Act only on a CONFIDENT match to a different roster trainee; a noisy or off-roster read warns instead of halting.
         var best: String? = null
         var bestScore = 0.0
         var bestIndex = -1
@@ -2161,16 +1679,11 @@ abstract class Campaign(game: Game) : Task(game) {
 
         val matched = best
         if (matched != null && bestScore >= rotationVerifyMatchThreshold && deOutfit(matched) != deOutfit(target)) {
-            // The career on screen IS a rotation trainee — the signature of an externally
-            // interrupted queue restarted from entry 0 while the game resumed the old in-flight
-            // career. Resync the queue onto her entry (swap in her snapshot, fast-forward the
-            // cursor) and keep playing instead of killing the whole unattended queue. Refused when
-            // the character occupies multiple rotation slots: the bare in-career name cannot tell
-            // the outfits apart, and guessing the wrong slot would apply the wrong preset.
+            // An externally interrupted queue restarted from entry 0 while the game resumed the old career: resync onto her entry. Refused when the
+            // character holds several rotation slots (the bare in-career name cannot tell outfits apart).
             val duplicateSlots = rotationNames.count { deOutfit(it) == deOutfit(matched) }
             if (duplicateSlots == 1 && StartModule.resyncRotationOntoCareer(game.myContext, bestIndex)) {
-                // Rebuild the training config from the resynced DB - without this the career keeps the
-                // wrong preset's construction-cached stat priorities and event overrides to the end.
+                // Without this the career keeps the wrong preset's construction-cached stat priorities and event overrides.
                 reloadTraineeConfig()
                 MessageLog.w(
                     TAG,
@@ -2185,7 +1698,6 @@ abstract class Campaign(game: Game) : Task(game) {
                         "mustRestBeforeSummer=$mustRestBeforeSummer moodFloor=$moodFloor skillPointCheck=$skillPointsRequired " +
                         "objective=${skillSpendObjective.token()}",
                 )
-                // Prove the reload landed: the live fingerprint must now equal the resynced slot's.
                 warnOnTraineeConfigDrift(bestIndex, "post-resync verification")
                 return
             }
@@ -2217,7 +1729,6 @@ abstract class Campaign(game: Game) : Task(game) {
         )
     }
 
-    /** Strips a leading "[Outfit]" prefix so a bare in-career name matches an outfit-tagged target. */
     private fun deOutfit(name: String): String {
         val stripped = name.replace(Regex("^\\s*\\[[^\\]]*\\]\\s*"), "").trim()
         return stripped.ifEmpty { name.trim() }
@@ -2231,8 +1742,7 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return True if the bot is at the Main screen, false otherwise.
      */
     open fun checkMainScreen(): Boolean {
-        // Single screenshot shared across all four checks. Each check otherwise grabs its own
-        // bitmap, costing 4 MediaProjection screenshots per Campaign.process() iteration.
+        // One screenshot shared across the four checks; each would otherwise cost its own MediaProjection capture per process() iteration.
         val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
 
         // If there is a dialog on the screen, then we are not directly on the Main screen.
@@ -2276,13 +1786,8 @@ abstract class Campaign(game: Game) : Task(game) {
         } else if (IconGoalRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             // Most likely the user started the bot here so a delay will need to be placed to allow the start banner of the Service to disappear.
             game.wait(2.0)
-            // The goal ribbon also stays visible on the Main screen and behind blocking info popups (e.g. the
-            // "Umamusume Class" fan-class popup the game shows around debut, which only has a Close button). A
-            // goal-ribbon match alone therefore does NOT prove we're on the Race Selection screen. Only treat this
-            // as the race-prep flow if a Back button is actually present and gets clicked. Re-capture a fresh
-            // screenshot (the start banner has had 2s to clear) so the check reflects the current screen. If there
-            // is no Back button, return false so process() falls through to performMiscChecks for real recovery
-            // instead of looping forever on a no-op back tap.
+            // The goal ribbon also shows on Main and behind blocking popups (e.g. the "Umamusume Class" popup), so it does not prove Race Selection:
+            // require a Back button that is actually clicked, else return false so process() falls through to real recovery instead of looping on a no-op tap.
             if (ButtonBack.click(game.imageUtils)) {
                 MessageLog.v(TAG, "[INFO] Bot is at the Race Selection screen with a mandatory race needing to be selected.")
                 game.wait(1.0)
@@ -2311,12 +1816,8 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.v(TAG, "[INFO] Bot is at the Racing screen waiting to be skipped or done manually.")
             true
         } else if (ButtonRace.check(game.imageUtils) || ButtonRaceExclamation.check(game.imageUtils)) {
-            // The lineup screen (roster of entrants + green "Race!" button) also belongs to the race
-            // flow, but has no ButtonChangeRunningStyle. Resuming a career that was interrupted mid-race
-            // lands here, which every other screen check misses - it killed the queue on 2026-07-11
-            // when a Continue-Career resume dropped onto this screen and the loop counted it unknown to
-            // the stop. handleStandaloneRace clicks Race and rides the race out. Checked AFTER the
-            // strategy-screen match so the normal prep flow is unaffected.
+            // The lineup screen (entrants + green "Race!" button) has no ButtonChangeRunningStyle and no other check matches it; a Continue-Career resume
+            // lands here. Checked after the strategy screen so the normal prep flow is unaffected.
             MessageLog.v(TAG, "[INFO] Bot is at the race lineup screen (Race! button present); entering the race.")
             true
         } else {
@@ -2341,16 +1842,8 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
-    /**
-     * Checks if the bot is on the career-end "Learn" skill purchase screen with the careerComplete
-     * plan enabled.
-     *
-     * Covers starting (or restarting) the bot directly on that screen, where [checkEndScreen]
-     * cannot match because the Complete Career button is not reliably visible from inside the
-     * list. The branch decides via [bCareerEndSkillsHandled] whether to run the plan (first time)
-     * or actively exit the screen (plan already ran but the bot is still here - a failed commit
-     * or a wedged screen).
-     */
+    /** Covers starting the bot directly on that screen, where [checkEndScreen] cannot match because Complete Career is not reliably visible
+     * inside the list. */
     private fun checkCareerEndSkillListScreen(): Boolean {
         if (!(skillPlan.skillPlans["careerComplete"]?.bIsEnabled ?: false)) return false
         return careerEndScreenChecker.checkCareerCompleteSkillListScreen()
@@ -2449,11 +1942,8 @@ abstract class Campaign(game: Game) : Task(game) {
         return false
     }
 
-    // Forced-infirmary tracking. A negative status that persists while the Infirmary button reads
-    // disabled is either a misread of the button state or a condition the infirmary can't cure
-    // (e.g. Super Creek's story-locked "Under the Weather"). One forced click per episode resolves
-    // the misread case cheaply (a click on a genuinely disabled button is a no-op); the loud log
-    // captures the incurable case for later tuning.
+    // A negative status that persists while the Infirmary reads disabled is a button-state misread or an incurable condition (e.g. Super Creek's
+    // story-locked "Under the Weather"). One forced click per episode settles the misread; the loud log captures the rest.
     private var turnsWithPersistentNegativeStatus = 0
     private var bForcedInfirmaryAttempted = false
 
@@ -2516,12 +2006,8 @@ abstract class Campaign(game: Game) : Task(game) {
                     ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
                     game.wait(game.dialogWaitDelay)
 
-                    // Infirmary button click already succeeded above, which means the in-game
-                    // heal has fired server-side. The follow-up event-header template match is a
-                    // best-effort visual confirmation only — when it misses (template drift,
-                    // animation timing, "Connecting" overlay), the heal still happened. Treat
-                    // the button click as authoritative so a failed visual match doesn't make
-                    // the bot believe injuries persist across turns.
+                    // The click already fired the heal server-side; the event-header match is only a best-effort visual confirmation, so a miss (template drift,
+                    // "Connecting" overlay) must not make the bot believe injuries persist.
                     if (IconInfirmaryEventHeader.check(game.imageUtils)) {
                         MessageLog.v(TAG, "[INJURY] Injury detected and attempted to heal.")
                     } else {
@@ -2550,57 +2036,24 @@ abstract class Campaign(game: Game) : Task(game) {
         return date.bIsFinaleSeason
     }
 
-    /**
-     * Grand Concert only: the point-economy context the training scorer uses to steer performance
-     * income toward the next song (see [Training.Companion.calculateGrandConcertPointMultiplier]).
-     * [balances] is what the training screen's panel showed this turn, read by Training; the
-     * campaign contributes the cycle state and the song target. Every other campaign returns
-     * null, which disarms the bias entirely.
-     */
+    /** [balances] is what the training panel showed this turn; non-Grand Concert campaigns return null, which disarms the bias. */
     open fun grandConcertPointContext(balances: Map<PerformancePointType, Int?>?): GrandConcertPointContext? = null
 
-    /**
-     * Scenario hook: whether a detected fan requirement may be deferred for a training turn THIS
-     * turn instead of being raced immediately. The base returns false, so every scenario keeps the
-     * historical behaviour of racing a fan requirement the moment it appears. Grand Concert
-     * overrides it with a fail-closed slack policy (see [GrandConcertFanPolicy]); the override also
-     * records the fan-decision telemetry. Only the fan arm is ever eligible - a trophy or
-     * goal-points requirement always races - and the override is responsible for enforcing that.
-     */
+    /** The base returns false (race a fan requirement immediately); Grand Concert overrides with a fail-closed slack policy. Only the fan arm is
+     * eligible: trophy and goal-points requirements always race. */
     open fun considerFanRaceDeferral(): Boolean = false
 
-    /**
-     * The current-scope fan requirement derived from committed scenario route facts, if this scenario
-     * has any. The base returns [GrandConcertFanRequirement.Result.Unknown] with the no-scenario-facts
-     * sentinel, so every non-facts scenario keeps its legacy template-driven fan requirement
-     * unchanged. Grand Concert overrides it because the `race_criteria_fans` template is dead there.
-     * Pure: reads no pixels, performs no navigation, has no side effects.
-     */
+    /** The base returns the no-scenario-facts sentinel, keeping the legacy template-driven requirement; Grand Concert overrides it because its
+     * `race_criteria_fans` template is dead. Pure. */
     open fun currentFanRequirementFromScenarioFacts(): GrandConcertFanRequirement.Result =
         GrandConcertFanRequirement.Result.Unknown(GrandConcertFanRequirement.REASON_NO_SCENARIO_FACTS)
 
-    /**
-     * Public accessor for the grade of the most recent race processed in this career.
-     *
-     * Exposes the protected [racing.lastRaceGrade] field so that base classes like [DialogHandler]
-     * can make grade-aware decisions (e.g., the alarm clock carat policy) without using reflection
-     * or relaxing the encapsulation of the [Racing] property.
-     *
-     * @return The [RaceGrade] of the last processed race, or null if no race has been processed yet
-     *   in this career run.
-     */
+    /** Exposes the protected [racing.lastRaceGrade] to [DialogHandler] (alarm-clock carat policy) without reflection. */
     fun getLastRaceGrade(): com.steve1316.uma_android_automation.types.RaceGrade? = racing.lastRaceGrade
 
     fun isRetryingLostGoalRace(): Boolean = racing.bRetryingLostGoalRace
 
-    /**
-     * Marks the current race as having had its alarm-clock retry option declined per
-     * [Racing.bAlarmClockPolicySkippedThisRace]. Exposed so [DialogHandler]'s purchase_alarm_clock
-     * branch can write the flag without breaking the protected encapsulation of [racing] — same
-     * cross-class-access pattern as [getLastRaceGrade].
-     *
-     * Reset automatically when the race state is cleared (in `Racing` post-race cleanup).
-     */
+    /** Lets [DialogHandler]'s purchase_alarm_clock branch set Racing's protected skipped flag; reset in Racing's post-race cleanup. */
     fun markAlarmClockPolicySkipped() {
         racing.bAlarmClockPolicySkippedThisRace = true
     }
@@ -2663,8 +2116,7 @@ abstract class Campaign(game: Game) : Task(game) {
         if (
             !recreationDateCompleted &&
             IconRecreationDate.check(game.imageUtils, sourceBitmap = sourceBitmap) &&
-            // With an active dating schedule the chain belongs to the scheduler - an energy-recovery
-            // recreation goes to the trainee instead of consuming a scheduled outing.
+            // With an active dating schedule the chain is the scheduler's: recover on the trainee instead of consuming a scheduled outing.
             handleRecreationDate(recoverMoodIfCompleted = false, doDateRecreation = !isScheduleActive())
         ) {
             MessageLog.v(TAG, "[ENERGY] Successfully recovered energy via recreation date.")
@@ -2737,8 +2189,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
             // Check if a date is available.
             if (!recreationDateCompleted && IconRecreationDate.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
-                // With an active dating schedule the chain belongs to the scheduler - a mood-recovery
-                // recreation goes to the trainee instead of consuming a scheduled outing.
+                // With an active dating schedule the chain is the scheduler's: recover on the trainee instead of consuming a scheduled outing.
                 if (handleRecreationDate(recoverMoodIfCompleted = true, doDateRecreation = !isScheduleActive())) {
                     MessageLog.v(TAG, "[MOOD] Successfully recovered mood via recreation date.")
                 }
@@ -2792,8 +2243,7 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun shouldDoRecreationToday(sourceBitmap: Bitmap? = null): Boolean {
         if (!isScheduleActive() || recreationChainComplete || recreationDateCompleted) return false
-        // A back-out this turn (held final, no rows) does not advance the game, so retrying before the
-        // turn changes would reopen the same dialog forever. The latch clears when the date advances.
+        // A back-out (held final, no rows) does not advance the game; retrying before the date changes would reopen the same dialog forever.
         if (recreationAttemptFailedThisTurn) return false
         // Do an outing on a pinned turn, or - when catch-up is on - on any turn where a missed outing has left us behind schedule.
         val pinnedOrBehind =
@@ -2803,10 +2253,8 @@ abstract class Campaign(game: Game) : Task(game) {
         // If only the final outing remains and this is not the Pure Passion turn, hold it: spend the turn on a normal action instead of opening the recreation.
         if (DatingSchedule.shouldHoldFinalOuting(recreationOutingsStarted, recreationTotalOutingsKnown, allowFinalOutingNow())) return false
         val bitmap = sourceBitmap ?: game.imageUtils.getSourceBitmap()
-        // Mandatory career-goal races cannot be skipped, so they still outrank a recreation. Scheduled (in-game agenda) races
-        // do not - the recreation overrides them. Upstream also blocks on IconGoalRibbon here; deliberately dropped: on this
-        // fork the goal ribbon persists on the Main screen for any active objective (see cachedGoalRibbonDay), so keying on
-        // it would dead-block the schedule on most turns. The race-day ribbon is the reliable race-day signal here.
+        // Mandatory goal races outrank a recreation; scheduled (in-game agenda) races do not. Upstream also blocks on IconGoalRibbon, deliberately
+        // dropped: here the ribbon persists for any active objective (see cachedGoalRibbonDay) and would dead-block the schedule on most turns.
         if (cachedMandatoryRaceDay || IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = bitmap)) {
             return false
         }
@@ -2867,8 +2315,7 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Whether the final chain outing may be taken right now - only on the Pure Passion turn (or when the schedule or Pure Passion turn is off). */
     protected fun allowFinalOutingNow(): Boolean = DatingSchedule.allowFinalOuting(enableDatingSchedule, purePassionTurn, date.day)
 
-    /** Whether the recreation schedule is actively driving decisions: enabled and not abandoned (the Pure Passion window has not passed with the chain
-     * unfinished). Protected rather than upstream's private so Trackblazer's budget override can exempt scheduled outings. */
+    /** Enabled and not abandoned (the Pure Passion window passed with the chain unfinished). Protected so Trackblazer's budget override can exempt scheduled outings. */
     protected fun isScheduleActive(): Boolean = enableDatingSchedule && !DatingSchedule.isScheduleAbandoned(purePassionTurn, date.day, recreationChainComplete)
 
     /**
@@ -2887,9 +2334,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
             MessageLog.v(TAG, "\n[RECREATION_DATE] Recreation has a possible date available.")
             game.wait(1.0)
-            // Check if all of the possible dates have been completed. Multiple tries: a
-            // single-frame check against the popup's open animation can miss and send the flow
-            // down the dead Event Progress pill below.
+            // Multiple tries: a single-frame check against the popup's open animation can miss and send the flow to the dead Event Progress pill below.
             if (LabelRecreationDateComplete.check(game.imageUtils, tries = 3)) {
                 MessageLog.v(TAG, "[RECREATION_DATE] Recreation date is already completed.")
                 recreationDateCompleted = true
@@ -2902,9 +2347,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 } else {
                     MessageLog.i(TAG, "[RECREATION_DATE] Mood does not require recovery. Moving on...")
                     ButtonCancel.click(game.imageUtils)
-                    // Return false: no recreation date was actually consumed (we just confirmed it was already
-                    // completed and cancelled out). The recoverEnergy caller falls through to ButtonRest, and the
-                    // Trackblazer override no longer increments its recreationUsedCount budget on this no-op path.
+                    // No date was consumed (already completed), so the Trackblazer override must not count it against its recreation budget.
                     false
                 }
             } else {
@@ -2926,7 +2369,7 @@ abstract class Campaign(game: Game) : Task(game) {
                             cancelPartnerDialog()
                         }
                     } else {
-                        // Read the in-game group-event progress (e.g. "3/4"). This is the authoritative chain position, so it holds correctly even after a bot restart or manual play.
+                        // Authoritative chain position (e.g. "3/4"), correct even after a restart or manual play.
                         getGroupEventProgress(game.imageUtils.getSourceBitmap())?.let { (completed, total) ->
                             recreationOutingsStarted = completed
                             recreationTotalOutingsKnown = total
@@ -2958,7 +2401,7 @@ abstract class Campaign(game: Game) : Task(game) {
                                 game.waitForLoading()
                                 true
                             } else {
-                                // Back out rather than leave the dialog open to desync the next turn (the choose_recreation_partner dialog case is the backstop).
+                                // Back out rather than leave the dialog open to desync the next turn.
                                 MessageLog.e(TAG, "[ERROR] handleRecreationDate:: Failed to find any date progress labels in the partner selection dialog. Backing out.")
                                 cancelPartnerDialog()
                             }
@@ -2967,10 +2410,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 } else if (LabelEventProgress.click(game.imageUtils)) {
                     // Legacy support cards or situations where the dialog doesn't apply.
                     game.waitForLoading()
-                    // A completed Pal row keeps its "Event Progress" pill but silently ignores
-                    // taps, so verify the popup actually closed before declaring success (the
-                    // complete-check can miss a frame, leaving this branch to click the dead pill,
-                    // report success, and loop the campaign on the open popup).
+                    // A completed Pal row keeps its "Event Progress" pill but ignores taps; verify the popup closed before declaring success, or the campaign
+                    // loops on the open popup.
                     if (LabelRecreationUmamusume.check(game.imageUtils)) {
                         MessageLog.w(
                             TAG,
@@ -3077,39 +2518,20 @@ abstract class Campaign(game: Game) : Task(game) {
         return skillPlan.start(skillPlanName, trigger)
     }
 
-    /**
-     * The config-arm fingerprint of the career currently running, computed from the same snapshot and
-     * the same helper the [CAREER_END] record uses, so a mid-career record joins the arm its career
-     * will land in. Reuses [outcomeConfigFingerprint] rather than re-deriving the digest - two
-     * fingerprint implementations would silently split arms the day one of them drifted.
-     */
+    /** Same helper as the [CAREER_END] record, so a mid-career record joins the arm its career lands in; two fingerprint implementations would
+     * silently split arms. */
     internal fun currentConfigFingerprint(): String = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot)
 
-    /**
-     * Re-reads Skill Points from a fresh capture to confirm a candidate high-water crossing.
-     *
-     * Runs only when the per-turn value already appears to cross the bar, so an ordinary turn pays
-     * nothing for it. It exists because the per-turn reading is the one input to the trigger that
-     * nothing else validates: on 2026-07-16 a contaminated read dispatched a purchase whose own skill
-     * screen then reported 71 points against a 350 bar.
-     *
-     * Deliberately re-reads the Main screen only - opening the skill screen to check would cost the
-     * very navigation this gate exists to prevent, and would be indistinguishable from the false
-     * trigger it is meant to refuse.
-     *
-     * A rejection rewrites the trusted value so the next turn re-arms normally instead of re-confirming
-     * the same bad number every turn, and never marks the threshold handled: a genuine crossing later
-     * in the career must still fire.
-     *
-     * @return True to dispatch the high-water action, false to skip this turn.
-     */
+    /** Re-reads Skill Points from the Main screen to confirm a candidate high-water crossing: the per-turn read is the one trigger input nothing
+     * else validates (a contaminated read once dispatched a purchase whose skill screen showed 71 points against a 350 bar). Not the skill screen:
+     * opening it is the navigation this gate prevents. A rejection rewrites the trusted value so the next turn re-arms, and never marks the
+     * threshold handled, so a genuine later crossing still fires. Returns true to dispatch. */
     private fun confirmHighWaterCrossing(): Boolean {
         val candidate: Int = trainee.skillPoints
         val fresh: Int = game.imageUtils.determineSkillPoints()
         return when (confirmHighWater(fresh, skillPointsRequired)) {
             SkillPointConfirmation.CONFIRMED -> {
                 if (fresh != candidate) {
-                    // Both cross the bar, so the trigger stands; trust the fresher number.
                     trainee.skillPoints = fresh
                 }
                 true
@@ -3120,8 +2542,6 @@ abstract class Campaign(game: Game) : Task(game) {
                     "[SKILLS] High-water candidate $candidate rejected: a fresh read says $fresh, below the $skillPointsRequired threshold. " +
                         "Not opening the skill screen. The threshold stays eligible for a later crossing.",
                 )
-                // Replace the bad candidate so the re-arm below the bar happens next turn and this does
-                // not re-confirm the same number every turn.
                 trainee.skillPoints = fresh
                 false
             }
@@ -3135,14 +2555,8 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
-    /**
-     * Records the careerComplete pass that never got to run because the Learn screen would not open
-     * within its bounded attempts. [SkillPlan] cannot report this one: its session never started, so
-     * the corpus would otherwise show a career whose final purchase silently vanished.
-     *
-     * Best-effort like every other skill-spend write - a telemetry failure must not change the
-     * career-completion path this sits on.
-     */
+    /** Records a careerComplete pass whose Learn screen never opened; [SkillPlan] cannot report it because its session never started. Best-effort:
+     * must not change the completion path. */
     private fun recordAbortedSkillEntry() {
         runCatching {
             val record =
@@ -3156,8 +2570,7 @@ abstract class Campaign(game: Game) : Task(game) {
                     scenario = game.scenario.ifEmpty { null }?.replace(" ", "_"),
                     fp = currentConfigFingerprint(),
                     turn = date.day,
-                    // The last per-turn OCR is the only points reading available: the Learn screen never
-                    // opened, so there is no screen-authoritative total to quote.
+                    // The Learn screen never opened, so the last per-turn OCR is the only points reading.
                     spBefore = trainee.skillPoints,
                     spAfter = trainee.skillPoints,
                     proposed = emptyList(),
@@ -3277,9 +2690,7 @@ abstract class Campaign(game: Game) : Task(game) {
         ButtonCancel.click(game.imageUtils)
         ButtonClose.click(game.imageUtils)
         game.wait(1.0)
-        // Use the explicit training outcome: turnAdvanced is true for a facility training, forced Wit, OR
-        // energy/mood recovery - all of which advance the turn. The selected-stat return alone is null on
-        // recovery paths that still advance, so it cannot be used to detect advancement here.
+        // turnAdvanced covers facility training, forced Wit and recovery; the selected-stat return is null on recovery paths that still advance.
         val trainingOutcome = training.handleTrainingWithOutcome()
         return RaceFallbackOutcome(shouldStopForMandatoryRace = false, turnAdvanced = trainingOutcome.turnAdvanced)
     }
@@ -3340,15 +2751,9 @@ abstract class Campaign(game: Game) : Task(game) {
             ButtonCancel.click(game.imageUtils, sourceBitmap = sourceBitmap)
             return true
         } else if (LabelUmamusumeClassFans.check(game.imageUtils, sourceBitmap = sourceBitmap) && ButtonClose.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
-            // Dismiss the "Umamusume Class" fan-pyramid popup ONLY. The bot opens this itself (openFansDialog)
-            // to read the fan count, but its title bar is blue and the title-gradient detector only knows the
-            // green header, so handleDialogs can't recognize it — without this it traps the bot.
-            //
-            // CRITICAL: scope this strictly to the class popup via LabelUmamusumeClassFans. A blanket ButtonClose
-            // here also closes the green-header Umamusume Details / Strategy dialogs the bot opens to read
-            // aptitudes / set the running style. handleDialogs reads those on a later pass once the dialog is
-            // stable+open; closing them here first leaves aptitudes unread (all "G") and spins the bot in an
-            // open/close loop. Leave non-class dialogs alone so the real dialog handler can read them.
+            // Dismiss ONLY the "Umamusume Class" popup the bot opens itself: its blue title bar is invisible to the green-header detector, so it would trap
+            // the bot. Scope strictly via LabelUmamusumeClassFans: a blanket ButtonClose would also close the Details / Strategy dialogs handleDialogs must
+            // read later (aptitudes stay "G" in an open/close loop).
             MessageLog.i(TAG, "[MISC] Dismissed the Umamusume Class popup via its Close button.")
             game.wait(0.5)
             return true
@@ -3356,10 +2761,7 @@ abstract class Campaign(game: Game) : Task(game) {
             bMiscBackPressedThisTick = true
             consecutiveMiscBackPresses++
             if (consecutiveMiscBackPresses == 2) {
-                // Two presses without progress: if an open notification shade is eating the
-                // taps, clear it before the streak runs on. An open shade covers the top anchors,
-                // absorbs back-presses, and can let a misc template match shade content and tap
-                // the bot's own STOP BOT notification action.
+                // An open notification shade absorbs back-presses and can let a misc match tap the bot's own STOP BOT notification action; clear it.
                 dismissNotificationShade("misc back-press streak")
             }
             if (consecutiveMiscBackPresses >= maxConsecutiveMiscBackPresses) {
@@ -3370,11 +2772,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 )
             }
             MessageLog.i(TAG, "[MISC] Navigating back a screen since all the other misc checks have been completed. (consecutive back-presses: $consecutiveMiscBackPresses)")
-            // ButtonBack.click does NOT auto-wait (Component.click goes through Components.tap which
-            // calls the accessibility service directly, not Game.tap). A back-navigation is almost
-            // always a pure UI transition with no server round-trip, so 0.5s is enough to let the
-            // animation settle before the next iteration re-scans. game.wait() also includes a
-            // waitForLoading() poll at the end, so any actual server call is still covered.
+            // ButtonBack.click does not auto-wait (Components.tap bypasses Game.tap). 0.5s settles the animation; game.wait() still polls waitForLoading().
             game.wait(0.5)
             return true
         } else if (ButtonSkip.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
@@ -3407,14 +2805,8 @@ abstract class Campaign(game: Game) : Task(game) {
         // Scenario-specific pre-update hook.
         onBeforeMainScreenUpdate()
 
-        // Re-verify we're still on the main screen. The hook above may have navigated
-        // away (e.g. Trackblazer's shop check opens and tries to navigate the shop UI).
-        // If the hook left us on a non-main screen - for example because shop entry
-        // misfired - bail out instead of running updateDate() against the wrong UI.
-        // This prevents the IllegalArgumentException("y must be >= 0") crash that
-        // happens when date-OCR offset calculations land outside the source bitmap
-        // on a shop or dialog screen. The main process loop will re-detect screen
-        // state on the next iteration and converge.
+        // The hook above may have left the main screen (e.g. a misfired Trackblazer shop entry): bail out rather than run updateDate() against the
+        // wrong UI, where date-OCR offsets can fall outside the bitmap ("y must be >= 0").
         if (!checkMainScreen()) {
             MessageLog.w(TAG, "[WARN] handleMainScreen:: After onBeforeMainScreenUpdate, bot is no longer on the main screen. Bailing out so the main loop can re-detect.")
             return false
@@ -3435,11 +2827,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 racing.raceRepeatWarningCheck = false
                 bHasTriedCheckingFansToday = false
                 bHasCheckedForMaidenRaceToday = false
-                // Reset recreation-date check so a fresh icon detection runs every turn.
-                // The flag is only meant to short-circuit re-checks within a single recovery sequence,
-                // not to permanently disable recreation date detection for the rest of the run.
+                // The flag only short-circuits re-checks within one recovery sequence; reset it so a fresh icon detection runs every turn.
                 recreationDateCompleted = false
-                // The turn advanced, so a failed scheduled-outing attempt may be retried fresh.
                 recreationAttemptFailedThisTurn = false
 
                 // Reset scenario-specific daily flags.
@@ -3448,20 +2837,15 @@ abstract class Campaign(game: Game) : Task(game) {
                 // Perform parallel turn-start updates (stats, mood, energy, fans, etc.).
                 performTurnStartUpdates(sourceBitmap)
 
-                // Open this turn's Decision Report window now that trainee/date state is fresh. Any
-                // record* calls during decideNextAction/executeAction (and skill buys in
-                // performGlobalChecks, which run in the same turn before the action) append here, and
-                // emit() flushes the block after the action executes.
+                // Opens this turn's Decision Report window; emit() flushes it after the action executes.
                 decisionTracer?.startTurn(
                     date = date,
                     trainee = trainee,
                     settings = DecisionTracer.SettingsSnapshot().add("Mood Floor", moodFloor),
                 )
 
-                // The DecisionTracer just opened its turn window; mark it so the debug shadow comparison
-                // knows it has fresh turn-open evidence for this turn. The CareerState build latch is NOT
-                // armed here: it is rearmed from the action-completion lifecycle (see executeAction), so a
-                // new turn still snapshots when date OCR failed and the tracer opened no window.
+                // The CareerState build latch is rearmed from the action-completion lifecycle (see executeAction), not here, so a turn still snapshots when
+                // date OCR failed and the tracer opened no window.
                 careerStateLatch.markTracerWindowOpened()
 
                 // Debug build or Debug Mode: one labeled positive fixture per new turn for the offline replay corpus.
@@ -3503,13 +2887,9 @@ abstract class Campaign(game: Game) : Task(game) {
             val bIsScheduledRaceDayInitial = LabelScheduledRace.check(game.imageUtils, sourceBitmap = sourceBitmap)
             val bIsMandatoryRaceDayInitial = IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)
 
-            // Cache for downstream consumers (decideNextAction, executeAction tail) so we
-            // don't re-run the same template scans 2-3 more times per turn.
             cachedScheduledRaceDay = bIsScheduledRaceDayInitial
             cachedMandatoryRaceDay = bIsMandatoryRaceDayInitial
-            // Separate goal-ribbon cache for the Trackblazer irregular-training gate only. Deliberately
-            // NOT folded into cachedMandatoryRaceDay: the goal ribbon persists on the Main screen for an
-            // active objective and must never reach decideNextAction's forced-RACE branch.
+            // Not folded into cachedMandatoryRaceDay: the goal ribbon persists for any active objective and must never reach decideNextAction's forced-RACE branch.
             cachedGoalRibbonDay = IconGoalRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)
 
             if (!date.bIsFinaleSeason && !bIsMandatoryRaceDayInitial && !bIsScheduledRaceDayInitial && bNeedToCheckFans && !bHasTriedCheckingFansToday) {
@@ -3536,55 +2916,40 @@ abstract class Campaign(game: Game) : Task(game) {
         // Scenario-specific main screen entry hook (e.g. for item usage).
         onMainScreenEntry()
 
-        // Canonical CareerState v1 (Phase A): snapshot the coherent pre-decision state exactly once
-        // per turn, now that all state-changing turn prep (race caches, global checks, scenario item
-        // use) has run. The factual `career_state` record shares the decision_trace's gate
-        // ([factualCorpusEnabled]), so both per-turn streams record together (or not at all) and stay
-        // joinable by seq; a release build with the corpus off does no per-turn shadow work. Nothing
-        // below reads it; a failure here must never change the decision, so the block is non-fatal.
+        // Snapshot the pre-decision state once per turn, after all state-changing prep. It shares the decision_trace gate so both streams record
+        // together and stay joinable by seq. Non-fatal: it must never change the decision.
         if (factualCorpusEnabled && careerStateLatch.shouldBuild()) {
-            // Allocate this logical decision turn's sequence exactly when the build opportunity is
-            // consumed. currentTurnSeq stays null until the build succeeds, so a swallowed build leaves
-            // the emitted trace without a seq rather than inheriting the previous turn's; the counter
-            // still advances, so seq N is never reused for a later turn (a gap is honest).
+            // currentTurnSeq stays null until the build succeeds, so a swallowed build leaves the trace without a seq rather than a stale one; the
+            // counter still advances so seq N is never reused.
             val seq = careerStateSeq.allocate()
             try {
                 val careerState = buildCareerState()
                 shadowCareerState = careerState
-                // Build succeeded: retain the seq for this turn's trace BEFORE the append, so even a
-                // later serialize/append failure leaves the trace correctly stamped (a traceWithoutState
-                // join, not a stale seq). Serialization is pure and the append swallows its own I/O.
+                // Retain the seq before the append so a later serialize/append failure still leaves the trace correctly stamped.
                 careerStateSeq.retain(seq)
                 appendCareerState(careerState, seq)
-                // Debug-only shadow comparison against the tracer's turn-open snapshot: one compact
-                // [CAREER_STATE] line. Kept on the debug gate so a corpus-only run adds no per-turn log noise.
+                // Debug gate keeps corpus-only runs free of per-turn log noise.
                 if (debugDiagnosticsEnabled) compareCareerStateToTracer(careerState)
             } catch (e: Exception) {
-                // Shadow-only observability: swallow so a snapshot/compare fault cannot stop or alter the turn.
+                // Swallowed so a snapshot/compare fault cannot stop or alter the turn.
                 Log.e(TAG, "[CAREER_STATE] shadow snapshot failed (ignored): ${e.message}")
             }
         }
 
         publishTurnStatus()
 
-        // Start this decision turn with no held entered-race fact. Only a race that completes inside
-        // executeAction below may write one, and the trace emit right after reads it; clearing here
-        // ensures a completed-race fact from a prior turn can never attach to this turn's trace.
+        // Cleared so a completed-race fact from a prior turn can never attach to this turn's trace.
         pendingEnteredRace.clear()
 
         // Decision-making process.
         val action = decideNextAction()
-        // Reuse the cached value populated above instead of re-running LabelScheduledRace.check -
-        // nothing between performTurnStartUpdates() and here would have changed scheduled-race
-        // status (no game-advancing actions occurred), and the third scan was redundant.
+        // Reuse the cached value: nothing since performTurnStartUpdates() could have changed scheduled-race status.
         val actionExecuted = executeAction(action, cachedScheduledRaceDay)
-        // Flush the consolidated Decision Report after the action ran, so training/race selections
-        // recorded inside executeAction land in the block. emit() is idempotent per turn.
+        // Flushed after the action so selections recorded inside executeAction land in the block; emit() is idempotent per turn.
         decisionTracer?.emit()
         return actionExecuted
     }
 
-    /** Hands this turn's already-read values to the dashboard, as plain copies. */
     private fun publishTurnStatus() {
         val (year, label) = StatusBoard.dateLabels(date.year.longName, date.phase.name, date.month.name, date.day)
         val stats = listOf(trainee.stats.speed, trainee.stats.stamina, trainee.stats.power, trainee.stats.guts, trainee.stats.wit)
@@ -3592,10 +2957,7 @@ abstract class Campaign(game: Game) : Task(game) {
         ProgressNotification.refresh()
     }
 
-    /**
-     * Recomputes the trainee's estimated overall rank from her current stats, aptitudes, owned skills, and unique-skill level. The estimate mirrors the UmaTools calculator
-     * (an approximation of the game's unpublished formula), so it is labeled "Est." wherever shown; it lands in [Trainee.estimatedRank] for the turn log and the career ledger.
-     */
+    /** Mirrors the UmaTools calculator (an approximation of the game's unpublished formula), so it is labeled "Est." wherever shown. */
     fun updateEstimatedRank() {
         if (!trainee.bHasUpdatedStats) return
         val aptitudes =
@@ -3724,16 +3086,13 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return True if a check was handled, false otherwise.
      */
     open fun performGlobalChecks(): Boolean {
-        // Re-arm the high-water check once points fall back under the bar. Owned here because the flag
-        // is this instance's mutable state; decideSkillCheck only reads the resulting value.
+        // Owned here because the flag is this instance's mutable state; decideSkillCheck only reads the resulting value.
         if (trainee.skillPoints < skillPointsRequired) {
             bHasHandledSkillPointCheck = false
             skillPointCheckAttempts = 0
         }
 
-        // Phase 2A: compute the two adaptive-only trigger inputs. Everything defaults inert -
-        // manual mode, a rank objective, a disabled plan, OCR failure, or finals adjacency all
-        // leave both flags false and this function behaving exactly as V1.
+        // The two adaptive-only trigger inputs. Everything defaults inert (manual mode, rank objective, disabled plan, OCR failure, finals adjacency).
         val adaptive = resolvedSkillThreshold.mode == SkillSpendMode.ADAPTIVE
         produceGoalSnapshotIfDue(adaptive)
         val critical = computeCriticalRace(adaptive)
@@ -3745,8 +3104,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 null
             }
 
-        // Which skill check (if any) is due this turn, and why. Pure decision - navigation, the
-        // Main-screen confirmation, the attempt counters and the flags all stay below.
+        // Pure decision: navigation, the Main-screen confirmation, the attempt counters and the flags all stay below.
         val skillCheck: SkillCheckDecision =
             decideSkillCheck(
                 skillPoints = trainee.skillPoints,
@@ -3761,9 +3119,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 affordableSkillDue = affordableCandidate != null,
             )
 
-        // Phase 2A sessions: both run the skillPointCheck plan via the same screen flow as the
-        // high-water branch. Handled/re-arm bookkeeping differs per trigger, so they get their
-        // own branches instead of piggybacking on the high-water flags.
+        // Handled/re-arm bookkeeping differs per trigger, so each gets its own branch instead of piggybacking on the high-water flags.
         if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.CRITICAL_RACE && critical != null) {
             if (!checkMainScreen()) {
                 MessageLog.i(TAG, "[SKILLS] Skipping the critical-race skill session for now - not confirmed on the Main screen.")
@@ -3782,8 +3138,7 @@ abstract class Campaign(game: Game) : Task(game) {
             val handled = handleSkillListScreen(PLAN_SKILL_POINT_CHECK, SkillCheckTrigger.CRITICAL_RACE)
             activeTriggerContext = null
             if (handled) {
-                // A completed session (even one that bought nothing) covers this race turn; an
-                // aborted one leaves the window open so the next turn can retry.
+                // A completed session (even one that bought nothing) covers this race turn; an aborted one leaves the window open for a retry next turn.
                 lastCriticalRaceTurnHandled = critical.raceTurn
             } else {
                 MessageLog.w(TAG, "[WARN] performGlobalChecks:: Critical-race skill session did not complete. The 1-2 turn window allows one retry next turn.")
@@ -3797,8 +3152,7 @@ abstract class Campaign(game: Game) : Task(game) {
             }
             val (skillName, observedPrice) = affordableCandidate
             MessageLog.i(TAG, "[SKILLS] Planned skill '$skillName' affordable at observed $observedPrice SP (have ${trainee.skillPoints}). Locking it in...")
-            // The belt arms on the firing itself, so even an aborted or no-buy session cannot
-            // re-fire until SP grows - the bound on repeated opens.
+            // Arms on the firing itself, so even an aborted or no-buy session cannot re-fire until SP grows: the bound on repeated opens.
             plannedSkillEvidence.markAffordableFired(trainee.skillPoints)
             activeTriggerContext =
                 SkillTriggerContext(
@@ -3817,8 +3171,7 @@ abstract class Campaign(game: Game) : Task(game) {
         if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.SCENARIO_FINALS) {
             ButtonSkills.click(game.imageUtils)
             game.wait(1.0)
-            // Plan name stays null so start() resolves it from the screen exactly as before; only the
-            // trigger is threaded through, for telemetry.
+            // Plan name stays null so start() resolves it from the screen; only the trigger is threaded through, for telemetry.
             if (!handleSkillListScreen(trigger = SkillCheckTrigger.SCENARIO_FINALS)) {
                 preFinalsCheckAttempts++
                 if (preFinalsCheckAttempts >= preFinalsCheckMaxAttempts) {
@@ -3840,12 +3193,9 @@ abstract class Campaign(game: Game) : Task(game) {
             return true
         }
 
-        // The high-water threshold has been reached: stop the bot, or run the skill plan if enabled.
-        // The confirmation gates BOTH branches - an unconfirmed reading must not open the skill screen,
-        // and must not throw the breakpoint either, since in the plan-disabled configuration a bad read
-        // would otherwise kill a healthy run outright. Short-circuit: it only re-reads once the trigger
-        // already fired, so an ordinary turn pays nothing. An unconfirmed turn falls through to the
-        // stop checks below exactly as the not-on-Main-screen path already does.
+        // The confirmation gates BOTH branches: an unconfirmed reading must not open the skill screen, and must not throw the breakpoint either (with
+        // the plan disabled a bad read would kill a healthy run). It only re-reads once the trigger fired; an unconfirmed turn falls through to the stop
+        // checks below.
         if (skillCheck.trigger == SkillCheckTrigger.HIGH_WATER && confirmHighWaterCrossing()) {
             if (skillCheck.action == SkillCheckAction.RUN_PLAN) {
                 // Ensure we are actually at the Main screen before attempting to navigate.
@@ -3894,14 +3244,8 @@ abstract class Campaign(game: Game) : Task(game) {
         return false
     }
 
-    /**
-     * Produces this turn's [GoalDeadlineSnapshot] at most once per `date.day`, and only when the
-     * critical-race gate is open (adaptive mode + a reliability objective + not finals-adjacent).
-     * Racing's own goal read is NOT consumed here: it refreshes after this method runs and can
-     * skip turns entirely, so it would hand the skill check stale data. The goal-text OCR only
-     * runs when the countdown already reads 1-2 turns, so ordinary turns pay one small
-     * countdown read at most.
-     */
+    /** At most once per `date.day`, and only when the critical-race gate is open. Racing's own goal read is not consumed: it refreshes after this
+     * runs and can skip turns, handing the skill check stale data. The goal-text OCR runs only when the countdown reads 1-2 turns. */
     private fun produceGoalSnapshotIfDue(adaptive: Boolean) {
         val gateOpen =
             adaptive &&
@@ -3913,7 +3257,7 @@ abstract class Campaign(game: Game) : Task(game) {
         StatusBoard.goal(date.day, turnsRemaining)
         currentGoalSnapshot =
             if (turnsRemaining < 0) {
-                // OCR failed - inert for the whole turn, never a guess.
+                // OCR failed: inert for the whole turn, never a guess.
                 GoalDeadlineSnapshot(date.day, null, null, GoalKind.UNKNOWN, null)
             } else if (turnsRemaining !in CRITICAL_RACE_MIN_TURNS..CRITICAL_RACE_MAX_TURNS) {
                 GoalDeadlineSnapshot(date.day, turnsRemaining, null, GoalKind.UNKNOWN, null)
@@ -3928,20 +3272,14 @@ abstract class Campaign(game: Game) : Task(game) {
             }
     }
 
-    /** A qualified critical race for this turn, or null. */
     private data class CriticalRaceDue(val raceName: String, val raceTurn: Int, val turnsUntil: Int, val source: String)
 
-    /**
-     * Evaluates both critical-race arms. The mandatory goal-OCR arm wins over the planned-race
-     * arm when both see the same window (they share the handled key, so the same race can never
-     * fire twice regardless of which arm saw it first).
-     */
+    /** The mandatory goal-OCR arm wins over the planned-race arm; they share the handled key, so the same race never fires twice. */
     private fun computeCriticalRace(adaptive: Boolean): CriticalRaceDue? {
         if (!adaptive || !skillSpendObjective.allowsCriticalRace()) return null
         if (date.day >= PRE_FINALS_DAY - 1) return null
         if (trainee.skillPoints < MIN_CRITICAL_SPEND) return null
 
-        // Primary: this turn's mandatory-goal snapshot (never a previous turn's).
         val snapshot = currentGoalSnapshot?.takeIf { it.turn == date.day }
         if (snapshot != null && snapshot.kind == GoalKind.RACE && snapshot.raceName != null) {
             val turns = snapshot.turnsRemaining
@@ -3953,7 +3291,6 @@ abstract class Campaign(game: Game) : Task(game) {
             }
         }
 
-        // Secondary: the configured racing plan's next optional must-win.
         val planned =
             racing.plannedRacesForTriggers
                 .filter { it.turnNumber - date.day in CRITICAL_RACE_MIN_TURNS..CRITICAL_RACE_MAX_TURNS }
@@ -3970,8 +3307,7 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return The decided [MainScreenAction].
      */
     open fun decideNextAction(): MainScreenAction {
-        // DecisionTracer: accumulate the alternatives ruled out as the priority cascade descends, and
-        // record the chosen action plus its reason at the point it wins. Null-safe no-op in release.
+        // DecisionTracer: accumulate ruled-out alternatives down the priority cascade and record the chosen action where it wins.
         val tracerRejected = mutableListOf<DecisionTracer.RejectedAlternative>()
 
         fun choose(action: MainScreenAction, reason: String): MainScreenAction {
@@ -3979,24 +3315,16 @@ abstract class Campaign(game: Game) : Task(game) {
             return action
         }
 
-        // Use cached race-day flags populated in handleMainScreen rather than re-running the
-        // same two template scans. The bitmap is captured lazily - only the late branches
-        // (checkInjury, shouldRecoverMood) actually use it, so race/popup/maiden/etc. fast
-        // paths can return before paying the MediaProjection screenshot cost (~50-150 ms).
-        // Split mandatory from scheduled so a pinned recreation outing can sit between them:
-        // mandatory career-goal races outrank everything, but a pinned recreation outranks a
-        // scheduled (in-game agenda) race. shouldDoRecreationToday is a settings-only fast
-        // no-op while the dating schedule is disabled (no screenshot cost).
+        // Use the cached race-day flags from handleMainScreen. The bitmap is captured lazily: only the late branches (checkInjury, shouldRecoverMood)
+        // use it, so earlier fast paths skip the MediaProjection cost (~50-150 ms). Mandatory is split from scheduled so a pinned recreation outing can
+        // sit between them: shouldDoRecreationToday is a settings-only no-op while the dating schedule is disabled.
         if (cachedMandatoryRaceDay) {
             return choose(MainScreenAction.RACE, "mandatory race day")
         }
 
         if (racing.encounteredRacingPopup) {
-            // Consume the flag at decision time. If the resulting race succeeds the date advances and
-            // the daily reset would clear it anyway; if the race attempt fails or finds no suitable
-            // race, we don't want to spin on RACE decisions turn after turn just because a popup
-            // appeared two turns ago. A fresh popup on a future turn will simply set the flag again.
-            // Sits above DATE: an open popup must be consumed before any Recreation tap can land.
+            // Consume the flag at decision time so a failed race attempt does not spin on RACE turn after turn over a popup from two turns ago. Sits
+            // above DATE: an open popup must be consumed before any Recreation tap can land.
             racing.encounteredRacingPopup = false
             return choose(MainScreenAction.RACE, "a racing popup was encountered")
         }
@@ -4019,24 +3347,17 @@ abstract class Campaign(game: Game) : Task(game) {
             return choose(MainScreenAction.RACE, "maiden race not yet completed")
         }
 
-        // From here on the downstream branches need a screenshot - capture it now.
         val sourceBitmap = game.imageUtils.getSourceBitmap()
 
-        // A mandatory career requirement (fan / trophy / goal-pts) can only be met by racing, so it
-        // outranks the pre-summer prep below - the forced rest/mood turn would otherwise eat the very
-        // turn the requirement needed. If no races turn out to be available, Racing resets the flags
-        // and the turn falls back to training, so routing here is safe on a raceless day.
+        // A mandatory requirement (fan / trophy / goal-pts) can only be met by racing, so it outranks the pre-summer prep, whose forced rest/mood turn
+        // would eat the turn it needed. With no races available Racing resets the flags and the turn falls back to training.
         val isRacingRequirementActive = racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement
-        // Turn-local: true only when the fan-requirement arm was explicitly deferred this turn. It is
-        // threaded into the later extra-race eligibility gate so the same fan requirement cannot
-        // re-force the race it was just deferred from; every other race reason there stays intact.
+        // True only when the fan-requirement arm was deferred this turn; the later extra-race eligibility gate uses it so the same fan requirement
+        // cannot re-force the race it was just deferred from.
         var fanRequirementDeferredThisTurn = false
         if (isRacingRequirementActive) {
             if (considerFanRaceDeferral()) {
-                // A scenario fan policy proved enough schedule slack to spend this turn training
-                // instead of racing the fan requirement; fall through to the rest of the cascade.
-                // The base implementation never defers, so every non-overriding scenario keeps the
-                // historical force-race behaviour unchanged.
+                // A scenario fan policy proved enough slack to train instead of racing the fan requirement; the base never defers.
                 fanRequirementDeferredThisTurn = true
                 MessageLog.i(TAG, "[INFO] Fan requirement deferred for a training turn by the scenario policy.")
             } else {
@@ -4046,10 +3367,8 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
         if (mustRestBeforeSummer && (date.year == DateYear.CLASSIC || date.year == DateYear.SENIOR) && date.month == DateMonth.JUNE && date.phase == DatePhase.LATE) {
-            // An explicit mandatory plan entry or a due fan goal outranks summer prep. This forced
-            // rest once consumed the exact turn of a mandatory planned race (Unicorn Stakes) while a
-            // 5000-fan goal was due, and the career force-ended. bFanEmergencyActive carries the
-            // previous turn's evaluation, which is current enough across a multi-turn emergency window.
+            // An explicit mandatory plan entry or a due fan goal outranks summer prep: this forced rest once consumed the turn of a mandatory planned race
+            // (Unicorn Stakes) while a 5000-fan goal was due. bFanEmergencyActive carries the previous turn's evaluation, current enough across the window.
             if (racing.hasMandatoryPlannedRaceToday() || racing.bFanEmergencyActive) {
                 MessageLog.i(
                     TAG,
@@ -4059,8 +3378,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 MessageLog.i(TAG, "[INFO] Energy is low (${trainee.energy}% < 70%). Forcing rest during $date in preparation for Summer Training.")
                 return choose(MainScreenAction.REST, "pre-summer prep: energy ${trainee.energy}% < 70%")
             } else if (trainee.mood < Mood.GREAT) {
-                // If firstTrainingCheck is active, mood recovery will be refused. Do a
-                // training first to clear the flag, then the next turn can recover mood.
+                // firstTrainingCheck refuses mood recovery: train first to clear it, then recover next turn.
                 if (training.firstTrainingCheck) {
                     MessageLog.i(TAG, "[INFO] Mood is ${trainee.mood} but firstTrainingCheck is active. Doing a training first to clear the flag before mood recovery can proceed.")
                     return choose(MainScreenAction.TRAIN, "pre-summer prep: train first to clear firstTrainingCheck before mood recovery")
@@ -4095,10 +3413,8 @@ abstract class Campaign(game: Game) : Task(game) {
         tracerRejected.add(DecisionTracer.RejectedAlternative("RECOVER_MOOD", "mood ${trainee.mood} at/above floor $moodFloor"))
 
         val extraRaceEligible = racing.checkEligibilityToStartExtraRacingProcess(ignoreFanRequirement = fanRequirementDeferredThisTurn)
-        // Record eligibility from the caller so it fires on every turn an extra race is considered,
-        // across all scenarios. checkEligibility has many early returns (Trackblazer interval, fan
-        // emergency, mandatory plan) that bypass its standard-racing block, so recording inside it
-        // missed Trackblazer entirely. The rich decline reason stays in the [RACE] log one line up.
+        // Recorded from the caller so it fires on every turn an extra race is considered: checkEligibility has early returns (Trackblazer interval,
+        // fan emergency, mandatory plan) that bypass its standard-racing block, so recording inside it missed Trackblazer.
         decisionTracer?.recordRaceEligibility(
             extraRaceEligible,
             if (extraRaceEligible) "extra races can be run today" else "not eligible for an extra race this turn (see [RACE] log for the gate)",
@@ -4136,8 +3452,7 @@ abstract class Campaign(game: Game) : Task(game) {
             training.handleTraining(StatName.WIT)
             bForcedWitTraining = false
             bHasCheckedDateThisTurn = false
-            // Shadow-only: forced-Wit training advances to a new main-screen decision turn; rearm the
-            // CareerState build latch so the next turn snapshots even when date OCR fails.
+            // Shadow-only: forced-Wit training advances to a new decision turn; rearm the CareerState build latch.
             careerStateLatch.armForNewTurn()
             return true
         }
@@ -4145,10 +3460,8 @@ abstract class Campaign(game: Game) : Task(game) {
         when (action) {
             MainScreenAction.RACE -> {
                 MessageLog.i(TAG, "[INFO] All checks are cleared for racing.")
-                // bDidRace is the authoritative advance signal: true only when a race actually ran.
-                // An aborted race (consecutive-race warning, no suitable race, failed nav) returns false
-                // and leaves the bot on the same logical turn - but its fallback may then train/recover
-                // and advance the turn itself, so track advancement from both sources.
+                // bDidRace is true only when a race actually ran. An aborted race returns false but its fallback may train/recover and advance the turn, so
+                // track advancement from both sources.
                 val bDidRace = handleRaceEvents(bIsScheduledRaceDay)
                 var turnAdvanced = bDidRace
                 if (!bDidRace) {
@@ -4158,9 +3471,7 @@ abstract class Campaign(game: Game) : Task(game) {
                     }
                     turnAdvanced = fallback.turnAdvanced
                 }
-                // Always re-evaluate the same turn (a failed race must pick another action), but shadow-only:
-                // rearm CareerState when the race OR its fallback training advanced the turn. A same-turn
-                // backout advances nothing and does not rearm, so no duplicate snapshot is built.
+                // Always re-evaluate the same turn (a failed race must pick another action); rearm CareerState only when the race or its fallback advanced it.
                 bHasCheckedDateThisTurn = false
                 careerStateLatch.armForNewTurnIf(turnAdvanced)
             }
@@ -4173,37 +3484,27 @@ abstract class Campaign(game: Game) : Task(game) {
             }
 
             MainScreenAction.REST -> {
-                // Capture the bitmap only when REST/RECOVER_MOOD actually use it. RACE/TRAIN
-                // (the vast majority of turns) do not need a fresh screenshot here.
+                // RACE/TRAIN (most turns) need no fresh screenshot here; capture only for REST/RECOVER_MOOD.
                 recoverEnergy(game.imageUtils.getSourceBitmap())
                 bHasCheckedDateThisTurn = false
                 careerStateLatch.armForNewTurn() // shadow-only: resting advances the turn
             }
 
             MainScreenAction.RECOVER_MOOD -> {
-                // Target the configured floor, not a hardcoded GOOD: with moodFloor=GREAT the
-                // decision gate keeps choosing RECOVER_MOOD while a GOOD-targeted recovery no-ops
-                // (mood GOOD < GOOD is false), a livelock that burned the full runtime cap doing
-                // nothing on every moodFloor=GREAT preset.
+                // Target the configured floor, not a hardcoded GOOD: with moodFloor=GREAT a GOOD-targeted recovery no-ops (GOOD < GOOD is false) while the
+                // decision gate keeps choosing RECOVER_MOOD, a livelock that ran to the runtime cap.
                 val target = forcedTargetMood ?: moodFloor
                 val recovered = performMoodRecovery(game.imageUtils.getSourceBitmap(), targetMood = target)
-                // Always clear bHasCheckedDateThisTurn so the next main-screen pass re-runs updateDate/stats
-                // and can pick a different action based on fresh state. Previously this only reset on success,
-                // which meant a failed mood recovery (e.g. Recreation/RestAndRecreation buttons briefly missing
-                // due to a mid-transition screenshot) could spin indefinitely: shouldRecoverMood keeps returning
-                // true, decideNextAction keeps returning RECOVER_MOOD, and the same screenshot produced the same
-                // failure.
+                // Always clear so the next main-screen pass re-runs updateDate/stats and can pick another action; clearing only on success let a failed mood
+                // recovery (buttons missing from a mid-transition screenshot) spin on the same screenshot forever.
                 bHasCheckedDateThisTurn = false
                 if (recovered) {
                     forcedTargetMood = null
-                    // Shadow-only: a successful recovery advances the turn; a failed one (the spin below)
-                    // does not, and the re-dispatch to TRAIN rearms via the TRAIN branch.
+                    // Shadow-only: a successful recovery advances the turn; a failed one re-dispatches to TRAIN, which rearms.
                     careerStateLatch.armForNewTurn()
                 } else if (trainee.mood >= Mood.GOOD) {
-                    // Recovery made no progress while only a high floor (GREAT) is unmet. The floor
-                    // is a preference; training is progress. Train this turn rather than letting any
-                    // future target/floor mismatch degrade back into the RECOVER_MOOD spin. Re-dispatch
-                    // through executeAction so a scenario override's TRAIN handling stays in effect.
+                    // Recovery made no progress while only a high floor (GREAT) is unmet: the floor is a preference, training is progress. Re-dispatch through
+                    // executeAction so a scenario override's TRAIN handling stays in effect.
                     MessageLog.w(TAG, "[WARN] Mood recovery made no progress toward the $target floor. Training this turn instead.")
                     return executeAction(MainScreenAction.TRAIN, bIsScheduledRaceDay)
                 }
@@ -4213,13 +3514,11 @@ abstract class Campaign(game: Game) : Task(game) {
                 MessageLog.i(TAG, "[INFO] Decision made to perform a scheduled recreation outing.")
                 val started = handleRecreationDate(recoverMoodIfCompleted = false, allowFinalOuting = allowFinalOutingNow(), doDateRecreation = true)
                 if (!started) {
-                    // Backing out (held final, no selectable rows) does not advance the turn, so latch the
-                    // failure - otherwise decideNextAction re-picks DATE and reopens the dialog forever.
+                    // Backing out (held final, no selectable rows) does not advance the turn; latch it or decideNextAction re-picks DATE and reopens the dialog forever.
                     recreationAttemptFailedThisTurn = true
                     MessageLog.i(TAG, "[RECREATION_DATE] Scheduled outing did not start. Deferring to the normal action flow for the rest of this turn.")
                 }
                 bHasCheckedDateThisTurn = false
-                // Shadow-only: a started outing advances the turn; a failed one (no selectable rows) does not.
                 if (started) careerStateLatch.armForNewTurn()
             }
 
@@ -4233,43 +3532,25 @@ abstract class Campaign(game: Game) : Task(game) {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /**
-     * Size of the process-lifetime message buffer at this Campaign's construction (= this career's
-     * start). [writePerCareerLog] slices from here so the per-career .txt holds only THIS career's
-     * lines. The buffer deliberately survives across queued careers (clearing it would blank the
-     * on-screen RN log), which used to bleed the prior career's tail into every file.
-     */
+    /** The process-lifetime buffer survives across queued careers (clearing it would blank the on-screen RN log); [writePerCareerLog] slices from
+     * this size so each per-career file holds only that career's lines. */
     private val careerLogStartIndex: Int = MessageLog.getMessageLogCopy().size
 
-    /**
-     * One structured outcome line per career run, logged when any run ends.
+    /** One structured outcome line per career, greppable as `[CAREER_END]`. The game shows the SAME end screen for a clean finish and an early
+     * force-end, so [result] is COMPLETE for both and `turn` is the real discriminator (a full arc ends near the scenario's last turn, URA finals = 75;
+     * a Junior fan-checkpoint death lands around turn 24). `outcome=` is INCOMPLETE for a non-COMPLETE result (user stop or bot failure), FORCE_END for a
+     * force-end confirmed at its source ([careerForceEnded]), and COMPLETED for the still-ambiguous rest. Fields come from memory or already-OCR'd
+     * state, so building the line triggers no capture.
      *
-     * Greppable as `[CAREER_END]` to build a per-preset completion ledger across runs. The game shows
-     * the SAME end screen for a clean finish and an early force-end (a missed fan/goal deadline ends
-     * the career on the spot), and there is no win/lose template to read - so [result] is COMPLETE for
-     * both, and `turn` is the real discriminator: a full arc ends near the scenario's last turn (URA
-     * finals = 75), a force-end ends early (a Junior fan-checkpoint death lands around turn 24). The
-     * `outcome=` field interprets the run: INCOMPLETE for a non-COMPLETE result (a user stop or bot
-     * failure - never a force-end), FORCE_END for a force-end confirmed at its source
-     * ([careerForceEnded], currently only a lost mandatory race), and COMPLETED for the still-ambiguous
-     * rest - a true win OR an unflagged early force-end, which `turn` must split. Every field comes
-     * from memory or already-OCR'd state, so building the line triggers no extra capture.
-     *
-     * `spd/sta/pwr/grt/wit/fans` reflect the post-finale career-complete screen: after the finale the
-     * bot re-opens the Umamusume Details dialog (`ButtonDetails`, confidence lowered to 0.65 so the
-     * match lands) and re-reads stats + fans, so the line carries the true final values rather than the
-     * pre-finale in-career snapshot it logged before that fix. If the Details re-read fails (logged
-     * `[WARN] Could not find ButtonDetails`), the fields fall back to the last in-career OCR and will
-     * understate the finale rewards (~+40 per stat, large fan injection) — trust `turn`/`result` then.
-     * A stat the result screen contradicts is logged as -1 and no estRank/estScore is written.
-     */
+     * `spd/sta/pwr/grt/wit/fans` come from the post-finale re-read of the Umamusume Details dialog (`ButtonDetails`, confidence lowered to 0.65 so the
+     * match lands). If that re-read fails the fields fall back to the last in-career OCR and understate the finale rewards (~+40 per stat, large fan
+     * injection), so trust `turn`/`result`. A stat the result screen contradicts is logged as -1 and no estRank/estScore is written. */
     override fun careerEndLedgerLine(result: TaskResult): String {
         val shownName = trainee.name.ifEmpty { SettingsHelper.getStringSetting("misc", "currentProfileName") }
         val resolvedName = shownName.ifEmpty { "unknown" }.replace(" ", "_")
         val scenarioToken = game.scenario.ifEmpty { "unknown" }.replace(" ", "_")
         val st = trainee.stats
-        // Snapshot for the career-end SPARKS screen: the reroll gate reads the final stat values
-        // after this Campaign instance is gone. Keyed by the statPrioritization display names.
+        // For the career-end SPARKS screen: the reroll gate reads the final stats after this Campaign instance is gone.
         StartModule.lastCareerEndStats =
             mapOf(
                 "Speed" to st.speed,
@@ -4280,10 +3561,8 @@ abstract class Campaign(game: Game) : Task(game) {
             )
         StartModule.lastCareerEndTrainee = resolvedName
         StartModule.lastCareerEndTraineeName = shownName.ifEmpty { null }
-        // Snapshot the same config-arm fingerprint + scenario the career-end record below carries, so
-        // the SPARKS records the navigator appends later join to this exact career/arm directly (not
-        // only positionally). Computed once here and reused for the record - never recomputed from
-        // settings a queued run may have changed between this career's end and its spark recording.
+        // The same fingerprint and scenario the career-end record carries, so SPARKS records appended later join this exact career/arm; computed once,
+        // never from settings a queued run may have changed since.
         val careerEndFp = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot)
         StartModule.lastCareerEndScenario = scenarioToken
         StartModule.lastCareerEndFp = careerEndFp
@@ -4306,29 +3585,21 @@ abstract class Campaign(game: Game) : Task(game) {
         if (outcome != "INCOMPLETE") ProgressTracker.noteProgress(ProgressEvent.CAREER_END)
         val quality = classifyCareerQuality(outcome, finaleRaces, finaleRaces1st)
 
-        // Stage 3 of the outcome-measurement plan: the same fields as the ledger line, appended
-        // as one JSON record to the on-device corpus with the app version and the config-arm
-        // fingerprint. The write swallows its own failures, so the ledger line below always logs.
+        // Same fields as the ledger line, appended to the on-device corpus; the write swallows its own failures, so the ledger line always logs.
         val record =
             JSONObject().apply {
                 put("ts", System.currentTimeMillis())
                 put("app", BuildConfig.VERSION_NAME)
                 put("fp", careerEndFp)
-                // The launch-transaction id this career adopted at attachment (Game.start). It joins
-                // this career's Veteran to the lineage read taken during its launch. Absent when no
-                // launch navigation minted one (a hand-played or restart-resumed career).
+                // The launch-transaction id adopted at attachment (Game.start), joining this career's Veteran to its launch lineage read; absent for hand-played or restart-resumed careers.
                 LaunchTransactionGate.active?.id?.let { put("launchTransactionId", it) }
                 put("result", careerLedgerResult(result.code, StartModule.queueStopReason))
                 put("outcome", outcome)
                 forceEndReason?.let { put("forceEndReason", it) }
                 put("trainee", resolvedName)
                 put("scenario", scenarioToken)
-                // Only record a turn the bot actually read. A career resumed at its Complete Career
-                // screen finalizes without ever reading a date, and GameDate.day still holds its
-                // initial 1: writing that produced COMPLETED rows at turn 1 for full arcs, which
-                // both misread as crashes and double-counted careers an earlier run had already
-                // recorded (2026-07-26: one Copano Rickey career, three rows). The analyzer treats a
-                // null turn as "no observed arc" and keeps it out of the arm summaries.
+                // Only record a turn the bot actually read. A career resumed at its Complete Career screen never reads a date and GameDate.day keeps its
+                // initial 1, which produced COMPLETED rows at turn 1 for full arcs. A null turn is kept out of the arm summaries.
                 put("turn", if (date.dayObserved) date.day else JSONObject.NULL)
                 put("fans", trainee.fans)
                 put("spd", st.speed)
@@ -4382,15 +3653,9 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
-    /**
-     * The automation_library writes a per-career .txt log itself, but that silently stopped on a
-     * long-lived queue session (2026-07-09: an 11h run produced zero .txt logs while the outcome
-     * corpus kept appending). Write our own copy from the readable buffer so every career leaves a
-     * triage log regardless of the library's state. Runs AFTER the [CAREER_END] line is logged
-     * (Task.handleTaskEnd ordering) so the file contains its own ledger line, and slices from
-     * [careerLogStartIndex] so a long app session does not bleed prior careers' tails into the file.
-     * Best-effort: a logging failure must never abort the run.
-     */
+    /** The library's own per-career .txt silently stopped on a long-lived queue session, so write our own copy from the readable buffer. Runs after
+     * the [CAREER_END] line (Task.handleTaskEnd ordering) so the file contains it, and slices from [careerLogStartIndex]. Best-effort: must never
+     * abort the run. */
     override fun writePerCareerLog(result: TaskResult) {
         try {
             val filesDir = game.myContext.getExternalFilesDir(null) ?: return
@@ -4401,15 +3666,12 @@ abstract class Campaign(game: Game) : Task(game) {
                     SettingsHelper.getStringSetting("misc", "currentProfileName").ifEmpty { "unknown" }
                 }.replace(" ", "_")
             val buffer = MessageLog.getMessageLogCopy()
-            // Defensive: if the buffer was ever trimmed below the start snapshot, write the full
-            // copy (old behavior) rather than a wrong slice.
+            // Defensive: write the full copy rather than a wrong slice if the buffer was trimmed below the start snapshot.
             val lines = if (careerLogStartIndex <= buffer.size) buffer.subList(careerLogStartIndex, buffer.size) else buffer
             val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH_mm_ss", java.util.Locale.US).format(java.util.Date())
             val logFile = java.io.File(logsDir, "${resolvedName}_$stamp.txt")
             logFile.writeText(lines.joinToString("\n"))
-            // App-written files land u0_a75:u0_a75 on this emulator image, which locks the adb
-            // shell out of triage pulls (observed 2026-07-10: cat/pull Permission denied while the
-            // outcome corpus stayed readable). Best-effort world-read so logs stay pullable.
+            // App-written files land u0_a75:u0_a75 on this emulator image, which locks the adb shell out of triage pulls; best-effort world-read.
             logFile.setReadable(true, false)
         } catch (e: Exception) {
             MessageLog.w(TAG, "[WARN] writePerCareerLog:: Failed to write the per-career log file: ${e.message}")
@@ -4426,11 +3688,8 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     override fun process(): TaskResult? {
         try {
-            // The emulator can wipe the Accessibility grant mid-run (gestures silently die while
-            // screen reads keep working - every historical "stall" traced back to this). Detect
-            // and self-heal BEFORE the dialog and main-screen ticks: both early-return, so a
-            // gesture-death while a dialog was up previously looped unbounded (taps no-op, the
-            // dialog never closes) all the way to the runtime cap.
+            // The emulator can wipe the Accessibility grant mid-run (gestures die while screen reads keep working). Self-heal BEFORE the dialog and
+            // main-screen ticks: both early-return, so a gesture-death during a dialog looped unbounded to the runtime cap.
             if (!game.ensureAccessibilityService()) {
                 val reason =
                     "The Accessibility Service was disabled mid-run and could not be restored automatically. " +
@@ -4443,9 +3702,8 @@ abstract class Campaign(game: Game) : Task(game) {
             if (tryHandleAllDialogs()) {
                 consecutiveUnknownScreenCount = 0
                 consecutiveDialogTicks++
-                // The string-only ensure above cannot see MuMu's enabled-but-dispatch-dead mode.
-                // A long dialog streak is that mode's signature here: hard-rebind at the ladder
-                // points, and stop cleanly rather than spin to the runtime cap.
+                // The string-only ensure above cannot see MuMu's enabled-but-dispatch-dead mode; a long dialog streak is its signature, so hard-rebind at the
+                // ladder points and stop cleanly.
                 if (consecutiveDialogTicks == 13 || consecutiveDialogTicks == 19) {
                     if (consecutiveDialogTicks == 13) dialogRebinds.start()
                     MessageLog.w(TAG, "[WARN] process:: $consecutiveDialogTicks consecutive dialog ticks without progress - forcing an accessibility service rebind.")
@@ -4471,9 +3729,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 return null
             }
 
-            // Tracks whether this tick resolved to a known screen. The unknown-screen counter is
-            // only reset below when something was actually handled, so a transient blip does not
-            // accumulate toward the stuck-screen stop.
+            // Reset the unknown-screen counter only when something was actually handled, so a transient blip does not accumulate toward the stop.
             var detectedKnownScreen = true
             bMiscBackPressedThisTick = false
 
@@ -4500,12 +3756,8 @@ abstract class Campaign(game: Game) : Task(game) {
             } else if (checkEndScreen()) {
                 // Stop when the bot has reached the screen where it details the overall result of the run.
                 if (!bCareerEndSkillsHandled && (skillPlan.skillPlans["careerComplete"]?.bIsEnabled ?: false)) {
-                    // Open the career-end "Learn" skill screen, then hand off: the next tick lands on
-                    // that screen and the checkCareerEndSkillListScreen branch below runs the plan once
-                    // the screen is actually present. The old path bought inline here after a single
-                    // fixed 1s wait and terminal-failed the whole career when the screen loaded slower
-                    // (a slow career-end dropped 544 SP and ended the run with an exception). Only mark
-                    // handled on a confirmed buy (done in that branch), so this stays retryable.
+                    // Open the Learn screen, then hand off: the next tick runs the plan once the screen is present (an inline buy after a fixed 1s wait failed when
+                    // it loaded slower). Marked handled only on a confirmed buy in that branch, so this stays retryable.
                     careerEndEntryAttempts++
                     if (careerEndEntryAttempts <= maxCareerEndEntryAttempts) {
                         MessageLog.i(
@@ -4515,19 +3767,15 @@ abstract class Campaign(game: Game) : Task(game) {
                         game.wait(0.5)
                         openCareerEndSkillScreen()
                         game.wait(1.0)
-                        // Let the next tick detect the Learn screen and buy. If the click did not
-                        // navigate (still on the result screen), this branch fires again and retries.
+                        // If the click did not navigate, this branch fires again and retries.
                         return null
                     }
-                    // Out of attempts: the Learn button never took us to the skill screen. Complete the
-                    // career rather than hang; unspent skill points are a smaller loss than a wedged run.
+                    // Out of attempts: complete the career rather than hang; unspent skill points are a smaller loss than a wedged run.
                     MessageLog.e(
                         TAG,
                         "[ERROR] process:: Could not open the career-end skill screen after $maxCareerEndEntryAttempts attempts. Completing the career without the careerComplete plan (skill points may remain unspent).",
                     )
-                    // The one skill-spend outcome SkillPlan cannot report: its session never began, so
-                    // record the lost pass here - only now that every bounded attempt is spent, never
-                    // on the earlier retryable attempts.
+                    // SkillPlan cannot report this pass (its session never began); record it only once every bounded attempt is spent.
                     recordAbortedSkillEntry()
                     bCareerEndSkillsHandled = true
                 }
@@ -4558,11 +3806,8 @@ abstract class Campaign(game: Game) : Task(game) {
                             debugName = "final_fan_count",
                         )
 
-                    // toIntOrNull (not toInt): isNotEmpty() does not bound the digit count, so OCR
-                    // noise (>10 digits) overflowed Int and threw NumberFormatException - which unwinds
-                    // past Task.start()'s InterruptedException/IllegalStateException-only catch and ends
-                    // the whole run (aborting a stopOnError queue) at career end. Keep the last value on a
-                    // bad read instead of crashing.
+                    // toIntOrNull: OCR noise (>10 digits) overflowed Int and threw NumberFormatException, which unwinds past Task.start()'s catch and ends the whole
+                    // run (aborting a stopOnError queue). Keep the last value on a bad read.
                     val cleanedFans = fansText.replace(Regex("[^0-9]"), "")
                     cleanedFans.toIntOrNull()?.let { trainee.observeFanCount(it) }
                         ?: MessageLog.w(TAG, "[WARN] process:: Could not detect final fan count for the end of the Career from OCR: $fansText")
@@ -4594,23 +3839,20 @@ abstract class Campaign(game: Game) : Task(game) {
                         },
                     )
 
-                // Re-open the Details dialog to read the owned skills from its Skills tab - the first open was consumed by the standard dialog handler (final stats + aptitudes),
-                // which closes the dialog on its way out. The owned skills and unique level feed the estimated rank below.
-                // Gate on the re-click actually landing: if it misses (screen already moved on), the tab
-                // tap, scroll swipes, and close-fallback tap would all fire blind on an unknown screen.
+                // Re-open Details to read the owned skills from its Skills tab: the first open was consumed by the standard dialog handler. The skills and
+                // unique level feed the estimated rank. Gate on the re-click landing, else the tab tap, swipes and close-fallback would fire blind.
                 if (buttonLocation != null && ButtonDetails.click(game.imageUtils)) {
                     game.wait(1.0)
                     val ownedSkills = SkillList(game, this).parseDetailsSkillsTab()
-                    // The Skills tab always holds at least the unique skill, so an empty read is a failed
-                    // read (tab never rendered, OCR blackout) - keep the purchase-tracked set instead of
-                    // wiping it, or the final estimate silently drops every skill the career bought.
+                    // The Skills tab always holds at least the unique skill, so an empty read is a failed read: keep the purchase-tracked set rather than
+                    // dropping every skill the career bought.
                     if (ownedSkills.skillNames.isNotEmpty()) {
                         trainee.ownedSkillNames.clear()
                         trainee.ownedSkillNames.addAll(ownedSkills.skillNames)
                         trainee.uniqueSkillLevel = ownedSkills.uniqueLevel
                     }
-                    // Dismiss the dialog directly - it now shows the Skills tab, which the generic details handler must not process as a stats read. Same close idiom the
-                    // between-run navigator uses for this card (wide Close template, else the card's fixed bottom-center Close position).
+                    // Dismiss directly: the dialog now shows the Skills tab, which the generic details handler must not read as stats. Same close idiom as the
+                    // between-run navigator (wide Close template, else the card's fixed bottom-center Close).
                     val closeBitmap = game.imageUtils.getSourceBitmap()
                     if (!ButtonCloseWide.click(game.imageUtils, sourceBitmap = closeBitmap)) {
                         CoordinateTap.tap(game.gestureUtils, closeBitmap.width * 0.5, closeBitmap.height * 0.86, "umamusume_details_close")
@@ -4618,12 +3860,9 @@ abstract class Campaign(game: Game) : Task(game) {
                     game.wait(1.0)
                 }
 
-                // A final Details read the floor rejected leaves the game's result screen and the
-                // in-career value disagreeing. Neither is reported: the stat goes out unread and no
-                // rank is claimed from it.
+                // A final Details read the floor rejected leaves the result screen and the in-career value disagreeing: the stat goes out unread and no rank is claimed.
                 val contradicted = trainee.detailsFloorRejections.filter { (stat, read) -> StatReadPlausibility.contradictsHeldValue(read, trainee.getStat(stat)) }
                 if (contradicted.isEmpty()) {
-                    // Recompute the estimated rank from the final stats, aptitudes, and owned skills so the end-of-run log and the [CAREER_END] ledger reflect the completed career.
                     updateEstimatedRank()
                 } else {
                     contradicted.forEach { (stat, read) ->
@@ -4640,17 +3879,10 @@ abstract class Campaign(game: Game) : Task(game) {
                 // Print the final Trainee information.
                 trainee.logInfo()
 
-                // Finalization guard (Adaptive mode only): the game DISCARDS every unspent skill
-                // point at Finish, and one sparks career handed 716 points to the Finish click
-                // because its planned-only session had already reported success. Decide here,
-                // where the balance was just re-read from the Details dialog, from EVIDENCE:
-                // the careerComplete session's scan/planner/confirmation completeness and its
-                // candidate-exhaustion counts - never from a fixed balance threshold. An
-                // unproven balance gets one controlled re-run of the careerComplete plan
-                // through the existing Learn-screen machinery; after that the gate is armed
-                // with a career-scoped verdict the between-run navigator consults before it
-                // presses Finish. Manual mode never arms the gate, so Manual finalization is
-                // unchanged.
+                // Finalization guard (Adaptive mode only): the game DISCARDS every unspent skill point at Finish (one sparks career handed 716 points to the
+                // Finish click). Decide from EVIDENCE (the careerComplete session's scan/planner/confirmation completeness and candidate-exhaustion counts),
+                // never a fixed balance threshold. An unproven balance gets one re-run of the plan through the Learn-screen machinery; after that the gate
+                // is armed with a career-scoped verdict the between-run navigator consults before pressing Finish. Manual mode never arms it.
                 if (resolvedSkillThreshold.mode == SkillSpendMode.ADAPTIVE) {
                     val evidence =
                         skillPlan.lastSessionEvidence?.takeIf { it.trigger == SkillCheckTrigger.CAREER_COMPLETE }
@@ -4675,14 +3907,9 @@ abstract class Campaign(game: Game) : Task(game) {
                     } else {
                         MessageLog.e(TAG, "[FINALIZE] ${evaluation.reason}")
                     }
-                    // The verdict is scoped to THIS career: the token combines the applied
-                    // preset's outfit-bearing trainee identity (falling back to the OCR'd
-                    // name), the scenario, the queue run, and the per-career construction
-                    // nonce. The navigator captures the token it observes when its
-                    // finalization navigation starts, and a verdict whose token does not match
-                    // (a previous career, a previous run, a later arming) is unusable.
-                    // Prefer the run number the career task recorded at run start; fall back to
-                    // the persisted queue cursor for paths that started without a context.
+                    // The verdict token combines the applied preset's outfit-bearing trainee identity (else the OCR'd name), the scenario, the queue run and the
+                    // per-career construction nonce. The navigator captures the token when its finalization starts; a non-matching verdict (previous career, run
+                    // or arming) is unusable. The run number comes from the career task, else the persisted queue cursor.
                     val queueRun: Int =
                         CareerFinalizeGate.context?.queueRun ?: SettingsHelper.getIntSetting("queueState", "currentRun", 0)
                     val traineeIdentity: String =
@@ -4702,7 +3929,6 @@ abstract class Campaign(game: Game) : Task(game) {
                         )
                     CareerFinalizeGate.arm(verdict)
                     MessageLog.i(TAG, "[FINALIZE] Verdict armed for token ${verdict.careerToken} (queueRun=${verdict.queueRun ?: "-"}).")
-                    // Durable reconstruction record: one per career finalization, best-effort.
                     runCatching {
                         OutcomeCorpus.append(
                             game.myContext,
@@ -4725,34 +3951,23 @@ abstract class Campaign(game: Game) : Task(game) {
                     }
                 }
 
-                // Reaching here means the careerComplete plan already committed (via the
-                // checkCareerEndSkillListScreen branch on an earlier tick), was disabled, or was
-                // skipped after exhausting the Learn-screen open attempts - all clean completions.
+                // Reaching here means the plan already committed, was disabled, or was skipped after exhausting the Learn-screen open attempts.
                 return TaskResult.Success(
                     TaskResultCode.TASK_RESULT_COMPLETE,
                     "Bot has reached end of run. Stopping bot...",
                 )
             } else if (checkCareerEndSkillListScreen()) {
                 if (!bCareerEndSkillsHandled) {
-                    // Started or restarted directly on the career-end "Learn" skill purchase screen.
-                    // Buy per the careerComplete plan; once the plan confirms and exits the list,
-                    // the End screen branch above performs the final bookkeeping on a later tick.
+                    // Started directly on the career-end Learn screen: buy per the plan; the End screen branch above does the final bookkeeping on a later tick.
                     MessageLog.i(TAG, "[INFO] Bot is on the career-end skill purchase screen. Running the careerComplete skill plan...")
                     bCareerEndSkillsHandled = true
-                    // Plan name stays null so start() resolves it from the screen exactly as before.
                     if (!handleSkillListScreen(trigger = SkillCheckTrigger.CAREER_COMPLETE)) {
                         MessageLog.w(TAG, "[WARN] process:: careerComplete skill plan failed on the career-end skill purchase screen.")
                     }
                 } else {
-                    // The plan already ran but the bot is STILL on the Learn screen - confirmAndExit
-                    // reported success without actually leaving (e.g. a transient gone-read). This used
-                    // to fall through to the misc back-press forever (10+ minute livelock). Actively
-                    // exit, bounded. The plan's purchases are already committed, so Confirm here was
-                    // WRONG: with nothing selected it is a no-op that never leaves, and because its
-                    // click "succeeds" the Back fallback never fired - an infinite loop to the throw that
-                    // wedged the career end and aborted the whole queue. cancelAndExit resets any stray
-                    // selection, presses Back, and drains the "unused skill points - exit anyway?" dialog
-                    // - the real way off this screen.
+                    // The plan already ran but the bot is STILL on the Learn screen (confirmAndExit reported success without leaving), which used to livelock on
+                    // the misc back-press for 10+ minutes. Confirm is wrong here: with nothing selected it is a no-op whose "success" starved the Back fallback.
+                    // cancelAndExit resets any stray selection, presses Back and drains the "unused skill points - exit anyway?" dialog.
                     careerEndExitAttempts++
                     if (careerEndExitAttempts >= maxCareerEndExitAttempts) {
                         game.imageUtils.saveBitmap(filename = "career_end_exit_stuck", fullRes = true)
@@ -4783,7 +3998,6 @@ abstract class Campaign(game: Game) : Task(game) {
             } else {
                 detectedKnownScreen = false
                 consecutiveUnknownScreenCount++
-                // Debug build or Debug Mode: capture genuinely-stuck unknown screens (skip short benign animations).
                 if ((com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) &&
                     (consecutiveUnknownScreenCount == 6 || consecutiveUnknownScreenCount == 13 || consecutiveUnknownScreenCount == 22)
                 ) {
@@ -4833,17 +4047,8 @@ abstract class Campaign(game: Game) : Task(game) {
         return null
     }
 
-    /**
-     * Attempts to close the Android notification shade via the accessibility service.
-     *
-     * A pulled-down shade covers the top-region detection anchors and absorbs taps, so screen
-     * detection goes blind and template matching runs against a contaminated frame — a misc
-     * template can match shade content and tap the bot's own STOP BOT notification action, ending
-     * the session mid-career. Dismissal is a free no-op when the shade is already closed. Requires
-     * API 31+; older devices skip silently.
-     *
-     * @param reason Short context string for the log line.
-     */
+    /** A pulled-down shade covers the top-region detection anchors and absorbs taps, and a misc template can match shade content and tap the bot's
+     * own STOP BOT notification action. Free no-op when already closed; needs API 31+, older devices skip silently. */
     protected fun dismissNotificationShade(reason: String) {
         if (Build.VERSION.SDK_INT >= 31) {
             val dispatched = game.gestureUtils.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
@@ -4852,7 +4057,6 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
-    /** True inside the no-tap wait after the Data Download OK ([Game.dataDownloadActive]); once it runs out, says so and ends it. */
     private fun dataDownloadRunning(): Boolean {
         val acceptedAt = game.dataDownloadAcceptedAtMs ?: return false
         if (Game.dataDownloadActive(acceptedAt, SystemClock.elapsedRealtime())) return true
@@ -4861,48 +4065,23 @@ abstract class Campaign(game: Game) : Task(game) {
         return false
     }
 
-    /** A recognised screen after the Data Download OK: the download is done. */
     private fun endDataDownloadWait() {
         val acceptedAt = game.dataDownloadAcceptedAtMs ?: return
         game.dataDownloadAcceptedAtMs = null
         MessageLog.i(TAG, "[DIALOG] The game data download finished after ${(SystemClock.elapsedRealtime() - acceptedAt) / 1000}s.")
     }
 
-    /**
-     * Recovers from a process() tick where no known screen was detected.
-     *
-     * The previous behavior was a single unconditional tap at (350, 450) every tick with no bound,
-     * so any persistent unrecognized overlay wedged the bot forever — most notably an open dialog
-     * whose title OCR returned empty (low-contrast banner), so [DialogUtils.getDialog] returned null,
-     * the dialog was never closed, and no screen matched underneath it. Escalate instead:
-     *
-     *  1. If a dialog title banner is present (the gradient match still succeeds even when the title
-     *     OCR fails), the bot is stuck on an unidentified dialog — close it.
-     *  2. Otherwise nudge with the legacy tap to clear transient/intermediate screens.
-     *  3. If still unrecovered after [maxUnknownScreenBeforeStop] consecutive ticks, stop with a
-     *     diagnostic capture rather than loop forever.
-     *
-     * @param count The current [consecutiveUnknownScreenCount] for this stuck streak.
-     */
+    /** The escalation replaces a single unbounded blind tap at (350, 450) that wedged the bot forever on an unrecognized overlay (notably an open
+     * dialog whose title OCR returned empty, so [DialogUtils.getDialog] returned null). A visible dialog title banner means an unidentified dialog:
+     * close it; otherwise nudge; after [maxUnknownScreenBeforeStop] ticks stop with a diagnostic capture. */
 
-    /**
-     * Whether the bot is on a story / event cutscene that must be body-tapped through to reach its
-     * choices. Detects the in-career "Skip" affordance (skip_off / skip_on template, then an OCR
-     * fallback over the pill band).
-     *
-     * The catch: that green "Skip >>" affordance is NOT cutscene-exclusive - it also sits on the
-     * main screen, the skill list, and race-day screens. Those each carry an interactive control a
-     * genuine cutscene never shows (Training / Rest / Confirm / the race-day ribbon), so a leading
-     * guard rules them out first. Without it the bot mistook a momentarily-unrecognized normal screen
-     * for a cutscene and body-tapped it, wasting cycles and occasionally nudging the persistent Skip
-     * toggle to a slower speed (the misfire was frequent in Unity Cup, which churns through the most
-     * transient multi-screen states). A real cutscene has none of those controls, so it still fires.
-     */
+    /** The green "Skip >>" affordance is NOT cutscene-exclusive: it also sits on the main screen, skill list and race-day screens. A leading guard
+     * on controls a real cutscene never shows (Training / Rest / Confirm / race-day ribbon) rules them out; without it the bot body-tapped
+     * momentarily unrecognized normal screens and nudged the persistent Skip toggle to a slower speed (frequent in Unity Cup). */
     private fun isEventCutsceneSkipPillVisible(): Boolean {
         val sourceBitmap = game.imageUtils.getSourceBitmap()
 
-        // Not a cutscene if a normal-screen interactive control is present: this is a real screen
-        // that merely also shows the ubiquitous "Skip >>" button, not a dialogue to tap through.
+        // A normal-screen control is present: a real screen that merely shows the ubiquitous "Skip >>" button.
         if (ButtonTraining.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
             ButtonRest.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
             ButtonConfirm.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
@@ -4934,11 +4113,7 @@ abstract class Campaign(game: Game) : Task(game) {
         ButtonSkipOff.check(game.imageUtils, sourceBitmap = bitmap) ||
             skipOffPillByColour(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
 
-    /**
-     * Switches the persistent Skip pill from Off back to fast when this screen shows it Off
-     * ([InCareerSkipFix]), tapping the pill's measured centre. A screen without an Off pill costs
-     * one template match and a colour read, and taps nothing.
-     */
+    /** Tapping the pill's measured centre. A screen without an Off pill costs one template match and a colour read, and taps nothing. */
     private fun setFastSkipIfOff(screen: String) {
         val bitmap = game.imageUtils.getSourceBitmap()
         if (!skipOffPill(bitmap)) return
@@ -4960,10 +4135,8 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
-    /** OCR fallback for the cutscene Skip pill: the intro-pill band, then a wider bottom-left scan. */
     private fun skipPillTextFound(sourceBitmap: Bitmap): Boolean {
         return try {
-            // Scan 22%-53% width, 94%-98% height - centered on the event-INTRO Skip pill.
             val skipPillOcr =
                 game.imageUtils.performOCROnRegion(
                     sourceBitmap,
@@ -4979,10 +4152,8 @@ abstract class Campaign(game: Game) : Task(game) {
             if (skipPillOcr.uppercase().contains("SKIP")) {
                 true
             } else {
-                // Day-end event / result screens (support-card & scenario event dialogue, hint-level-up,
-                // goal-result) render the green "Skip >>" button lower and further left than the intro
-                // pill, so the band above missed it and the screen churned to the unknown-screen stop.
-                // A wider bottom-left scan catches them; they advance with the same body-tap.
+                // Day-end event / result screens (support-card and scenario event dialogue, hint-level-up, goal-result) render the Skip button lower and
+                // further left than the intro pill; the wider bottom-left scan catches them and they advance with the same body-tap.
                 val skipButtonOcr =
                     game.imageUtils.performOCROnRegion(
                         sourceBitmap,
@@ -5039,19 +4210,13 @@ abstract class Campaign(game: Game) : Task(game) {
 
     private fun recoverFromUnknownScreen(count: Int) {
         if (count == 1) {
-            // First unrecognized tick: clear the notification shade in case it is covering the
-            // top-region anchors (free no-op when closed).
+            // First unrecognized tick: clear a notification shade that may be covering the top-region anchors.
             dismissNotificationShade("unknown screen")
         }
 
-        // Story / chain support-card events (e.g. Air Shakur's "Both High and Low") open with an
-        // intro cutscene that must be tapped through before the choices render. During the intro
-        // there is no event-choice horseshoe, so checkTrainingEventScreen() is false and every other
-        // screen check misses too - the tick lands here. The bottom-left Skip pill (Skip Off / Skip
-        // On) renders only during these cutscenes; use it as the signal to body-tap the dialogue
-        // toward the choices rather than treating it as stuck. The misc skip handler only knows the
-        // distinct `skip` template and misses this pill. Bounded by maxCutsceneAdvanceBeforeStop so a
-        // truly frozen cutscene still stops, with defensive rebinds in case dispatch silently died.
+        // Story / chain support-card events (e.g. Air Shakur's "Both High and Low") open with an intro cutscene to tap through before the choices
+        // render. There is no choice horseshoe then, so every other screen check misses; the bottom-left Skip pill renders only during these cutscenes
+        // and is the signal to body-tap (the misc skip handler only knows the distinct `skip` template). Bounded by maxCutsceneAdvanceBeforeStop.
         if (isEventCutsceneSkipPillVisible()) {
             if (count >= cutsceneStopAt) {
                 cutsceneRebinds.closeLast()
@@ -5086,17 +4251,11 @@ abstract class Campaign(game: Game) : Task(game) {
             return
         }
 
-        // A mid-career bounce to the game's outer Home lobby - the 17:00 JST daily-reset reload, an
-        // app resume, or a crash-to-title - is invisible to every in-career screen check, so without
-        // this the loop spirals to the maxUnknownScreenBeforeStop stop and only recovers via the
-        // queue's between-run path. That path treats the crash as a finished run: it advances the
-        // rotation cursor onto the NEXT preset, writes a phantom CAREER_END, and rebuilds Training/
-        // TrainingEvent against the wrong preset (both cache their config at construction). Detect the
-        // lobby and re-enter THIS career in place through the navigator (HOME -> CAREER -> Continue ->
-        // Resume), keeping the task alive so none of that happens. Gated at >=2 cycles so a one-frame
-        // misdetect during a normal transition cannot trigger it, AND on careerScreenObservedThisTask
-        // so a bot started at the lobby never launches a career on stale state; any failure falls
-        // through to the standard ladder below.
+        // A mid-career bounce to the outer Home lobby (the 17:00 JST daily-reset reload, an app resume, a crash-to-title) is invisible to every
+        // in-career check; the between-run path would treat it as a finished run, advance the rotation cursor and rebuild Training/TrainingEvent
+        // on the wrong preset. Re-enter THIS career in place through the navigator instead. Gated at >=2 cycles (a one-frame misdetect must not
+        // trigger it) and on careerScreenObservedThisTask (a bot started at the lobby must not launch a career on stale state); a failure falls
+        // through to the standard ladder.
         if (count >= 2 && careerScreenObservedThisTask && lobbyReentryAttempts < maxLobbyReentryAttempts) {
             val navigator = CareerLaunchNavigator(game.myContext)
             navigator.attachLiveGame(game)
@@ -5115,13 +4274,9 @@ abstract class Campaign(game: Game) : Task(game) {
             }
         }
 
-        // MuMu can leave the Accessibility Service "enabled" in secure settings while its gesture
-        // dispatch silently dies, so the per-tick ensureAccessibilityService() string check passes
-        // and every blind tap below no-ops - which can wedge a recognizable screen (e.g. a post-race
-        // scenario event) to the stop cap. Once we have been stuck longer than a normal transition,
-        // force a hard off->on rebind to revive dispatch; the next blind tap then lands and advances
-        // the screen, resetting the counter. Falls through to the stop below if it cannot help (e.g.
-        // WRITE_SECURE_SETTINGS missing), so there is no new dead-end.
+        // MuMu can leave the Accessibility Service "enabled" while gesture dispatch silently dies, so the string check passes and blind taps no-op,
+        // wedging even a recognizable screen to the stop cap. Past a normal transition, force a hard off->on rebind. Falls through to the stop if it
+        // cannot help (e.g. WRITE_SECURE_SETTINGS missing).
         if (count in gestureRebindThresholds) {
             if (count == gestureRebindThresholds.min()) unknownScreenRebinds.start()
             MessageLog.w(
@@ -5160,12 +4315,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 game.wait(0.5)
                 return
             }
-            // The Trackblazer Shop "lineup has been refreshed" dialog has Cancel/Shop buttons (no Close or
-            // OK) and its title-bar OCR is flaky, so getDialog frequently fails to name it and it lands
-            // here unclosable - it killed the queue after 25 stuck cycles. ButtonShop is the dialog's
-            // reliable green button and renders only on shop dialogs, so tapping it enters the shop and
-            // the campaign's shop handling takes over on the next tick. Safe: it no-ops (returns false)
-            // on any non-shop dialog, so it cannot mis-fire on other unidentified popups.
+            // The Trackblazer Shop "lineup has been refreshed" dialog has Cancel/Shop buttons and flaky title OCR, so getDialog fails to name it and it
+            // would be unclosable (it killed a queue after 25 stuck cycles). ButtonShop renders only on shop dialogs, so tapping it enters the shop; it
+            // no-ops on any other dialog.
             if (ButtonShop.click(game.imageUtils)) {
                 MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Entered the Shop via its button on an unidentified shop dialog.")
                 game.wait(1.0)
@@ -5177,11 +4329,8 @@ abstract class Campaign(game: Game) : Task(game) {
         if (count >= maxUnknownScreenBeforeStop) {
             unknownScreenRebinds.closeLast()
             game.imageUtils.saveBitmap(filename = "unknown_screen_stuck", fullRes = true)
-            // If a relaunch was tried this episode and a game screen still never came back, the game
-            // could not be recovered to a state the bot can drive (it crashed/was killed, or a live
-            // screen is genuinely un-driveable). Flag it so the queue PAUSES instead of launching the
-            // next run onto a dead/foreign screen, regardless of stopOnError. A plain stuck-screen stop
-            // with no relaunch attempted stays a generic error (the queue's normal stopOnError rules).
+            // If a relaunch was tried and no game screen came back, the game is unrecoverable: flag it so the queue PAUSES instead of launching the next
+            // run onto a dead/foreign screen, regardless of stopOnError. A stop with no relaunch attempted stays a generic error.
             if (stopIsGameUnrecoverable(gameRestartAttemptsThisEpisode)) {
                 StartModule.gameRecoveryFailed = true
                 MessageLog.e(
@@ -5193,32 +4342,26 @@ abstract class Campaign(game: Game) : Task(game) {
             val reason =
                 "Bot stuck on an unrecognized screen for $count consecutive cycles. Stopping. " +
                     "A screenshot was saved to the temp folder as unknown_screen_stuck."
-            // An unrecognized screen may be the game's fault, so issued rebinds prove nothing about
-            // input here; a refused one does prove the bot could not try its input repair.
+            // An unrecognized screen may be the game's fault, so issued rebinds prove nothing about input here; a refused one proves the repair could not be tried.
             if (unknownScreenRebinds.refused > 0 && !StartModule.gameRecoveryFailed) requestAccessibilityHalt(A11Y_GRANT_MISSING)
             throw InterruptedException(reason)
         }
 
-        // Award/ceremony screens (the first-time trophy popup after a finals win, ending cards)
-        // have no dialog banner and ignore the legacy nudge spot - a finals trophy sat through 25
-        // nudges at (350, 450) and forced a stop. They do dismiss on a standard OK or a tap near
-        // the bottom-center, so try those too.
+        // Award/ceremony screens (the first-time trophy popup after a finals win, ending cards) have no dialog banner and ignore the legacy nudge
+        // spot; they dismiss on a standard OK or a tap near the bottom-center.
         if (ButtonOk.click(game.imageUtils)) {
             MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Dismissed an unrecognized screen via its OK button.")
             game.wait(1.0)
             return
         }
-        // First-win trophy popups use a Close button instead of OK (the URA Finals dirt-champion
-        // trophy sat through OK attempts and both nudges, which land just above its button).
+        // First-win trophy popups use Close instead of OK (the URA Finals dirt-champion trophy sat through OK attempts and both nudges).
         if (ButtonClose.click(game.imageUtils)) {
             MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Dismissed an unrecognized screen via its Close button.")
             game.wait(1.0)
             return
         }
-        // Post-turn result / event screens (GOAL COMPLETE!, race results, achievement & hint popups,
-        // day-end event results) advance via a Next or Skip button, not OK/Close - without these the
-        // loop blind-nudges them for several cycles before stumbling past. Tap the affordance directly
-        // when present; each no-ops when absent, and the screen is already unknown so advancing is safe.
+        // Post-turn result / event screens (GOAL COMPLETE!, race results, achievement and hint popups) advance via Next or Skip, not OK/Close. Tap
+        // the affordance directly; each no-ops when absent, and the screen is already unknown so advancing is safe.
         if (ButtonNext.click(game.imageUtils)) {
             MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Advanced a result/continue screen via its Next button.")
             game.wait(1.0)
@@ -5237,7 +4380,6 @@ abstract class Campaign(game: Game) : Task(game) {
         if (count % 2 == 0) {
             game.tap(540.0, 1300.0, taps = 1)
         } else {
-            // Legacy nudge to progress transient/intermediate screens.
             game.tap(350.0, 450.0, taps = 1)
         }
     }

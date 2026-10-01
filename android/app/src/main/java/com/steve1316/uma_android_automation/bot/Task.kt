@@ -40,9 +40,8 @@ enum class TaskResultCode {
 }
 
 /**
- * The game could not reach its server within the connection outage budget, or kept loading with
- * no dialog for too long. An [InterruptedException] so every existing stop path unwinds it; the
- * main loop reports it as [TaskResultCode.TASK_RESULT_CONNECTION_ERROR].
+ * The game could not reach its server within the outage budget, or kept loading with no dialog for too long. An
+ * [InterruptedException] so existing stop paths unwind it; reported as [TaskResultCode.TASK_RESULT_CONNECTION_ERROR].
  */
 class ConnectionLostException(message: String) : InterruptedException(message)
 
@@ -85,8 +84,8 @@ abstract class Task(game: Game) : DialogHandler(game) {
         val TAG: String = "[${MainActivity.loggerTag}]${this::class.simpleName}"
 
         /**
-         * Result code for an interrupted run. A user Stop or queue skip always wins; otherwise a
-         * lost connection is reported as such instead of as an unhandled exception.
+         * Result code for an interrupted run: a user Stop or queue skip wins, otherwise a lost connection is reported
+         * as such.
          */
         internal fun interruptResultCode(skipRequested: Boolean, stopRequested: Boolean, serviceRunning: Boolean, connectionLost: Boolean): TaskResultCode =
             when {
@@ -193,17 +192,11 @@ abstract class Task(game: Game) : DialogHandler(game) {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /**
-     * Optional one-line career-outcome summary, logged by [handleTaskEnd] at the end of every run.
-     * Base tasks (Daily Races, Team Trials) have no career to summarize and return null; [Campaign]
-     * overrides this to emit the `[CAREER_END]` ledger line.
-     */
     protected open fun careerEndLedgerLine(result: TaskResult): String? = null
 
     /**
-     * Optional per-career log-file write, called by [handleTaskEnd] AFTER the ledger line has been
-     * logged - so the file can contain its own `[CAREER_END]` line. Base tasks write nothing;
-     * [Campaign] overrides this with the buffer-slice file write.
+     * Optional per-career log-file write, called AFTER the ledger line is logged so the file contains its own
+     * `[CAREER_END]` line.
      */
     protected open fun writePerCareerLog(result: TaskResult) {}
 
@@ -229,9 +222,8 @@ abstract class Task(game: Game) : DialogHandler(game) {
 
         val timeoutMs = (maxRuntimeMinutes * (60 * 1000)).toLong()
         val startTime = System.currentTimeMillis()
-        // Bound the unhandled-dialog recover net below. A dialog the net can never clear (it taps
-        // nothing) otherwise retries forever and only dies when the 3-min watchdog kills the whole
-        // process - taking the rest of the queue with it.
+        // Bounds the unhandled-dialog recover net: a dialog it can never clear would retry until the 3-min watchdog
+        // kills the whole process, taking the queue with it.
         var consecutiveUnhandledDialogs = 0
         var lastUnhandledDialogMessage: String? = null
         val maxIdenticalUnhandledDialogs = 5
@@ -239,9 +231,7 @@ abstract class Task(game: Game) : DialogHandler(game) {
             try {
                 game.connectionBudget.beginIteration()
                 val tmpResult: TaskResult? = process()
-                // process() returned without throwing - forward progress, so reset the recover counter.
                 consecutiveUnhandledDialogs = 0
-                // An iteration with no connection error ends the outage episode.
                 game.connectionBudget.endIterationNormally()
                 // Stop the task if a non-null result is received.
                 if (tmpResult != null) {
@@ -252,18 +242,11 @@ abstract class Task(game: Game) : DialogHandler(game) {
                 result = interruptResult(e)
                 break
             } catch (e: IllegalStateException) {
-                // Most often this is `tryHandleAllDialogs` reporting an unrecognized dialog. The
-                // upstream design treats that as fatal, but in practice MuMu can spawn transient
-                // dialogs (shop/server/scenario popups) that the next iteration can handle once
-                // they animate away. Killing a 60-turn career over one mis-OCR'd dialog is the
-                // wrong tradeoff. (An `Unhandled dialog: shop` once bubbled to Game.start and
-                // ended a career 24 turns early.) Save a screenshot so we know which dialog the
-                // bot didn't recognize next time this fires.
-                //
-                // But a dialog the net can never clear would retry forever, so bail after a bounded
-                // run of the SAME unhandled dialog: end the run cleanly with a saved log instead of
-                // spinning to the process-killing watchdog. The queue's stopOnError logic then
-                // decides continue-vs-abort. (The midnight date_changed rollover used to die here.)
+                // An unrecognized dialog is not fatal here: MuMu spawns transient dialogs (shop/server/scenario popups)
+                // that the next iteration handles once they animate away, and ending a 60-turn career over one
+                // mis-OCR'd dialog is the wrong tradeoff. Save a screenshot to identify it. A bounded run of the SAME
+                // unhandled dialog ends the run cleanly instead of spinning to the watchdog; the queue's stopOnError
+                // then decides continue-vs-abort.
                 if (e.message == lastUnhandledDialogMessage) {
                     consecutiveUnhandledDialogs++
                 } else {
@@ -292,7 +275,6 @@ abstract class Task(game: Game) : DialogHandler(game) {
                         "[WARN] start:: Recovered from unhandled dialog: ${e.message}. (Failed to save screenshot: ${saveErr.message}.) Continuing main loop.",
                     )
                 }
-                // Brief breather so we don't tightloop on the same screen if the dialog persists.
                 try {
                     game.wait(1.0, skipWaitingForLoading = true)
                 } catch (ie: InterruptedException) {
@@ -309,24 +291,19 @@ abstract class Task(game: Game) : DialogHandler(game) {
     }
 
     /**
-     * Builds the [TaskResult] for an [InterruptedException] caught in the main loop, attributed to
-     * its ACTUAL source instead of always claiming a user stop. A real Stop sets
-     * [StartModule.queueStopRequested] or tears the service down ([BotService.isRunning] == false);
-     * any other interrupt is an internal give-up or watchdog (e.g. the career-end exit safety-net's
-     * throw) and is reported as an error carrying the real reason, so the queue's stopOnError logic
-     * decides continue-vs-abort. Reporting these as MANUALLY_STOPPED made the queue treat an internal
-     * give-up as a user quit and discard every remaining run.
+     * Builds the [TaskResult] for an [InterruptedException] from the main loop, attributed to its actual source: a real
+     * Stop sets [StartModule.queueStopRequested] or tears the service down ([BotService.isRunning] == false). Any other
+     * interrupt is an internal give-up or watchdog and is reported as an error so the queue's stopOnError decides;
+     * reporting it as MANUALLY_STOPPED made the queue discard every remaining run.
      */
     private fun interruptResult(e: InterruptedException): TaskResult {
         // Taken first, before the settle below: the stall watchdog's interrupt carries no message of its own.
         val watchdogReason = WatchdogReason.take()
         // Clear the interrupt flag so task teardown (log save, events) is not poisoned by it.
         Thread.interrupted()
-        // A user Stop (app button or the projection overlay) interrupts this thread and flips its
-        // flags from ANOTHER thread, and the interrupt routinely lands first - a live run was
-        // attributed to "an internal watchdog" and the queue kept going after a real Stop. Settle
-        // briefly before attributing. Watchdog interrupts never set these flags, so they only pay
-        // this wait once at task end.
+        // A user Stop interrupts this thread and flips its flags from another thread, and the interrupt routinely lands
+        // first, which once attributed a real Stop to a watchdog. Settle briefly before attributing; watchdog
+        // interrupts never set these flags, so they pay the wait once at task end.
         val settleDeadline = System.currentTimeMillis() + 1500
         while (System.currentTimeMillis() < settleDeadline &&
             !StartModule.queueStopRequested &&
@@ -336,7 +313,6 @@ abstract class Task(game: Game) : DialogHandler(game) {
             try {
                 Thread.sleep(100)
             } catch (_: InterruptedException) {
-                // A second interrupt while settling changes nothing about attribution.
             }
         }
         val connectionLost = e is ConnectionLostException || game.connectionLostReason != null
@@ -347,8 +323,8 @@ abstract class Task(game: Game) : DialogHandler(game) {
                     "Run was skipped from the queue controls.",
                 )
             TaskResultCode.TASK_RESULT_MANUALLY_STOPPED ->
-                // queueStopReason is set by a deliberate internal stop (e.g. the trainee-mismatch guard);
-                // null means a genuine user Stop. Report whichever it actually was instead of always "user".
+                // queueStopReason is set by a deliberate internal stop (e.g. the trainee-mismatch guard); null means a
+                // genuine user Stop.
                 TaskResult.Success(
                     TaskResultCode.TASK_RESULT_MANUALLY_STOPPED,
                     StartModule.queueStopReason ?: "Bot was manually stopped by the user.",

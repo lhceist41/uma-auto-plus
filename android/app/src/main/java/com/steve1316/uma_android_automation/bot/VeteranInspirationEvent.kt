@@ -5,77 +5,47 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The Veteran Inspiration observation record (`type:"veteran_inspiration"`): one per Veteran whose
- * `Umamusume Details` -> Inspiration tab was read, carrying the Veteran's own Sparks and the factor
- * blocks of its two Legacy Origin ancestors, keyed to the roster identity by `rosterFingerprint`.
- *
- * Two things this deliberately keeps apart, because they are different facts about inheritance:
- *  - `selfFactors` is what THIS Veteran can pass on; and
- *  - `legacyAncestors` is the ancestry already sitting behind it.
- * Flattening them into one factor bag would make both unusable for a later retention decision, which
- * is exactly what this record exists to feed.
- *
- * Two things it deliberately does NOT claim. There is no game-stable ancestor identifier: the panel
- * shows an ancestor's portrait and rank medal but no name, so an ancestor is addressed only by its
- * position in this Veteran's own list. And ancestor `rank` stays null: the medal here is a small
- * stylized badge at a position the calibrated header-medal classifier does not cover, and a guessed
- * rank is worse than an absent one.
- *
- * Separate from `lineage_selected` (PL-4) on purpose. That record is what a career LAUNCH selected;
- * this one is what a REGISTERED Veteran carries. They are different evidence sources about different
- * moments and must stay distinguishable, so this writes its own file and never overwrites that one.
+ * `veteran_inspiration` record: one per Veteran whose Inspiration tab was read, keyed to the roster identity by
+ * `rosterFingerprint`. `selfFactors` (what this Veteran passes on) and `legacyAncestors` (the ancestry behind
+ * it) stay separate; one flat factor bag would be unusable for a retention decision. Ancestors have no
+ * game-stable identifier (no names shown), so they are addressed by position, and ancestor `rank` stays null:
+ * the medal is a stylized badge the header-medal classifier does not cover, and a guessed rank is worse than
+ * none. Distinct from `lineage_selected` (what a career launch selected), so it writes its own file.
  */
 const val VETERAN_INSPIRATION_SCHEMA_VERSION: Int = 2
 
-/** Which column of the two-column grid a factor card occupied. Preserved because the panel's order is
- * deterministic (stat, aptitude, unique, then the white factors in reading order) and that order is
- * itself evidence. */
+/** Which column of the two-column grid a factor card occupied; the panel order (stat, aptitude, unique, then whites) is itself evidence. */
 enum class InspirationColumn { LEFT, RIGHT }
 
 /**
- * One factor card as read: kind and stars are pixel-classified (authoritative), the name is OCR, and
- * the name is then snapped onto the canonical factor domain so the identity is stable across re-reads.
- *
- * [displayName] keeps the raw OCR as evidence; [canonicalName] is the resolved domain name (null when
- * the read did not resolve), and it is the ONLY input to the semantic [factorFingerprint]. The raw
- * text jitters (~3.5% of names differ on a re-read), so a fingerprint built off it was not
- * identity-stable; a fingerprint built off the canonical name is.
+ * One factor card: kind and stars are pixel-classified (authoritative), the name is OCR snapped onto the canonical
+ * factor domain. Raw OCR jitters (~3.5% of names differ on a re-read), so only [canonicalName] feeds the
+ * semantic [factorFingerprint].
  */
 data class InspirationFactor(
-    /** Zero-based grid row within the block, in reading order. */
     val rowIndex: Int,
     val column: InspirationColumn,
     val kind: SparkRowKind,
-    /** Raw OCR text, trimmed. Empty when the name did not read; never inferred from the kind. */
     val displayName: String,
     val stars: Int,
     val ambiguous: Boolean,
-    /** The canonical factor name the raw OCR resolved to, or null when it did not (garbage, empty,
-     * truncated, or off-domain). Null fails the semantic fingerprint closed. */
+    /** Canonical name the raw OCR resolved to, or null (garbage, truncated, off-domain); null fails the semantic fingerprint closed. */
     val canonicalName: String? = null,
-    /** How the canonical name was accepted, for offline audit. REJECT means [canonicalName] is null. */
     val canonicalPath: FactorAcceptancePath = FactorAcceptancePath.REJECT,
-    /** The winning candidate's similarity, kept so a reject/margin accept is explicable without a rescan. */
     val canonicalScore: Double = 0.0,
-    /** The runner-up's similarity, or null (exact-skeleton hit or single candidate). */
     val canonicalSecondScore: Double? = null,
 ) {
-    /** Whether the raw OCR snapped onto a known canonical name. */
     val resolved: Boolean get() = canonicalName != null
 
-    /** Whitespace-collapsed, upper-cased raw name, kept as evidence next to [displayName]. */
     val normalizedName: String get() = normalizeLineageFactorName(displayName)
 
-    /** The deterministic semantic token `kind:CANONNAME:stars`, or null when unresolved. Byte-identical
-     * in format to the PL-4 canonical token, so the two sources cross-link on resolved factors. */
+    /** Semantic token `kind:CANONNAME:stars`, or null when unresolved; same format as the lineage canonical token so the two cross-link. */
     val factorFingerprint: String? get() = canonicalFactorToken(kind, canonicalName, stars)
 
-    /** The name-free `kind:stars` token, always available and stable even when the name did not read. */
     val structuralFingerprint: String get() = structuralFactorToken(kind, stars)
 }
 
-/** One Legacy Origin ancestor block. [ancestorIndex] is its position in this Veteran's own list and
- * is not a game identifier. */
+/** One Legacy Origin ancestor block; [ancestorIndex] is its position in this Veteran's list, not a game identifier. */
 data class InspirationAncestor(
     val ancestorIndex: Int,
     val portraitObserved: Boolean,
@@ -83,63 +53,45 @@ data class InspirationAncestor(
     val rank: String?,
     val factors: List<InspirationFactor>,
 ) {
-    /** Trusted canonical set fingerprint, or null when any factor is unresolved (fail closed). */
     val factorFingerprint: String? get() = canonicalFactorSetFingerprint(factors.map { it.factorFingerprint })
 
-    /** Name-free structural set fingerprint, always available. */
     val structuralFingerprint: String get() = structuralFactorSetFingerprint(factors.map { it.structuralFingerprint })
 
-    /** Whether every factor resolved to a canonical name, so [factorFingerprint] is a trusted identity. */
     val factorSetTrusted: Boolean get() = factors.isNotEmpty() && factors.all { it.resolved }
 }
 
-/** Why the traversal of one Veteran's panel stopped. */
 enum class InspirationReadTermination {
-    /** The scrollbar reached the bottom of the content. The normal, complete ending. */
     REACHED_BOTTOM,
 
-    /** The list fits in the viewport, so one frame was the whole of it. */
     NO_SCROLL_NEEDED,
 
-    /** The last factor card was seen with empty space below it. The normal ending for a Veteran that
-     * has an inspiration-usage history below its factors, which most do. */
+    /** The last factor card was seen with empty space below it: the normal ending when a usage history sits below the factors. */
     REACHED_FACTOR_LIST_END,
 
-    /** The bounded swipe budget ran out before the bottom. */
     SCROLL_BUDGET_EXHAUSTED,
 
-    /** Two consecutive swipes moved neither the scrollbar nor the content. */
     STALLED,
 
-    /** The Inspiration tab was not open, or the panel showed no factor cards at all. */
     PANEL_NOT_READY,
 
-    /** The traversal did not begin at the top of the content, so it cannot claim to have seen it all. */
     NOT_AT_TOP,
 }
 
-/** The traversal's own measurements, kept so an incomplete read can be diagnosed from the corpus
- * rather than by re-walking the roster. */
 data class InspirationDiagnostics(
     val frames: Int,
     val swipes: Int,
     val startedAtTop: Boolean,
-    /** The scrollbar confirmed the bottom of the whole panel - which for a Veteran with an
-     * inspiration-usage history is far below the last factor card, and is not required. */
+    /** The scrollbar confirmed the bottom of the whole panel; far below the last factor card when a usage history exists, so not required. */
     val reachedBottom: Boolean,
-    /** The end of the FACTOR list was positively observed: either the panel bottom, or a frame showing
-     * the last card with empty space beneath it. This, not the content height, is the proof that no
-     * factor was left unread. */
+    /** The end of the FACTOR list was positively observed (panel bottom, or the last card with empty space beneath it); this, not content height, proves no factor was left unread. */
     val factorListEndObserved: Boolean,
     val gapFrames: Int,
     val spacingBreaks: Int,
     val alignmentFailures: Int,
-    /** Frames whose scrollbar thumb never settled to the length measured at rest, and frames whose
-     * offset therefore came from dead reckoning off the swipe distance instead of the scrollbar. */
+    /** Frames whose scrollbar thumb never settled, and frames whose offset therefore came from dead reckoning off the swipe distance. */
     val unsettledFrames: Int,
     val deadReckonedFrames: Int,
-    /** Content height the scrollbar reported with the panel at rest, and the height the merged rows
-     * imply. Disagreement beyond [INSPIRATION_CONTENT_HEIGHT_SLACK] means rows are missing off one end. */
+    /** Scrollbar content height at rest vs the height the merged rows imply; disagreement beyond [INSPIRATION_CONTENT_HEIGHT_SLACK] means rows are missing. */
     val scrollbarContentHeight: Int?,
     val observedContentHeight: Int?,
     val rowsAccepted: Int,
@@ -148,18 +100,15 @@ data class InspirationDiagnostics(
     val blocksObserved: Int,
 )
 
-/** How far the two independent content-height measurements may disagree before the read is called
- * incomplete. One card pitch would already hide a whole missed row, so the bound sits well below it. */
+/** Max disagreement between the two content-height measurements; kept below one card pitch, which would hide a whole missed row. */
 const val INSPIRATION_CONTENT_HEIGHT_SLACK: Int = 45
 
-/** One Veteran's assembled Inspiration observation. */
 data class VeteranInspirationObservation(
     val schemaVersion: Int,
     val observedAt: Long,
     val scanId: String,
     val scanIndex: Int,
-    /** The roster identity this evidence attaches to. Null when the entry's own identity fields did
-     * not all resolve, in which case the factors are still recorded but cannot be attributed. */
+    /** The roster identity this evidence attaches to; null when its identity fields did not all resolve (factors are still recorded, unattributed). */
     val rosterFingerprint: String?,
     val character: String?,
     val outfit: String?,
@@ -173,32 +122,20 @@ data class VeteranInspirationObservation(
     val unresolvedFields: List<String>,
     val diagnostics: InspirationDiagnostics,
 ) {
-    /** Trusted canonical fingerprint of the Veteran's own Sparks, or null when any factor is unresolved. */
     val selfFactorFingerprint: String? get() = canonicalFactorSetFingerprint(selfFactors.map { it.factorFingerprint })
 
-    /** Name-free structural fingerprint of the Veteran's own Sparks, always available. */
     val selfStructuralFingerprint: String get() = structuralFactorSetFingerprint(selfFactors.map { it.structuralFingerprint })
 
-    /** Whether every self factor resolved, so [selfFactorFingerprint] is a trusted identity. */
     val selfFactorSetTrusted: Boolean get() = selfFactors.isNotEmpty() && selfFactors.all { it.resolved }
 }
 
-/** One block of factor rows as the traversal segmented them, before roles are assigned. */
 data class InspirationBlockObservation(val blockIndex: Int, val portraitObserved: Boolean, val factors: List<InspirationFactor>)
 
 /**
- * Assembles one Veteran's observation from the segmented blocks and the traversal's diagnostics.
- *
- * Block 0 is the Veteran's own Sparks; every later block is a Legacy Origin ancestor, in panel order.
- * A block index of -1 (rows above the first blue stat card) is a traversal that did not start at the
- * top; it is counted in the diagnostics and its rows are discarded rather than attributed to anyone.
- *
- * [sparkCaptureComplete] is the single flag a consumer should gate on, and it is deliberately strict:
- * the traversal started at the top, reached the bottom, merged with no gap and no irregular row
- * spacing, agreed with the scrollbar on the total content height, saw at least one block with no
- * leading partial, read every factor name, and read no ambiguous star. Anything less is an incomplete
- * picture of what this Veteran can pass on, and a retention decision made on a partial factor list is
- * worse than one made on none.
+ * Block 0 is the Veteran's own Sparks; every later block is a Legacy Origin ancestor, in panel order. A block
+ * index of -1 (rows above the first blue stat card) means the traversal did not start at the top; those rows
+ * are discarded, not attributed. [sparkCaptureComplete] is the flag consumers gate on and is deliberately
+ * strict: a retention decision on a partial factor list is worse than one on none.
  */
 fun assembleVeteranInspiration(
     scanId: String,
@@ -237,18 +174,13 @@ fun assembleVeteranInspiration(
         val loc = "${factor.kind.name.lowercase()}:${factor.rowIndex}:${factor.column.name.lowercase()}"
         if (factor.displayName.isEmpty()) unresolved.add("factorName@$loc")
         if (factor.ambiguous) unresolved.add("factorStars@$loc")
-        // A name that read but did not snap onto the canonical domain (truncated, off-domain). Kept as
-        // evidence, marked here so the untrusted semantic fingerprint is explicable. This does NOT gate
-        // sparkCaptureComplete - the read was complete; only the canonical identity is unresolved.
+        // An unresolved canonical name (truncated, off-domain) is marked for the fingerprint but does NOT gate sparkCaptureComplete: the read was complete.
         if (factor.displayName.isNotEmpty() && !factor.resolved) unresolved.add("factorCanonical@$loc")
     }
 
-    // Neither `reachedBottom` nor a content-height comparison is one of the checks, and both were
-    // tried first. The scrollbar measures the WHOLE panel, and below the factors sits an
-    // inspiration-usage history that can be an order of magnitude taller than them, so the panel's
-    // height says nothing about whether every factor was read and its bottom is not worth scrolling
-    // to. `factorListEndObserved` is the fact that actually matters: the last factor card was seen
-    // with nothing after it.
+    // Neither `reachedBottom` nor a content-height comparison is a check: the scrollbar measures the whole panel,
+    // and the usage history below the factors can be far taller than them. `factorListEndObserved` (the last
+    // factor card seen with nothing after it) is what matters.
     val checks =
         listOf(
             diagnostics.startedAtTop,
@@ -293,8 +225,7 @@ private fun serializeFactors(factors: List<InspirationFactor>): JSONArray =
                     put("displayName", f.displayName)
                     put("normalizedName", f.normalizedName)
                     put("stars", f.stars)
-                    // Canonical identity (present only when resolved) plus its acceptance path; the raw
-                    // OCR stays above as evidence. The structural token is always present and name-free.
+                    // Canonical identity only when resolved; the structural token is always present and name-free.
                     f.canonicalName?.let { put("canonicalName", it) }
                     put("canonicalPath", f.canonicalPath.name.lowercase())
                     f.factorFingerprint?.let { put("factorFingerprint", it) }
@@ -305,7 +236,6 @@ private fun serializeFactors(factors: List<InspirationFactor>): JSONArray =
         }
     }
 
-/** Serializes one Veteran's observation to its durable `type:"veteran_inspiration"` record. */
 fun serializeVeteranInspiration(o: VeteranInspirationObservation): JSONObject =
     JSONObject().apply {
         put("type", "veteran_inspiration")
@@ -371,7 +301,6 @@ fun serializeVeteranInspiration(o: VeteranInspirationObservation): JSONObject =
 
 // -- Scan header ---------------------------------------------------------------------------------
 
-/** Why a multi-Veteran Inspiration capture stopped. */
 enum class InspirationScanTermination {
     COUNT_REACHED,
     CYCLE_CLOSED,
@@ -386,12 +315,9 @@ enum class InspirationScanTermination {
 }
 
 /**
- * The header for one batch of Inspiration captures.
- *
- * It binds the batch to ONE current-roster state. The roster's `Registered used` count is read before
- * the first entry and again after the last. [pagerCycleClosed] requires the distinct full traversal
- * and return to the anchor; [snapshotCompatibility] also requires stable unfiltered list facts.
- * Partial batches keep their individual captures without claiming account-wide membership.
+ * Binds a batch to ONE current-roster state: `Registered used` is read before the first entry and after the last.
+ * [pagerCycleClosed] requires the full traversal and return to the anchor; [snapshotCompatibility] also requires
+ * stable unfiltered list facts. Partial batches keep their captures without claiming account-wide membership.
  */
 data class VeteranInspirationScanHeader(
     val schemaVersion: Int,

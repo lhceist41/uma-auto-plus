@@ -1,46 +1,31 @@
 package com.steve1316.uma_android_automation.bot
 
-/** Why the skill screen was opened. Recorded on every skill-spend telemetry record. */
 enum class SkillCheckTrigger {
-    /** Skill Points reached the user's configured threshold mid-career. */
     HIGH_WATER,
 
-    /** The turn before the finale season (day 72). */
     SCENARIO_FINALS,
 
-    /** The career-end "Learn" screen, the last purchase of the career. */
     CAREER_COMPLETE,
 
-    /** The Debug Settings skill-buy harness. */
     MANUAL,
 
-    /** Phase 2A, adaptive-only: a critical race (mandatory goal via OCR, or a planned race) is
-     * 1-2 turns away - spend before it instead of waiting for the high-water threshold. */
+    /** Adaptive-only: a critical race is 1-2 turns away; spend before it instead of waiting for the threshold. */
     CRITICAL_RACE,
 
-    /** Phase 2A, adaptive-only: a user-planned skill previously observed on the skill screen is
-     * affordable at its observed price - lock it in below the high-water threshold. */
+    /** Adaptive-only: a user-planned skill seen on the skill screen is now affordable at its observed price. */
     PLANNED_SKILL_AFFORDABLE,
 }
 
-/** What the run loop does about a skill check this turn. */
 enum class SkillCheckAction {
-    /** Nothing to do. */
     NONE,
 
-    /** Open the skill screen and run [SkillCheckDecision.planKey]. */
     RUN_PLAN,
 
-    /** Threshold reached with its plan disabled: stop the bot, the long-standing "notify me" behavior. */
+    /** Threshold reached with its plan disabled: stops the bot (the "notify me" behavior). */
     BREAKPOINT_STOP,
 }
 
-/**
- * One turn's skill-check decision: what to do, why, and which plan to run.
- *
- * [trigger] and [planKey] are null exactly when [action] is [SkillCheckAction.NONE], and [planKey] is
- * null for [SkillCheckAction.BREAKPOINT_STOP] (no plan runs).
- */
+/** [trigger] and [planKey] are null when [action] is NONE; [planKey] is also null for BREAKPOINT_STOP. */
 data class SkillCheckDecision(
     val action: SkillCheckAction,
     val trigger: SkillCheckTrigger? = null,
@@ -52,35 +37,10 @@ data class SkillCheckDecision(
 }
 
 /**
- * Pure, Context-free decision behind the mid-career skill checks in `Campaign.performGlobalChecks`.
- *
- * Extracted verbatim from the inline conditions so the precedence and the guards are unit-testable
- * without a live Campaign; it decides ONLY whether to open the skill screen and which plan to run,
- * never which skills to buy. The caller still owns navigation, the Main-screen confirmation, the
- * bounded attempt counters, and the flags - this function reads them, it does not mutate them.
- *
- * Two behaviors here are load-bearing and must not drift:
- *  - Pre-Finals wins over the high-water check when both are due on day 72 (the original order).
- *  - Reaching the threshold with the `skillPointCheck` plan DISABLED is not "do nothing": it stops
- *    the bot via CampaignBreakpointException. Collapsing that into NONE would silently turn a
- *    deliberate stop into an ignored threshold, so it gets its own action.
- *
- * The threshold re-arm (clearing `alreadyHandledHighWater` once points fall back under the bar) stays
- * with the caller, which owns that mutable flag; this function only sees the resulting state.
- *
- * @param skillPoints The trainee's current Skill Points (per-turn OCR).
- * @param highWaterThreshold The user's `skills.skillPointCheck` value.
- * @param enableSkillPointCheck The user's `skills.enableSkillPointCheck` toggle.
- * @param highWaterPlanEnabled Whether the `skillPointCheck` plan itself is enabled.
- * @param alreadyHandledHighWater Whether the high-water check already ran since the last re-arm.
- * @param day The current career turn (1-75).
- * @param preFinalsPlanEnabled Whether the `preFinals` plan is enabled.
- * @param alreadyHandledPreFinals Whether the Pre-Finals check already ran this career.
- * @param criticalRaceDue Phase 2A: a critical race qualified this turn (adaptive mode, objective
- *   gate, window, SP floor, and re-arm all checked by the caller). Defaults inert so every V1
- *   call site and test keeps its exact behavior.
- * @param affordableSkillDue Phase 2A: an observed planned skill is affordable (evidence, belt,
- *   and objective gate checked by the caller). Defaults inert.
+ * Pure decision behind the mid-career skill checks in `Campaign.performGlobalChecks`: whether to open the
+ * skill screen and which plan to run, never which skills to buy. Pre-Finals wins over high-water when both
+ * are due on day 72. Reaching the threshold with the `skillPointCheck` plan disabled returns BREAKPOINT_STOP,
+ * not NONE, so a deliberate stop is not silently ignored.
  */
 fun decideSkillCheck(
     skillPoints: Int,
@@ -94,14 +54,12 @@ fun decideSkillCheck(
     criticalRaceDue: Boolean = false,
     affordableSkillDue: Boolean = false,
 ): SkillCheckDecision {
-    // Pre-Finals first: this is the original evaluation order in performGlobalChecks.
     if (!alreadyHandledPreFinals && day == PRE_FINALS_DAY && preFinalsPlanEnabled) {
         return SkillCheckDecision(SkillCheckAction.RUN_PLAN, SkillCheckTrigger.SCENARIO_FINALS, PLAN_PRE_FINALS)
     }
 
-    // Phase 2A triggers sit between finals and high-water. Both run the skillPointCheck plan, so
-    // both are disabled with it - and neither ever breakpoint-stops: that semantic stays
-    // exclusively the high-water threshold's plan-disabled branch below.
+    // The critical-race and affordable-skill triggers run the skillPointCheck plan, so they are disabled with it
+    // and never breakpoint-stop; that stays exclusive to the high-water plan-disabled branch below.
     if (criticalRaceDue && highWaterPlanEnabled) {
         return SkillCheckDecision(SkillCheckAction.RUN_PLAN, SkillCheckTrigger.CRITICAL_RACE, PLAN_SKILL_POINT_CHECK)
     }
@@ -120,14 +78,10 @@ fun decideSkillCheck(
     return SkillCheckDecision.none
 }
 
-/** The turn Pre-Finals buying runs on: the last turn before the finale season. */
 const val PRE_FINALS_DAY: Int = 72
 
-/** Settings key of the plan the high-water check runs. */
 const val PLAN_SKILL_POINT_CHECK: String = "skillPointCheck"
 
-/** Settings key of the plan the Pre-Finals check runs. */
 const val PLAN_PRE_FINALS: String = "preFinals"
 
-/** Settings key of the plan the career-end Learn screen runs. */
 const val PLAN_CAREER_COMPLETE: String = "careerComplete"

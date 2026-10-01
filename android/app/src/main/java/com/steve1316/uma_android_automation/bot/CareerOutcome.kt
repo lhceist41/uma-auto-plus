@@ -3,19 +3,11 @@ package com.steve1316.uma_android_automation.bot
 import com.steve1316.uma_android_automation.types.StatName
 
 /**
- * The career-outcome label emitted in the `[CAREER_END]` ledger, derived from the task result code
- * and whether the bot confirmed a force-end at its source.
- *
- * - `INCOMPLETE` - the run did not finish a career under bot control: a user stop (breakpoint /
- *   stop-at-date / manual) or a bot failure (watchdog, timeout, unhandled exception). These must
- *   NEVER be counted as force-ends; only the result code separates them, so branch on it first.
- * - `FORCE_END` - a force-end the bot observed at its source. Today that is only a lost mandatory
- *   race the game will not let us retry past ([Campaign] sets the flag in handleTryAgainDialog).
- * - `COMPLETED` - reached the career-end screen with no confirmed force-end: a true win OR an
- *   unflagged early force-end (a fan / Result-Pts checkpoint miss is invisible at its trigger).
- *   `turn` is the discriminator here (a full arc ends near the scenario max, a force-end ends early).
- *
- * Pure and side-effect-free so the three branches are unit-testable without a live [Campaign].
+ * Career-outcome label for the `[CAREER_END]` ledger, from the task result code and whether the bot confirmed a force-end.
+ * - `INCOMPLETE`: a user stop or bot failure; never a force-end, so branch on the result code first.
+ * - `FORCE_END`: observed at its source (today only a lost mandatory race the game will not let us retry past).
+ * - `COMPLETED`: reached the career-end screen with no confirmed force-end; a true win or an unflagged early force-end,
+ *   which `turn` separates.
  */
 internal fun classifyCareerOutcome(resultCode: TaskResultCode, careerForceEnded: Boolean): String =
     when {
@@ -25,19 +17,9 @@ internal fun classifyCareerOutcome(resultCode: TaskResultCode, careerForceEnded:
     }
 
 /**
- * Richer career-quality label that closes the `COMPLETED` ambiguity [classifyCareerOutcome] leaves:
- * a completed run is either a true finale win or a career that reached the finale and lost it (or an
- * unflagged early force-end, which `turn` still splits). Derived from the raw [outcome] plus the
- * finale-race tally captured during the run ([finaleRaces] seen, [finaleWins] taken at 1st place).
- *
- * - Non-`COMPLETED` outcomes (`INCOMPLETE`, `FORCE_END`) pass through unchanged.
- * - `COMPLETED` with an observed finale swept (`finaleWins >= finaleRaces > 0`) => `WIN`.
- * - `COMPLETED` that reached the finale but dropped a race (`finaleWins < finaleRaces`) => `FINALE_LOST`.
- * - `COMPLETED` with no observed finale race (`finaleRaces == 0`) stays `COMPLETED`. This is deliberate:
- *   only URA-style finales tag `RaceGrade.FINALE`, so a Unity Cup / Trackblazer completion (which never
- *   sets it) is never mislabeled - the WIN/LOST axis is only asserted when a finale was actually seen.
- *
- * Pure and side-effect-free so all branches are unit-testable without a live [Campaign].
+ * Splits the `COMPLETED` ambiguity: `finaleWins >= finaleRaces > 0` is `WIN`, `finaleWins < finaleRaces` is
+ * `FINALE_LOST`, and no observed finale stays `COMPLETED`, because only URA-style finales tag `RaceGrade.FINALE` and a
+ * Unity Cup / Trackblazer completion must never be mislabeled. Other outcomes pass through.
  */
 internal fun classifyCareerQuality(outcome: String, finaleRaces: Int, finaleWins: Int): String =
     when {
@@ -48,12 +30,8 @@ internal fun classifyCareerQuality(outcome: String, finaleRaces: Int, finaleWins
     }
 
 /**
- * Stable short fingerprint of the config arm a career ran under, for the outcome corpus
- * (Stage 3 of the outcome-measurement plan). Two runs with the same fingerprint are
- * comparable; any change to an enumerated tunable or the app version starts a new arm.
- *
- * Canonicalization sorts by key so map iteration order can never split an arm. Pure and
- * side-effect-free so it is unit-testable without a live [Campaign].
+ * Stable short fingerprint of the config arm a career ran under: any change to an enumerated tunable or the app version
+ * starts a new arm. Sorted by key so map iteration order never splits an arm.
  */
 internal fun outcomeConfigFingerprint(appVersion: String, cfg: Map<String, String>): String {
     val canonical = cfg.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" } + ";app=$appVersion"

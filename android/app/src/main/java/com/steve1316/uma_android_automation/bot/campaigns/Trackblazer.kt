@@ -130,8 +130,7 @@ class Trackblazer(game: Game) : Campaign(game) {
     /** Whether the Good-Luck Charm has been used this turn. */
     private var bUsedCharmToday: Boolean = false
 
-    /** Whether Royal Kale Juice was queued during the current inventory management pass. Reset at
-     * the start of each pass. Used to fire a cupcake in the same pass to offset the -1 mood penalty. */
+    /** Whether Royal Kale Juice was queued this inventory pass (reset each pass); fires a cupcake to offset its -1 mood. */
     private var bKaleJuiceQueuedThisPass: Boolean = false
 
     /** Whether a race hammer has been used this turn. */
@@ -152,12 +151,7 @@ class Trackblazer(game: Game) : Campaign(game) {
     /** Flag indicating if the bot has checked for Irregular Training during the current turn. */
     private var bHasCheckedIrregularTrainingThisTurn: Boolean = false
 
-    /**
-     * True once a training has executed this turn. The Summer and Finale branches of
-     * [decideNextAction] return TRAIN unconditionally; without this guard, re-landing on the main
-     * screen before the date advances re-enters training and double-trains, burning energy before
-     * the race. Cleared each turn in [resetDailyFlags].
-     */
+    /** True once a training ran this turn: Summer/Finale branches return TRAIN unconditionally and would double-train on re-landing. Cleared in [resetDailyFlags]. */
     private var bCompletedTrainingThisTurn: Boolean = false
 
     /** Mapping of energy-restoring items to their gain values. */
@@ -185,20 +179,10 @@ class Trackblazer(game: Game) : Campaign(game) {
     /** Flag to bypass conservation and force-use the reserved energy item. */
     private var bForceUseReservedItem: Boolean = false
 
-    /**
-     * When mood is below NORMAL, training resources (Reset Whistle reshuffle, Good-Luck Charm,
-     * Megaphones) refuse to fire if main-stat gain is below this floor. Avoids wasting items on
-     * low-return turns where the mood multiplier caps the gain.
-     */
+    /** Below NORMAL mood, training resources refuse to fire when main-stat gain is under this floor. */
     private val lowMainStatGainItemFloor: Int = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerLowMainStatGainItemFloor", 15)
 
-    /**
-     * Per-tier minimum selected-training main-stat gain required before each megaphone is spent. Unlike
-     * [lowMainStatGainItemFloor] this is mood-independent and stacks on top of it: a tier is held whenever the
-     * selected training's main gain is below its threshold, regardless of mood. 0 = no threshold (always allowed).
-     * Higher-effect tiers (Empowering +60%/2t, Motivating +40%/3t) reward being saved for high-gain turns such as
-     * Classic/Senior summer camp; raising their thresholds stops the bot from burning them on low-value turns.
-     */
+    /** Per-tier minimum main-stat gain before each megaphone is spent; mood-independent, stacks on [lowMainStatGainItemFloor]. 0 = always allowed. */
     private val megaphoneThresholds: Map<String, Int> =
         mapOf(
             "Empowering Megaphone" to SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerSkipEmpoweringMegaphoneBelowGain", 0),
@@ -212,18 +196,10 @@ class Trackblazer(game: Game) : Campaign(game) {
     /** Tracks the number of days since the last race for shop check frequency. */
     private var shopCheckCounter: Int = 0
 
-    /**
-     * Number of recreation dates consumed across this entire career. Rio Kashimoto decks get ~5
-     * recs and should save one for Senior-year mood instead of burning them all on streak breaks;
-     * non-Rio decks with fewer recs never reach the cap, so behavior is unchanged.
-     */
+    /** Recreation dates used this career; caps Rio Kashimoto decks (~5 recs) so one is saved for Senior-year mood. */
     private var recreationUsedCount: Int = 0
 
-    /**
-     * Soft cap on recreation usages in non-Senior years, applied only to energy-recovery calls
-     * (streak breaking). Past the cap, energy-path recs defer to Senior and the caller falls back
-     * to Rest. Mood-recovery calls are never gated - saving one rec for mood is the point.
-     */
+    /** Soft cap on non-Senior energy-recovery recreations (past it the caller falls back to Rest); mood-recovery calls are never gated. */
     private val recreationUsageCapBeforeSenior: Int = 4
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -348,8 +324,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 val boughtItems = args["itemsBought"] as? List<String> ?: emptyList()
                 val quickUseItemsOnly = boughtItems.filter { shopList.shopItems[it]?.isQuickUsage == true }
 
-                // With the game's "When Exchanging Items from the Pro Shop" auto-use option on, the game uses some
-                // items itself and tags their rows "Used"; only those tags count as used, and the rest is queued.
+                // With the game's Pro Shop auto-use option on, the game tags some rows "Used"; only those count as used, the rest is queued.
                 val bConfirmUseShown =
                     quickUseItemsOnly.isNotEmpty() &&
                         (ButtonConfirmUse.check(game.imageUtils) || TrackblazerShopList.awaitDialog({ ButtonConfirmUse.check(game.imageUtils) }, { game.wait(it, skipWaitingForLoading = true) }))
@@ -478,22 +453,11 @@ class Trackblazer(game: Game) : Campaign(game) {
         return super.recoverMood(sourceBitmap, targetMood)
     }
 
-    /**
-     * Enforces the recreation budget: save at least one rec for Senior-year mood instead of burning
-     * them all on streak breaks in Junior/Classic. Gates only energy-recovery calls
-     * (`recoverMoodIfCompleted` false); mood-recovery calls pass through, since the reserve exists
-     * for them. A blocked energy-path rec falls back to [recoverEnergy]'s Rest.
-     *
-     * @param recoverMoodIfCompleted True for mood-recovery (always allowed); false for energy /
-     * streak-break calls (gated by the budget).
-     * @return True if a recreation was consumed, false if the budget was enforced.
-     */
+    /** Recreation budget: keeps one rec for Senior-year mood by gating energy-recovery calls; mood-recovery calls always pass. */
     override fun handleRecreationDate(recoverMoodIfCompleted: Boolean, allowFinalOuting: Boolean, doDateRecreation: Boolean): Boolean {
         val isMoodRecovery = recoverMoodIfCompleted
         val isSenior = date.year == DateYear.SENIOR
-        // A scheduled outing (the DATE action under an active dating schedule) is user-pinned, so it is
-        // exempt from the energy-recreation budget. Opportunistic recovery calls under an active schedule
-        // pass doDateRecreation=false, which makes this condition identify exactly the scheduled path.
+        // A scheduled outing (DATE under an active dating schedule) is user-pinned, so it skips the energy budget.
         val isScheduledOuting = doDateRecreation && isScheduleActive()
         if (!isMoodRecovery && !isScheduledOuting && !isSenior && recreationUsedCount >= recreationUsageCapBeforeSenior) {
             MessageLog.i(
@@ -531,9 +495,7 @@ class Trackblazer(game: Game) : Campaign(game) {
 
             Log.d(TAG, "[DEBUG] onConsecutiveRaceWarningDetected:: OCR text from consecutive warning: \"$ocrText\"")
 
-            // Matches the count in "This will put you at N consecutive races."
-            // toIntOrNull (not toInt): a >10-digit OCR misread overflows Int and toInt() throws;
-            // toIntOrNull returns null on overflow too, so garbage falls through to -1 ("no count").
+            // toIntOrNull: a >10-digit OCR misread overflows Int and toInt() would throw.
             val match = Regex("""([0-9]+)""").find(ocrText)
             val ocrCount = match?.groups?.get(1)?.value?.toIntOrNull() ?: -1
 
@@ -644,8 +606,6 @@ class Trackblazer(game: Game) : Campaign(game) {
         ButtonCancel.click(game.imageUtils)
         ButtonClose.click(game.imageUtils)
         game.wait(1.0)
-        // Shadow-only: report whether the specialized training actually advanced the turn (trained or
-        // recovered) so the RACE branch rearms CareerState. A pure backout leaves the same turn and must not.
         val advanced = handleTrackblazerTraining()
         return RaceFallbackOutcome(shouldStopForMandatoryRace = false, turnAdvanced = advanced)
     }
@@ -653,10 +613,7 @@ class Trackblazer(game: Game) : Campaign(game) {
     override fun handleRaceEvents(isScheduledRace: Boolean): Boolean {
         counterUpdatedByOCR = false
 
-        // Entered-race fact for the Trackblazer-selected extra race, captured before it is entered so the
-        // completed entry can be recorded with its real identity AND its true lookup provenance (the base
-        // already-selected tail only knows an unresolved fact). Stays null for scheduled and
-        // mandatory-ribbon races, which use base telemetry.
+        // Captured before entry so the recorded race keeps its real identity and lookup provenance; null for scheduled and mandatory-ribbon races.
         var tbSelectedEnteredRace: EnteredRace? = null
 
         // If it's not a scheduled race, we need to apply Trackblazer-specific filtering.
@@ -668,9 +625,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             if (IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap) || IconGoalRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
                 MessageLog.i(TAG, "[TRACKBLAZER] Mandatory race ribbon detected. Processing as mandatory race.")
                 val result = super.handleRaceEvents(true)
-                // Mandatory races bypass executeAction(), so decrement the megaphone counter here
-                // to match the per-turn decrement other actions get. Otherwise it stays inflated
-                // and the bot thinks a megaphone is still active after its effect expired in-game.
+                // Mandatory races bypass executeAction(), so decrement the megaphone counter here or it stays inflated after expiry.
                 if (result && trainee.megaphoneTurnCounter > 0) {
                     trainee.megaphoneTurnCounter--
                     MessageLog.i(TAG, "[TRACKBLAZER] Megaphone duration reduced. Turns remaining: ${trainee.megaphoneTurnCounter}.")
@@ -696,9 +651,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 game.imageUtils.determineTurnsRemainingBeforeNextGoal() != 1
             ) {
                 MessageLog.i(TAG, "[TRACKBLAZER] Consecutive race warning obeyed. Aborting racing.")
-                // Back off the race list onto a detectable screen (matches the "no suitable races"
-                // abort below). Without it the bot is stranded on the race list and the next
-                // handleMainScreen fails checkMainScreen, wasting cycles until something recovers.
+                // Back off the race list so the next handleMainScreen can pass checkMainScreen.
                 ButtonBack.click(game.imageUtils)
                 game.wait(0.5)
                 return false
@@ -719,8 +672,6 @@ class Trackblazer(game: Game) : Campaign(game) {
                 }
 
                 racing.lastRaceGrade = raceData.grade
-                // Carry the selection's real resolution provenance (exact/fuzzy/ambiguousSet) instead of
-                // stamping exact/1 unconditionally.
                 tbSelectedEnteredRace = suitableRaceResult.enteredRace
                 game.tap(suitableRaceLocation.x, suitableRaceLocation.y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
                 game.wait(0.5)
@@ -734,9 +685,6 @@ class Trackblazer(game: Game) : Campaign(game) {
 
         val result = super.handleRaceEvents(isScheduledRace)
         if (result) {
-            // The base already-selected tail recorded an unresolved standalone fact; replace it with the
-            // race Trackblazer actually selected, carrying its real lookup provenance (turn is already
-            // the current turn, never the bare-name map's).
             tbSelectedEnteredRace?.let { recordEnteredRace(it) }
             if (!counterUpdatedByOCR) {
                 consecutiveRaceCount++
@@ -774,12 +722,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         training.clearAnalysisCache()
     }
 
-    /**
-     * Shadow CareerState scenario payload (Phase A). Reads Trackblazer's own fields by value and
-     * copies the inventory map; [TrackblazerState.consecutiveRaceCountObserved] carries the
-     * [counterUpdatedByOCR] flag so a carried count is never mistaken for an observed one. Megaphone
-     * turns live on the trainee, not on this scenario.
-     */
+    /** Shadow CareerState scenario payload; megaphone turns live on the trainee, not here. */
     override fun scenarioStateSnapshot(): ScenarioState {
         return TrackblazerState.snapshot(
             shopCoins = shopCoins,
@@ -804,10 +747,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 buyItems(bAfterRacePurchase = true)
             } else {
                 MessageLog.w(TAG, "[WARN] onBeforeMainScreenUpdate:: Failed to open the shop despite pending shop check.")
-                // A misfired shop entry can leave us on a partial shop dialog or greeting screen.
-                // Tap Back/Cancel/Close to claw back to the main screen so the next handleMainScreen
-                // re-check doesn't see non-main UI and the performOCROnRegion bounds check doesn't
-                // fire. Clear the pending flag either way so we don't loop on the same failure.
+                // A misfired shop entry can leave a partial shop dialog; back out to the main screen and clear the pending flag so it cannot loop.
                 bShouldCheckShop = false
                 ButtonBack.click(game.imageUtils)
                 game.wait(0.5)
@@ -841,9 +781,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         return recoverMood(sourceBitmap, targetMood = targetMood)
     }
 
-    /** True when this turn carries a scheduled agenda race or a mandatory/goal race. Live template
-     * checks OR the turn-start cached flags count - a single missed read must not skip a race
-     * (same belt-and-braces rationale as the irregular-training gate). */
+    /** A scheduled agenda or mandatory/goal race this turn: live checks OR cached turn-start flags, so one missed read cannot skip a race. */
     private fun isRaceCommitmentTurn(): Boolean {
         return cachedMandatoryRaceDay ||
             cachedScheduledRaceDay ||
@@ -860,8 +798,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 MessageLog.i(TAG, "[TRACKBLAZER] Summer training already completed this turn. Deferring to the race/rest flow.")
                 return super.decideNextAction()
             }
-            // A scheduled or mandatory race this turn outranks the summer-training hijack -
-            // a skipped agenda race costs more than one camp training.
+            // A skipped agenda race costs more than one camp training.
             if (isRaceCommitmentTurn()) {
                 MessageLog.i(TAG, "[TRACKBLAZER] Scheduled/mandatory race this summer turn. Deferring to the race flow instead of camp training.")
                 return super.decideNextAction()
@@ -882,21 +819,14 @@ class Trackblazer(game: Game) : Campaign(game) {
             return MainScreenAction.TRAIN
         }
 
-        // A pinned recreation outing outranks every action below here - scheduled (in-game agenda)
-        // races, the bond-building window, and the low-energy guard. Only mandatory career-goal races
-        // outrank it (checked inside shouldDoRecreationToday, which no-ops fast while the dating
-        // schedule is disabled). Pinned turns never fall in Summer, so this sits just below the
-        // Summer / Finale training hijacks.
+        // A pinned recreation outing outranks everything below except mandatory goal races (checked in shouldDoRecreationToday).
         if (shouldDoRecreationToday()) {
             MessageLog.i(TAG, "[TRACKBLAZER] Dating schedule: pinned recreation turn ${date.day}. Performing the scheduled outing.")
             decisionTracer?.recordActionChoice(MainScreenAction.DATE, "Trackblazer: dating schedule pinned recreation turn ${date.day}")
             return MainScreenAction.DATE
         }
 
-        // Post-debut bond-building window (Junior July, turns 13-14): Rival Races unlock Junior
-        // Early August (turn 15), so the two turns after the June debut have only OP-grade races.
-        // Train instead to push support bonds toward orange before the graded calendar starts.
-        // Turn 15 is excluded (rival races available). A scheduled in-game Agenda race wins over this.
+        // Junior turns 13-14 have only OP-grade races (Rival Races unlock at turn 15), so train to build bonds; a scheduled Agenda race wins.
         val isPostDebutBondWindow =
             date.year == DateYear.JUNIOR && date.month == DateMonth.JULY
         if (isPostDebutBondWindow && !LabelScheduledRace.check(game.imageUtils)) {
@@ -911,8 +841,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         // can bypass high failure chances that come with low energy.
         val hasCharmAvailable = !bUsedCharmToday && (currentInventory["Good-Luck Charm"] ?: 0) > 0
         if (trainee.energy <= 10 && consecutiveRaceCount >= 3 && !hasCharmAvailable) {
-            // Scheduled and mandatory races always run - a skipped agenda race costs more than
-            // the -30 low-energy penalty this guard exists to avoid.
+            // A skipped agenda race costs more than the -30 low-energy penalty.
             if (isRaceCommitmentTurn()) {
                 MessageLog.i(TAG, "[TRACKBLAZER] Scheduled/mandatory race detected at low energy. Racing anyway - the race outranks the consecutive-race energy guard.")
                 decisionTracer?.recordActionChoice(MainScreenAction.RACE, "Trackblazer: scheduled/mandatory race overrides the low-energy rest guard")
@@ -969,11 +898,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             val isScheduledRace = LabelScheduledRace.check(game.imageUtils)
             val isMandatoryRace = IconRaceDayRibbon.check(game.imageUtils) || IconGoalRibbon.check(game.imageUtils)
 
-            // Also gate on the turn-start cached flags: the live template checks above can miss, and an
-            // irregular-training hijack must never override a mandatory/scheduled race. Requiring both
-            // the live AND cached detections to be clear means a single missed read cannot skip a race.
-            // cachedGoalRibbonDay mirrors the goal-ribbon arm of the live isMandatoryRace check, so a
-            // goal-only mandatory day (no race-day ribbon) still has a cache backup if its live read misses.
+            // Also require the cached turn-start flags: one missed live read must not let an irregular-training hijack override a mandatory/scheduled race.
             if (!isScheduledRace && !isMandatoryRace && !cachedMandatoryRaceDay && !cachedScheduledRaceDay && !cachedGoalRibbonDay) {
                 // Skip irregular training evaluation when energy is depleted and no charm can offset the failure chance.
                 if (trainee.energy <= 0 && !hasCharmAvailable) {
@@ -1007,8 +932,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                         bHasCheckedIrregularTrainingThisTurn = true
                     }
                 } else {
-                    // The Training button could not be found/clicked. Mark the check as done for
-                    // this turn to prevent a tight retry loop and fall through to normal logic.
+                    // Mark done for this turn to avoid a tight retry loop.
                     MessageLog.w(
                         TAG,
                         "[WARN] decideNextAction:: Irregular Training evaluation could not click ButtonTraining. Skipping this turn's check.",
@@ -1033,9 +957,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                         StatusBoard.action("training", null)
                         handleTrackblazerTraining()
                         bHasCheckedDateThisTurn = false
-                        // Shadow-only: this fast path advances the turn without super.executeAction, so the
-                        // base CareerState rearm is bypassed - rearm here beside the reset. This also covers
-                        // the virtual RECOVER_MOOD -> TRAIN redispatch, which re-enters this same branch.
+                        // This fast path skips super.executeAction, so rearm the base CareerState here (also covers the virtual RECOVER_MOOD -> TRAIN redispatch).
                         armCareerStateForNewTurn()
                         true
                     }
@@ -1090,10 +1012,7 @@ class Trackblazer(game: Game) : Campaign(game) {
      */
     fun openShop(tries: Int = 5): Boolean {
         StatusBoard.action("shop", null)
-        // Already on the Training Items screen; nothing to open. ButtonTrainingItems also matches
-        // the Main screen's round quick-access button on some devices (99%+ confidence in a device
-        // capture), and the false "already open" made updateShopCoins read the Main screen's stat
-        // HUD. ButtonHomeFullStats only appears on the Main screen, so its absence disambiguates.
+        // ButtonTrainingItems can also match the Main screen's quick-access button, so ButtonHomeFullStats (Main only) disambiguates.
         if (ButtonTrainingItems.check(game.imageUtils) && !ButtonHomeFullStats.check(game.imageUtils)) {
             return true
         }
@@ -1101,8 +1020,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         if (ButtonShopTrackblazer.click(game.imageUtils, tries = tries)) {
             game.wait(game.dialogWaitDelay)
 
-            // An unlock/discount dialog can intercept the tap, so the click "succeeds" but the items
-            // screen never opened. Dismiss any shop dialog and re-verify before reporting success.
+            // A shop dialog can intercept the tap; dismiss it and re-verify before reporting success.
             val detectedDialog = DialogUtils.getDialog(game.imageUtils)
             if (detectedDialog != null && detectedDialog.name == "shop") {
                 MessageLog.i(TAG, "[TRACKBLAZER] Shop dialog intercepted the shop button. Entering via dialog...")
@@ -1139,8 +1057,6 @@ class Trackblazer(game: Game) : Campaign(game) {
      */
     fun updateShopCoins(): Boolean {
         MessageLog.i(TAG, "[TRACKBLAZER] Updating current amount of Shop Coins...")
-        // Brief settle wait for popup-dismiss animations; the find(tries=30) below already polls
-        // with its own per-try delay, so a longer pre-wait would just be dead air.
         game.wait(1.0)
         val (trainingItemsButtonLocation, sourceBitmap) = ButtonTrainingItems.find(game.imageUtils, tries = 30)
         if (trainingItemsButtonLocation == null) {
@@ -1213,14 +1129,10 @@ class Trackblazer(game: Game) : Campaign(game) {
 
                 val maxLimit =
                     if (isBadConditionItem || isGoodConditionItem) {
-                        // Stockpile items go FIRST, before the "already have one" guard. Miracle Cure and
-                        // Rich Hand Cream get burned through during high-frequency racing, so target up to 5.
-                        // Otherwise the `itemCount >= 1` guard short-circuits to 0 once you own one and the
-                        // stockpile never builds.
+                        // Stockpile items go before the "already have one" guard, which would otherwise stop the stockpile at 1.
                         if (isBadConditionItem && (itemName == "Miracle Cure" || itemName == "Rich Hand Cream")) {
                             5
                         } else if (itemCount >= 1) {
-                            // Already have one of this single-use condition item - don't buy more.
                             0
                         } else {
                             // Check if the condition is active/inactive.
@@ -1299,12 +1211,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         priorityList.add("Artisan Cleat Hammer")
         priorityList.add("Glow Sticks")
 
-        // 1b. Summer Camp Prep Window.
-        // Before Classic/Senior summer camp (starts Early July), promote training-effect items
-        // (Megaphones, top-stat Ankle Weights, Reset Whistles) and the energy combo (Royal Kale
-        // Juice + Plain Cupcake) above stat scrolls, to stock up for the 4 all-Level-5 camp turns.
-        // Duplicate later entries are idempotent: calculatePurchases() removes each bought unit from
-        // the pool, so a later occurrence is a no-op once the limit is claimed at the promoted spot.
+        // 1b. Summer Camp Prep Window: before Classic/Senior camp, promote training-effect items and the energy combo above stat scrolls. Duplicate later entries are idempotent.
         val isPreSummerCampWindow = isInPreSummerCampPrepWindow()
         if (isPreSummerCampWindow) {
             MessageLog.i(TAG, "[TRACKBLAZER] Pre-summer-camp prep window active. Promoting training-effect and energy-combo items to top priority.")
@@ -1401,13 +1308,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         return priorityList
     }
 
-    /**
-     * Pre-summer-camp prep window: Classic/Senior June, the month before camp starts (Early July).
-     * Inventory must be stocked with Megaphones, Ankle Weights, Reset Whistles, and the Royal Kale +
-     * Plain Cupcake combo before camp, or the run's highest-value training turns are forfeited.
-     *
-     * @return True when the current turn is in the prep window (Classic or Senior, month is June).
-     */
+    /** Classic/Senior June, the month before camp: stock Megaphones, Ankle Weights, Reset Whistles and the Kale + Cupcake combo. */
     private fun isInPreSummerCampPrepWindow(): Boolean {
         val isTargetYear = date.year == DateYear.CLASSIC || date.year == DateYear.SENIOR
         val isPrepMonth = date.month == DateMonth.JUNE
@@ -1429,12 +1330,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         currentInventory = nextInventory.toMap()
     }
 
-    /**
-     * Records the items just used on the decision trace. The Good-Luck Charm and the Reset Whistle
-     * have their own records, so they are not listed twice.
-     *
-     * @param items The used items with the reason for each.
-     */
+    /** Records items just used on the decision trace; Good-Luck Charm and Reset Whistle have their own records. */
     private fun traceItemsUsed(items: List<Pair<String, String>>) {
         for ((name, reason) in items) {
             when (name) {
@@ -1452,7 +1348,6 @@ class Trackblazer(game: Game) : Campaign(game) {
      * @return False if Confirm Use was greyed out and the dialog was closed without using anything.
      */
     private fun confirmAndCloseItemDialog(itemsUsedCount: Int = 1): Boolean {
-        // Confirm Use stays greyed out while the use count is 0; tapping it does nothing.
         if (ButtonConfirmUse.checkDisabled(game.imageUtils) == true) {
             MessageLog.w(TAG, "[WARN] confirmAndCloseItemDialog:: Confirm Use is greyed out, so no item was queued. Closing the dialog without confirming.")
             ButtonClose.click(game.imageUtils)
@@ -1497,8 +1392,7 @@ class Trackblazer(game: Game) : Campaign(game) {
     private fun clickItemPlusButton(itemName: String, entry: ScrollListEntry, logMessage: String, nextInventory: MutableMap<String, Int>, recheck: Boolean = false, reason: String? = null): Boolean {
         val bitmapToUse: Bitmap =
             if (recheck) {
-                // Let the dialog finish updating button states (e.g. cupcakes enabling right
-                // after Royal Kale Juice is queued) before capturing the fresh crop.
+                // Let button states update (cupcakes enable after Kale Juice is queued) before the fresh crop.
                 game.wait(0.3)
                 val source = game.imageUtils.getSourceBitmap()
                 game.imageUtils.createSafeBitmap(source, entry.bbox.x, entry.bbox.y, entry.bbox.w, entry.bbox.h, "recheck item")
@@ -1533,9 +1427,6 @@ class Trackblazer(game: Game) : Campaign(game) {
      */
     private fun handleTrackblazerTraining(): Boolean {
         MessageLog.i(TAG, "[TRACKBLAZER] Starting specialized Training process.")
-        // Shadow-only: true once a turn-advancing action (training execution or mood/energy recovery)
-        // actually runs. Stays false on a pure backout so the RACE fallback does not rearm on a
-        // non-advancing outcome.
         var advanced = false
 
         // Fast path: Already on the training screen from irregular training evaluation.
@@ -1591,10 +1482,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         if (date.day >= 13 && !bUsedWhistleToday && trainingSelected == null && !bIsIrregularTraining && !training.needsEnergyRecovery) {
             val hasWhistle = (currentInventory["Reset Whistle"] ?: 0) > 0
 
-            // Whistle viability gate: below NORMAL mood the multiplier caps gains, and reshuffling won't
-            // recover from that, so refuse the Whistle if enough non-blacklisted trainings already show
-            // low main-stat gain. Required count scales with blacklist size: 0 -> 3-of-5, 1 -> 2-of-4,
-            // 2+ -> 1 (clamped).
+            // Below NORMAL mood a reshuffle won't recover the capped gains, so refuse the Whistle if enough non-blacklisted trainings are already low-gain (0 -> 3-of-5, 1 -> 2-of-4, 2+ -> 1).
             val whistleGateBlocks =
                 if (trainee.mood < Mood.NORMAL) {
                     val blacklistSize = training.blacklist.filterNotNull().size
@@ -1633,10 +1521,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                             trainingSelected == null ->
                                 MessageLog.i(TAG, "[TRACKBLAZER] Reset Whistle re-analysis returned no training; nothing to execute.")
                             training.lastSelectionSource == SelectionSource.FORCED_FROM_SKIPPED -> {
-                                // The forced pick comes from the rejected pool, so either its main gain is below the
-                                // item-conservation floor or its failure chance is too high to clear without a Good-Luck
-                                // Charm. If the charm gates would suppress the charm anyway, executing it is a near-certain
-                                // failure with no defensive item. Abandon it and let the recovery branch take Rest/Recreation.
+                                // The forced pick came from the rejected pool and the charm gates would suppress the charm, so it is a near-certain failure; abandon it and let recovery take Rest/Recreation.
                                 val forcedCandidate = training.cachedAnalysisResults?.firstOrNull { it.name == trainingSelected }
                                 val forcedFail = forcedCandidate?.failureChance ?: 0
                                 val forcedMainGain = forcedCandidate?.statGains?.get(trainingSelected) ?: 0
@@ -1694,11 +1579,9 @@ class Trackblazer(game: Game) : Campaign(game) {
             bCompletedTrainingThisTurn = true
             advanced = true
         } else {
-            // No suitable training, so take the best recovery action to avoid a wasted turn.
             // Resting is 62.5% chance of +50 energy; Shrine (clears status conditions) is 30% in recreation.
             if (trainee.mood <= Mood.NORMAL || trainee.energy <= 50) {
                 MessageLog.i(TAG, "[TRACKBLAZER] Still no suitable training found. Backing out for recovery.")
-                // Set to false to avoid possible rest/recreation looping on the next turn.
                 training.firstTrainingCheck = false
                 ButtonBack.click(game.imageUtils)
                 game.wait(1.0)
@@ -1711,12 +1594,10 @@ class Trackblazer(game: Game) : Campaign(game) {
                         MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
                         if (recoverEnergy()) decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "No suitable training; energy ${trainee.energy}%.")
                     }
-                    // Shadow-only: a recovery action advances the turn.
                     advanced = true
                 }
             } else {
-                // Force a training (Wit when we'd risk stat reductions, else Speed). 80 Energy is
-                // optimal for Wit since there may be post events that provide additional energy.
+                // Force a training (Wit if stat reductions are at risk, else Speed); 80 Energy suits Wit since post events may add energy.
                 val forcedStat =
                     if (trainee.energy >= 80 && trainee.currentNegativeStatuses.isEmpty()) {
                         StatName.SPEED
@@ -1724,8 +1605,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                         StatName.WIT
                     }
 
-                // Refuse to force-train a stat the analysis rejected (high failure, low gain even with
-                // a charm) or that the user blacklisted; mood/energy recovery beats a guaranteed-bad turn.
+                // Never force-train a stat the analysis rejected or the user blacklisted; recovery beats a guaranteed-bad turn.
                 val skippedForced = training.skippedTrainingMap[forcedStat]
                 val forcedIsBlacklisted = forcedStat in training.blacklist
                 if (skippedForced != null || forcedIsBlacklisted) {
@@ -1747,7 +1627,6 @@ class Trackblazer(game: Game) : Campaign(game) {
                             MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
                             if (recoverEnergy()) decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "Cannot force $forcedStat training ($reason).")
                         }
-                        // Shadow-only: a recovery action advances the turn.
                         advanced = true
                     }
                 } else {
@@ -1809,19 +1688,16 @@ class Trackblazer(game: Game) : Campaign(game) {
 
         val hasMasterHammer =
             if (date.day == 73) {
-                // Twinkle Star Climax race 1 of 3. Need ≥3 to chain through all 3 races.
+                // Twinkle Climax race 1 of 3: need >=3 to chain through all 3.
                 masterHammerCount >= 3
             } else if (date.day == 74) {
-                // Twinkle race 2 of 3. Need ≥2 (one for this and one for the Final).
+                // Race 2 of 3: need >=2 (this one and the Final).
                 masterHammerCount >= 2
             } else if (date.day == 75) {
-                // Twinkle Final. Use the last reserved hammer.
+                // Final: use the last reserved hammer.
                 masterHammerCount >= 1
             } else {
-                // Pre-climax: reserve 3 Masters for the 3 Twinkle Climax races. The climax
-                // races have the highest stat-return per hammer of the entire run, so 3
-                // Masters must be hoarded. Excess (4+) can be spent on regular G1s before
-                // the climax.
+                // Pre-climax: hoard 3 Masters for the Twinkle Climax races (highest stat return per hammer); spend extras (4+) on regular G1s.
                 masterHammerCount > 3
             }
         val hasArtisanHammer =
@@ -1979,8 +1855,7 @@ class Trackblazer(game: Game) : Campaign(game) {
 
         val itemsUsedWithReasons = mutableListOf<Pair<String, String>>()
         val itemNameMapInManage = mutableMapOf<Int, String>()
-        // Snapshot energy at pass start so the threshold gate stays open after earlier items in the
-        // same pass raise `trainee.energy`. Greedy selection in isBestEnergyItemToUse still picks which.
+        // Snapshot at pass start so earlier items raising `trainee.energy` do not close the threshold gate.
         val passStartEnergy = trainee?.energy ?: 0
         shopList.processItemsWithFallback(
             bRequireTrainingItemsDialog = true,
@@ -2175,9 +2050,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         remainingItemsOfInterest: Set<String>,
         passStartEnergy: Int,
     ): String? {
-        // Cupcakes captured before Royal Kale Juice was queued will read as disabled (mood was
-        // still GREAT at scan time). Bypass the early-return when the flag is set so the
-        // recheck=true bitmap can decide; the game's dialog enables them once Juice is queued.
+        // Cupcakes scanned before Kale Juice was queued read as disabled; bypass the early return so the recheck bitmap decides.
         val isCupcake = itemName == "Berry Sweet Cupcake" || itemName == "Plain Cupcake"
         if (isDisabled && !(isCupcake && bKaleJuiceQueuedThisPass)) {
             MessageLog.v(TAG, "[TRACKBLAZER] Item \"$itemName\" read as disabled in dialog, so skipping its usage.")
@@ -2205,8 +2078,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         // Good-Luck Charm Check.
         val failureChance = training.trainingMap[trainingSelected]?.failureChance ?: 0
         if (date.day >= 13 && !bUsedCharmToday && failureChance >= 20 && itemName == "Good-Luck Charm") {
-            // Below NORMAL mood the multiplier caps gain; burning Charm on a low-gain training wastes its
-            // 0%-failure benefit, so conserve for a higher-gain turn.
+            // Below NORMAL mood the multiplier caps gain, so conserve the Charm for a higher-gain turn.
             if (shouldConserveTrainingEffectItems(trainingSelected, trainee)) {
                 val selectedMainGain = training.cachedAnalysisResults?.firstOrNull { it.name == trainingSelected }?.statGains?.get(trainingSelected) ?: 0
                 MessageLog.i(
@@ -2223,15 +2095,14 @@ class Trackblazer(game: Game) : Campaign(game) {
             }
         }
 
-        // If a Good-Luck Charm is (or will be) queued this turn, skip energy items: the Charm sets failure
-        // to 0% regardless of energy and the energy cost is subtracted after training, so they'd be wasted.
+        // A queued Good-Luck Charm sets failure to 0% regardless of energy, so energy items would be wasted.
         val charmBeingUsedThisTurn =
             bUsedCharmToday ||
                 (date.day >= 13 && failureChance >= 20 && (nextInventory["Good-Luck Charm"] ?: 0) > 0)
 
         // Energy Items Check.
         if (!charmBeingUsedThisTurn && passStartEnergy <= energyThresholdToUseEnergyItems && shopList.energyItemNames.contains(itemName)) {
-            // Conservation: always keep the last unit of the lowest-level energy item for emergency race recovery.
+            // Always keep the last unit of the lowest-level energy item for emergency race recovery.
             if (!bForceUseReservedItem) {
                 val conserveItem = energyItemConservationOrder.firstOrNull { (nextInventory[it] ?: 0) > 0 }
                 if (conserveItem == itemName && (nextInventory[itemName] ?: 0) <= 1) {
@@ -2284,9 +2155,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         val moodDroppedByKaleJuice = isCupcake && bKaleJuiceQueuedThisPass
         val shouldUseMoodItem = (trainee.mood <= Mood.NORMAL && trainee.energy < 70) || moodDroppedByKaleJuice
         if (shouldUseMoodItem && isCupcake) {
-            // Conservation: always keep at least 1 cupcake in case Royal Kale Juice is purchased later.
-            // Prefer conserving Plain Cupcake (+1 mood) since Kale Juice is -1 mood and we can avoid waste from Berry Sweet (+2).
-            // Bypassed when Kale Juice was queued this pass: the reserved-for event is happening right now, so spend it.
+            // Keep at least 1 cupcake in case Kale Juice is bought later (prefer conserving Plain, since Kale is -1 mood); bypassed when Kale was queued this pass.
             if (!bKaleJuiceQueuedThisPass) {
                 val plainCount = nextInventory["Plain Cupcake"] ?: 0
                 val berryCount = nextInventory["Berry Sweet Cupcake"] ?: 0
@@ -2299,9 +2168,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 }
             }
 
-            // Recheck reads a fresh bitmap when Kale Juice was queued earlier this pass, because
-            // the captured bitmap shows the pre-Juice disabled state (mood was still GREAT at
-            // scan time). The game's dialog enables cupcakes after Juice is queued.
+            // Recheck reads a fresh bitmap when Kale Juice was queued this pass; the captured one shows the pre-Juice disabled state.
             val reason =
                 if (moodDroppedByKaleJuice) {
                     "Offsetting Royal Kale Juice's -1 mood penalty (mood: ${trainee.mood} post-Juice)."
@@ -2310,14 +2177,12 @@ class Trackblazer(game: Game) : Campaign(game) {
                 }
             if (clickItemPlusButton(itemName, entry, "[TRACKBLAZER] Queuing $itemName for mood recovery.", nextInventory, recheck = moodDroppedByKaleJuice, reason = reason)) {
                 val oldMood = trainee.mood
-                // Cupcakes are additive, not absolute: Plain = +1 mood, Berry Sweet = +2.
-                // Mood.increment() caps at GREAT, so over-stacking is safe.
+                // Cupcakes are additive (Plain +1, Berry Sweet +2) and Mood.increment() caps at GREAT, so over-stacking is safe.
                 trainee.mood = trainee.mood.increment()
                 if (itemName == "Berry Sweet Cupcake") {
                     trainee.mood = trainee.mood.increment()
                 }
-                // Clear the flag so a second cupcake in the same pass doesn't double-spend when
-                // one is already enough to offset the -1.
+                // Clear the flag so a second cupcake does not double-spend.
                 if (moodDroppedByKaleJuice) bKaleJuiceQueuedThisPass = false
                 MessageLog.i(TAG, "[TRACKBLAZER] Trainee mood updated: $oldMood -> ${trainee.mood}.")
                 return reason
@@ -2327,8 +2192,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         // Megaphone Check.
         val megaphoneNames = listOf("Empowering Megaphone", "Motivating Megaphone", "Coaching Megaphone")
         if (trainee.megaphoneTurnCounter == 0 && trainingSelected != null && megaphoneNames.contains(itemName)) {
-            // Below NORMAL mood the multiplier caps gain. Megaphones multiply gain across several turns,
-            // so spending one on a low-gain training is worse than conserving for a better turn.
+            // Below NORMAL mood the multiplier caps gain, and megaphones span several turns, so conserve for a better turn.
             if (shouldConserveTrainingEffectItems(trainingSelected, trainee)) {
                 val selectedMainGain = training.cachedAnalysisResults?.firstOrNull { it.name == trainingSelected }?.statGains?.get(trainingSelected) ?: 0
                 MessageLog.i(
@@ -2338,8 +2202,6 @@ class Trackblazer(game: Game) : Campaign(game) {
                 return null
             }
 
-            // Per-tier stat threshold: hold a higher-effect megaphone on a low-gain turn. Mood-independent and
-            // stacked on top of the mood-coupled conservation above.
             val selectedMainGain = training.cachedAnalysisResults?.firstOrNull { it.name == trainingSelected }?.statGains?.get(trainingSelected) ?: 0
             val threshold = megaphoneThresholds[itemName] ?: 0
             if (selectedMainGain < threshold) {
@@ -2350,9 +2212,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 return null
             }
 
-            // Fire only the best eligible tier this turn: if a stronger megaphone is on hand and also clears its
-            // threshold, hold this one and let the stronger row fire. With all thresholds at 0 this reproduces the
-            // prior best-available-tier behavior exactly.
+            // Fire only the best eligible tier: hold this one if a stronger megaphone is on hand and clears its threshold.
             val bestEligible = MegaphoneSelection.bestEligibleMegaphone(selectedMainGain, nextInventory, megaphoneThresholds)
             if (bestEligible != itemName) {
                 return null
@@ -2581,7 +2441,6 @@ class Trackblazer(game: Game) : Campaign(game) {
 
                 var count = (nextInventory[name] ?: 0)
 
-                // Exclude one unit of the conserved item from the greedy pool.
                 if (name == conserveItem && count > 0) {
                     count--
                 }

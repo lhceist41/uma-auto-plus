@@ -5,46 +5,34 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The read-only Veteran protection record (`type:"veteran_protection"`): one row per filter-partition
- * probe of the roster. Pure model and serializer - [com.steve1316.uma_android_automation.VeteranProtectionScanner]
- * drives the Display Settings dialog and reads the pixels, this turns the reads into the durable
- * record, and `src/lib/parentLab/protection.ts` reads it back and binds it to a roster snapshot.
- *
- * Protection in this game is DERIVED, never read as its own field: there is no lock concept, only two
- * user-mutable markers that block a release - a favorite icon and a memo. The probe establishes the
- * account-wide POPULATION of each (empty / non-empty) from the game's own "OK disabled when the
- * selection is empty" behaviour. Only two positively empty partitions can yield COMPLETE. A
- * nonempty partition remains unknown until a separate filtered-list census is proven.
+ * The read-only Veteran protection record (`type:"veteran_protection"`): one row per filter-partition probe.
+ * Protection is derived, never read: only a favorite icon or a memo blocks a release, and the probe infers each
+ * marker's account-wide population from the game's "OK disabled when the selection is empty" behaviour. Only
+ * two positively empty partitions can yield COMPLETE.
  */
 const val VETERAN_PROTECTION_SCHEMA_VERSION: Int = 2
 
-/** The account-wide size class of a favorite/memo partition, from the OK-enabled probe. */
 enum class ProtectionPopulation { EMPTY, NONEMPTY, UNKNOWN }
 
-/** How the probe ended. Only COMPLETE is trustworthy; every other value means the derived protection
- * for this snapshot must stay UNKNOWN rather than being read as a positive result. */
+/** Only COMPLETE is trustworthy; every other value keeps the derived protection UNKNOWN. */
 enum class ProtectionScanOutcome {
-    /** Both exact partitions positively empty, with filters confirmed restored OFF. */
     COMPLETE,
 
-    /** A nonempty partition has no independent filtered-list census. */
     NONEMPTY_PARTITION_CENSUS_UNAVAILABLE,
 
-    /** The roster list, its Registered count, or Filters: OFF could not be confirmed before any tap. */
     PRECONDITION_FAILED,
 
-    /** A frame that should have been the Display Settings dialog was not. The probe stops where it is. */
+    /** The probe stops where it is. */
     UI_UNEXPECTED,
 
-    /** A partition could not be set to the intended checkbox state after retries. Read nothing from it. */
+    /** Read nothing from the partition. */
     PARTITION_SET_FAILED,
 
-    /** The probe finished reading but could not confirm the roster returned to Filters: OFF. */
     RESTORE_FAILED,
 }
 
-/** Called only after the exact target and unrelated filters were positively reread. An empty target
- * also needs a fresh neutral baseline and an enabled, exact complementary probe. */
+/** Called only after the target and unrelated filters were positively reread; an empty target also needs a fresh
+ * baseline and an enabled complementary probe. */
 fun populationFromProvenFilters(state: ApplyButtonState, complementary: ApplyButtonState? = null): ProtectionPopulation =
     when (state) {
         ApplyButtonState.ENABLED -> ProtectionPopulation.NONEMPTY
@@ -52,13 +40,6 @@ fun populationFromProvenFilters(state: ApplyButtonState, complementary: ApplyBut
         ApplyButtonState.UNKNOWN -> ProtectionPopulation.UNKNOWN
     }
 
-/**
- * One protection probe's durable record.
- *
- * [favoritedFingerprints] and [memoFingerprints] stay empty for current probes. Only a complete
- * empty-partition record lets the offline reader derive the whole-roster complement. The restored
- * filter state is checked after every probe.
- */
 data class VeteranProtectionScan(
     val schemaVersion: Int,
     val scanId: String,
@@ -90,9 +71,7 @@ data class VeteranProtectionScan(
     val probeDiagnostics: List<String> = emptyList(),
 )
 
-/** Serializes the protection scan to its durable `type:"veteran_protection"` record. Every value the
- * reader must not confuse for a positive result (an UNKNOWN population, a non-COMPLETE outcome) is
- * written verbatim rather than defaulted. */
+/** UNKNOWN populations and non-COMPLETE outcomes are written verbatim, never defaulted. */
 fun serializeVeteranProtectionScan(s: VeteranProtectionScan): JSONObject =
     JSONObject().apply {
         put("type", "veteran_protection")

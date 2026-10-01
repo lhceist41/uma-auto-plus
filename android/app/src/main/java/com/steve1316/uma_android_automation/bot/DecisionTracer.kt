@@ -18,12 +18,7 @@ import com.steve1316.uma_android_automation.types.Trainee
  * written only when `humanReportEnabled` (Debug Mode), while the sink runs whenever it is attached. Existing `MessageLog.i/v/w/e` lines are left untouched so chronological tracing is unaffected.
  */
 class DecisionTracer(
-    /**
-     * Whether `emit()` writes the heavy multi-line human Decision Report block via `MessageLog.i`.
-     * The machine-readable [traceSink] runs regardless: the dedicated Record Decision Data setting
-     * records the factual trace with the report suppressed, while Debug Mode enables both. Defaults
-     * true so existing callers and tests keep the historical report-on behavior.
-     */
+    /** Whether `emit()` writes the multi-line Decision Report; the machine-readable [traceSink] runs regardless. */
     private val humanReportEnabled: Boolean = true,
 ) {
     /** Header for the current turn's Decision Report block (e.g. "Turn 25 (CLASSIC EARLY JANUARY)"). */
@@ -44,15 +39,10 @@ class DecisionTracer(
     /** True once `emit()` has flushed this turn's block, so subsequent calls become no-ops. */
     private var hasEmitted: Boolean = false
 
-    /**
-     * Optional observability sink invoked once per turn by `emit()`, after the block is logged and
-     * after the turn's action has already executed. Set by [Campaign] to append the machine-readable
-     * `decision_trace` record. Never consulted by any decision path: a sink that is absent, slow or
-     * throwing changes nothing about what the bot chose.
-     */
+    /** Observability sink called once per turn after the action has executed. Never consulted by a decision path. */
     var traceSink: ((TurnEvidence) -> Unit)? = null
 
-    /** True once a sink failure has been reported, so a persistent disk fault warns once per career instead of every turn. */
+    /** True once a sink failure has been reported, so a persistent fault warns once per career. */
     private var hasWarnedOnSinkFailure: Boolean = false
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -71,17 +61,12 @@ class DecisionTracer(
         val inventory: Map<String, Map<String, Int>>,
         /** Campaign-specific extra state (e.g. `consecutiveRaceCount` for Trackblazer) as displayable key/value pairs. */
         val extra: Map<String, String>,
-        /** The five trainee stats as read at turn start. Captured here rather than at emit time because the turn's action has already run by then. */
+        /** Captured at turn start because the action has already run by emit time. */
         val stats: Map<StatName, Int> = emptyMap(),
-        /** Skill points at turn start, before any in-turn skill purchase. */
         val skillPoints: Int = 0,
-        /** Fan count at turn start. */
         val fans: Int = 0,
-        /** Whether the stat values came from an actual read this career rather than the trainee's initial defaults. */
         val statsObserved: Boolean = false,
-        /** Whether [skillPoints] came from an actual read. */
         val skillPointsObserved: Boolean = false,
-        /** Whether the trainee's aptitudes had been read by this turn. */
         val aptitudesObserved: Boolean = false,
     )
 
@@ -125,27 +110,11 @@ class DecisionTracer(
         val failureChance: Int? = null,
         /** Optional full stat-gain map for this training (gain per `StatName`). Renders as `gains=[SPD:N STA:N PWR:N GUTS:N WIT:N]` when present. */
         val statGains: Map<StatName, Int>? = null,
-        /**
-         * Optional already-computed scorer inputs for this candidate, for the machine-readable trace only.
-         * Null when the caller did not attach them (e.g. a hand-built test runner-up). Not rendered in the
-         * human Decision Report.
-         */
+        /** Scorer inputs for the machine-readable trace only; not rendered in the human report. */
         val evidence: TrainingCandidateEvidence? = null,
     )
 
-    /**
-     * One relationship/support bar as the analyzer read it for a training candidate, in the smallest form a
-     * downstream shadow-scorer needs to reproduce the relationship score: fill, discrete segments, band
-     * colour, and the trainer-support identity the Junior/Trackblazer bonuses key on. UI coordinates, the
-     * underlying bitmap, and the stat-block handle are deliberately not carried.
-     *
-     * @property fillPercent Percentage of the bar that is filled.
-     * @property filledSegments Discrete filled segments (0-5).
-     * @property dominantColor Band colour the scorer reads (e.g. "orange", "green", "blue").
-     * @property isSupport Whether this bar belongs to a trainer support character.
-     * @property trainerName Canonical support/trainer identity when known, else null. Used by the Akikawa
-     *   bonding bonus; a game-data identity, never user data.
-     */
+    /** One relationship/support bar as read for a training candidate, minimal for a shadow scorer. UI coordinates and bitmaps are not carried. `trainerName` is a game-data identity, never user data. */
     data class RelationshipBarEvidence(
         val fillPercent: Double,
         val filledSegments: Int,
@@ -154,24 +123,7 @@ class DecisionTracer(
         val trainerName: String?,
     )
 
-    /**
-     * Already-computed, scorer-relevant evidence for one training candidate that the pick/runner-up records
-     * previously dropped before disk. Additive telemetry only: it is never consulted by any decision path.
-     *
-     * Honesty rules follow the trace's: a field the live analysis did not compute is omitted at serialization
-     * rather than placeholder-filled. [trainingLevel] is null unless level weighting actually read one;
-     * [relationshipBars] and [performanceGains] are empty when the facility had no supports / the scenario is
-     * not Grand Concert; the spirit-gauge counts are meaningful only under Unity Cup and the serializer emits
-     * them only there (they are carried here as the raw per-option values the analyzer holds).
-     *
-     * @property numRainbow Rainbow trainings detected on this facility (computed every scenario).
-     * @property numSkillHints Skill hints detected on this facility (computed every scenario).
-     * @property trainingLevel OCR'd facility level (1-5), or null when not read.
-     * @property numSpiritGaugesCanFill Unity Cup fillable Spirit Explosion gauges (raw; serialized under Unity Cup only).
-     * @property numSpiritGaugesReadyToBurst Unity Cup gauges ready to burst (raw; serialized under Unity Cup only).
-     * @property relationshipBars Per-bar relationship evidence, empty when the facility had no support bars.
-     * @property performanceGains Grand Concert per-type performance-point preview keyed by canonical type name, empty off Grand Concert.
-     */
+    /** Already-computed scorer evidence for one training candidate; telemetry only. Fields the live analysis did not compute are omitted at serialization, and the spirit-gauge counts are serialized only under Unity Cup. */
     data class TrainingCandidateEvidence(
         val numRainbow: Int,
         val numSkillHints: Int,
@@ -242,10 +194,6 @@ class DecisionTracer(
             val pickedFailureChance: Int? = null,
             /** Full stat-gain map for the picked training, when available. Rendered alongside `pickedFailureChance` on the `Pick:` line. */
             val pickedStatGains: Map<StatName, Int>? = null,
-            /**
-             * Already-computed scorer inputs for the picked training, for the machine-readable trace only.
-             * Null when the pick has no resolvable same-turn option. Not rendered in the human Decision Report.
-             */
             val pickedEvidence: TrainingCandidateEvidence? = null,
         ) : DecisionEvent()
 
@@ -324,20 +272,15 @@ class DecisionTracer(
      */
     fun emit() {
         if (hasEmitted || stateSnapshot == null) return
-        // The human Decision Report is a heavy debug-only diagnostic. The dedicated Record Decision
-        // Data setting records only the machine-readable trace below, so suppress the block when the
-        // report is off; the sink still runs, keeping the factual corpus intact without the report.
+        // The report is debug-only; the sink still runs when it is suppressed.
         if (humanReportEnabled) MessageLog.i(TAG, formatReport())
-        // Set BEFORE the sink runs so a sink that throws cannot leave the turn re-emittable and
-        // duplicate the block on the next tick.
+        // Set BEFORE the sink runs so a throwing sink cannot leave the turn re-emittable.
         hasEmitted = true
         val sink = traceSink ?: return
         try {
             sink(turnEvidence())
         } catch (e: Exception) {
-            // Observability must never surface as a run failure. Warn once per tracer so a
-            // persistent fault leaves one diagnosable line instead of one per turn, and keep the
-            // sink attached so a transient failure does not silently drop the rest of the career.
+            // Observability must never fail the run: warn once, keep the sink attached.
             if (!hasWarnedOnSinkFailure) {
                 hasWarnedOnSinkFailure = true
                 MessageLog.w(TAG, "Failed to record the decision trace for this turn (further failures are not repeated): $e")
@@ -345,17 +288,7 @@ class DecisionTracer(
         }
     }
 
-    /**
-     * Immutable copy of this turn's captured evidence, for the trace sink.
-     *
-     * Copies the event list and settings map so a consumer holds a stable view even though the
-     * tracer reuses its buffers on the next `startTurn`. The state snapshot is already replaced
-     * wholesale each turn rather than mutated, so it is safe to hold. The date is NOT: it is the
-     * campaign's live [GameDate], which the next turn advances in place. A consumer must read what
-     * it needs during the call rather than retaining the evidence across turns.
-     *
-     * @return The turn's evidence. Date and state are null before the first turn opens.
-     */
+    /** Immutable copy of this turn's evidence. The date is the campaign's live [GameDate], advanced in place next turn, so read it during the call. */
     fun turnEvidence(): TurnEvidence =
         TurnEvidence(
             date = turnDate,

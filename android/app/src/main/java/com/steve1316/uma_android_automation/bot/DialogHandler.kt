@@ -40,26 +40,20 @@ sealed class DialogHandlerResult {
 }
 
 /**
- * One connection outage, timed on the monotonic clock so a device clock change cannot stretch or
- * cut it. The episode starts at the first Connection or Download Error and ends after a main-loop
- * iteration that sees none. Each error gets Retry after a growing pause; once the episode has
- * lasted [OUTAGE_BUDGET_MS] the run gives up as a connection error.
+ * One connection outage, on the monotonic clock so a device clock change cannot stretch or cut it.
+ * Ends after a main-loop iteration that sees no Connection or Download Error.
  */
 class ConnectionOutageBudget(private val now: () -> Long = { SystemClock.elapsedRealtime() }) {
     sealed interface Decision {
-        /** Wait [waitMs], then tap Retry. [attempt] counts from 1 within the episode. */
         data class Retry(val waitMs: Long, val attempt: Int, val elapsedMs: Long) : Decision
 
         data class GiveUp(val elapsedMs: Long, val attempts: Int) : Decision
     }
 
     companion object {
-        /** Outage length the run rides out mid-career. The career is saved server-side, and the
-         * outages seen so far (around the daily reset) passed within minutes; this is an estimate
-         * to tune from how often connection-error endings actually occur. */
+        /** Outage the run rides out mid-career: the career is saved server-side and past outages (around the daily reset) passed within minutes. An estimate. */
         const val OUTAGE_BUDGET_MS: Long = 20 * 60_000L
 
-        /** Pause before each Retry within an episode: the first is immediate, then it backs off. */
         val RETRY_BACKOFF_MS: List<Long> = listOf(0L, 30_000L, 60_000L, 120_000L)
 
         fun backoffFor(attemptIndex: Int): Long = RETRY_BACKOFF_MS[attemptIndex.coerceIn(0, RETRY_BACKOFF_MS.lastIndex)]
@@ -69,7 +63,6 @@ class ConnectionOutageBudget(private val now: () -> Long = { SystemClock.elapsed
     private var attempts = 0
     private var errorSeenThisIteration = false
 
-    /** Records one error dialog and decides what to do with it. */
     fun onError(): Decision {
         val t = now()
         val start = episodeStartMs ?: t.also { episodeStartMs = it }
@@ -81,12 +74,10 @@ class ConnectionOutageBudget(private val now: () -> Long = { SystemClock.elapsed
         return Decision.Retry(wait, attempts, elapsed)
     }
 
-    /** Called before each main-loop iteration. */
     fun beginIteration() {
         errorSeenThisIteration = false
     }
 
-    /** Called when an iteration returns normally; one without any error ends the episode. */
     fun endIterationNormally() {
         if (!errorSeenThisIteration) {
             episodeStartMs = null
@@ -113,7 +104,6 @@ class ConnectionOutageBudget(private val now: () -> Long = { SystemClock.elapsed
  * @property game Reference to the bot's [Game] instance for state access and utilities.
  */
 open class DialogHandler(val game: Game) {
-    /** Looks in a row at the Data Download prompt without finding its OK button ([Game.DATA_DOWNLOAD_OK_MISS_LIMIT]). */
     private var dataDownloadOkMisses = 0
 
     companion object {
@@ -189,14 +179,12 @@ open class DialogHandler(val game: Game) {
             }
 
             "notices" -> {
-                // Daily-reset announcements (00:00 JST = 17:00 CEST) - pops mid-career on whatever
-                // screen is up. Left unrouted it burned 5 recovery cycles and ended the run.
+                // Daily-reset announcements (00:00 JST) pop up mid-career on any screen.
                 dialog.close(game.imageUtils)
             }
 
             "date_changed" -> {
-                // Real-world midnight date-rollover popup; its only control is OK. Left unhandled it
-                // spun the recover loop until the watchdog killed any overnight run that crossed midnight.
+                // Midnight date-rollover popup, OK only; unhandled it spins recovery until the watchdog kills an overnight run.
                 dialog.ok(game.imageUtils)
             }
 
@@ -285,11 +273,8 @@ open class DialogHandler(val game: Game) {
             }
 
             "follow_trainer" -> {
-                // Appears after a run when Auto-Fill borrowed a support card from a trainer you hadn't
-                // used before, asking whether to follow them. There's no rule to when it shows. The
-                // DialogFollowTrainer object existed but had no handler case here, so it fell through to
-                // the else branch (Unhandled) and the bot wedged on the open popup. Default to Cancel
-                // (close() clicks the first button, ButtonCancel) so the run continues to a known screen.
+                // Shown after a run when Auto-Fill borrowed a card from a new trainer, at no predictable time. Cancel
+                // (close() clicks the first button) so the run continues to a known screen.
                 dialog.close(game.imageUtils)
             }
 
@@ -358,13 +343,9 @@ open class DialogHandler(val game: Game) {
                     dialog.ok(game.imageUtils)
                 } else {
                     MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Skipping carats spend (policy='$policy', grade=$grade, lostGoalRace=$lostGoalRace). Continuing without retry.")
-                    // Mark this race as having had its retry option exhausted via policy. Without this
-                    // flag the bot loops: cancel popup → game returns to retry screen → bot taps retry
-                    // button again → popup reopens → policy rejects again. shouldRetryRace short-circuits
-                    // when the flag is set so the loop exits after one rejection. Routed through a
-                    // public Campaign method since racing is `protected` and not accessible via cast.
+                    // Flag this race's retry as exhausted, or the loop cancel popup -> retry screen -> tap retry -> popup
+                    // reopens never exits. Routed through a public Campaign method since racing is `protected`.
                     (game.task as? Campaign)?.markAlarmClockPolicySkipped()
-                    // ButtonCancel is the first entry in the dialog's buttons list, so close() clicks it.
                     dialog.close(game.imageUtils)
                 }
             }
@@ -408,12 +389,9 @@ open class DialogHandler(val game: Game) {
             }
 
             "recreation" -> {
-                // Two different dialogs share the "Recreation" title: the classic confirmation
-                // (OK/Cancel + skip checkbox) and the Pal-card partner picker, which has no OK
-                // button - on that one the clicks below are silent no-ops and the campaign loops
-                // on the open popup forever. If the partner rows are visible, take the trainee
-                // outing: always selectable, unlike the Pal row, which goes dark once its event
-                // chain completes.
+                // Two dialogs share the "Recreation" title: the classic confirmation and the Pal-card partner picker,
+                // which has no OK button (the clicks below silently no-op and the campaign loops). With partner rows
+                // visible, take the trainee outing: always selectable, unlike the Pal row, dark once its event chain completes.
                 if (LabelRecreationUmamusume.check(game.imageUtils)) {
                     if (!LabelRecreationUmamusume.click(game.imageUtils)) {
                         dialog.close(game.imageUtils)
@@ -495,11 +473,8 @@ open class DialogHandler(val game: Game) {
             }
 
             else -> {
-                // This is the shared-dialog level (the deepest handler in the chain). Reaching here only
-                // means the dialog is not one of the cross-cutting shared dialogs, so it cascades up to the
-                // campaign/scenario handler that owns it - the normal path (e.g. consecutive_race_warning is
-                // handled by Campaign). Log at DEBUG, not WARN: the real "nobody handled it" warning is
-                // emitted by the most-derived handler's else, so warning here was a false alarm.
+                // Shared-dialog level (deepest in the chain): not a cross-cutting dialog, so it cascades up to the owning
+                // campaign handler. DEBUG, not WARN: the real "nobody handled it" warning comes from the most-derived else.
                 Log.d(TAG, "[DEBUG] handleDialogs:: Dialog \"${dialog.name}\" is not a shared dialog; cascading to the campaign handler.")
                 return DialogHandlerResult.Unhandled(dialog)
             }
@@ -509,11 +484,7 @@ open class DialogHandler(val game: Game) {
         return DialogHandlerResult.Handled(dialog)
     }
 
-    /**
-     * Accepts the game's Data Download prompt with OK, never Cancel, and starts the no-tap wait the
-     * campaign keeps while the download runs ([Game.dataDownloadActive]). A Download Error after it
-     * is the outage route's, as always.
-     */
+    /** Accepts the Data Download prompt with OK, never Cancel, and starts the no-tap wait while it runs ([Game.dataDownloadActive]). */
     private fun handleDataDownload(dialog: DialogInterface) {
         if (!ButtonOk.click(game.imageUtils)) {
             dataDownloadOkMisses++
@@ -533,11 +504,7 @@ open class DialogHandler(val game: Game) {
         return grandConcertLessonConfirmationPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
     }
 
-    /**
-     * The OK button was not found on [Game.DATA_DOWNLOAD_OK_MISS_LIMIT] looks in a row: stops the run
-     * with its own reason, as the trainee-mismatch stop does, rather than let the dialog streak end it
-     * as dead gestures. Nothing is tapped.
-     */
+    /** Stops the run with its own reason after [Game.DATA_DOWNLOAD_OK_MISS_LIMIT] looks without an OK button, rather than let the dialog streak end it as dead gestures. Taps nothing. */
     private fun stopForDataDownloadPrompt(dialog: DialogInterface): Nothing {
         val reason = "The game asked to download additional data, and the ${dialog.title} prompt's OK button was not found. Answer the prompt in the game (OK, or Title Screen for a data update), let any download finish, then press Start again."
         StartModule.queueStopKey = "DATA_DOWNLOAD_PROMPT"
@@ -548,10 +515,8 @@ open class DialogHandler(val game: Game) {
     }
 
     /**
-     * Rides out a Connection or Download Error within the outage budget: Retry only, after the
-     * budget's pause. Title Screen is never tapped mid-career - it abandons the loaded career and
-     * nothing here can navigate back. A dialog with no Retry is left up and keeps counting against
-     * the budget, which ends the run as a connection error.
+     * Retry only, after the budget's pause. Title Screen is never tapped mid-career (it abandons the loaded
+     * career). A dialog with no Retry stays up and keeps counting against the budget.
      */
     private fun handleConnectionError(dialog: DialogInterface) {
         when (val decision = game.connectionBudget.onError()) {

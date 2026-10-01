@@ -3,71 +3,45 @@ package com.steve1316.uma_android_automation.bot
 import com.steve1316.uma_android_automation.types.StatName
 
 /**
- * Pure model for the Grand Concert scenario ("Brighter Together Our Grand Concert", community
- * name "Grand Live"), added to Global on 2026-07-22 22:00 UTC.
- *
- * Everything in this file is total, Android-free, and JUnit-pinned. Pixel work lives in
- * [com.steve1316.uma_android_automation.utils.GrandConcertProbes]; screen handling lives in the
- * campaign class.
- *
- * Support status: the shared career loop (dates, training scoring, racing plan, events, skill
- * buying) drives a Grand Concert career exactly as it drives URA Finale. The scenario's own
- * systems - the Lesson shop, the five performance point types, and the concerts - are automated
- * on top of that by the campaign class, and the ordinary career-end path carries the run from the
- * last concert back to the home screen. The scenario carousel can select Grand Concert like any
- * other scenario, so the run queue, trainee rotation, and automatic TP restore all apply to it the
- * same as URA Finale, Unity Cup, or Trackblazer. Only a Lesson or concert screen the bot cannot
- * identify reaches the manual-handoff boundary, rather than being clicked blind.
- *
- * Data provenance is tracked per fact ([Provenance]) because this file mixes three very
- * different evidence classes: strings pulled from the Global client's own master database,
- * mechanics published for the Japanese version months earlier, and community models.
+ * Pure, Android-free model for the Grand Concert scenario ("Brighter Together Our Grand Concert", community
+ * name "Grand Live"). Provenance is tracked per fact because values mix Global master-database strings,
+ * mechanics published for the Japanese version, and community models.
  */
 
-/** How well-established one fact is. Every seeded value carries one. */
 enum class Provenance {
-    /** Read out of the Global client's own data or observed on a Global screen capture. */
     GLOBAL_CONFIRMED,
 
-    /** Published for the Japanese version and not yet re-verified on Global. */
     JP_CONFIRMED,
 
-    /** A current published strategy guide's synthesis (uma.guide, GameTora, and similar). More
-     * specific than a bare community model, but still not an official statement and not observed on
-     * Global: a guide figure may not survive a live Global capture. */
+    /** A published strategy guide's synthesis (uma.guide, GameTora); may not survive a live Global capture. */
     GUIDE,
 
-    /** A community guide or simulator's model, not an official statement. */
     COMMUNITY_MODEL,
 
-    /** Derived by reasoning from the above rather than observed. */
     INFERRED,
 
-    /** Not known. Must never be treated as a number. */
+    /** Must never be treated as a number. */
     UNKNOWN,
 }
 
-/** One fact plus where it came from. */
 data class Sourced<T>(val value: T, val provenance: Provenance)
 
 object GrandConcertScenario {
     /**
-     * The canonical scenario key. Chosen to match the short, human-readable style of the
-     * existing keys ("URA Finale", "Unity Cup", "Trackblazer") rather than the full rendered
-     * title, because this string is persisted in settings, hashed into the launch identity,
-     * matched by presets, and printed in logs.
+     * Short key in the style of the existing keys; persisted in settings, hashed into the launch identity, matched by
+     * presets and logged.
      */
     const val KEY = "Grand Concert"
 
-    /** The title as the Global client renders it on Scenario Select and Final Confirmation:
-     * two lines, no colon and no exclamation mark. Display only - never a persistence key. */
+    /**
+     * The Global client's title on Scenario Select (two lines, no colon or exclamation mark). Display only, never a
+     * persistence key.
+     */
     const val DISPLAY_TITLE = "Brighter Together Our Grand Concert"
 
     /**
-     * Every spelling that must resolve to [KEY]. Covers the community name, the two punctuated
-     * forms that pre-launch research predicted, the unpunctuated form the client actually
-     * renders, and the client's own internal name for the scenario ("Our Grand Concert", which
-     * is also the name of its inheritance spark).
+     * Every spelling that must resolve to [KEY], including the client's internal name ("Our Grand Concert", also its
+     * spark name).
      */
     val ALIASES =
         listOf(
@@ -80,10 +54,8 @@ object GrandConcertScenario {
         )
 
     /**
-     * Base stat caps. GLOBAL_CONFIRMED: read directly off the Trainee Select and career screen
-     * denominators on 2026-07-23 (1600 / 1300 / 1300 / 1500 / 1300). Blue inheritance sparks
-     * raise these per-career (observed 1641 / 1300 / 1325 / 1500 / 1309 on the same career), so
-     * these are the FLOOR, never an assertion about a specific run.
+     * Base stat caps read off the Trainee Select and career screens; blue sparks raise them per career, so these are
+     * a floor.
      */
     fun baseStatCap(statName: StatName): Int =
         when (statName) {
@@ -93,26 +65,20 @@ object GrandConcertScenario {
         }
 
     /**
-     * The five concerts land on these fixed career turns: four Promo Concerts then the Grand
-     * Concert. GLOBAL_CONFIRMED, read from the Global client's own master database
-     * (single_mode_live_live_data.turn). Every concert shares the same Great Success song floor
-     * ([GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR] = 3; the same table's great_success_songs).
+     * Fixed concert turns (four Promo Concerts, then the Grand Concert), from single_mode_live_live_data.turn in the
+     * Global master database.
      */
     val CONCERT_TURNS = Sourced(listOf(24, 36, 48, 60, 72), Provenance.GLOBAL_CONFIRMED)
 
     /**
-     * The Grand Concert (the fifth concert) gates its special song at this TOTAL setlist size.
-     * GLOBAL_CONFIRMED from single_mode_live_live_data.grand_song_threshold = 20 (the four Promo
-     * Concerts carry 0). Whether this equals the community "18 learned songs" figure plus automatic
-     * setlist songs is NOT confirmed on Global; see [GrandConcertPolicy.SPECIAL_SONG_TARGET].
+     * Total setlist size gating the Grand Concert's special song (grand_song_threshold; Promo Concerts carry 0).
+     * Whether it equals the community "18 learned songs" plus automatic songs is unconfirmed; see [GrandConcertPolicy.SPECIAL_SONG_TARGET].
      */
     val GRAND_CONCERT_SONG_THRESHOLD = Sourced(20, Provenance.GLOBAL_CONFIRMED)
 
-    /** The scenario's inheritance spark, as the Global client names it. */
     const val SPARK_NAME = "Our Grand Concert"
 
-    /** Trainees with a scenario link. GLOBAL_CONFIRMED for the badge itself (observed on the
-     * Trainee Select portrait); the roster is JP_CONFIRMED plus Global guide agreement. */
+    /** The badge is Global-observed; the roster is JP-confirmed plus Global guide agreement. */
     val SCENARIO_LINK_TRAINEES =
         Sourced(
             listOf("Light Hello", "Agnes Tachyon", "Silence Suzuka", "Mihono Bourbon", "Smart Falcon"),
@@ -120,9 +86,8 @@ object GrandConcertScenario {
         )
 
     /**
-     * Normalizes any accepted spelling to [KEY], leaving every other scenario string untouched.
-     * Applied before dispatch, persistence comparison, queue and rotation validation, and logs,
-     * so one career cannot be persisted under one spelling and dispatched under another.
+     * Applied before dispatch, persistence, queue/rotation validation and logs so a career is never persisted under
+     * one spelling and dispatched under another.
      */
     fun normalizeScenarioKey(raw: String?): String {
         val trimmed = raw?.trim().orEmpty()
@@ -131,18 +96,13 @@ object GrandConcertScenario {
         return if (ALIASES.any { fold(it) == folded }) KEY else trimmed
     }
 
-    /** True when [raw] names this scenario under any accepted spelling. */
     fun matches(raw: String?): Boolean = normalizeScenarioKey(raw) == KEY
 
-    /** Casing, punctuation, and whitespace are all OCR- and localisation-fragile; the fold
-     * keeps only letters and digits so "Brighter Together! Our Grand Concert" and
-     * "brighter together our grand concert" are the same key. */
+    /** Casing, punctuation and whitespace are OCR- and localisation-fragile, so only letters and digits are kept. */
     private fun fold(text: String): String = text.lowercase().filter { it.isLetterOrDigit() }
 }
 
-/** The five performance point types. Global names come from the client's own text data (the
- * fifth is "Composure" there; several community guides call it "Mental", so that spelling is
- * accepted as an alias but never emitted). */
+/** Global calls the fifth type "Composure"; the community "Mental" is accepted as an alias but never emitted. */
 enum class PerformancePointType(val displayName: String, val aliases: List<String> = emptyList()) {
     DANCE("Dance"),
     PASSION("Passion"),
@@ -161,10 +121,7 @@ enum class PerformancePointType(val displayName: String, val aliases: List<Strin
     }
 }
 
-/**
- * The five balances as last read off the screen. A null entry means "not readable", which is
- * different from zero and must stay different all the way through the policy.
- */
+/** A null entry means "not readable", which is different from zero and must stay different through the policy. */
 data class PerformanceBalances(val values: Map<PerformancePointType, Int?> = emptyMap()) {
     operator fun get(type: PerformancePointType): Int? = values[type]
 
@@ -173,20 +130,20 @@ data class PerformanceBalances(val values: Map<PerformancePointType, Int?> = emp
     val unknownTypes: List<PerformancePointType> get() = PerformancePointType.entries.filter { values[it] == null }
 }
 
-/** What one training choice is expected to pay out in performance points. Seeded from the
- * facility-to-type mapping, which is COMMUNITY_MODEL: the Global client does not publish it and
- * at least one Global guide states there is no fixed correspondence. */
+/**
+ * Seeded from the facility-to-type mapping, a COMMUNITY_MODEL: Global does not publish it and a guide says there is
+ * no fixed correspondence.
+ */
 data class PerformanceRewardPreview(
     val primary: PerformancePointType?,
     val secondary: PerformancePointType?,
     val provenance: Provenance,
 )
 
-/** A lesson's price in performance points. A null component means the cost could not be read. */
 data class LessonCost(val amounts: Map<PerformancePointType, Int?> = emptyMap()) {
     val fullyKnown: Boolean get() = amounts.values.none { it == null }
 
-    /** Affordability is a three-valued question: yes, no, or unknown. Never collapse unknown. */
+    /** Three-valued: yes, no, or unknown (null); never collapse unknown. */
     fun affordableWith(balances: PerformanceBalances): Boolean? {
         if (!fullyKnown) return null
         for ((type, needed) in amounts) {
@@ -199,17 +156,14 @@ data class LessonCost(val amounts: Map<PerformancePointType, Int?> = emptyMap())
 
 enum class LessonCardKind { TECHNIQUE, SONG, UNKNOWN }
 
-/** A technique's immediate effect, as the client's effect text states it. */
 data class TechniqueEffect(val text: String?, val provenance: Provenance = Provenance.UNKNOWN)
 
-/** A song's Mastery Bonus (immediate on learning). */
 data class SongEffect(val masteryText: String?, val provenance: Provenance = Provenance.UNKNOWN)
 
-/** A song's Concert Bonus (activates after the next concert; same types stack additively). */
+/** Activates after the next concert; same types stack additively. */
 data class ConcertBonus(val text: String?, val provenance: Provenance = Provenance.UNKNOWN)
 
-/** One offered card as read off the shop. Every field is nullable because every field can fail
- * to read, and an unreadable card must never be recommended. */
+/** Every field can fail to read, and an unreadable card must never be recommended. */
 data class LessonCard(
     val slot: Int,
     val kind: LessonCardKind = LessonCardKind.UNKNOWN,
@@ -218,27 +172,22 @@ data class LessonCard(
     val techniqueEffect: TechniqueEffect? = null,
     val songEffect: SongEffect? = null,
     val concertBonus: ConcertBonus? = null,
-    /** True when the shop offers to schedule this card for later instead of learning it now
-     * (the Global help text calls this "schedule it for later"). */
+    /** True when the shop offers to schedule this card for later instead of learning it now. */
     val scheduleOnly: Boolean? = null,
 ) {
     val readable: Boolean get() = kind != LessonCardKind.UNKNOWN && !name.isNullOrBlank() && cost.fullyKnown
 }
 
-/** The three cards currently on offer. */
 data class LessonOfferSet(val cards: List<LessonCard> = emptyList()) {
     val complete: Boolean get() = cards.size == 3 && cards.all { it.readable }
 }
 
-/** Where the run sits in the technique-count pattern that gates the next song. JP_CONFIRMED
- * counts; the pattern is not published on Global. */
+/** JP_CONFIRMED counts; the pattern is not published on Global. */
 data class LessonPatternState(
     val techniquesSinceLastSong: Int?,
     val techniquesNeededForNextSong: Sourced<Int?>,
 )
 
-/** Which concert window the run is in. The Global help text calls the first four "Promo
- * Concerts" and the fifth the "Grand Concert". */
 enum class ConcertSegment(val displayName: String) {
     BEFORE_PROMO_1("before the first Promo Concert"),
     BEFORE_PROMO_2("before the second Promo Concert"),
@@ -248,7 +197,6 @@ enum class ConcertSegment(val displayName: String) {
     UNKNOWN("unknown"),
 }
 
-/** Everything the decision engine is allowed to look at. Anything absent stays null. */
 data class GrandConcertRunState(
     val balances: PerformanceBalances = PerformanceBalances(),
     val offers: LessonOfferSet = LessonOfferSet(),
@@ -259,13 +207,12 @@ data class GrandConcertRunState(
     val lessonUnlocked: Boolean? = null,
 )
 
-/** What the engine observed, so a report can be audited without re-running it. */
 data class GrandConcertEvidence(
     val missing: List<String> = emptyList(),
     val notes: List<String> = emptyList(),
 )
 
-/** The engine's answer. [recommendedSlot] is null whenever nothing can be recommended safely. */
+/** [recommendedSlot] is null whenever nothing can be recommended safely. */
 data class GrandConcertDecision(
     val recommendedSlot: Int?,
     val certain: Boolean,
@@ -274,6 +221,6 @@ data class GrandConcertDecision(
     val constraintsAtRisk: List<String> = emptyList(),
     val evidence: GrandConcertEvidence = GrandConcertEvidence(),
 ) {
-    /** This engine never actuates. A decision is a report, and the campaign may only print it. */
+    /** Never actuates: the campaign may only print a decision. */
     val actionable: Boolean get() = false
 }

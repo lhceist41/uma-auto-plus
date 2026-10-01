@@ -46,21 +46,16 @@ class UnityCup(game: Game) : Campaign(game) {
     private var bOverrideOpponentSelection: Boolean = false
 
     /**
-     * Best weighted prediction score seen across the three opponents this selection cycle, and the
-     * opponent index holding it. When no opponent clears [confidentWinPredictionScore], the
-     * confirmation loop races [bestPredictionIndex] (the highest win chance) instead of a fixed
-     * position, since a showdown loss costs team rank and stats. Reset when a new selection begins.
+     * Best weighted prediction score seen across the three opponents this cycle, and its index; the fallback races
+     * [bestPredictionIndex] since a showdown loss costs team rank and stats. Reset when a new selection begins.
      */
     private var bestPredictionScore: Int = -1
     private var bestPredictionIndex: Int = 0
 
     /**
-     * Minimum weighted prediction score (double circle = 2, single circle = 1, across the five
-     * discipline slots) for a match to count as a confident win worth taking outright. 6 keeps the
-     * old three-double-circle bar and additionally admits strong-singles rows (2 doubles + 2
-     * singles, 1 double + 4 singles). Singles substitute for doubles at 2:1 - this is NOT a raw
-     * circle count; three singles alone score 3 and fail. Opponents are checked hardest-first, so
-     * the first to clear this bar is also the highest-reward safe pick.
+     * Minimum weighted score (double circle = 2, single = 1, five slots) for a confident win; 6 also admits
+     * strong-singles rows (2 doubles + 2 singles, 1 double + 4 singles). Not a raw circle count: three singles score 3
+     * and fail.
      */
     private val confidentWinPredictionScore: Int = 6
 
@@ -86,10 +81,8 @@ class UnityCup(game: Game) : Campaign(game) {
                 } else {
                     result.dialog.close(game.imageUtils)
                     if (selectedOpponentIndex >= 2) {
-                        // All three opponents checked; none cleared the confident-win bar. Race the
-                        // opponent with the best weighted prediction (best win chance) instead of a
-                        // fixed position - a loss costs team rank and stats. Ties were already
-                        // resolved toward the easier opponent in analyzeOpponentRacePrediction.
+                        // None cleared the confident-win bar: race the best-scoring opponent (ties already resolved
+                        // toward the easier one).
                         MessageLog.w(
                             TAG,
                             "[WARN] handleDialogs:: No opponent cleared the confident-win bar. Falling back to opponent #${bestPredictionIndex + 1} (best prediction score: $bestPredictionScore).",
@@ -124,8 +117,8 @@ class UnityCup(game: Game) : Campaign(game) {
                         game.gestureUtils.tap(trainingOptionLocations[1].x, trainingOptionLocations[1].y, IconTrainingEventHorseshoe.template.path)
                         true
                     } else {
-                        // A partial render or capture can match fewer than 2 horseshoes; indexing
-                        // [1] crashed the run. Stay un-dismissed and retry on the next tick.
+                        // A partial render can match fewer than 2 horseshoes (indexing [1] crashed the run); stay
+                        // un-dismissed and retry.
                         MessageLog.w(TAG, "[WARN] handleTrainingEvent:: Tutorial header detected but only ${trainingOptionLocations.size} option(s) found. Retrying next tick.")
                         false
                     }
@@ -143,9 +136,8 @@ class UnityCup(game: Game) : Campaign(game) {
         if (ButtonUnityCupRace.check(game.imageUtils)) {
             // Handle the Unity Cup race.
             MessageLog.i(TAG, "[UNITY_CUP] Will start the process for Unity Cup race handling.")
-            // A showdown is not an ordinary catalog race. Record a non-catalog entered-race fact only
-            // when the showdown actually completed (the inner function returns true only at its natural
-            // completion exit; an abort/timeout returns false). The unconditional true below is unchanged.
+            // Record a non-catalog entered-race fact only when the showdown actually completed (the inner function
+            // returns false on abort/timeout).
             if (handleRaceEventsUnityCup()) {
                 recordEnteredRace(EnteredRace(date.day, EnteredRaceResolution.NON_CATALOG, EnteredRacePath.UNITY_CUP_SHOWDOWN))
             }
@@ -161,27 +153,20 @@ class UnityCup(game: Game) : Campaign(game) {
     }
 
     /**
-     * Scores the currently-selected opponent's prediction row on the confirmation screen (five
-     * discipline slots; double circle = 2 points, single circle = 1) and decides whether the match
-     * is a confident win. Also records the score against the running best so the exhaustion
-     * fallback in [handleDialogs] can race the highest-win-chance opponent.
-     *
-     * @return True if the weighted score clears [confidentWinPredictionScore], false otherwise.
+     * Scores the selected opponent's prediction row (double circle = 2, single = 1) and records it against the running
+     * best for the exhaustion fallback. Returns true when it clears [confidentWinPredictionScore].
      */
     private fun analyzeOpponentRacePrediction(): Boolean {
         val sourceBitmap = game.imageUtils.getSourceBitmap()
-        // 0.85 instead of the 0.8 default: true glyphs self-match at 0.98+, while the double
-        // template scores ~0.79 on a bold single-circle ring and generic ring ornaments reach
-        // ~0.83 - the higher bar keeps both cross-fire classes out without costing real matches.
+        // 0.85, not 0.8: true glyphs self-match at 0.98+, the double template scores ~0.79 on a bold single ring and
+        // ring ornaments reach ~0.83.
         val doubleCircles = IconDoubleCircle.findAll(game.imageUtils, sourceBitmap = sourceBitmap, region = game.imageUtils.regionMiddle, confidence = 0.85)
-        // The single-circle template is the double's outer ring, so it can weakly co-match on a
-        // double-circle glyph. Any single match within half a glyph (~20px) of a double is the same
-        // slot and gets dropped; real slots sit ~197px apart.
+        // The single template is the double's outer ring, so it can co-match on a double; singles within ~20px of a
+        // double are the same slot and are dropped (real slots sit ~197px apart).
         var singleCircles =
             IconSingleCircle.findAll(game.imageUtils, sourceBitmap = sourceBitmap, region = game.imageUtils.regionMiddle, confidence = 0.85)
                 .count { single -> doubleCircles.none { double -> abs(double.x - single.x) < 20 && abs(double.y - single.y) < 20 } }
-        // The row has exactly five slots. Counts beyond that mean a template is false-firing
-        // somewhere in the region; clamp so a phantom match cannot quietly lower the win bar.
+        // The row has exactly five slots; clamp so a false-firing template cannot lower the win bar.
         if (doubleCircles.size + singleCircles > 5) {
             MessageLog.w(
                 TAG,
@@ -191,9 +176,7 @@ class UnityCup(game: Game) : Campaign(game) {
         }
         val score = doubleCircles.size * 2 + singleCircles
 
-        // Track the strongest prediction seen so far. >= breaks ties toward the later (weaker/easier)
-        // opponent, the safer bet once no opponent clears the confident-win bar. Opponents are always
-        // checked in top-to-bottom (hardest-to-easiest) order, so the last tie is the easiest.
+        // Ties go to the later (easier) opponent; opponents are checked hardest-to-easiest.
         if (score >= bestPredictionScore) {
             bestPredictionScore = score
             bestPredictionIndex = selectedOpponentIndex
@@ -235,13 +218,9 @@ class UnityCup(game: Game) : Campaign(game) {
             return false
         }
 
-        // Exit-loop guard. A full showdown (opponent select -> 5-race sim -> WIN/results/standings)
-        // runs ~30s even on the See-All skip path post-July-2026, and longer when the race is watched
-        // or the result animations play. The old 30s cap aborted at the finish line: the standings
-        // race-end logo matched at ~27-30s but the Next button was still sliding in, so the loop timed
-        // out 0.1s before it could exit and the career died flailing on the stranded standings screen.
-        // 120s gives ample margin; the career stall watchdog still backstops a true hang because a
-        // working loop keeps its heartbeat fresh.
+        // Exit-loop guard: a full showdown runs ~30s on the See-All skip path and longer when watched; a 30s cap once
+        // timed out 0.1s before the Next button finished sliding in. 120s leaves margin and the stall watchdog still
+        // backstops a true hang.
         val executionTimeThresholdMs = 120000 // 2 minutes.
         var startTime = System.currentTimeMillis()
 
@@ -336,10 +315,9 @@ class UnityCup(game: Game) : Campaign(game) {
                 // Exit from function if it runs too long.
                 System.currentTimeMillis() - startTime > executionTimeThresholdMs -> {
                     MessageLog.w(TAG, "[WARN] handleRaceEventsUnityCup:: Race event took too long to complete. Aborting...")
-                    // Clear selection state so a later re-entry starts a clean cycle. The reset in
-                    // the Race-button branch is skipped when recovery taps reach the selection
-                    // screen another way, and a leftover bOverrideOpponentSelection would insta-OK
-                    // the first opponent of the NEXT showdown with no analysis.
+                    // Clear selection state: recovery taps can reach the selection screen without the Race-button
+                    // reset, and a leftover bOverrideOpponentSelection would insta-OK the next showdown's first
+                    // opponent.
                     selectedOpponentIndex = 0
                     bOverrideOpponentSelection = false
                     bestPredictionScore = -1

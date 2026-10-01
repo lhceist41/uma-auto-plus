@@ -65,13 +65,9 @@ enum class SelectionSource {
 }
 
 /**
- * Result of [Training.handleTrainingWithOutcome]. [selectedTraining] is the executed facility (null when
- * none executed, e.g. a recovery or backout); [turnAdvanced] is true whenever a turn-advancing action ran
- * (facility training, forced Wit, or energy/mood recovery). The two are independent: a recovery advances
- * the turn while leaving [selectedTraining] null.
- *
- * @property selectedTraining The facility that was trained, or null if none executed.
- * @property turnAdvanced True when the turn advanced (training or recovery), false on a same-turn backout.
+ * [selectedTraining] is the executed facility (null for a recovery or backout); [turnAdvanced] is true whenever a
+ * turn-advancing action ran (training, forced Wit, recovery). They are independent: a recovery advances the turn
+ * with a null [selectedTraining].
  */
 data class TrainingActionOutcome(
     val selectedTraining: StatName?,
@@ -102,19 +98,14 @@ class Training(private val game: Game, private val campaign: Campaign) {
     var cachedAnalysisResults: List<TrainingAnalysisResult>? = null
         private set
 
-    /** The `ignoreFailureChance` flag in effect when [cachedAnalysisResults] was written. A cache hit must
-     * match this value, or [processAnalysisResults]'s failure-chance filtering replays inconsistent inputs. */
+    /** `ignoreFailureChance` when [cachedAnalysisResults] was written; a cache hit must match it or failure-chance filtering replays inconsistent inputs. */
     private var cachedIgnoreFailureChance: Boolean = false
 
-    /** The `isIrregularEvaluation` flag in effect when [cachedAnalysisResults] was written. A cache hit must
-     * match this value: irregular mode applies a stricter min-gain filter on the in-place-mutated results,
-     * so replaying under a different flag yields non-equivalent decisions. */
+    /** `isIrregularEvaluation` when cached; irregular mode applies a stricter min-gain filter to the in-place-mutated results, so a hit must match. */
     private var cachedIsIrregularEvaluation: Boolean = false
 
-    /** The turn (`campaign.date.day`) the cached analysis was written on. A hit must also match the
-     * current turn: an analysis-then-no-training turn (a race day, a forced rest) otherwise leaks its
-     * failure chances and gains across the turn boundary - caught live on a finale run, where turns
-     * 74 and 75 replayed turn 73's analysis. */
+    /** The turn the cached analysis was written on; a hit must match it, or an analysis-then-no-training turn (race day, forced rest)
+     * leaks its results across the boundary (turns 74 and 75 once replayed turn 73's). */
     private var cachedAnalysisTurn: Int? = null
 
     /** The current training scenario name. */
@@ -207,10 +198,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
      * Lazy so every other scenario never constructs it. */
     private val gcTrainingReader by lazy { GrandConcertTrainingReader(game) }
 
-    /** Grand Concert only: the panel balances read during this turn's analysis (first facility
-     * frame that yielded them). Survives the per-turn analysis cache the same way the results do:
-     * a cache replay is same-turn by definition, so the balances written by the original run are
-     * still current. */
+    /** Grand Concert only: panel balances read during this turn's analysis; they survive the per-turn cache because a replay is same-turn. */
     private var gcTurnBalances: Map<PerformancePointType, Int?>? = null
 
     data class TrainingAnalysisResult(val name: StatName, val latch: CountDownLatch, val startTime: Long) {
@@ -247,8 +235,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         /** The OCR-detected training level (1-5) for this stat, or null if the feature is disabled or OCR failed. */
         var trainingLevel: Int? = null
 
-        /** Grand Concert only: the performance-point type(s) this facility grants this turn, read
-         * off its own analysis frame's panel annotation. Null amount = glyph seen, number unread. */
+        /** Grand Concert only: performance-point type(s) this facility grants, read from its analysis frame's panel annotation; null amount = glyph seen, number unread. */
         var performanceGains: Map<PerformancePointType, Int?> = emptyMap()
     }
 
@@ -404,14 +391,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
         private val TAG: String = "[${MainActivity.loggerTag}]Training"
 
         /**
-         * Estimates the failure chance a facility should show at the given energy. Non-Wit facilities
-         * follow the game's ~2%-per-energy-point curve below 50 energy and read 0% at or above it; Wit
-         * gets its own flatter curve since it stays trainable at lower energy. A crude model, but a read
-         * deviating from it by more than the caller's tolerance is an OCR misread in practice.
-         *
-         * @param currentEnergy The trainee's current energy (0-100).
-         * @param statName The facility, or null for the generic non-Wit curve.
-         * @return The estimated failure chance percentage (0-100).
+         * Estimated failure chance at the given energy: non-Wit facilities follow ~2% per energy point below 50 and 0% at
+         * or above it; Wit has a flatter curve. A read deviating by more than the caller's tolerance is in practice an
+         * OCR misread.
          */
         fun estimateFailureChanceFromEnergy(currentEnergy: Int, statName: StatName? = null): Int {
             val energy = currentEnergy.coerceIn(0, 100)
@@ -463,7 +445,6 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
             val sorted = withoutWit.sortedBy { it.first.ordinal }.toMutableList()
 
-            // Walk backwards: correct any value suspiciously lower than its successor.
             for (i in sorted.size - 2 downTo 0) {
                 val (currentName, currentChance) = sorted[i]
                 val (_, nextChance) = sorted[i + 1]
@@ -480,23 +461,13 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * Decide whether a training is admissible as a Trackblazer irregular-training hijack (skip a
-         * voluntary race to train this turn instead). Pure so it is directly unit-testable. Three paths:
-         *  - C1: main-stat gain >= the phase-curved baseline threshold (a strong training stands alone).
-         *  - C2: main-stat gain >= baseline-5 AND strong secondary value (a rainbow, a skill hint, a bond
-         *    bar still building toward a rainbow, an Akikawa bond, or a large side-stat carry).
-         *  - C3: critical-stat rescue - a below-floor Stamina/Power the training meaningfully raises.
-         *
-         * @param name The stat this training trains (its main stat).
-         * @param statGains Detected stat gains for this training (main + side).
-         * @param relationshipBars Relationship bars on this facility (bond/rainbow build state).
-         * @param numRainbow Rainbow count detected on this training.
-         * @param numSkillHints Skill hints detected on this training.
-         * @param baseline The slider value (`trackblazerIrregularTrainingMinStatGain`) used as the curve anchor.
-         * @param year Current career year (Classic/Senior; Junior never reaches the gate).
-         * @param day Current turn number, for the phase curve.
-         * @param currentMainStat The trainee's current value of [name], for the critical-stat rescue.
-         * @return A short admission reason, or null if the training is not admissible.
+         * Whether a training is admissible as a Trackblazer irregular-training hijack (skip a voluntary race to train).
+         * Pure for unit tests. Paths:
+         *  - C1: main-stat gain >= the phase-curved baseline threshold.
+         *  - C2: main-stat gain >= baseline-5 AND strong secondary value (rainbow, skill hint, bond bar building toward a
+         *    rainbow, Akikawa bond, or a large side-stat carry).
+         *  - C3: critical-stat rescue: a below-floor Stamina/Power the training meaningfully raises.
+         * Returns a short admission reason, or null.
          */
         fun admitIrregularTraining(
             name: StatName,
@@ -510,9 +481,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
             currentMainStat: Int,
         ): String? {
             val mainGain = statGains[name] ?: 0
-            // Phase-curved threshold: lower early-Classic (favour training/bond building), higher into
-            // Senior (favour racing for fans/coins/Grade Points). Offsets are applied here rather than on
-            // the slider so they can dip below the slider's min-20 clamp.
+            // Phase-curved threshold: lower early-Classic (favour bond building), higher into Senior (favour racing).
+            // Offsets are applied here so they can dip below the slider's min-20 clamp.
             val tBase =
                 when {
                     year == DateYear.CLASSIC && day < 43 -> baseline - 3
@@ -525,9 +495,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val sideGains = statGains.filterKeys { it != name }.values
             val sideSum = sideGains.sum()
             val sideMax = sideGains.maxOrNull() ?: 0
-            // Bar-color semantics verified in calculateRelationshipScore: blue = furthest from rainbow
-            // (highest build value), green = nearly there, orange = rainbow already. A bond worth building
-            // toward a future rainbow is a blue/green bar with headroom (<80%).
+            // Bar colors (see calculateRelationshipScore): blue = furthest from rainbow, green = nearly there, orange = rainbow.
+            // A bond worth building is a blue/green bar with headroom (<80%).
             val buildableBond = relationshipBars.any { (it.dominantColor == "blue" || it.dominantColor == "green") && it.fillPercent < 80.0 }
             val akikawaBond = relationshipBars.any { it.isTrainerSupport && it.trainerName == "Yayoi Akikawa" }
             val strongSecondary = numRainbow >= 1 || numSkillHints >= 1 || buildableBond || akikawaBond || sideSum >= 25 || sideMax >= 15
@@ -569,10 +538,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         StatName.WIT -> 1500
                         else -> 1200
                     }
-                // Read off the Global Trainee Select and career-screen denominators on
-                // 2026-07-23. These are the BASE caps; blue inheritance sparks raise them per
-                // career (1641 Speed was observed on a linked run), so the live screen may show
-                // more and the OCR rejection guard must not treat that as a misread.
+                // BASE caps from the Trainee Select and career-screen denominators; blue inheritance sparks raise them per career
+                // (1641 Speed seen), so the OCR rejection guard must not treat higher values as a misread.
                 GrandConcertScenario.matches(scenario) ->
                     when (statName) {
                         StatName.SPEED -> 1600
@@ -595,59 +562,37 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * Maximum cap raise from inherited blue sparks (July 2026 rebalance): +4/+9/+16 per
-         * 1/2/3-star spark, applied for up to six inherited sparks across career start and the
-         * two inheritance events - 6 x 16 = 96 at the extreme. A trainee's PERSONAL cap cannot
-         * be derived on our side (borrowed parents are invisible), so cap consumers that must
-         * not block legitimate spark-raised values allow this much headroom above the base
-         * scenario cap.
+         * Max cap raise from inherited blue sparks: +4/+9/+16 per 1/2/3-star spark, up to six sparks (96 at the extreme).
+         * A trainee's personal cap is underivable (borrowed parents are invisible), so cap consumers allow this headroom
+         * above the base cap.
          */
         const val SPARK_CAP_HEADROOM = 96
 
-        /** Grand Concert point bias: score multiplier added per effective point a facility's
-         * previewed gain contributes toward the target song's deficit. 0.04 x a typical 15-point
-         * contribution = +60% at the [GC_POINT_BOOST_MAX] ceiling, deliberately at the same
-         * ceiling as the anticipatory-rainbow multiplier and strictly below a real rainbow's
-         * 2.0x, so point steering re-ranks near-peers without overruling the big signals. */
+        /** Grand Concert point bias: multiplier added per effective point a previewed gain contributes toward the target song's
+         * deficit. 0.04 x a typical 15 points = +60% at the [GC_POINT_BOOST_MAX] ceiling, below a real rainbow's 2.0x so point
+         * steering re-ranks near-peers without overruling big signals. */
         const val GC_POINT_BOOST_PER_POINT = 0.04
 
-        /** Ceiling for the Grand Concert point-bias multiplier's boost portion. */
         const val GC_POINT_BOOST_MAX = 0.6
 
-        /** Contribution assumed for a gain whose glyph was detected but whose "+N" number failed
-         * OCR. Mid-band of the observed per-training gains (roughly 8 to 25). */
+        /** Assumed contribution for a gain whose glyph was detected but whose number failed OCR (mid-band of the observed ~8-25). */
         const val GC_ASSUMED_GAIN_WHEN_UNREAD = 12
 
-        /** Raised boost ceiling for a cycle that is behind its own floor AND within
-         * [GC_CONCERT_NEAR_TURNS] of the concert: the per-cycle song deadline is imminent, so
-         * point income that feeds it earns more. 0.8 keeps the multiplier at 1.8x, still strictly
-         * below a real rainbow's 2.0x so point steering never outranks a rainbow on its own. */
+        /** Raised boost ceiling for a cycle behind its floor and within [GC_CONCERT_NEAR_TURNS] of the concert; 0.8 keeps the multiplier at 1.8x, below a real rainbow's 2.0x. */
         const val GC_POINT_BOOST_MAX_URGENT = 0.8
 
-        /** Concert-proximity windows for the point bias. At or inside [GC_CONCERT_NEAR_TURNS] the
-         * boost is amplified; at or inside the tighter [GC_CONCERT_URGENT_TURNS] more so. Both are
-         * below the default test proximity (7 turns) so the calm-window behaviour is unchanged. */
+        /** Concert-proximity windows: the boost is amplified within [GC_CONCERT_NEAR_TURNS] and more so within [GC_CONCERT_URGENT_TURNS]; both are below the default test proximity (7 turns). */
         const val GC_CONCERT_NEAR_TURNS = 4
         const val GC_CONCERT_URGENT_TURNS = 2
 
-        /** Boost amplifiers inside the near and urgent concert windows. Applied to the boost before
-         * the ceiling clamp, so they tighten steering near a deadline without uncapping it. */
+        /** Boost amplifiers for the near and urgent windows, applied before the ceiling clamp so they never uncap it. */
         const val GC_PROXIMITY_MULTIPLIER_NEAR = 1.25
         const val GC_PROXIMITY_MULTIPLIER_URGENT = 1.5
 
-        /** Race calculations value stat points past 1200 at half weight (July 2026 rebalance). */
+        /** Race calculations value stat points past 1200 at half weight. */
         private const val SOFT_CAP_STAT_VALUE = 1200
 
-        /**
-         * Effective value of a stat gain under the 1200 soft cap: the portion of a gain landing
-         * above 1200 counts at half weight in race calculations (a 1500 stat performs as 1350),
-         * so training points spent past the line buy half the performance. An unknown current
-         * stat (absent from the map or the -1 OCR-miss sentinel) can never trigger the discount.
-         *
-         * @param currentStat The trainee's current value of the stat.
-         * @param statGain The detected gain for the stat.
-         * @return The soft-cap-adjusted gain value.
-         */
+        /** Value of a stat gain under the 1200 soft cap: the part above 1200 counts at half weight in race calculations. An unknown current stat (absent or the -1 OCR-miss sentinel) never triggers the discount. */
         fun softCapAdjustedGain(currentStat: Int, statGain: Int): Double {
             if (statGain <= 0) return 0.0
             val fullPortion = (SOFT_CAP_STAT_VALUE - currentStat).coerceIn(0, statGain)
@@ -663,12 +608,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         /** Stats gained per finale race win, per stat. Slightly above the actual +10 to account for misc event/card gains. */
         private const val FINALE_RACE_STAT_BONUS = 15
 
-        /**
-         * Bonding-phase energy-economy tiebreaker. Wit training costs no energy (it restores some) while Guts
-         * costs the most, so on an equal bond score we prefer Wit and avoid Guts. Held below 0.5 — the smallest
-         * gap between two distinct relationship-bar sums (bars are worth 1.0/2.5) — so it can only break a tie,
-         * never overturn a genuine bonding advantage.
-         */
+        /** Bonding-phase tiebreaker: Wit costs no energy and Guts the most, so on an equal bond score prefer Wit. Held below 0.5, the smallest gap between distinct bar sums, so it can only break a tie. */
         private const val BONDING_ENERGY_TIEBREAK = 0.2
 
         /**
@@ -717,18 +657,13 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         "blue" -> 2.5
                         else -> 0.0
                     }
-                // Mirror calculateRelationshipScore's trainer-support weighting. Without these the
-                // Akikawa 1.25x / trainer 1.15x bonuses were structurally inert during the Junior
-                // bonding phase - the one window where bond-building choices matter most.
+                // Mirror calculateRelationshipScore's trainer-support weighting; without it the Akikawa 1.25x / trainer 1.15x bonuses were inert during the Junior bonding phase.
                 val trainerSupportBonus = if (bar.isTrainerSupport) 1.15 else 1.0
                 val akikawaBondingBonus =
                     if (scenario == "Trackblazer" && bar.isTrainerSupport && bar.trainerName == "Yayoi Akikawa") 1.25 else 1.0
                 score += contribution * trainerSupportBonus * akikawaBondingBonus
             }
 
-            // Energy-economy tiebreaker (see BONDING_ENERGY_TIEBREAK): on an equal bond score prefer the
-            // free-energy Wit facility and avoid the costly Guts one. The magnitude stays under the 0.5
-            // minimum gap between distinct bar sums, so this only ever decides a tie.
             score +=
                 when (training.name) {
                     StatName.WIT -> BONDING_ENERGY_TIEBREAK
@@ -840,19 +775,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             return score
         }
 
-        /**
-         * Compute the level-based amplifier for a stat's priority weight.
-         *
-         * Returns 1.0 when the feature is disabled or has no effect; values > 1.0 amplify the
-         * priority weight of stats that are both high in the user's priority list and have a
-         * high training level (1-5). Only ranks 1-3 get a boost; rank 4-5 and level 1 return 1.0.
-         * At Lvl 5: rank 1 = 1.75x, rank 2 = 1.25x, rank 3 = 1.10x — the fade keeps the boost on
-         * the top priority while still rewarding the secondary.
-         *
-         * @param priorityRank The 1-indexed position of the stat in the active priority list (1 = highest priority).
-         * @param trainingLevel The detected training level (1-5), or null if OCR was unavailable.
-         * @return Multiplier in [1.0, 1.75].
-         */
+        /** Level-based amplifier for a stat's priority weight: 1.0 when disabled, for rank 4-5, or at level 1; at Lvl 5 rank 1 = 1.75x, rank 2 = 1.25x, rank 3 = 1.10x. */
         fun levelBoostMultiplier(priorityRank: Int, trainingLevel: Int?): Double {
             val level = trainingLevel ?: 1
             if (level <= 1) return 1.0
@@ -934,8 +857,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             1.0
                         }
 
-                    // Level-based amplifier: when the feature is enabled, scale up the contribution from this training's primary stat
-                    // based on its OCR-detected training level (1-5) and its position in the priority list. See [levelBoostMultiplier].
+                    // Level-based amplifier on the primary stat's contribution; see [levelBoostMultiplier].
                     val levelMultiplier =
                         if (config.enableTrainingLevelWeighting && statName == training.name && priorityIndex != -1) {
                             levelBoostMultiplier(priorityIndex + 1, training.trainingLevel)
@@ -963,8 +885,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             1.0
                         }
 
-                    // July 2026 soft cap: points landing above 1200 deliver half race value, so a
-                    // gain that crosses the line is worth less than its raw size suggests.
+                    // Points above 1200 deliver half race value, so a gain crossing the line is worth less than its raw size.
                     val effectiveGain = softCapAdjustedGain(currentStat, statGain)
 
                     val bonusNote = if (isMainStat && statGain >= 30) " [HIGH MAIN STAT]" else ""
@@ -1031,10 +952,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     // Trainer support bonus to prioritize them slightly above regular supports.
                     val trainerSupportBonus = if (bar.isTrainerSupport) 1.15 else 1.0
 
-                    // Trackblazer Akikawa bonding priority: Yayoi Akikawa is the scenario's MotY
-                    // (Umamusume of the Year) trainer support, and her bond drives MotY point gains, so
-                    // trainings showing her get an extra multiplier on top of the generic trainer-support
-                    // bonus. We have no OCR template for the MotY ranking UI, so bond is the best proxy.
+                    // Yayoi Akikawa is Trackblazer's MotY trainer support and her bond drives MotY point gains, so trainings showing her get an extra
+                    // multiplier. No OCR template exists for the MotY ranking UI; bond is the proxy.
                     val akikawaBondingBonus =
                         if (
                             config.scenario == "Trackblazer" &&
@@ -1098,22 +1017,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * Build the per-stat runner-up list for a turn's [DecisionTracer] training contest.
-         *
-         * Combines the scored ([trainingScores]) and gate-filtered ([skippedScores]) trainings into one
-         * ordered list (scored entries first). [picked] — the stat that won or was forced this turn — is
-         * omitted so the report shows only the alternatives; pass null to keep every entry (the
-         * default-fallback branches, where the "pick" is just the first non-blacklisted training rather
-         * than a contest winner).
-         *
-         * A non-finite (-Infinity) score is the scorer's hard-exclusion sentinel, not a real number: such
-         * entries are marked rejected with reason "excluded (hard penalty)" and carry no numeric score, so
-         * the report reads cleanly instead of printing "score=-Infinity".
-         *
-         * @param trainingScores Gate-passing trainings mapped to their computed score.
-         * @param skippedScores Gate-filtered trainings mapped to their (often non-finite) score.
-         * @param picked The winning/forced stat to exclude, or null to keep all entries.
-         * @return Ordered runner-up entries for the Decision Report.
+         * Per-stat runner-up list for a turn's DecisionTracer contest: scored entries first, then gate-filtered ones; [picked] is
+         * omitted (null keeps all, for default-fallback branches with no contest winner). A non-finite score is the scorer's
+         * hard-exclusion sentinel, so such entries are marked rejected ("excluded (hard penalty)") with no numeric score.
          */
         fun buildTracerRunnerUps(
             trainingScores: Map<TrainingOption, Double>,
@@ -1125,8 +1031,6 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     if (option.name == picked) return@mapNotNull null
                     val scoreMap = if (wasSkipped) skippedScores else trainingScores
                     val rawScore = scoreMap[option]
-                    // A non-finite score (-Infinity) is a hard exclusion from the scorer, not a real
-                    // number - surface it as an exclusion and drop the ugly "score=-Infinity" render.
                     val excluded = rawScore != null && !rawScore.isFinite()
                     DecisionTracer.TrainingRunnerUp(
                         stat = option.name,
@@ -1145,14 +1049,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     )
                 }
 
-        /**
-         * Same-turn decision-time evidence for a forced or fallback training pick: the picked facility's observed stat
-         * gains and its failure chance (null when OCR did not measure it, i.e. a negative raw value).
-         *
-         * @property pickedFailureChance The picked facility's OCR failure chance, or null when unmeasured.
-         * @property pickedStatGains The picked facility's observed stat gains, or null when no same-turn option exists.
-         * @property pickedEvidence The picked facility's already-computed scorer inputs for the trace, or null when no same-turn option exists.
-         */
+        /** Same-turn evidence for a forced or fallback pick: the picked facility's stat gains and failure chance (null when OCR did not measure it, i.e. a negative raw value). */
         internal data class SelectedTrainingEvidence(
             val pickedFailureChance: Int?,
             val pickedStatGains: Map<StatName, Int>?,
@@ -1160,19 +1057,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
         )
 
         /**
-         * Reshapes a [TrainingOption]'s already-computed scorer inputs into the trace-neutral
-         * [DecisionTracer.TrainingCandidateEvidence] that pick and runner-up records carry. Pure over its
-         * argument: no OCR, tap, wait, scoring, or mutation - it only copies fields the analyzer already
-         * produced this turn.
-         *
-         * Relationship bars are reduced to the fill/segment/colour/support fields the relationship scorer
-         * reads; UI coordinates, the stat-block handle, and the underlying bitmap are dropped. Performance
-         * gains are keyed by canonical type name in enum order for a deterministic record, and a null
-         * (unreadable) per-type value is dropped rather than emitted as zero. Spirit-gauge counts are carried
-         * raw; the serializer emits them only under Unity Cup, where they are meaningful.
-         *
-         * @param option The facility whose evidence to reshape.
-         * @return The trace-neutral candidate evidence.
+         * Reshapes a [TrainingOption]'s computed scorer inputs into trace-neutral [DecisionTracer.TrainingCandidateEvidence];
+         * pure copy, no OCR/tap/scoring. Relationship bars keep only the fields the scorer reads, performance gains are keyed
+         * by canonical type name in enum order with unreadable values dropped (not zero), and spirit-gauge counts stay raw
+         * (serialized only under Unity Cup).
          */
         fun trainingCandidateEvidence(option: TrainingOption): DecisionTracer.TrainingCandidateEvidence =
             DecisionTracer.TrainingCandidateEvidence(
@@ -1199,19 +1087,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     },
             )
 
-        /**
-         * Resolves the decision-time evidence for a forced/fallback [stat] pick so its TrainingSelection can carry the
-         * same numbers the analyzer already measured. Prefers the picked facility's own [trainingMap] entry, then the
-         * failure-gated [skippedTrainingMap], then honest nulls when neither holds it. Pure over the two maps: no OCR,
-         * taps, waits, scoring, inference, or mutation. Callers pass this turn's maps (cleared at [executeTraining] end
-         * and rebuilt on the next turn's [analyzeTrainings]), so it never reads prior-turn state. A negative raw failure
-         * chance maps to null rather than a fabricated number.
-         *
-         * @param trainingMap The gate-passing trainings analyzed this turn.
-         * @param skippedTrainingMap The failure-gated trainings analyzed this turn.
-         * @param stat The forced/fallback facility, or null when none was picked.
-         * @return The picked facility's evidence, or null/null when absent.
-         */
+        /** Resolves decision-time evidence for a forced/fallback [stat] pick from this turn's [trainingMap], then the failure-gated
+         * [skippedTrainingMap], else nulls. Pure; the maps are rebuilt each turn so it never reads prior-turn state. A negative
+         * raw failure chance maps to null. */
         internal fun selectedTrainingEvidence(
             trainingMap: Map<StatName, TrainingOption>,
             skippedTrainingMap: Map<StatName, TrainingOption>,
@@ -1241,10 +1119,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val finaleBonus = getFinaleStatBonus(config.currentDate.day)
             val effectiveStatCap = statCap - 100 - finaleBonus
 
-            // Don't score for stats that are at the absolute cap. Inherited blue sparks raise the
-            // personal cap by up to SPARK_CAP_HEADROOM above the base scenario cap, so the hard
-            // skip allows that band: a truly capped stat shows +0 gains and scores itself out,
-            // while a spark-raised stat keeps training legitimately past the base cap.
+            // Skip stats at the absolute cap, allowing SPARK_CAP_HEADROOM above the base cap: a truly capped stat shows +0 gains
+            // and scores itself out, while a spark-raised stat keeps training.
             if (currentStat >= statCap + SPARK_CAP_HEADROOM) {
                 return 0.0
             }
@@ -1308,13 +1184,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
             // Apply rainbow multiplier to total score.
             totalScore *= rainbowMultiplier
 
-            // 5. Anticipatory rainbow multiplier (Year 2+ only, when no real rainbows present).
-            // Each near-max (green/blue) friendship bar contributes fillPercent/100 to a sum, then
-            // 0.2 * sum is added to a 1.0 base, capped at +0.6. Caps at 1.6x to remain strictly
-            // below the real 2.0x rainbow multiplier so anticipation never outranks an actual
-            // rainbow. Ported verbatim from upstream; note our verified bar semantics (blue =
-            // furthest from rainbow, green = nearly there) make the green/blue lumping loose, but
-            // the fill weighting and the cap keep the effect mild.
+            // 5. Anticipatory rainbow multiplier (Year 2+, no real rainbows): 0.2 * the sum of near-max (green/blue) bar fills is
+            // added to 1.0, capped at 1.6x, below a real rainbow's 2.0x. Ported from upstream; green/blue lumping is loose given
+            // our bar semantics (blue = furthest from rainbow), but the cap keeps it mild.
             if (
                 config.enablePrioritizeNearMaxFriendship &&
                 config.currentDate.year > DateYear.JUNIOR &&
@@ -1342,40 +1214,24 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
             }
 
-            // 6. Grand Concert point-income multiplier: when the cycle is still short of its song
-            // floor, a facility whose per-turn performance type feeds the target song's deficit is
-            // worth extra. Applied as a bounded multiplier so it re-ranks comparable options
-            // without resurrecting a zero-score facility or outranking a real rainbow on its own.
+            // 6. Grand Concert point-income multiplier: a facility whose performance type feeds the target song's deficit is worth
+            // extra, bounded so it never resurrects a zero-score facility or outranks a rainbow.
             totalScore *= calculateGrandConcertPointMultiplier(config, training)
 
             return totalScore.coerceAtLeast(0.0)
         }
 
         /**
-         * The Grand Concert point-income multiplier for [training], 1.0 outside the scenario or
-         * whenever the bias is disarmed.
+         * The Grand Concert point-income multiplier for [training]; 1.0 outside the scenario or when disarmed. Armed while the
+         * cycle is behind its purchased-song floor (context.behindPace) OR the career total trails the 18-song cadence
+         * (context.behindTotalTarget); the second arm keeps steering alive in a Senior cycle that met its floor but trails
+         * the total.
          *
-         * Armed while the cycle is behind its purchased-song floor with a concert remaining
-         * (context.behindPace) OR while the career total trails the 18-song cadence with a concert
-         * remaining (context.behindTotalTarget) - the second arm is what keeps point steering alive
-         * through a cycle that already met its own floor but is behind the total, the Senior case
-         * where the old floor-only bias disarmed and income stopped chasing songs.
-         *
-         * Each point the facility's previewed gain contributes toward the target song's per-type
-         * deficit adds [GC_POINT_BOOST_PER_POINT]. The contribution is clamped to both the remaining
-         * deficit and the cap headroom, because overflow above a type's cap is lost
-         * (research-confirmed), so a +20 preview into a nearly-capped type is genuinely worth only
-         * the headroom. A gain whose glyph was detected but whose amount resisted OCR contributes a
-         * conservative [GC_ASSUMED_GAIN_WHEN_UNREAD]: the TYPE is the dominant signal and is
-         * pixel-read, while the number is the fragile OCR half.
-         *
-         * Two deadline shapers tighten the boost without uncapping it: an approaching concert
-         * amplifies it ([GC_PROXIMITY_MULTIPLIER_NEAR]/[GC_PROXIMITY_MULTIPLIER_URGENT] inside the
-         * [GC_CONCERT_NEAR_TURNS]/[GC_CONCERT_URGENT_TURNS] windows), and the ceiling rises to
-         * [GC_POINT_BOOST_MAX_URGENT] for a behind-floor cycle at a near concert. A behind-floor cycle
-         * and a behind-total-cadence career share the [GC_POINT_BOOST_MAX] ceiling (the total-song
-         * deficit is mission-critical). Every ceiling stays strictly below a real rainbow's 2.0x so
-         * the bias re-ranks near-peers rather than overruling the big signals.
+         * Each previewed point toward the target song's per-type deficit adds [GC_POINT_BOOST_PER_POINT], clamped to the
+         * remaining deficit and cap headroom because overflow above a type's cap is lost. A gain with a detected glyph but an
+         * unreadable amount counts as [GC_ASSUMED_GAIN_WHEN_UNREAD] (the type is pixel-read, the number is the fragile OCR half).
+         * An approaching concert amplifies the boost and a behind-floor cycle at a near concert raises the ceiling to
+         * [GC_POINT_BOOST_MAX_URGENT]; every ceiling stays below a real rainbow's 2.0x.
          */
         fun calculateGrandConcertPointMultiplier(config: TrainingConfig, training: TrainingOption): Double {
             val ctx = config.grandConcertPoints ?: return 1.0
@@ -1401,9 +1257,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val ceiling =
                 when {
                     ctx.behindPace && turns != null && turns <= GC_CONCERT_NEAR_TURNS -> GC_POINT_BOOST_MAX_URGENT
-                    // Behind the cycle floor OR behind the whole-career song cadence both use the same
-                    // 0.6 ceiling: the total-song deficit is mission-critical (18 countable songs), so
-                    // it is no longer capped weaker than a behind-floor cycle.
+                    // Behind the cycle floor or behind the whole-career cadence share the 0.6 ceiling: the total-song deficit (18 countable songs) is mission-critical.
                     else -> GC_POINT_BOOST_MAX
                 }
             return 1.0 + minOf(ceiling, boost)
@@ -1510,14 +1364,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
             cachedIgnoreFailureChance == ignoreFailureChance &&
             cachedIsIrregularEvaluation == isIrregularEvaluation
         ) {
-            // Cache hit on the same turn with matching evaluation flags. Safe to replay.
             MessageLog.i(TAG, "[TRAINING] Using cached training analysis results for this turn.")
             processAnalysisResults(cachedAnalysisResults!!, ignoreFailureChance, isIrregularEvaluation, test)
             return
         } else if (cachedAnalysisResults != null) {
-            // Cache exists but is not reusable: written on a different turn, or under different flags.
-            // The stored TrainingAnalysisResult objects are mutable and may have been boosted/patched in
-            // place, and a prior turn's failure chances no longer hold after energy changed - re-run fresh.
+            // Not reusable: written on another turn or under different flags. The cached results are mutable (boosted/patched in place)
+            // and old failure chances no longer hold after energy changed, so re-run fresh.
             MessageLog.d(
                 TAG,
                 "[DEBUG] analyzeTrainings:: Cached results not reusable (cached turn=$cachedAnalysisTurn now=${campaign.date.day}; cached ignore=$cachedIgnoreFailureChance/irregular=$cachedIsIrregularEvaluation, requested ignore=$ignoreFailureChance/irregular=$isIrregularEvaluation). Re-analyzing from scratch.",
@@ -1526,8 +1378,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             MessageLog.v(TAG, "\n[TRAINING] Now starting process to analyze all 5 Trainings.")
         }
 
-        // A fresh full analysis starts a new turn's panel read; a singleTraining re-analysis is
-        // same-turn by definition and must keep the balances the full pass already read.
+        // A fresh full analysis starts a new turn's panel read; a singleTraining re-analysis is same-turn and keeps the balances already read.
         if (!singleTraining) {
             gcTurnBalances = null
         }
@@ -1683,12 +1534,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
             ButtonBack.click(game.imageUtils)
             game.wait(1.0)
 
-            // Clear any dialog that surfaced during the back-out before checking for Main.
-            // `checkMainScreen()` returns false whenever any DialogUtils-detected dialog is up, so a
-            // transient event/scenario popup (e.g. Trackblazer's Insufficient Goal Race Result Pts,
-            // which fires concurrently with OCR retries) blocks recovery even though the bot is at or
-            // one step from Main. Wrap the call so an unrecognized dialog doesn't kill the bot here;
-            // the throw is intentionally non-fatal in this scope.
+            // Clear any dialog from the back-out before checking Main: `checkMainScreen()` returns false while any DialogUtils dialog
+            // is up, so a transient popup (e.g. Trackblazer's Insufficient Goal Race Result Pts) would block recovery. The wrapper keeps
+            // an unrecognized dialog from killing the bot here.
             try {
                 campaign.tryHandleAllDialogs(timeoutMs = 5000)
             } catch (e: IllegalStateException) {
@@ -1699,9 +1547,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             }
 
             if (!campaign.checkMainScreen()) {
-                // Save the actual failure-state screen so we can identify which screen the bot
-                // was stuck on and patch root cause. Filename mirrors CareerLaunchNavigator's
-                // nav_failure_*.png pattern for grep-ability.
+                // Save the failure-state screen to identify where the bot was stuck; the filename mirrors CareerLaunchNavigator's nav_failure_*.png.
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                 val screenshotName = "ocr_retry_abort_$timestamp"
                 try {
@@ -1842,10 +1688,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     )
 
                 if (GrandConcertScenario.matches(game.scenario)) {
-                    // Read this facility's performance-point preview off the frame already in hand.
-                    // The selected facility's "+N" annotation is on screen right now, so each
-                    // facility's visit contributes its own (type, amount) and the loop as a whole
-                    // assembles the turn's full income matrix without extra navigation.
+                    // The selected facility's "+N" preview is on screen now, so each visit contributes its own (type, amount) and the loop
+                    // assembles the turn's income matrix without extra navigation.
                     val panel = gcTrainingReader.readFacilityPanel(sourceBitmap)
                     if (panel != null) {
                         result.performanceGains = panel.gains
@@ -2134,8 +1978,6 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     }
                 }
 
-                // Cross-validate the failure chances across facilities to correct OCR misreads before
-                // they feed scoring and the cache.
                 normalizeFailureChances(analysisResults)
 
                 // Process results and populate training maps.
@@ -2248,10 +2090,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             }
 
             if (!test && isIrregularEvaluation) {
-                // Irregular-training admission: on a free Classic/Senior turn the bot may skip a
-                // voluntary race only for a training genuinely worth more than the race. The decision
-                // is the pure companion function admitIrregularTraining (so it is unit-tested directly);
-                // here we just feed it the live phase, baseline, and current stat.
+                // Irregular-training admission: on a free Classic/Senior turn, skip a voluntary race only for a training worth more than the race (decided by admitIrregularTraining).
                 val baseline = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerIrregularTrainingMinStatGain", 30)
                 val admitReason =
                     admitIrregularTraining(
@@ -2308,12 +2147,6 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
     }
 
-    /**
-     * Cross-validates and corrects the failure chances across all training results via
-     * [crossValidateFailureChances], logging any correction it applies.
-     *
-     * @param results The list of [TrainingAnalysisResult] to normalize in place.
-     */
     private fun normalizeFailureChances(results: List<TrainingAnalysisResult>) {
         val validResults = results.filter { it.failureChance >= 0 }
         if (validResults.size < 2) return
@@ -2559,8 +2392,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         // Build skillHintsPerLocation from the training map.
         val skillHintsPerLocation: Map<StatName, Int> = StatName.entries.associateWith { trainingMap[it]?.numSkillHints ?: 0 }
 
-        // Grand Concert: assemble the point context (balances read this turn + the campaign's
-        // cycle state and song target) and log the turn's income matrix so the bias is auditable.
+        // Grand Concert: assemble the point context and log the turn's income matrix so the bias is auditable.
         val grandConcertPoints = campaign.grandConcertPointContext(gcTurnBalances)
         if (grandConcertPoints != null) {
             val gainsLine =
@@ -2644,11 +2476,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val finalScoringMode = if (isIrregularEvaluation) "Trackblazer (Irregular Training)" else scoringMode
         logSelectionReasoning(trainingConfig, finalScoringMode, trainingScores, skippedScores, best)
 
-        // DecisionTracer: capture the per-stat scoring contest for the turn's Decision Report. The
-        // runner-up list is only built when a tracer is attached -- tracer presence controls the
-        // allocation, and the null-safe call short-circuits its arguments, so when no tracer is present
-        // (tracer == null) the allocation is skipped entirely. The tracer may now exist in normal
-        // release play when factual recording is enabled.
+        // DecisionTracer: build the runner-up list only when a tracer is attached (it can exist in normal release play when factual
+        // recording is enabled); the null-safe call skips the allocation otherwise.
         val tracer = campaign.decisionTracer
 
         if (best != null) {
@@ -3124,10 +2953,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         firstTrainingCheck = false
                         advanced = true
                         campaign.decisionTracer?.let { tracer ->
-                            // recommendTraining() already recorded selected=null for this empty-map turn; now that the
-                            // forced Wit tap has succeeded, record the authoritative WIT selection so lastOrNull() makes
-                            // it the turn's pick. Evidence is same-turn pre-action analysis only. This never runs on the
-                            // failed-tap recovery branch below, so a rest is never mislabeled as a Wit training.
+                            // recommendTraining() already recorded selected=null for this empty-map turn; record the authoritative WIT selection now that
+                            // the forced tap succeeded, so lastOrNull() makes it the pick. Never runs on the failed-tap recovery branch, so a rest is never
+                            // mislabeled as a Wit training.
                             val evidence = selectedTrainingEvidence(trainingMap, skippedTrainingMap, StatName.WIT)
                             tracer.recordTrainingSelection(
                                 selected = StatName.WIT,
@@ -3169,10 +2997,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
             } else {
                 // Now select the training option with the highest weight.
                 campaign.decisionTracer?.let { tracer ->
-                    // P05: record a forced override only on this committed path. This is the else of the
-                    // trainingMap.isEmpty() check, so the map is non-empty and the turn will actually train;
-                    // a forced Wit that fell through to recoverEnergy() on the empty-map branch records nothing.
-                    // Evidence is same-turn pre-action analysis; lastOrNull() keeps this the turn's selection.
+                    // Record a forced override only on this committed path (non-empty map, so the turn will train); a forced Wit that fell through
+                    // to recoverEnergy() records nothing.
                     if (forceStat != null) {
                         val evidence = selectedTrainingEvidence(trainingMap, skippedTrainingMap, forceStat)
                         tracer.recordTrainingSelection(
@@ -3186,12 +3012,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     }
                 }
 
-                // Grand Concert: record the turn's training-attributable per-color point income,
-                // tagged to the facility actually being trained. The income is that facility's own
-                // on-screen "+N" preview (the game's per-facility award), so it needs no before/after
-                // differencing to attribute; see GrandConcertPointIncome for why there is no truthful
-                // ppAfter at this hook. The context call is idempotent (already made this turn by
-                // recommendTraining and considerFanRaceDeferral) and returns null off Grand Concert.
+                // Record the facility's own on-screen "+N" preview as the turn's per-color point income; it needs no before/after
+                // differencing. See GrandConcertPointIncome for why there is no truthful ppAfter here. The context call is idempotent and
+                // returns null off Grand Concert.
                 val gcPoints = campaign.grandConcertPointContext(gcTurnBalances)
                 if (gcPoints != null && trainingSelected != null) {
                     val trained = trainingMap[trainingSelected]
@@ -3199,9 +3022,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         TAG,
                         GrandConcertPointIncome.format(
                             turn = campaign.date.day,
-                            // The turn's committed-action seq, so distinct Pre-Debut trainings that share
-                            // one canonical turn (turn=12) stay individually identifiable and join the
-                            // decision_trace/career_state streams. Null (omitted) in a non-debug build.
+                            // The committed-action seq keeps distinct Pre-Debut trainings that share one canonical turn identifiable and joined to
+                            // decision_trace/career_state; null (omitted) in a non-debug build.
                             seq = campaign.currentDecisionSeq(),
                             selected = trainingSelected,
                             gains = trained?.performanceGains ?: emptyMap(),

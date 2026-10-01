@@ -44,42 +44,32 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     /** The preferred track distance override for training. */
     private val trainingSettingTrackDistanceString = SettingsHelper.getStringSetting("training", "preferredDistanceOverride")
 
-    /** Whether this session's strategy tail was allowed (2B-1 planned-only shaping). Null until the
-     * planner actually resolves it, so early exits that never reach the planner omit the telemetry
-     * field instead of guessing. */
+    /** Null until the planner resolves it, so early exits omit the telemetry field. */
     private var sessionStrategyTailAllowed: Boolean? = null
 
-    /** The trigger [start] resolved for this session, for planner decisions that depend on WHY
-     * the session is running (the career-end fallback fires only on CAREER_COMPLETE). */
+    /** The trigger [start] resolved; the career-end fallback fires only on CAREER_COMPLETE. */
     private var sessionEffectiveTrigger: SkillCheckTrigger? = null
 
-    /** True only when the constrained career-end fallback ran this session (sparks objective at
-     * CAREER_COMPLETE). Null otherwise so the telemetry field is omitted, not guessed. */
+    /** True only when the constrained career-end fallback ran; null otherwise so the telemetry field is omitted. */
     private var sessionCareerEndFallback: Boolean? = null
 
-    /** Whether this session's PLANNING scan reached a confirmed end of the skill list. Null
-     * until the planning parse runs (early exits never scanned); the buy passes deliberately do
-     * not overwrite it - purchase coverage is already policed by the points-delta arbiter. */
+    /**
+     * Null until the planning scan runs; the buy passes do not overwrite it (purchase coverage is policed by the
+     * points-delta arbiter).
+     */
     private var sessionPlanningScanComplete: Boolean? = null
 
-    /** The last session's finalization evidence: outcome, scan/planner/confirmation
-     * completeness, the verified balance, and the candidate-exhaustion counts. Set on every
-     * session record independently of the corpus append - a telemetry IO failure must never
-     * blind the guard that decides whether Finish is safe. */
+    /** Set independent of the corpus append: a telemetry IO failure must never blind the Finish guard. */
     internal var lastSessionEvidence: FinalizeEvidence? = null
         private set
 
-    /** 2B-2 recovery-protection outcome for this session, for telemetry. All null when the gate
-     * never armed (Manual, wrong objective or distance, or an exit before the planner ran). */
+    /** Recovery-protection outcome for telemetry; all null when the gate never armed. */
     private var sessionRecoveryRuleActive: Boolean? = null
     private var sessionRecoveryRequired: Boolean? = null
     private var sessionRecoverySkill: String? = null
     private var sessionRecoveryObservedPrice: Int? = null
 
-    /** Names whose purchase was VERIFIED this session (Skill Points moved). The plan-round loop
-     * preserves these through each round's simulation reset, and progress tracking uses the
-     * count so a round that bought nothing and dead-tapped nothing ends the session instead of
-     * re-planning against a stuck screen. */
+    /** Names whose purchase was VERIFIED (Skill Points moved); they survive each round's simulation reset. */
     private val sessionVerifiedBuys: MutableSet<String> = mutableSetOf()
 
     /** The original race strategy from settings. */
@@ -112,8 +102,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                                 skillNames = skillNames,
                             )
                     } catch (e: Exception) {
-                        // Skip just this entry, not the whole map — a try/catch around the entire loop
-                        // would let one bad plan empty ALL plans.
+                        // Skip just this entry: one bad plan must not empty ALL plans.
                         MessageLog.w(TAG, "[WARN] skillPlans:: Skipping unparseable plan '$planName': ${e.message}")
                     }
                 }
@@ -137,10 +126,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         /** Prioritize skills that offer the best rank increase per point spent. */
         OPTIMIZE_RANK,
 
-        /** Grouped 0/1 knapsack DP across upgrade chains to maximize total rank under budget. Unlike
-         * [OPTIMIZE_RANK]'s greedy ratio, it respects mutual exclusion between a base skill and its
-         * upgrade — owning both wastes the base cost since only the upgrade activates — and evaluates
-         * non-greedy combos the ratio sort misses (two cheap mid-tier skills vs one unaffordable top-tier).
+        /**
+         * Unlike greedy [OPTIMIZE_RANK], respects base/upgrade mutual exclusion (owning both wastes the base cost).
          */
         OPTIMIZE_KNAPSACK,
 
@@ -150,9 +137,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             private val nameMap = entries.associateBy { it.name }
             private val ordinalMap = entries.associateBy { it.ordinal }
 
-            /** Look up by name, tolerating whitespace and hyphen/underscore drift from the persisted
-             *  form (e.g. "optimize-knapsack" -> OPTIMIZE_KNAPSACK) so a stray format doesn't silently
-             *  fall back to greedy DEFAULT. */
+            /**
+             * Tolerates whitespace and hyphen/underscore drift so a stray persisted format does not fall back to
+             * greedy.
+             */
             fun fromName(value: String): SpendingStrategy? = nameMap[value.trim().uppercase().replace('-', '_')]
 
             /** Retrieve the [SpendingStrategy] by its ordinal value. */
@@ -205,22 +193,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 get() = if (price > 0) evaluationPoints.toDouble() / price.toDouble() else 0.0
         }
 
-        /** Mid-career cannot-afford early-exit heuristic, in skill points. An upstream
-         * approximation of the cheapest useful purchase (cheapest non-negative base cost 70 at
-         * the deepest observed 40% hint discount = 42), NOT a proven universal floor: the
-         * packaged data prices purchasable negatives at 40, and discounts are screen-observed,
-         * never bounded by repository data. Used ONLY to skip pointless mid-career scans; the
-         * career-finalization guard never consults it (see SkillDataFloorTest). */
+        /**
+         * Upstream's approximation of the cheapest useful purchase (70 at the deepest observed 40% hint discount =
+         * 42), NOT a proven floor; it only skips mid-career scans and is never consulted by the finalization guard.
+         */
         internal const val SKILL_POINTS_EARLY_EXIT_FLOOR = 42
 
-        /**
-         * Whether a skill is the ◎ (double-circle) upgrade of an ○ skill, identified by the name suffix the
-         * OCR pass appends ([SkillList.getSkillListEntryTitle]). The "skip double-circle upgrades" toggle drops
-         * these so the budget spreads across more distinct ○ skills instead of paying up for one ◎.
-         *
-         * @param name The skill name to test.
-         * @return True if the name ends with the ◎ marker.
-         */
+        /** The ◎ upgrade of an ○ skill, by the name suffix the OCR pass appends. */
         fun isDoubleCircleUpgrade(name: String): Boolean = name.trimEnd().endsWith("◎")
 
         /**
@@ -273,13 +252,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             }
 
         /**
-         * Whether a skill may enter the constrained career-end fallback (sparks objective at
-         * CAREER_COMPLETE). Stricter than the general knapsack candidate set on purpose:
-         * negatives and inherited uniques are ALWAYS excluded here because their existing
-         * toggles own those purchases in the common phase (toggle on = already bought before
-         * the fallback runs; toggle off = must not be bought at all), the double-circle skip
-         * toggle is honored, and the skill must pass the Style-preference axes - a
-         * wrong-distance, wrong-style, or wrong-surface skill never enters the fallback.
+         * Stricter than the knapsack set: negatives and inherited uniques are excluded (their toggles own them), plus
+         * the double-circle skip and Style axes.
          */
         fun careerEndFallbackCandidateAllowed(
             isNegative: Boolean,
@@ -290,14 +264,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         ): Boolean = !isNegative && !isInheritedUnique && (!skipDoubleCircleUpgrades || !isDoubleCircle) && matchesAxes
 
         /**
-         * Whether a skill may be auto-injected to cover a recovery deficit (2B-2). Purely
-         * structural: a purchasable white or gold recovery (never an inherited unique - those
-         * satisfy ownership but stay behind their own toggle; never a negative - the 20024
-         * debuff family already belongs to the negative phase) that the Style preference
-         * accepts AND that either explicitly commits to a distance, style, or surface axis or
-         * sits on the small verified general allow-list. Axis-free condition traps such as
-         * Triple 7s (fires only at 776-778m remaining) and Shake It Out fail the last check;
-         * inferred styles deliberately do not count as commitment (they are heuristic).
+         * Structural only: a purchasable white or gold recovery (never an inherited unique or a negative) that the
+         * Style preference accepts and that commits to a distance/style/surface axis or is on the small verified
+         * allow-list. Axis-free condition traps (Triple 7s, Shake It Out) fail; inferred styles do not count as
+         * commitment.
          */
         internal fun isRecoveryInjectionCandidate(
             skillData: SkillData,
@@ -323,7 +293,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return committed || skillData.id in GENERAL_RECOVERY_IDS
         }
 
-        /** One observed recovery-injection candidate. [price] is the live cumulative screen price. */
+        /** [price] is the live cumulative screen price. */
         internal data class RecoveryCandidate(
             val name: String,
             val recoveryClass: RecoveryClass,
@@ -331,10 +301,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             val skillId: Int,
         )
 
-        /** Deterministic injection choice: WHITE before GOLD (survival protection wants the
-         * cheapest reliable heal, and gold does not automatically outrank white), then lowest
-         * live price, then skill ID as the stable tie-break. Budget is the caller's concern so
-         * an unaffordable best pick can be logged with the price that did not fit. */
+        /** WHITE before GOLD (cheapest reliable heal), then lowest live price, then skill ID. */
         internal fun pickRecoveryCandidate(candidates: List<RecoveryCandidate>): RecoveryCandidate? =
             candidates.minWithOrNull(
                 compareBy({ it.recoveryClass != RecoveryClass.WHITE }, { it.price }, { it.skillId }),
@@ -376,75 +343,33 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return result
         }
 
-        /**
-         * One mutually-exclusive choice within a [KnapsackGroup].
-         *
-         * For an upgrade-chain group like base ○ → upgrade ◎, choices look like:
-         *   - empty list (skip the group)
-         *   - [base only] (cost = base.price, score = base.evalPt)
-         *   - [base, upgrade] (cost = upgrade.price, score = upgrade.evalPt;
-         *     only the upgraded form activates so we don't sum the scores)
-         *
-         * @property items Skill candidates picked together by this choice. Empty = "skip this group".
-         */
+        /** For an upgrade chain only the upgraded form activates, so scores are not summed. */
         data class KnapsackChoice(
             val items: List<SkillCandidate>,
         ) {
-            /** SP cost of this choice: the LAST item's price, not the sum. A chain member's screen
-             * price already includes its unpurchased prerequisites (SkillListEntry), so summing
-             * charged the base twice per combo and made the DP under-buy gold/◎ upgrades. Chain
-             * choices are prefixes (base first), so the last item carries the combined price;
-             * for singletons the two are the same. */
+            /**
+             * SP cost: the LAST item's price, not the sum. A chain member's screen price already includes its
+             * unpurchased prerequisites, so summing charged the base twice and made the DP under-buy gold/◎ upgrades.
+             */
             val cost: Int = items.lastOrNull()?.price ?: 0
 
-            /** Score for this choice: the max [SkillCandidate.evaluationPoints] across the items, not
-             * the sum — owning both base ○ and upgrade ◎ activates only the upgrade, so the base's
-             * score is superseded. Singleton = the one item's eval_pt; skip = 0.
-             */
+            /** Max across the items, not the sum: only the upgrade ◎ activates. */
             val score: Int = items.maxOfOrNull { it.evaluationPoints } ?: 0
 
-            /** True if this choice picks nothing (the implicit skip option). */
             val isSkip: Boolean = items.isEmpty()
 
-            /** Names of the skills picked by this choice, in order. */
             val names: List<String> = items.map { it.name }
         }
 
-        /**
-         * A group of mutually-exclusive [KnapsackChoice] options the DP must pick at most one from.
-         *
-         * Typical groups:
-         *   - **Singleton standalone skill** — choices: [skip], [pick]
-         *   - **Upgrade chain** — choices: [skip], [base], [base, upgrade1], [base, upgrade1, upgrade2]
-         *   - **Required skill** (user-planned, negative, inherited unique) — choices: [pick] only
-         *     (no skip option) so the DP must include it
-         *
-         * @property choices All possible selections within this group. Must contain at least one choice.
-         * @property isRequired When true, the DP cannot choose to skip this group; it must pick a
-         *   non-empty choice. Used for skills the user explicitly planned or for negative-skill cleanup.
-         */
+        /** A required group (user-planned, negative, inherited unique) has no skip option. */
         data class KnapsackGroup(
             val choices: List<KnapsackChoice>,
             val isRequired: Boolean = false,
         )
 
         /**
-         * Run a grouped 0/1 knapsack DP to choose the highest-scoring combination of skill purchases
-         * within [budget].
-         *
-         * Algorithm: standard grouped knapsack with rolling DP arrays for memory efficiency
-         * (`O(2 × budget)` instead of `O(groups × budget)` for the value table). Reconstruction uses
-         * a full `choice[g][b]` table to recover which option was picked per group.
-         *
-         * Faithful Kotlin port of the algorithm in `daftuyda/UmaTools` `js/optimizer.js`
-         * (`optimizeGrouped` function). Adapted to use [SkillCandidate] directly instead of
-         * row-metadata, and to treat empty/required choices via [KnapsackChoice.isSkip] +
-         * [KnapsackGroup.isRequired] flags rather than a JS `none` sentinel.
-         *
-         * @param groups Mutually-exclusive groups of skill choices.
-         * @param budget Total SP budget available.
-         * @return Ordered list of (name, price) pairs to buy. Empty if a required group is unreachable
-         *   under the budget.
+         * Port of `optimizeGrouped` in `daftuyda/UmaTools` `js/optimizer.js`; empty if a required group is
+         * unreachable under the budget.
          */
         fun calculateOptimizeKnapsackPurchases(
             groups: List<KnapsackGroup>,
@@ -456,19 +381,14 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             val sentinel = Int.MIN_VALUE / 4 // Avoids overflow when added to a positive score
             val budgetLimit = budget
 
-            // Rolling DP arrays: dpPrev[b] = best score using first (g-1) groups with exactly b budget used.
-            // dpCurr[b] = best score using first g groups. After processing g, swap and continue.
             var dpPrev = IntArray(budgetLimit + 1) { 0 }
             var dpCurr = IntArray(budgetLimit + 1) { sentinel }
 
-            // choice[g][b] = index of the chosen option in groups[g-1] for state (g, b), or -1 for "skip".
             val choice = Array(numGroups + 1) { IntArray(budgetLimit + 1) { -1 } }
 
             for (g in 1..numGroups) {
                 val group = groups[g - 1]
                 val opts = group.choices
-                // The group has an implicit skip path if it isn't required AND no explicit skip option exists,
-                // OR if any of its choices is already a skip (cost=0, score=0).
                 val skipAllowed = !group.isRequired || opts.any { it.isSkip }
 
                 for (b in 0..budgetLimit) {
@@ -495,20 +415,16 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     }
                 }
 
-                // Swap and clear curr for the next group iteration.
                 val tmp = dpPrev
                 dpPrev = dpCurr
                 dpCurr = tmp
                 dpCurr.fill(sentinel)
             }
 
-            // dpPrev[budgetLimit] now holds the optimal score for all groups within budget.
             if (dpPrev[budgetLimit] <= sentinel / 2) {
-                // A required group was unreachable under the budget — no feasible plan.
                 return emptyList()
             }
 
-            // Reconstruct the chosen options by walking the choice table backwards.
             val result = mutableListOf<Pair<String, Int>>()
             var remaining = budgetLimit
             val pickedGroups = mutableListOf<KnapsackChoice>()
@@ -521,18 +437,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 remaining -= picked.cost
             }
 
-            // Groups were walked backwards above, so reverse to emit in selection order with
-            // base-before-upgrade within each chain.
+            // Reverse into selection order (base before upgrade within each chain).
             for (choice in pickedGroups.asReversed()) {
                 var previousChainPrice = 0
                 for (item in choice.items) {
-                    // Chain members carry cumulative screen prices, so emit each link's increment
-                    // over the previous one - that is what the screen will charge once the earlier
-                    // links are owned, and it is what the execution loop's affordability gate
-                    // compares against its live remaining budget. Pair prices now sum to the
-                    // choice's DP cost. Singletons emit their full price (previous = 0). Clamped:
-                    // prices come from OCR, and a misread that breaks the cumulative invariant
-                    // must not emit a negative price into the affordability gate.
+                    // Chain members carry cumulative screen prices, so emit each link's increment (what the screen
+                    // charges once earlier links are owned); clamped because an OCR misread can break the
+                    // invariant.
                     result.add(item.name to (item.price - previousChainPrice).coerceAtLeast(0))
                     previousChainPrice = item.price
                 }
@@ -540,26 +451,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return result
         }
 
-        /**
-         * Build [KnapsackGroup]s from a flat list of skill candidates by merging skills that share an
-         * upgrade chain into a single group with combo choices.
-         *
-         * For each chain `[base, up1, up2]` from [upgradeChains], if any of those names appear in
-         * [candidates], the corresponding skills become one group with options:
-         *   - skip
-         *   - [base] only
-         *   - [base, up1]
-         *   - [base, up1, up2]
-         *
-         * Skills not part of any chain become singleton groups with choices [skip, pick].
-         *
-         * @param candidates Available skills the bot can currently purchase.
-         * @param upgradeChains Map of skill name → ordered chain (base first, upgrades after) from
-         *   [SkillDatabase.skillUpgradeChains].
-         * @param requiredNames Names of skills that must be included (user-planned, negatives, etc.);
-         *   their groups are marked [KnapsackGroup.isRequired].
-         * @return List of groups suitable for [calculateOptimizeKnapsackPurchases].
-         */
+        /** Skills sharing an upgrade chain become one group; the rest become [skip, pick] singletons. */
         fun buildKnapsackGroups(
             candidates: List<SkillCandidate>,
             upgradeChains: Map<String, List<String>>,
@@ -572,8 +464,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             for (candidate in candidates) {
                 if (candidate.name in processedNames) continue
 
-                // Resolve the canonical chain order for this candidate. The map may key by any chain
-                // member; the value is the full ordered chain.
+                // The map may key by any chain member; the value is the full ordered chain.
                 val chain: List<String> = upgradeChains[candidate.name].orEmpty()
                 val chainPresent: List<SkillCandidate> =
                     if (chain.isNotEmpty()) {
@@ -582,7 +473,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                         listOf(candidate)
                     }
 
-                // If only one chain member is present in the candidate list, treat as singleton.
                 if (chainPresent.size <= 1) {
                     val item = chainPresent.firstOrNull() ?: candidate
                     val isRequired = item.name in requiredNames
@@ -596,7 +486,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     continue
                 }
 
-                // Multi-link chain: choices are [skip, base, base+up1, base+up1+up2, ...].
                 val chainRequired = chainPresent.any { it.name in requiredNames }
                 val choices =
                     buildList {
@@ -701,12 +590,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             val spent = common.sumOf { it.second }
             val alreadyBought = common.map { it.first }
 
-            // Planned-only shaping (2B-1): the tail is skipped, leftover budget accepted.
+            // Planned-only: the strategy tail is skipped and leftover budget accepted.
             if (!allowStrategyTail) return result
 
-            // Strategy-specific purchases. Drop ◎ upgrades up front when the toggle is on so every
-            // strategy below — including the knapsack DP that models the ○ -> ◎ chain as a group — only
-            // ever sees the ○ form.
+            // Drop ◎ upgrades up front when the toggle is on so every strategy below, including the knapsack DP's
+            // ○ -> ◎ chain group, only sees the ○ form.
             val remainingCandidates =
                 candidates.filter {
                     it.name !in alreadyBought && (!skipDoubleCircle || !isDoubleCircleUpgrade(it.name))
@@ -743,11 +631,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                         tieredResult + rankFallback
                     }
                     SpendingStrategy.OPTIMIZE_KNAPSACK -> {
-                        // No upgrade-chain map here (it lives in SkillDatabase), so this static helper
-                        // runs the DP with singleton groups only — still better than greedy on budget-fit
-                        // edge cases, but without the mutual-exclusion benefit. Callers with the chain map
-                        // should call [calculateOptimizeKnapsackPurchases] + [buildKnapsackGroups] directly;
-                        // the in-bot [getSkillsToBuyOptimizeKnapsackStrategy] does and gets the full benefit.
+                        // No chain map here (it lives in SkillDatabase): singleton groups only; use
+                        // [buildKnapsackGroups] for the full benefit.
                         val singletonGroups =
                             remainingCandidates.map { c ->
                                 KnapsackGroup(
@@ -774,10 +659,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * This method allows for testing the skill identification and selection logic without performing actual transactions in the game.
      */
     fun startSkillListBuyTest() {
-        // TEMP (verification harness): runs the REAL purchase pass on the current skill list screen
-        // instead of the read-only simulation, so the (+) tap fix can be exercised without a full career.
-        // To use: enable debugMode_startSkillListBuyTest, open the career-end "Learn" screen, Start.
-        // Revert to the simulation once the tap fix is confirmed.
+        // Debug harness (debugMode_startSkillListBuyTest): runs the REAL purchase pass on the current skill list
+        // screen instead of the simulation.
         MessageLog.i(TAG, "\n[TEST] Now beginning Skill List Buy test (REAL purchase pass). Waiting up to 30s for the Learn screen...")
         val testSkillList = SkillList(game, campaign)
         var bOnSkillScreen = false
@@ -823,8 +706,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 continue
             }
 
-            // bIsAvailable guard ported from upstream 90b51885: auto-obtained rows tallied here
-            // spent budget on skills that were never purchasable.
+            // Auto-obtained rows are skipped: tallying them spent budget on skills that were never purchasable.
             if (entry.bIsAvailable && entry.screenPrice <= remainingSkillPoints) {
                 result[name] = entry.screenPrice
                 remainingSkillPoints -= entry.screenPrice
@@ -858,7 +740,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 continue
             }
 
-            // Same 90b51885 guard as the negative-skill tally above.
             if (entry.bIsAvailable && entry.screenPrice <= remainingSkillPoints) {
                 result[name] = entry.screenPrice
                 remainingSkillPoints -= entry.screenPrice
@@ -903,11 +784,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
             // Handle exact matches.
             if (entry.bIsAvailable) {
-                // Respect the wave budget in plan order. Without this, the plan committed every
-                // available planned skill regardless of total cost, and since the buyer purchases in
-                // scroll order (not plan order) an over-budget set stranded the expensive critical
-                // skills (careers reaching 2500m+ gates without Swinging Maestro). A budget-true set is
-                // order-insensitive — everything planned gets bought.
+                // Respect the wave budget in plan order: the buyer purchases in scroll order, so an over-budget
+                // set stranded the expensive critical skills (careers reached 2500m+ gates without Swinging
+                // Maestro).
                 if (entry.screenPrice > remainingSkillPoints) {
                     MessageLog.v(
                         TAG,
@@ -1001,16 +880,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Phase 4 of the common checks (2B-2): recovery-deficit protection. Runs only when the
-     * adaptive gate arms for this career's objective and resolved preferred distance; it never
-     * opens a session by itself. The deficit is satisfied by any compatible recovery already
-     * owned (Obtained rows on this parse, or purchases tracked this career) or already selected
-     * by an earlier phase of THIS session - a planned recovery bought moments ago counts, while
-     * a planned-but-never-observed one deliberately does not (a Potential-gated Cooldown must
-     * never block the fallback). Otherwise the cheapest compatible observed candidate (WHITE
-     * before GOLD) is bought from the remaining wave budget; an unaffordable or absent candidate
-     * is skipped with a log and retried naturally at the next real session. Nothing is reserved
-     * across turns.
+     * Recovery-deficit protection; runs only when the adaptive gate arms, never opens a session itself. Satisfied by
+     * a compatible recovery already owned or selected this session (a planned-but-never-observed one does not count:
+     * a Potential-gated Cooldown must never block the fallback); otherwise buys the cheapest compatible observed
+     * candidate (WHITE before GOLD) from the wave budget.
      */
     private fun getRecoveryInjectionSkills(skillList: SkillList, skillsToBuy: List<String>, availableSkillPoints: Int): Map<String, Int> {
         val axes = resolvePreferredAxes()
@@ -1019,9 +892,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         }
         sessionRecoveryRuleActive = true
 
-        // Ownership and this session's earlier selections, all by name. Inherited-unique
-        // recoveries count here (a real heal is a real heal) even though they are never
-        // injection candidates themselves.
+        // Inherited-unique recoveries count as owned though they are never injection candidates.
         val satisfiedBy: String? =
             (skillList.getObtainedSkills().keys + campaign.trainee.ownedSkillNames + skillsToBuy)
                 .firstOrNull { name ->
@@ -1041,8 +912,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     entry.name !in skillsToBuy &&
                         entry.bIsAvailable &&
                         entry.screenPrice > 0 &&
-                        // Same dead-tap exclusion as every other candidate source: a row the game
-                        // already refused this session must not be injected again.
+                        // Same dead-tap exclusion as every other candidate source.
                         entry.name !in skillList.deadTapSkills &&
                         isRecoveryInjectionCandidate(entry.skillData, axes.trackDistance, axes.runningStyle, axes.trackSurface)
                 }
@@ -1190,7 +1060,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                         continue
                     }
 
-                    // Skip ◎ upgrades when the toggle is on so the budget buys more distinct ○ skills.
                     if (skipDoubleCircleUpgrades && isDoubleCircleUpgrade(entry.name)) {
                         continue
                     }
@@ -1254,15 +1123,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     continue
                 }
 
-                // Skip ◎ upgrades when the toggle is on so the budget buys more distinct ○ skills.
                 if (skipDoubleCircleUpgrades && isDoubleCircleUpgrade(entry.name)) {
                     continue
                 }
 
-                // Strictly respect the Style preference: skip off-style/distance/surface skills when a
-                // preference is set (a no_preference axis resolves to null and never restricts). Without
-                // this, OPTIMIZE_RANK bought purely by ratio, and off-preference skills also leaked in via
-                // the OPTIMIZE_SKILLS leftover-budget tail that spends through this strategy.
+                // Strictly respect the Style preference (no_preference resolves to null and never restricts);
+                // otherwise OPTIMIZE_RANK bought purely by ratio and off-preference skills leaked in via the
+                // leftover tail.
                 if (!matchesPreference(
                         entry.trackDistance,
                         entry.runningStyle,
@@ -1324,9 +1191,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         val result: MutableMap<String, Int> = mutableMapOf()
         if (availableSkillPoints <= 0) return result.toMap()
 
-        // Apply the Style preference to the knapsack candidate set too. Upstream's gate only covered
-        // Optimize Skills/Rank; the knapsack is our addition, so extend the same gate here for
-        // consistency. A no_preference axis resolves to null and never restricts (default presets unaffected).
+        // Same Style-preference gate as Optimize Skills/Rank (upstream's gate omitted the knapsack).
         val (preferredRunningStyle, preferredTrackDistance, preferredTrackSurface) = resolvePreferredAxes()
         val tailFilter = careerEndTailFilter(campaign.skillSpendObjective, sessionEffectiveTrigger, careerEndBuyAnySkill, preferredRunningStyle != null)
         when (tailFilter) {
@@ -1339,14 +1204,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 entry.bIsAvailable &&
                     entry.name !in skillsToBuy &&
                     entry.screenPrice > 0 &&
-                    // Never re-plan a skill whose taps the game already refused this session: the
-                    // scan can list an owned skill as buyable, and planning it again just burns
-                    // the budget slot a real candidate needed (2026-07-26: the DP chose a phantom
-                    // "Focus" at 98 over a purchasable "Sympathy" at 63, and the queue stalled).
+                    // Never re-plan a skill whose taps the game refused this session: the scan can list an owned
+                    // skill as buyable and planning it burns a real candidate's budget.
                     entry.name !in skillList.deadTapSkills &&
-                    // Drop ◎ upgrades before buildKnapsackGroups runs, otherwise the ○ -> ◎ chain group still
-                    // offers the [○, ◎] combo and the DP buys the ◎ — the toggle would no-op on the one
-                    // strategy every preset uses at careerComplete.
+                    // Drop ◎ upgrades before buildKnapsackGroups, or the chain group still offers [○, ◎] and the
+                    // toggle no-ops at careerComplete.
                     (!skipDoubleCircleUpgrades || !isDoubleCircleUpgrade(entry.name)) &&
                     knapsackTailAllows(
                         tailFilter,
@@ -1364,7 +1226,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return result.toMap()
         }
 
-        // Convert live SkillListEntry instances into SkillCandidate snapshots for the DP.
         val candidates: List<SkillCandidate> =
             available.values.map { entry ->
                 SkillCandidate(
@@ -1378,8 +1239,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 )
             }
 
-        // Group skills that share an upgrade chain so the DP can evaluate the
-        // "buy base then upgrade" combo as a single mutually-exclusive option.
         val groups =
             buildKnapsackGroups(
                 candidates = candidates,
@@ -1404,9 +1263,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             "[KNAPSACK] DP plan: ${plan.size} skills for $planTotal SP. Skills: ${plan.joinToString { "${it.first}(${it.second})" }}",
         )
 
-        // Execute the plan: buy each chosen skill via the live SkillListEntry. We iterate the plan
-        // in DP order (base before upgrade within an upgrade chain) so the in-game purchase chain
-        // works correctly — buying the upgrade requires the base to already be owned.
+        // Iterate in DP order (base before upgrade within a chain): buying the upgrade requires the base to be owned.
         var remaining = availableSkillPoints
         for ((name, price) in plan) {
             if (price > remaining) {
@@ -1427,13 +1284,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Constrained career-end fallback (sparks objective at CAREER_COMPLETE only): spend the
-     * balance the planned phase left on profile-compatible skills, because the game discards
-     * every unspent point at Finish. Mirrors [getSkillsToBuyOptimizeKnapsackStrategy] but with
-     * the stricter [careerEndFallbackCandidateAllowed] candidate set - no negatives, no
-     * inherited uniques (their toggles own those purchases in the common phase), the
-     * double-circle skip toggle honored, and the Style-preference axes enforced so
-     * wrong-distance, wrong-style, and wrong-surface skills never enter.
+     * Constrained career-end fallback (sparks objective at CAREER_COMPLETE only): spends what the planned phase left
+     * on profile-compatible skills, since the game discards unspent points at Finish.
      */
     private fun getSkillsToBuyCareerEndFallback(
         skillList: SkillList,
@@ -1449,8 +1301,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 entry.bIsAvailable &&
                     entry.name !in skillsToBuy &&
                     entry.screenPrice > 0 &&
-                    // Same dead-tap exclusion as the knapsack strategy: a row the game already
-                    // refused this session is not a candidate, whatever the scan model says.
+                    // Same dead-tap exclusion as the knapsack strategy.
                     entry.name !in skillList.deadTapSkills &&
                     careerEndFallbackCandidateAllowed(
                         isNegative = entry.skillData.bIsNegative,
@@ -1550,17 +1401,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 availableSkillPoints = availableSkillPoints - result.values.sum(),
             )
 
-        // Planned-only shaping (2B-1): Adaptive + sparks skips the strategy tail entirely - only
-        // the common phases above (negatives/inherited via their toggles, the user plan with its
-        // chain substitution) may buy, and the leftover budget is deliberately accepted instead of
-        // drained into spark-diluting filler. Manual mode always allows the tail (strategyTailAllowed
-        // is true for every objective there), so Manual behavior is untouched.
+        // Adaptive + sparks skips the strategy tail so leftover budget is not drained into spark-diluting filler;
+        // Manual always allows it.
         val bAllowStrategyTail: Boolean = strategyTailAllowed(campaign.resolvedSkillThreshold.mode, campaign.skillSpendObjective)
-        // Career-end exception to planned-only: at CAREER_COMPLETE the game is about to DISCARD
-        // every unspent point at Finish, so a sparks session extends into the constrained
-        // profile-compatible fallback once the plan is exhausted (a live sparks career handed
-        // 716 points to the Finish click under pure planned-only). Mid-career sparks sessions
-        // stay planned-only exactly as before.
+        // At CAREER_COMPLETE the game DISCARDS unspent points, so a sparks session extends into the constrained
+        // fallback (a live career handed 716 points to Finish under pure planned-only).
         val bCareerEndFallback: Boolean =
             !bAllowStrategyTail &&
                 careerEndConstrainedFallbackAllowed(campaign.resolvedSkillThreshold.mode, campaign.skillSpendObjective, sessionEffectiveTrigger)
@@ -1621,9 +1466,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     }
                 }
         } else if (bCareerEndFallback) {
-            // Always the knapsack, never the configured strategy: the fallback's contract is
-            // "constrained and profile-compatible", and the knapsack path is the one that
-            // enforces the Style-preference axes on its candidate set.
+            // Always the knapsack: the one path that enforces the Style-preference axes.
             result +=
                 getSkillsToBuyCareerEndFallback(
                     skillList = skillList,
@@ -1655,17 +1498,12 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * @return True if all planned skills have been purchased, triggering an early exit; false otherwise.
      */
     private fun onSkillListEntryDetected(entry: SkillListEntry, point: Point, skillsToBuy: List<String>, skillList: SkillList): Boolean {
-        // Evaluate the exit conditions on every NON-candidate entry, not only after a buy. The
-        // post-buy check below never re-runs once the last buyable skill is bought (non-planned
-        // entries used to return before reaching it), so a single unbuyable leftover made every
-        // pass walk the full list. With no refunds, the scroll has nothing left to accomplish
-        // once each planned skill is either owned or priced beyond the remaining budget. A
-        // candidate entry skips these checks entirely: it must always get its buy attempt first
-        // (its recorded price may run stale-high while the live row is buyable).
+        // Evaluate exits on every NON-candidate entry, not only after a buy (the post-buy check never re-runs once
+        // the last buyable skill is bought, so one unbuyable leftover made every pass walk the full list); a
+        // candidate entry gets its buy attempt first since its recorded price may be stale-high.
         val bIsBuyCandidate =
             !entry.bIsObtained && !entry.bIsVirtual && entry.name in skillsToBuy &&
-                // A dead-tapped row already ran the full tap-retry budget this session; meeting it
-                // again on a later pass must not spend another tap batch on it.
+                // A dead-tapped row already ran the full tap-retry budget this session.
                 entry.name !in skillList.deadTapSkills
         if (!bIsBuyCandidate) {
             val outstandingSkills: List<String> = skillsToBuy.filter { it !in skillList.getObtainedSkills() }
@@ -1675,9 +1513,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             }
             val bAnyStillBuyable =
                 outstandingSkills.any { name ->
-                    // An unknown price means the row has not been seen this scan - it may appear
-                    // further down the list, so the scroll must continue. Dead-tapped names never
-                    // justify more scrolling.
+                    // An unknown price means the row has not been seen this scan: keep scrolling. Dead-tapped
+                    // names never justify more scrolling.
                     val livePrice: Int? = skillList.getAllSkills()[name]?.screenPrice
                     name !in skillList.deadTapSkills && (livePrice == null || livePrice <= skillList.skillPoints)
                 }
@@ -1698,7 +1535,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 val purchaseResult: SkillListEntry? = skillList.buySkill(name, point)
                 if (purchaseResult != null) {
                     MessageLog.i(TAG, "[INFO] Buying \"${purchaseResult.name}\" for ${purchaseResult.price} pts")
-                    // Track the purchase so the estimated rank stays current without re-reading the Details Skills tab.
                     campaign.trainee.ownedSkillNames.add(purchaseResult.name)
                     sessionVerifiedBuys.add(purchaseResult.name)
                 }
@@ -1707,7 +1543,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             val purchaseResult: SkillListEntry? = skillList.buySkill(entry.name, point)
             if (purchaseResult != null) {
                 MessageLog.i(TAG, "[INFO] Buying \"${purchaseResult.name}\" for ${purchaseResult.price} pts")
-                // Track the purchase so the estimated rank stays current without re-reading the Details Skills tab.
                 campaign.trainee.ownedSkillNames.add(purchaseResult.name)
                 sessionVerifiedBuys.add(purchaseResult.name)
             }
@@ -1735,8 +1570,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * @return True if the process completed successfully, false otherwise.
      */
     fun start(skillPlanName: String? = null, trigger: SkillCheckTrigger? = null): Boolean {
-        // Reset the per-session tail and recovery decisions: they stay null on paths that exit
-        // before the planner runs, so those records omit the fields rather than carrying stale ones.
+        // Null on early-exit paths so those records omit the fields rather than carry stale ones.
         sessionStrategyTailAllowed = null
         sessionCareerEndFallback = null
         sessionEffectiveTrigger = null
@@ -1753,9 +1587,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
         // Verify that the bot is currently at the skill list screen.
         val bIsCareerComplete: Boolean = skillList.checkCareerCompleteSkillListScreen(bitmap)
-        // The career-end Learn list is long enough that a full read does not fit the ordinary
-        // list budget, and the finalization guard can only approve a read it can prove reached
-        // the end - so this one caller gets the dedicated budget. Every other scan is unchanged.
+        // The career-end Learn list is too long for the ordinary list budget and the finalization guard approves
+        // only a read proven to reach the end, so it gets the dedicated budget.
         if (bIsCareerComplete) skillList.scanBudgetMs = CAREER_END_SCAN_BUDGET_MS
         if (!bIsCareerComplete && !skillList.checkSkillListScreen(bitmap)) {
             MessageLog.e(TAG, "[ERROR] start:: Not at skill list screen. Aborting...")
@@ -1769,8 +1602,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 val resolvedPlanName = if (bIsCareerComplete) "careerComplete" else "preFinals"
                 val resolvedPlan: SkillPlanSettings? = skillPlans[resolvedPlanName]
                 if (resolvedPlan == null) {
-                    // Was skillPlans[...]!! — a degraded/empty plans map (bad parse, unmigrated settings,
-                    // fresh install before a write) crashed skill buying instead of aborting. Abort gracefully.
+                    // A degraded/empty plans map must abort gracefully, not crash.
                     MessageLog.e(TAG, "[ERROR] start:: No '$resolvedPlanName' skill plan found (plans map empty or missing the key). Aborting skill purchase.")
                     recordSkillSpend(SkillSpendOutcome.FAILED, trigger, resolvedPlanName, null)
                     return false
@@ -1786,8 +1618,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 tmpPlan
             }
 
-        // Resolved plan key + trigger for telemetry. A null trigger means the caller did not name one
-        // (the debug harness), so the record carries the plan and omits the trigger rather than guessing.
+        // A null trigger (the debug harness): omit it rather than guess.
         val resolvedPlanKey: String = skillPlanName ?: if (bIsCareerComplete) PLAN_CAREER_COMPLETE else PLAN_PRE_FINALS
         val effectiveTrigger: SkillCheckTrigger? = trigger ?: if (bIsCareerComplete) SkillCheckTrigger.CAREER_COMPLETE else null
         sessionEffectiveTrigger = effectiveTrigger
@@ -1817,13 +1648,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 skillList.detectSkillPoints(bitmap) ?: 0
             }
 
-        // Mid-career early exit below the cannot-afford heuristic. 42 is upstream's
-        // approximation (the cheapest non-negative skill costs 70 before discounts and hint
-        // discounts reach 40%; purchasable negatives price at 40), NOT a proven universal
-        // floor - so the finalization guard never consumes it. Adaptive careerComplete
-        // sessions skip this exit entirely: the guard needs full candidate-exhaustion evidence
-        // (a complete scan) to approve Finish, and the balance-specific proof ("below the
-        // cheapest eligible candidate") replaces any price-floor shortcut.
+        // Mid-career cannot-afford early exit (42 is upstream's approximation, never consumed by the finalization
+        // guard). Adaptive careerComplete sessions skip it: the guard needs a complete scan, not a price-floor
+        // shortcut.
         if (skillPoints < SKILL_POINTS_EARLY_EXIT_FLOOR) {
             val guardNeedsEvidence =
                 campaign.resolvedSkillThreshold.mode == SkillSpendMode.ADAPTIVE && effectiveTrigger == SkillCheckTrigger.CAREER_COMPLETE
@@ -1851,9 +1678,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
         skillList.printSkillListEntries(verbose = true)
 
-        // Ground-truth snapshot: skills whose Obtained pill was detected on screen during the read
-        // pass (genuinely owned, e.g. on career-end re-entry). The post-planning state reset below
-        // must not clear these - doing so corrupts upgrade-chain pricing and ownership reads.
+        // Screen-confirmed ownership: the post-planning reset must not clear it or upgrade-chain pricing and
+        // ownership reads corrupt.
         val ownedAtParse: Set<String> = skillList.getObtainedSkills().keys
 
         // Calculate the list of skills to purchase based on settings and points.
@@ -1872,18 +1698,14 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return true
         }
 
-        // Planner output across every plan round, deduplicated by name at the first planned
-        // price. This is the `proposed` telemetry set: what the ranking decided to buy.
+        // Planner output across rounds, deduplicated by name at the first planned price (the `proposed` telemetry
+        // set).
         val proposedByName: LinkedHashMap<String, ProposedSkill> = LinkedHashMap()
         val allPlannedNames: MutableSet<String> = mutableSetOf()
 
-        // The plan-and-buy rounds. One planning pass is not enough at career end: the scan can
-        // list an already-owned skill as buyable, the DP then burns budget on that phantom, its
-        // taps die, and a single-plan session ends "satisfied" with real candidates unbought -
-        // which is exactly the disagreement that made the finalization guard stall a queue on
-        // 2026-07-26 (phantom "Focus" planned at 98 SP while "Sympathy" at 63 sat unbought).
-        // Each round re-plans over the live budget with dead-tapped names excluded, so the
-        // candidate pool strictly shrinks and the loop converges.
+        // The scan can list an owned skill as buyable, the DP burns budget on that phantom and its taps die,
+        // leaving real candidates unbought (this stalled a queue). So each round re-plans over the live budget
+        // with dead-tapped names excluded, and the pool shrinks until the loop converges.
         val maxPlanRounds = 3
         var totalEntriesSeen = 0
         for (planRound in 1..maxPlanRounds) {
@@ -1894,8 +1716,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             val verifiedBuysBeforeRound: Int = sessionVerifiedBuys.size
             val deadTapsBeforeRound: Int = skillList.deadTapSkills.size
 
-            // Reset the in-memory purchase simulation from planning, preserving screen-confirmed
-            // ownership and every purchase already verified this session.
             skillList.sellAllSkills(preserve = ownedAtParse + sessionVerifiedBuys)
 
             // Iterate through the list again and perform the confirmed purchases.
@@ -1907,8 +1727,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             // matchable Skill Up button.
             val maxBuyPasses = 3
             for (buyPass in 1..maxBuyPasses) {
-                // Heal a wiped Accessibility grant between passes - the most common mid-buy failure
-                // (the emulator drops the service and every tap/swipe silently stops registering).
+                // Heal a wiped Accessibility grant: the emulator drops the service and every tap silently stops
+                // registering.
                 if (!game.ensureAccessibilityService()) {
                     MessageLog.e(TAG, "[SKILLS] The Accessibility Service is off and cannot be restored without WRITE_SECURE_SETTINGS; skill taps in this pass will not land.")
                 }
@@ -1925,10 +1745,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 totalEntriesSeen += entriesSeenThisPass
 
                 val unbought: List<String> = skillsToPurchase.keys.filter { it !in skillList.getObtainedSkills() }
-                // Drop what the current budget can no longer cover -- re-scrolling the whole list for a
-                // skill that cannot be bought is pure waste. Prices can drift between parse and buy, so
-                // evaluate against the live screenPrice where known. Dead-tapped names are dropped too:
-                // their taps already ran the full retry budget this session.
+                // Drop what the live budget can no longer cover (prices drift between parse and buy) and dead-
+                // tapped names.
                 val remaining: List<String> =
                     unbought.filter { name ->
                         val price: Int = skillList.getAllSkills()[name]?.screenPrice ?: skillsToPurchase[name] ?: Int.MAX_VALUE
@@ -1945,9 +1763,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     break
                 }
                 if (entriesSeenThisPass == 0) {
-                    // The pass saw NOTHING - the list is unreadable or input is blocked (popup, stale
-                    // capture, emulator input outage), not merely incomplete. Try to clear a blocking
-                    // dialog before the next pass.
+                    // The pass saw NOTHING (unreadable list or blocked input): try to clear a blocking dialog first.
                     MessageLog.e(TAG, "[ERROR] Buy pass $buyPass processed zero entries - screen unreadable or input blocked. Attempting dialog recovery before retry.")
                     campaign.handleDialogs()
                     game.wait(1.0, skipWaitingForLoading = true)
@@ -1960,12 +1776,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             }
 
             if (planRound >= maxPlanRounds) break
-            // Extra rounds are CAREER-END ONLY. There the points expire at Finish and the
-            // finalization guard refuses to Finish over spendable money, so the session must not
-            // conclude while the guard's classifier still counts an affordable candidate.
-            // Mid-career the opposite holds: leftover SP is deliberate reserve for better skills
-            // later, a single plan is the long-standing behavior, and spending down to zero at
-            // every skill check would be a regression, not a fix.
+            // Extra rounds are CAREER-END ONLY: points expire at Finish and the guard refuses to Finish over
+            // spendable money; mid-career, leftover SP is deliberate reserve.
             if (!bIsCareerComplete) break
             val liveSp: Int = skillList.skillPoints
             val stillAffordable: Int =
@@ -1991,8 +1803,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[SKILLS] Plan round ${planRound + 1}: re-planning $stillAffordable remaining affordable candidate(s) under $liveSp SP.")
         }
 
-        // If every pass was blind AND nothing new got bought, the screen state is unknown - do not
-        // blind-confirm (a misplaced Confirm/Back sequence is how selections get silently lost).
+        // Every pass blind and nothing bought: do not blind-confirm (a misplaced Confirm/Back sequence silently
+        // loses selections).
         val boughtAny: Boolean = allPlannedNames.any { it in skillList.getObtainedSkills() && it !in ownedAtParse }
         if (!boughtAny && totalEntriesSeen == 0) {
             MessageLog.e(TAG, "[ERROR] start:: All buy passes processed zero entries and nothing was bought. Not confirming; aborting the skill plan.")
@@ -2011,7 +1823,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
-        // The commit must land on working input - heal the grant one more time if needed.
         if (!game.ensureAccessibilityService()) {
             MessageLog.e(TAG, "[SKILLS] The Accessibility Service is off and cannot be restored without WRITE_SECURE_SETTINGS; the purchase commit below cannot land.")
         }
@@ -2035,20 +1846,15 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Skills this session actually obtained: on screen as obtained now, and not already owned when the
-     * list was parsed. Evidence, never intent - a tap that silently missed must not be recorded as a
-     * purchase, so the planned set is filtered by what the screen reports.
+     * On screen as obtained now and not owned at parse. Evidence, never intent: a silently missed tap must not count
+     * as a purchase.
      */
     private fun confirmedPurchases(skillList: SkillList, planned: Set<String>, ownedAtParse: Set<String>): List<String> {
         val obtained: Map<String, SkillListEntry> = skillList.getObtainedSkills()
         return planned.filter { it in obtained && it !in ownedAtParse }
     }
 
-    /**
-     * Appends one `type:"skill_spend"` record for this session. Best-effort in every sense: wrapped in
-     * runCatching so a corpus failure cannot change what [start] returns, and every optional identity
-     * field is omitted rather than guessed when it is not available.
-     */
+    /** Best-effort: runCatching so a corpus failure cannot change what [start] returns. */
     @Suppress("LongParameterList")
     private fun recordSkillSpend(
         outcome: SkillSpendOutcome,
@@ -2061,15 +1867,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         confirmed: List<String> = emptyList(),
         skillList: SkillList? = null,
     ) {
-        // The points delta is the arbiter. If it says purchases happened that the obtained set
-        // never saw, every "skipped" verdict below would be unsound - flag the gap and say nothing
-        // more, rather than name skills as unbought when the points prove otherwise. Hoisted out
-        // of the telemetry runCatching because the finalization evidence needs it too.
+        // The points delta is the arbiter: if purchases happened that the obtained set never saw, every "skipped"
+        // verdict below is unsound, so flag the gap and name nothing as unbought.
         val confirmedIncomplete: Boolean =
             SkillSpendTelemetry.confirmationIsIncomplete(proposed, confirmed.toSet(), spBefore, spAfter)
-        // The finalization gate's view of this session. Assigned before (and independent of) the
-        // corpus append below: a telemetry IO failure must never blind the guard that decides
-        // whether Finish is safe.
+        // Assigned independent of the corpus append: a telemetry IO failure must never blind the Finish guard.
         lastSessionEvidence =
             computeFinalizeEvidence(
                 outcome = outcome,
@@ -2105,9 +1907,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     confirmed = confirmed,
                     skipped = skipped,
                     confirmedIncomplete = confirmedIncomplete,
-                    // The threshold policy the career is running under - the ACTING value Campaign
-                    // resolved at construction, not a re-read, so the record cannot disagree with
-                    // the decision that governed the run.
+                    // The ACTING policy Campaign resolved at construction, so the record cannot disagree with the
+                    // decision that governed the run.
                     threshold = campaign.resolvedSkillThreshold.value,
                     tier = campaign.resolvedSkillThreshold.tierToken(),
                     reason = campaign.resolvedSkillThreshold.reason,
@@ -2134,11 +1935,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             MessageLog.w(TAG, "[SKILL_SPEND] Failed to append the skill-spend record: $it")
         }
 
-        // Phase 2A evidence feed: a session whose parse genuinely saw the skill screen refreshes
-        // the observed-availability store (names + live prices of AVAILABLE rows only). Aborted
-        // and failed sessions deliberately leave prior evidence untouched - a failed parse is
-        // not evidence of absence. Runs outside the telemetry runCatching so a corpus append
-        // failure cannot starve the evidence, and in its own so one cannot break the other.
+        // Only a session that genuinely saw the skill screen refreshes the observed-availability store (AVAILABLE
+        // rows only): a failed parse is not evidence of absence. Outside the telemetry runCatching so a corpus
+        // failure cannot starve it.
         runCatching {
             if (skillList != null &&
                 outcome in setOf(SkillSpendOutcome.COMMITTED, SkillSpendOutcome.COMMIT_UNVERIFIED, SkillSpendOutcome.NOTHING_TO_BUY)
@@ -2158,11 +1957,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Snapshot the live post-purchase entry state into classifier candidates: getAllSkills so
-     * obtained and virtual rows reach [classifyRemainingCandidates] as explicit freshness facts
-     * (it drops them), never as silently pre-filtered absences. Shared between the finalization
-     * evidence and the buy-round loop in [start] so both answer "what remains spendable" with
-     * the same rules, including the dead-tap exclusion.
+     * getAllSkills keeps obtained and virtual rows as explicit freshness facts for [classifyRemainingCandidates];
+     * shared with the buy-round loop so both use the same rules, including dead-tap exclusion.
      */
     private fun buildRemainingCandidates(skillList: SkillList): List<RemainingCandidate> {
         val axes = resolvePreferredAxes()
@@ -2191,13 +1987,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Build the finalization evidence for a finished session: completeness of the scan, the
-     * planner, and the confirmation, plus a full classification of every candidate STILL
-     * purchasable on screen under the constrained career-end rules. Classification never skips
-     * a row silently - a candidate is either ELIGIBLE (and possibly affordable against the
-     * verified remaining balance) or counted under the explicit reason that excludes it, so
-     * "exhausted" downstream is a proven statement about examined rows, backed by
-     * [SkillList.lastScanComplete] for the claim that every row WAS examined.
+     * No candidate row is skipped silently: each is ELIGIBLE or counted under its exclusion reason, so "exhausted" is
+     * a proven statement backed by [SkillList.lastScanComplete].
      */
     private fun computeFinalizeEvidence(
         outcome: SkillSpendOutcome,

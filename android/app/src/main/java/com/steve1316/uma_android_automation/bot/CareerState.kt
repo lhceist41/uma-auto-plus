@@ -13,26 +13,14 @@ import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.types.Trainee
 
 /**
- * Canonical CareerState v1 (Phase A, shadow-only).
+ * Immutable snapshot of the state the decision engine sees at the main-screen turn boundary, built once per turn
+ * just before `decideNextAction()`. It copies live state and triggers no OCR, screenshot, navigation, scoring or
+ * tap. Shadow-only: nothing in the gameplay path reads it.
  *
- * An immutable, single-point-in-time snapshot of the state the decision engine sees at the
- * main-screen turn boundary, taken once per turn immediately before `decideNextAction()` (after
- * `performGlobalChecks()` and `onMainScreenEntry()` have run). It reads only already-available live
- * state and copies every mutable value; it triggers no OCR, screenshot, navigation, scoring, or tap.
- *
- * Phase A is shadow-only: NOTHING in the gameplay path reads a [CareerState]. Gameplay stays sourced
- * from the live `Trainee`/`GameDate`/`Racing` objects. The snapshot exists so tests and a debug-gated
- * comparison can prove the boundary is coherent, and so Phase B can later migrate consumers onto it.
- *
- * Honesty rules mirror `DecisionTrace`: a value is exposed as observed only when an existing read
- * flag proves it was read this career. A group that was never read is represented as unavailable
- * (null) rather than carrying its constructor default, so the phantom turn-1 / stat-`-1` / all-`G`
- * classes of bug cannot reappear through this object.
- *
- * Not included in v1, deliberately: raw fan count and fan-count class (no per-field read flag exists,
- * so a default `fans = 1` cannot be honestly labelled observed); Grand Concert performance-point
- * balances (unknown at the main-screen boundary - they are only read during training-screen
- * analysis). Adding a read to populate either would be new work outside Phase A.
+ * A group is exposed as observed only when an existing read flag proves it was read this career; otherwise it is
+ * null rather than its constructor default, so phantom turn-1 / stat `-1` / all-`G` values cannot reappear.
+ * Raw fan count (no per-field read flag) and Grand Concert performance-point balances (unknown at this
+ * boundary) are deliberately absent.
  */
 data class CareerState(
     val identity: CareerIdentity,
@@ -51,20 +39,10 @@ data class CareerState(
     val provenance: CareerStateProvenance,
 )
 
-/**
- * Availability class for a [CareerState] group. Grounded only in the boolean read flags the runtime
- * already maintains; no numeric confidence is invented, and no per-turn freshness is claimed where
- * only sticky career-level flags exist.
- *
- * Named `StateProvenance` rather than the audit's `Provenance` to avoid a package-level collision with
- * the unrelated research-verdict `Provenance` enum in `GrandConcertScenario.kt`; the four value names
- * the audit specified are unchanged.
- */
+/** Availability class for a [CareerState] group, grounded only in the boolean read flags the runtime keeps; no confidence or per-turn freshness is invented. */
 enum class StateProvenance {
-    /** Read from the screen this career (an existing read flag proves it). */
     OBSERVED,
 
-    /** Never read; the group is unavailable and carries no fabricated value. */
     UNREAD,
 
     /** A configured identity input (scenario, trainee, applied preset, queue run). */
@@ -75,29 +53,20 @@ enum class StateProvenance {
 }
 
 /**
- * Decision-time career identity. Reuses the finalize token machinery ([buildCareerFinalizeToken]) and
- * the same nonce and preset/queue-run sources the finalized corpus uses, so a snapshot joins the
- * `career_finalize` and `decision_trace` rows on [careerToken] rather than inventing an identifier.
- *
- * [scenario]/[trainee]/[preset]/[queueRun] are CONFIGURED; [careerToken]/[configFingerprint] are
- * DERIVED from them plus the nonce.
+ * Decision-time career identity; reuses the finalize token machinery so a snapshot joins `career_finalize` and
+ * `decision_trace` rows on [careerToken]. [scenario]/[trainee]/[preset]/[queueRun] are configured;
+ * [careerToken]/[configFingerprint] are derived from them plus the nonce.
  */
 data class CareerIdentity(
     val careerToken: String,
     val scenario: String,
     val trainee: String,
-    /** The applied preset name, or null when no preset is configured. */
     val preset: String?,
-    /** The queue run index, or null when the career is not part of a queue. */
     val queueRun: Int?,
     val configFingerprint: String,
 )
 
-/**
- * The game date by value. [observedTurn] is null when the date was never read from the screen, so an
- * unread default day can never be mistaken for a real turn (the trap the outcome corpus already hit).
- * When [dayObserved] is false every component is null.
- */
+/** The game date by value; components are null when [dayObserved] is false, so an unread default day is never mistaken for a real turn. */
 data class DateState(
     val observedTurn: Int?,
     val year: DateYear?,
@@ -106,11 +75,7 @@ data class DateState(
     val dayObserved: Boolean,
 )
 
-/**
- * Decision-time condition facts, refreshed every turn-start by `performTurnStartUpdates`. These carry
- * no dedicated read flag in the current runtime, so they are treated as best-effort observed at this
- * boundary; the status lists are defensively copied.
- */
+/** Decision-time condition facts refreshed every turn start; they have no read flag, so they are best-effort observed. */
 data class ConditionState(
     val energy: Int,
     val mood: Mood,
@@ -118,34 +83,24 @@ data class ConditionState(
     val positiveStatuses: List<String>,
 )
 
-/** The five core stats by value. Present in a [CareerState] only when the stats were read this career. */
 data class StatState(
     val stats: Map<StatName, Int>,
 )
 
-/**
- * The trainee's aptitude groups by value, copied. Present only when the aptitudes were read this
- * career. Derived convenience preferences (preferred distance / style) are intentionally NOT frozen
- * here: they are recomputable from these authoritative maps.
- */
+/** The trainee's aptitude groups by value. Derived preferences (distance/style) are not frozen: they are recomputable from these maps. */
 data class AptitudeState(
     val surface: Map<TrackSurface, Aptitude>,
     val distance: Map<TrackDistance, Aptitude>,
     val runningStyle: Map<RunningStyle, Aptitude>,
 )
 
-/**
- * Pre-decision race-day facts already refreshed by the time the snapshot is built - the three cached
- * flags `decideNextAction()` consumes. The later `RaceEligibility` decision result is deliberately
- * excluded; that stays DecisionTrace evidence.
- */
+/** Pre-decision race-day facts: the three cached flags `decideNextAction()` consumes. The later `RaceEligibility` result stays DecisionTrace evidence. */
 data class RaceContext(
     val mandatoryRaceDay: Boolean,
     val scheduledRaceDay: Boolean,
     val goalRibbonDay: Boolean,
 )
 
-/** Group-level provenance for a [CareerState]. See [StateProvenance]. */
 data class CareerStateProvenance(
     val identityInputs: StateProvenance,
     val derivedIdentity: StateProvenance,
@@ -157,18 +112,10 @@ data class CareerStateProvenance(
     val scenario: StateProvenance,
 )
 
-/**
- * Scenario-specific decision state at the main-screen boundary. Only scenarios that genuinely carry
- * persistent, decision-relevant state at turn open get a payload; a scenario subclass builds its own
- * payload from its private fields in its `scenarioStateSnapshot()` override, so no private scenario
- * field is widened for this feature.
- */
+/** Scenario-specific decision state; a scenario subclass builds its payload in `scenarioStateSnapshot()` so no private scenario field is widened. */
 sealed interface ScenarioState
 
-/**
- * Trackblazer decision-relevant state at turn open. [consecutiveRaceCountObserved] is Trackblazer's
- * `counterUpdatedByOCR` flag - the count is a carried value until it is true. [inventory] is copied.
- */
+/** [consecutiveRaceCountObserved] is Trackblazer's `counterUpdatedByOCR` flag: the count is a carried value until it is true. */
 data class TrackblazerState(
     val shopCoins: Int,
     val inventory: Map<String, Int>,
@@ -182,11 +129,7 @@ data class TrackblazerState(
     val megaphoneTurnCounter: Int,
 ) : ScenarioState {
     companion object {
-        /**
-         * Build a [TrackblazerState], defensively copying [inventory] so a later mutation of the live
-         * `currentInventory` map cannot change the snapshot. Used by the scenario override; keeps the
-         * copy in one pure, testable place.
-         */
+        /** Copies [inventory] so a later mutation of the live `currentInventory` cannot change the snapshot. */
         fun snapshot(
             shopCoins: Int,
             inventory: Map<String, Int>,
@@ -212,11 +155,7 @@ data class TrackblazerState(
     }
 }
 
-/**
- * Grand Concert decision-relevant state at turn open. Performance-point balances are intentionally
- * absent: they are unknown at the main-screen boundary (read only during training-screen analysis),
- * so exposing them here would fabricate state.
- */
+/** Grand Concert state at turn open. Performance-point balances are absent: they are read only during training-screen analysis, so exposing them here would fabricate state. */
 data class GrandConcertState(
     val songsBoughtThisCycle: Int,
     val songsBoughtThisCareer: Int,
@@ -224,106 +163,68 @@ data class GrandConcertState(
 ) : ScenarioState
 
 /**
- * Once-per-turn latch for the shadow CareerState build, plus a companion freshness flag for the debug
- * comparison. Cadence is driven by the action-completion lifecycle, NOT by the DecisionTracer window:
- * [armForNewTurn] is called when an action advances the game to a new main-screen decision turn, and
- * [shouldBuild] returns true for the first pre-decision pass of that turn. So a new turn still builds a
- * snapshot when date OCR failed (`dayObserved=false`) and when the tracer opened no window, and a
- * same-turn re-tick after a non-advancing action (a RECOVER_MOOD spin, a failed outing) does not
- * rebuild. Pure and independently testable.
- *
- * [markTracerWindowOpened] / [tracerWindowFresh] track, separately, whether the DecisionTracer opened
- * its own turn window this turn (its `startTurn` ran). The debug shadow comparison uses this so it
- * never compares a snapshot against a tracer snapshot left over from an earlier turn.
+ * Once-per-turn latch for the shadow CareerState build, plus a freshness flag for the debug comparison. Cadence
+ * follows the action-completion lifecycle, not the DecisionTracer window: [armForNewTurn] runs when an action
+ * advances to a new decision turn and [shouldBuild] is true for the first pre-decision pass, so a turn still
+ * builds when date OCR failed or the tracer opened no window, and a same-turn re-tick (RECOVER_MOOD spin, failed
+ * outing) does not rebuild. [tracerWindowFresh] tracks whether the tracer opened its window this turn, so the
+ * comparison never uses a stale tracer snapshot.
  */
 class CareerStateTurnLatch {
     private var built: Boolean = false
     private var tracerFresh: Boolean = false
 
-    /**
-     * Arm for a new main-screen decision turn: the next [shouldBuild] returns true. Called from the
-     * action-completion boundary when an action advanced gameplay, so the cadence does not depend on
-     * date OCR or on the tracer opening a window. Also clears the tracer-fresh flag, because the new
-     * turn's tracer window has not opened yet.
-     */
+    /** Arms the next [shouldBuild]; also clears the tracer-fresh flag, since the new turn's tracer window has not opened. */
     fun armForNewTurn() {
         built = false
         tracerFresh = false
     }
 
-    /**
-     * Arm only when [advanced] is true. For action outcomes that advance the turn on some paths but
-     * not others - a RACE that runs vs. one aborted by the consecutive-race warning - pass the real
-     * runtime outcome so a non-advancing outcome leaves the latch consumed and cannot produce a
-     * duplicate same-turn snapshot on the next pass. A no-op when [advanced] is false.
-     */
+    /** Arms only when [advanced]: a RACE that runs advances the turn but one aborted by the consecutive-race warning does not, and must not yield a duplicate same-turn snapshot. */
     fun armForNewTurnIf(advanced: Boolean) {
         if (advanced) armForNewTurn()
     }
 
-    /** Record that the DecisionTracer opened its window this turn (its `startTurn` ran), so the shadow comparison has fresh turn-open evidence. */
     fun markTracerWindowOpened() {
         tracerFresh = true
     }
 
-    /** True exactly once per armed turn - the first call after [armForNewTurn]; false on same-turn re-ticks until re-armed. */
     fun shouldBuild(): Boolean {
         if (built) return false
         built = true
         return true
     }
 
-    /** Whether a fresh DecisionTracer turn window exists for this turn. False after [armForNewTurn] until [markTracerWindowOpened]; the shadow comparison must not run against stale evidence when this is false. */
+    /** False after [armForNewTurn] until [markTracerWindowOpened]; the shadow comparison must not run on stale evidence. */
     fun tracerWindowFresh(): Boolean = tracerFresh
 }
 
 /**
- * Per-career monotonic decision-sequence holder: the join authority between the `career_state` and
- * `decision_trace` streams. Owned by a single Campaign (one career), so a fresh career/resume starts a
- * new instance at seq 1 under a new career token, keeping `careerToken + seq` unique.
- *
- * Lifecycle, mirroring the build/emit ordering in `Campaign.handleMainScreen`:
- * - [allocate] once per consumed CareerState build opportunity: advances the counter, returns the new
- *   seq, and clears [current] (so an unbuilt/failed turn carries no seq).
- * - [retain] only when the build succeeded: pins [current] to that seq.
- * - [current] read at trace-emit time. Emit runs AFTER the action re-armed the turn latch for the next
- *   turn, but the latch is a separate object; nothing between [retain] and emit touches [current], so
- *   the trace stamps the current turn's seq, never the next turn's or a stale one.
- *
- * The counter advances on every [allocate] even when the build later fails, so seq N is never reused for
- * a later turn - a gap after a swallowed build is honest and keeps joins unambiguous. Pure and testable.
+ * Per-career monotonic decision-sequence holder: the join authority between the `career_state` and `decision_trace`
+ * streams, so `careerToken + seq` is unique. [allocate] advances the counter on every consumed build opportunity
+ * and clears [current]; [retain] pins it only on a successful build. Seq N is never reused after a failed build,
+ * so a gap is honest and joins stay unambiguous. Trace emit runs after the action re-armed the turn latch, but
+ * nothing between [retain] and emit touches [current], so the trace stamps the current turn's seq.
  */
 class CareerStateDecisionSequence {
     private var counter: Int = 0
     private var current: Int? = null
 
-    /** Consume a build opportunity: advance the counter, clear [current], and return the new seq. */
     fun allocate(): Int {
         current = null
         return ++counter
     }
 
-    /** Pin [current] to [seq] after a successful build, so emit stamps this turn's seq. */
     fun retain(seq: Int) {
         current = seq
     }
 
-    /** The seq retained for the current turn, or null when no CareerState was built/retained this turn. */
     fun current(): Int? = current
 }
 
-/**
- * Pure builder for [CareerState]. Reads the given live objects' fields and returns an immutable
- * snapshot with defensive copies. It takes no `Context`, `ImageUtils`, or any OCR/screenshot handle,
- * so by construction it cannot read the screen or influence gameplay; it is exercised directly by the
- * unit tests over synthetic `Trainee`/`GameDate` instances.
- */
+/** Pure builder for [CareerState]: takes no Context, ImageUtils or OCR handle, so by construction it cannot read the screen or influence gameplay. */
 object CareerStateBuilder {
-    /**
-     * Build the identity block, reusing [buildCareerFinalizeToken] and the finalized corpus's
-     * preset/queue-run fallback semantics: the token's trainee component is the applied preset when
-     * one is set, else the live trainee name, and the queue run is treated as absent when not > 0.
-     */
+    /** Reuses [buildCareerFinalizeToken] and the finalized corpus's fallback semantics: the trainee component is the applied preset when set, else the live trainee name; the queue run is absent when not > 0. */
     fun buildIdentity(
         scenario: String,
         traineeName: String,
@@ -344,15 +245,6 @@ object CareerStateBuilder {
         )
     }
 
-    /**
-     * Build the full snapshot from live sources.
-     *
-     * @param identity Already-derived identity (see [buildIdentity]).
-     * @param date Live game date; copied by value, never retained.
-     * @param trainee Live trainee; only fields are read and mutable collections are copied.
-     * @param mandatoryRaceDay / @param scheduledRaceDay / @param goalRibbonDay The cached race-day flags this turn.
-     * @param scenario The scenario payload from the subclass hook, or null.
-     */
     fun build(
         identity: CareerIdentity,
         date: GameDate,
@@ -380,8 +272,7 @@ object CareerStateBuilder {
                 positiveStatuses = trainee.currentPositiveStatuses.toList(),
             )
 
-        // Gate each numeric group on its existing read flag; a group that was never read stays null so
-        // its constructor default (-1 / 120 / all-G) is never promoted to observed truth.
+        // Gate each group on its read flag so a constructor default (-1 / 120 / all-G) is never promoted to observed truth.
         val stats: StatState? = if (trainee.bHasUpdatedStats) StatState(trainee.stats.asMap()) else null
         val skillPoints: Int? = if (trainee.bHasUpdatedSkillPoints) trainee.skillPoints else null
         val aptitudes: AptitudeState? =
@@ -428,7 +319,6 @@ object CareerStateBuilder {
     }
 }
 
-/** Result of comparing a pre-decision [CareerState] against the DecisionTracer turn-open snapshot. */
 data class ShadowComparison(
     /** Fields that cannot legitimately change between turn-open and pre-decision but did - a real defect. */
     val strictMismatches: List<String>,
@@ -437,13 +327,9 @@ data class ShadowComparison(
 )
 
 /**
- * Pure debug-shadow comparison between a pre-decision [CareerState] and the earlier DecisionTracer
- * turn-open [DecisionTracer.StateSnapshot]. The two snapshots are taken at different points in the
- * turn, so only fields that cannot change between them are compared strictly (the five stats, the
- * observed turn, and read-flag no-regression). Fields the turn legitimately mutates in between - skill
- * points after `performGlobalChecks()` skill buys, energy/mood after `onMainScreenEntry()` item use -
- * are classified as expected drift, never strict mismatches. Extracted so it is testable without a
- * live `Campaign`.
+ * Debug-shadow comparison of a pre-decision [CareerState] against the earlier DecisionTracer turn-open snapshot.
+ * Only fields that cannot change between them are compared strictly (five stats, observed turn, read-flag
+ * no-regression); skill points and energy/mood legitimately drift (skill buys, item use) and count as expected drift.
  */
 object CareerStateShadow {
     fun compare(careerState: CareerState, open: DecisionTracer.StateSnapshot, openObservedTurn: Int?): ShadowComparison {

@@ -80,9 +80,10 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     /** The utility class for image processing and template matching. */
     val imageUtils: CustomImageUtils = CustomImageUtils(myContext, this)
 
-    /** The Accessibility Service for performing screen gestures. Resolved per access so a service
-     * rebind (after the emulator wipes the accessibility grant) is picked up immediately instead of
-     * dispatching gestures through the dead instance. */
+    /**
+     * Resolved per access, never cached: MuMu kills and rebinds the accessibility service mid-run, and a cached
+     * reference would keep dispatching taps into the dead instance while screen capture still works.
+     */
     val gestureUtils: MyAccessibilityService get() = MyAccessibilityService.getInstance()
 
     /** The database for skill-related information. */
@@ -91,10 +92,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     /** The formatter for decimal values. */
     val decimalFormat = DecimalFormat("#.##")
 
-    /** The current campaign scenario (e.g., "URA Finale", "Unity Cup", "Trackblazer").
-     * Normalized on read so every accepted Grand Concert spelling ("Grand Live", the punctuated
-     * title variants, the client's own "Our Grand Concert") dispatches, persists, and logs under
-     * the one canonical key. Other scenario strings pass through untouched. */
+    /** The current campaign scenario; normalized on read so every accepted Grand Concert spelling maps to one canonical key. */
     val scenario: String = GrandConcertScenario.normalizeScenarioKey(diagnosticSelection?.scenario ?: SettingsHelper.getStringSetting("general", "scenario"))
 
     /** Whether debug mode is enabled for additional logging and saving debugging images to storage. */
@@ -121,59 +119,37 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             else -> throw InterruptedException("Invalid scenario: $scenario")
         }
 
-    /** True if the currently selected task is a misc (non-career) mode. */
     val isMiscTask: Boolean = task is com.steve1316.uma_android_automation.bot.misc.MiscTask
 
-    /** This run's connection outage episode (see [ConnectionOutageBudget]). */
     internal val connectionBudget = ConnectionOutageBudget()
 
-    /** Set once the run has given up on the connection. [wait] re-throws it on every tick, so a
-     * broad catch that swallows the first [ConnectionLostException] cannot keep the run going. */
+    /** Set once the run gives up on the connection; [wait] re-throws it every tick so a broad catch cannot keep the run going. */
     @Volatile
     internal var connectionLostReason: String? = null
 
-    /** When the dialog handler tapped OK on the game's Data Download dialog ([dataDownloadActive]), or null. */
     @Volatile
     internal var dataDownloadAcceptedAtMs: Long? = null
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]Game"
 
-        /** How often a long load checks whether an error dialog is actually holding it up. */
         internal const val LOADING_DIALOG_CHECK_MS: Long = 90_000L
 
-        /** Loading this long with no error dialog is treated as a lost connection. No legitimate
-         * load has been measured anywhere near it; race playback is not a loading screen. */
+        /** Loading this long with no error dialog is treated as a lost connection (no legitimate load comes near it). */
         internal const val LOADING_HARD_LIMIT_MS: Long = 10 * 60_000L
 
-        /** Dialogs that can sit under a loading indicator and need the outage handling. */
         internal val LOADING_ERROR_DIALOGS: Set<String> = setOf("connection_error", "download_error", "session_error")
 
-        /**
-         * Whether a data download accepted at [acceptedAtMs] may still be running. No capture of the
-         * game's download screens exists, so they are not recognised: for [limitMs] after the OK they
-         * are waited out like its loading screen, tapping nothing. At ~200 MB, [LOADING_HARD_LIMIT_MS]
-         * covers any link faster than about 3 Mbit/s.
-         */
+        /** Whether a data download accepted at [acceptedAtMs] may still be running. Its screens are not recognised, so for [limitMs] they are waited out, tapping nothing. */
         internal fun dataDownloadActive(acceptedAtMs: Long?, nowMs: Long, limitMs: Long = LOADING_HARD_LIMIT_MS): Boolean =
             acceptedAtMs != null && nowMs - acceptedAtMs in 0 until limitMs
 
-        /**
-         * Looks in a row at the Data Download prompt without finding its OK button before the bot
-         * stops and asks for it by hand. The OK template is unverified on this dialog; each look is a
-         * fresh capture seconds apart, so three misses outlast its opening animation and mean a
-         * template mismatch, not a frame caught mid-draw.
-         */
+        /** Consecutive looks at the Data Download prompt without finding OK before asking for it by hand; three outlast the opening animation, so it means a template mismatch. */
         internal const val DATA_DOWNLOAD_OK_MISS_LIMIT = 3
 
         internal fun loadingHardLimitMessage(ms: Long): String = "The game kept loading for ${ms / 60_000} minutes with no error dialog. Stopping the run as a connection error."
 
-        /**
-         * Waits while [isLoading] holds. Every [softCheckMs] it asks [handleErrorDialog] whether an
-         * error dialog is holding the load up; a handled dialog restarts the hard window, because
-         * the outage budget owns that case. Loading for [hardLimitMs] with no dialog calls
-         * [onGiveUp] and throws [ConnectionLostException]. Returns only once loading has cleared.
-         */
+        /** Waits while [isLoading] holds, polling [handleErrorDialog] every [softCheckMs]; a handled dialog restarts the hard window. At [hardLimitMs] it calls [onGiveUp] and throws [ConnectionLostException]. */
         internal fun awaitLoadingCleared(
             isLoading: () -> Boolean,
             now: () -> Long,
@@ -204,77 +180,47 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             }
         }
 
-        /**
-         * Presses the game's Back once on the positively identified Training selection screen and
-         * reports whether the training menu came back. It presses nothing on any other screen.
-         */
         internal fun backOutOfTrainingSelection(onTrainingSelection: () -> Boolean, pressBack: () -> Boolean, settle: () -> Unit, onTrainingMenu: () -> Boolean): Boolean {
             if (!onTrainingSelection() || !pressBack()) return false
             settle()
             return onTrainingMenu()
         }
 
-        /** Package name of the Umamusume game (Global). The restart net relaunches this. If the JP
-         * client (jp.co.cygames.umamusume) is ever targeted this needs to change. */
+        /** Package name of the Global game; change if the JP client is targeted. */
         const val GAME_PACKAGE: String = "com.cygames.umamusume"
 
         // --- Stall watchdog ---
-        // On MuMu (and other emulators) the AccessibilityService's gesture injector can
-        // deadlock under load, causing the system InputDispatcher's queue to back up
-        // until the whole emulator appears frozen. To recover automatically, the bot
-        // loop updates a heartbeat every time it makes forward progress. A background
-        // coroutine watches that heartbeat and, if nothing has moved for
-        // WATCHDOG_KILL_AT_MS while the bot is supposedly running, kills the process.
-        // The AccessibilityService is sticky so Android restarts it within ~1 second
-        // and input dispatch unfreezes. Before the kill it tries the in-process rungs in
-        // StallWatchdog.kt: an accessibility toggle, then interrupting the Game thread.
+        // MuMu's gesture injector can deadlock under load and freeze the emulator. The bot loop updates a heartbeat;
+        // if nothing moves for WATCHDOG_KILL_AT_MS the watchdog tries the StallWatchdog.kt rungs, then kills the
+        // process (the sticky AccessibilityService restarts within ~1 s and input unfreezes).
 
-        /**
-         * The watchdog's clock: monotonic, so a device clock change can neither trip a rung or the
-         * kill on a healthy run nor hide a stall. Replaced only by tests. The queue ledger's own
-         * heartbeat file stays on the wall clock, since it must survive a reboot.
-         */
+        /** Monotonic so a device clock change can neither trip nor hide a stall; replaced only by tests. The queue ledger's heartbeat file stays on the wall clock to survive a reboot. */
         @Volatile
         internal var watchdogClock: () -> Long = { SystemClock.elapsedRealtime() }
 
-        /** [watchdogClock] milliseconds of the last recorded forward progress. */
         @Volatile
         private var lastHeartbeatMs: Long = watchdogClock()
 
-        /** The watchdog coroutine job, or null if not running. */
         @Volatile
         private var watchdogJob: Job? = null
 
-        /** The thread running the current run's [start], which the watchdog interrupts. */
         @Volatile
         private var gameThread: Thread? = null
 
-        /** The application Context for the watchdog's rungs, and whether its accessibility rung is granted. */
         @Volatile
         private var watchdogContext: Context? = null
 
         @Volatile
         private var watchdogGrant: Boolean = false
 
-        /** How often the watchdog checks the heartbeat. */
         private const val WATCHDOG_INTERVAL_MS: Long = 5_000L
 
-        /**
-         * Record forward progress. Called at safe boundaries in the bot loop
-         * (e.g., every tick of [wait]). Cheap, just a volatile store.
-         */
         fun heartbeat() {
             lastHeartbeatMs = watchdogClock()
         }
 
-        /** How long ago the last heartbeat was, on [watchdogClock]. */
         internal fun heartbeatAgeMs(): Long = watchdogClock() - lastHeartbeatMs
 
-        /**
-         * Start the watchdog. Idempotent: if already running, does nothing. Runs for
-         * the lifetime of the process; the check inside accounts for the bot being
-         * stopped/restarted.
-         */
         private fun startWatchdog() {
             if (watchdogJob?.isActive == true) return
             heartbeat()
@@ -284,7 +230,6 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                     while (isActive) {
                         delay(WATCHDOG_INTERVAL_MS)
                         if (!BotService.isRunning) {
-                            // Bot isn't running, reset so we don't fire immediately on resume.
                             heartbeat()
                             rungsDone = 0
                             continue
@@ -327,9 +272,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                                     "[WATCHDOG] No bot progress for ${age / 1000}s while BotService.isRunning=true. " +
                                         "Likely a stalled gesture injector / input-dispatch freeze. Self-restarting process to recover."
                                 Log.e(TAG, msg)
-                                // MessageLog goes on a throwaway thread: its global lock can be the
-                                // exact thing that wedged (EventBus subscribers run inside it), so a
-                                // blocked MessageLog.e here can neuter the watchdog before killProcess.
+                                // MessageLog goes on a throwaway thread: its global lock can be what wedged (EventBus subscribers run inside it), so a blocked MessageLog.e could neuter the watchdog before killProcess.
                                 try {
                                     Thread {
                                         try {
@@ -342,47 +285,36 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                                     }
                                 } catch (_: Throwable) {
                                 }
-                                // Give the log line a brief window to flush, then self-terminate.
-                                // AccessibilityService is sticky, Android will restart it.
+                                // Brief window for the log line to flush, then self-terminate.
                                 delay(250)
                                 android.os.Process.killProcess(android.os.Process.myPid())
                                 return@launch
                             }
                         }
-                        // Detect-only, after the rung has acted: how long progress had been missing (lock-free).
+                        // Detect-only, after the rung has acted (lock-free).
                         if (rung == WatchdogRung.TOGGLE_ACCESSIBILITY || rung == WatchdogRung.SKIP_TOGGLE || rung == WatchdogRung.INTERRUPT_GAME_THREAD) ProgressTracker.noteWatchdogRung()
                     }
                 }
         }
 
         // --- WakeLock ---
-        // Paired with the FGS foregroundServiceType="dataSync" on BotService in the manifest.
-        // Holding a PARTIAL_WAKE_LOCK while a run is active keeps the process-bucket
-        // classification stable so Android's OomAdjuster doesn't mark us as 'empty' and SIGKILL
-        // the process to reclaim memory under TRIM_EMPTY. The lock has a safety timeout so it
-        // can't leak indefinitely if the release path is skipped.
+        // A PARTIAL_WAKE_LOCK while a run is active keeps Android's OomAdjuster from SIGKILLing us under TRIM_EMPTY;
+        // the timeout stops it leaking if the release path is skipped. Pairs with the dataSync FGS type on BotService.
 
         @Volatile
         private var wakeLock: PowerManager.WakeLock? = null
 
-        /** WakeLock tag (visible in `adb shell dumpsys power`). */
         private const val WAKE_LOCK_TAG: String = "UmaAutoPlus:BotRun"
 
-        /** Hard cap on a single WakeLock acquisition. If we're still running after 6h something's wrong. */
+        /** Hard cap on one WakeLock acquisition. */
         private const val WAKE_LOCK_TIMEOUT_MS: Long = 6 * 60 * 60 * 1000L
 
-        /**
-         * Acquire a partial wake lock. Safe to call repeatedly: if one is already held,
-         * this is a no-op. Call from the bot-run entry point.
-         */
         @Synchronized
         fun acquireWakeLock(context: Context) {
             try {
                 val existing = wakeLock
                 if (existing != null && existing.isHeld) {
-                    // Non-reference-counted: re-acquiring only re-arms the safety timeout. Called
-                    // at every run boundary so a queue longer than one timeout window never
-                    // silently loses its OOM protection mid-session.
+                    // Non-reference-counted: re-acquiring re-arms the timeout, so a queue longer than one window keeps its OOM protection.
                     existing.acquire(WAKE_LOCK_TIMEOUT_MS)
                     Log.i(TAG, "[WAKELOCK] Re-armed the ${WAKE_LOCK_TIMEOUT_MS / 1000 / 60}m safety timeout.")
                     return
@@ -398,12 +330,10 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                 wakeLock = lock
                 Log.i(TAG, "[WAKELOCK] Acquired PARTIAL_WAKE_LOCK (timeout ${WAKE_LOCK_TIMEOUT_MS / 1000 / 60}m).")
             } catch (e: Throwable) {
-                // Never let wake-lock plumbing crash the bot.
                 Log.w(TAG, "[WAKELOCK] Acquire failed: ${e.message}")
             }
         }
 
-        /** Release the wake lock if held. Safe to call multiple times. */
         @Synchronized
         fun releaseWakeLock() {
             try {
@@ -420,28 +350,19 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
 
         // --- Between-run cleanup ---
-        // Called between queued runs to reduce RSS drift. Hints a GC at the known idle
-        // boundary to lower peak PSS before the next run's allocation spike.
 
-        /**
-         * Reset per-run soft state and suggest a GC. Intended for between-run boundaries in the
-         * queue loop; do NOT call mid-run. Cheap; never throws.
-         */
+        /** Reset per-run soft state and suggest a GC at the between-run boundary; do NOT call mid-run. */
         fun cleanupBetweenRuns() {
             try {
-                // Refresh the watchdog heartbeat so it doesn't false-trigger during the cleanup
-                // window (the bot loop is not calling wait() between runs).
+                // Refresh the heartbeat so the watchdog does not fire during cleanup (no wait() runs between runs).
                 heartbeat()
-                // Suggest a GC. Generally discouraged in hot paths, but fine at this idle boundary.
                 System.gc()
                 Log.i(TAG, "[CLEANUP] Between-run cleanup completed.")
             } catch (_: Throwable) {
-                // Cleanup must never be the thing that kills the bot.
             }
         }
     }
 
-    // Initialize Discord settings from SQLite and start the stall watchdog.
     init {
         DiscordUtils.enableDiscordNotifications = SettingsHelper.getBooleanSetting("discord", "enableDiscordNotifications", false)
         if (DiscordUtils.enableDiscordNotifications) {
@@ -454,20 +375,13 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             }
         }
 
-        // Kick the watchdog. This is idempotent; if the user starts a new run in the same
-        // process, the existing watchdog just picks up where it left off.
         startWatchdog()
     }
 
-    /** This run's [GameGeneration] token; 0 for a Game that never starts a run (the navigator's). */
     @Volatile
     private var runGeneration = 0
 
-    /**
-     * Makes the calling thread, the run's own, the one the stall watchdog interrupts, and reads the
-     * watchdog's permission here rather than on its thread. Claims this run's generation, so a
-     * leftover thread from an earlier run stops at its next wait or tap.
-     */
+    /** Makes the calling thread the one the stall watchdog interrupts and claims this run's generation, so a leftover thread from an earlier run stops at its next wait or tap. */
     private fun watchRun() {
         gameThread = Thread.currentThread()
         watchdogContext = myContext.applicationContext
@@ -476,7 +390,6 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         runGeneration = GameGeneration.claim()
     }
 
-    /** Stops a thread still running a run the watchdog gave up on before it can tap or keep the heartbeat alive. */
     private fun checkCurrentRun() {
         if (GameGeneration.isStale(runGeneration)) throw InterruptedException("This run was replaced by a newer one.")
     }
@@ -500,10 +413,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         var remainingMillis = totalMillis
         while (remainingMillis > 0) {
             checkCurrentRun()
-            // Record forward progress for the stall watchdog. Putting it here means
-            // every tick of any wait() call keeps the heartbeat fresh, so the watchdog
-            // only fires if we're genuinely stuck outside the wait loop for 45s+
-            // (most commonly a deadlocked gesture injector).
+            // Every wait() tick records progress, so the watchdog fires only when stuck outside the wait loop.
             heartbeat()
 
             if (!BotService.isRunning) {
@@ -511,7 +421,6 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             }
             connectionLostReason?.let { throw ConnectionLostException(it) }
 
-            // Check queue control flags at safe boundaries.
             if (StartModule.queueStopRequested) {
                 throw InterruptedException()
             }
@@ -548,7 +457,6 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                 loading
             },
             now = { SystemClock.elapsedRealtime() },
-            // Avoid an infinite recursion by skipping the loading check inside the pause.
             pause = { wait(waitDelay, skipWaitingForLoading = true) },
             handleErrorDialog = { handleLoadingErrorDialog() },
             onGiveUp = { reason ->
@@ -558,8 +466,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         )
     }
 
-    /** Hands a connection, download or session error dialog found under a loading indicator to the
-     * task's dialog handler, which owns the outage budget. Returns true if one was handled. */
+    /** Hands a connection, download or session error dialog under a loading indicator to the task's dialog handler, which owns the outage budget. */
     private fun handleLoadingErrorDialog(): Boolean {
         val dialog = DialogUtils.getDialog(imageUtils) ?: return false
         if (dialog.name !in LOADING_ERROR_DIALOGS) return false
@@ -615,9 +522,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         gestureUtils.tap(x, y, imageName, taps = taps)
         ProgressTracker.noteAction()
 
-        // Mark forward progress for the watchdog. If the gesture injector deadlocked
-        // the call above would have blocked past the watchdog threshold and we'd
-        // already be restarting; if it returned, we made progress.
+        // If the gesture injector had deadlocked, the call above would have blocked past the watchdog threshold.
         heartbeat()
 
         if (!ignoreWaiting) {
@@ -627,13 +532,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
     }
 
-    /**
-     * Intentional fixed-coordinate tap that keeps [tap]'s post-tap loading wait.
-     *
-     * Use this for a deliberate tap at a known coordinate whose [label] is descriptive tracing only
-     * (no backing template asset). It jitters like the library's coordinate fallback but taps with
-     * `imageName = null`, so there is no spurious missing-asset error. See [CoordinateTap].
-     */
+    /** Fixed-coordinate tap that keeps [tap]'s post-tap loading wait; [label] is tracing only, so there is no missing-asset error. See [CoordinateTap]. */
     fun tapCoordinate(x: Double, y: Double, label: String, taps: Int = 1, ignoreWaiting: Boolean = false) {
         val (jx, jy) = CoordinateTap.resolve(x, y, label)
         tap(jx.toDouble(), jy.toDouble(), null, taps = taps, ignoreWaiting = ignoreWaiting)
@@ -641,11 +540,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
     private var ownUiHoldNoted = false
 
-    /**
-     * Holds blind input while UMA Auto+'s own screen is in front ([OwnUiForeground]): waits a beat and
-     * returns true, so the caller neither taps nor counts the tick as stuck. The wait keeps the stall
-     * watchdog's heartbeat, which still fires on a real hang.
-     */
+    /** Holds blind input while UMA Auto+'s own screen is in front ([OwnUiForeground]): waits a beat, keeping the watchdog heartbeat, and returns true. */
     fun holdBlindInputForOwnUi(): Boolean {
         val held =
             holdForOwnUi(OwnUiForeground.resumed) {
@@ -657,7 +552,6 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         return held
     }
 
-    /** [holdBlindInputForOwnUi] for a loop with a wall-clock cap: the milliseconds held, or null when the game is in front. */
     fun heldMsForOwnUi(): Long? = heldMsForOwnUi(System::currentTimeMillis) { holdBlindInputForOwnUi() }
 
     /**
@@ -682,7 +576,6 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
     }
 
-    /** True on the in-career Training selection screen ([TrainingSelectionProbe]). */
     private fun isOnTrainingSelection(): Boolean {
         val bitmap = imageUtils.getSourceBitmap()
         return TrainingSelectionProbe.isTrainingSelection(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
@@ -714,13 +607,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         return pressed
     }
 
-    /**
-     * Checks if the bot is currently on the in-career main screen (a normal training turn OR a
-     * mandatory race day). Kept in sync with the CareerLaunchNavigator's ACTIVE_TRAINING_MENU
-     * detection: the Training/Rest buttons mark a normal turn, and the Race Day ribbon marks a
-     * race-day turn (which has no Training/Rest button). Either means the bot is already in the
-     * career and needs no auto-navigation.
-     */
+    /** On the in-career main screen: a normal training turn (Training/Rest buttons) or a mandatory race day (ribbon). Keep in sync with CareerLaunchNavigator's ACTIVE_TRAINING_MENU detection. */
     private fun isOnTrainingMenu(): Boolean {
         val bitmap = imageUtils.getSourceBitmap()
         return ButtonTraining.check(imageUtils, sourceBitmap = bitmap) ||
@@ -728,15 +615,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             IconRaceDayRibbon.check(imageUtils, sourceBitmap = bitmap)
     }
 
-    /**
-     * Warns loudly when key racing-plan settings deviate from what the last-applied preset set.
-     *
-     * The Home preset apply stores a snapshot of its racing-plan stance; a later manual toggle
-     * (or any stray write) silently reshapes racing for the whole career - e.g. mandatory
-     * racing-plan mode flipping to false mid-queue stops the planned races being entered until
-     * the career fails its fan goal. Log-only: the live settings still win; this just makes the
-     * deviation impossible to miss.
-     */
+    /** Log-only warning when key racing-plan settings deviate from the last-applied preset snapshot; a stray toggle can silently reshape racing for the whole career. */
     private fun warnOnRacingConfigDrift() {
         val snapshotJson = SettingsHelper.getStringSetting("racing", "appliedRacingSnapshot")
         if (snapshotJson.isEmpty()) return
@@ -774,16 +653,8 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     }
 
     /**
-     * Checks if the bot is sitting on one of the career-end screens: the End screen with the
-     * Complete Career button, or the career-end "Learn" skill purchase screen (the skill list
-     * without the in-career Log button).
-     *
-     * Startup auto-navigation must not run from these screens. The navigator's generic
-     * Confirm/Close handling closes the skill list and its CAREER_SUMMARY handler presses
-     * Complete Career, so a bot started here would complete the career with skill points unspent.
-     * The campaign loop handles both screens itself: it buys per the careerComplete plan and then
-     * finishes the career bookkeeping. Between-run queue navigation is unaffected - it runs from
-     * StartModule after a completed run, where the skill plan has already executed.
+     * On a career-end screen: the End screen, or the career-end Learn skill list. Startup auto-navigation must not run
+     * here, since the navigator would close the list and press Complete Career with skill points unspent.
      */
     private fun isOnCareerEndScreen(): Boolean {
         val bitmap = imageUtils.getSourceBitmap()
@@ -800,17 +671,9 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     }
 
     /**
-     * Verifies the Accessibility Service grant is still present and restores it if the emulator
-     * wiped it.
-     *
-     * MuMu sporadically clears enabled_accessibility_services while the bot is running, which kills
-     * all gesture injection while screen capture keeps working - taps and swipes silently stop
-     * registering. With WRITE_SECURE_SETTINGS granted once over adb (pm grant <package>
-     * android.permission.WRITE_SECURE_SETTINGS), the bot can rewrite the setting and bring its own
-     * service back within a few seconds.
-     *
-     * @param waitForRebind Seconds to wait after restoring the setting for the service to rebind.
-     * @return True if the service grant is present (or was restored), false otherwise.
+     * Restores the Accessibility Service grant if the emulator wiped it. MuMu sporadically clears
+     * enabled_accessibility_services mid-run, which silently kills gesture injection while capture keeps working.
+     * Needs WRITE_SECURE_SETTINGS granted once over the debug bridge.
      */
     fun ensureAccessibilityService(waitForRebind: Double = 3.0): Boolean {
         val expected = "${myContext.packageName}/com.steve1316.automation_library.utils.MyAccessibilityService"
@@ -840,21 +703,9 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     }
 
     /**
-     * Forces the Accessibility Service to unbind and rebind by toggling its entry in the secure
-     * ENABLED_ACCESSIBILITY_SERVICES setting off, then back on.
-     *
-     * [ensureAccessibilityService] only rewrites the setting when our service string is MISSING, but
-     * MuMu has a nastier failure mode: it leaves the string intact (the service still reports as
-     * bound in `dumpsys accessibility`) while silently killing gesture dispatch, so every tap/swipe
-     * no-ops even though screen capture keeps working - an adb InputManager tap at the same
-     * coordinate still lands, so only dispatchGesture is dead, not the OS input path. The string-only
-     * check cannot see this, and re-writing the same value is ignored by the framework, so the entry
-     * must actually be removed (letting the framework tear the dead instance down) and then re-added
-     * to bind a fresh one. [gestureUtils] resolves via MyAccessibilityService.getInstance() on every
-     * access, so it picks up the new instance automatically once it connects.
-     *
-     * @param waitForRebind Seconds to wait after re-adding the service for it to rebind.
-     * @return True if the toggle was issued, false if WRITE_SECURE_SETTINGS is missing.
+     * Forces an unbind/rebind by toggling the secure ENABLED_ACCESSIBILITY_SERVICES entry off and on. MuMu can leave
+     * the string intact while dispatchGesture is dead (shell input still lands), and rewriting the same value is ignored,
+     * so the entry must really be removed. [gestureUtils] resolves per access and picks up the new instance.
      */
     fun forceRebindAccessibilityService(waitForRebind: Double = 3.0): Boolean {
         val expected = "${myContext.packageName}/com.steve1316.automation_library.utils.MyAccessibilityService"
@@ -862,12 +713,11 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             val current: String = Settings.Secure.getString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
             val others: List<String> = current.split(':').filter { it.isNotEmpty() && !it.equals(expected, ignoreCase = true) }
 
-            // Off: drop our service so the framework destroys the (dead-gesture) instance. Keep any
-            // other enabled services intact.
+            // Off: drop only our service so the framework destroys the dead instance.
             Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, others.joinToString(":"))
             wait(1.0, skipWaitingForLoading = true)
 
-            // On: re-add ours so the framework binds a fresh instance with a working gesture dispatcher.
+            // On: re-add ours so a fresh instance binds.
             Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, (others + expected).joinToString(":"))
             Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, "1")
             SessionTally.accessibilityRebinds.incrementAndGet()
@@ -885,19 +735,10 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
     }
 
-    /** Whether this run has used its one [strongToggleAccessibilityService]. */
     var strongToggleUsed: Boolean = false
         private set
 
-    /**
-     * A stronger accessibility toggle than [forceRebindAccessibilityService]: turns accessibility off
-     * globally for 3 s, then back on with this app's entry present. Untested live, so it is tried once
-     * per run, only after two rebinds changed nothing, and the ladder that asked for it stops a few
-     * ticks later if taps did not come back. The re-enable sits in a finally so a stop during the
-     * pause cannot leave accessibility switched off.
-     *
-     * @return True if the toggle was issued, false if WRITE_SECURE_SETTINGS is missing.
-     */
+    /** Stronger toggle: accessibility off globally for 3 s, then on. Untested live, so tried once per run after two rebinds changed nothing. The re-enable sits in a finally so a stop cannot leave accessibility off. */
     fun strongToggleAccessibilityService(): Boolean {
         strongToggleUsed = true
         val expected = "${myContext.packageName}/com.steve1316.automation_library.utils.MyAccessibilityService"
@@ -1051,12 +892,10 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
     internal fun runDiagnostic(): TaskResult? {
         if (diagnosticSelection?.key == null) return null
-        // A frozen diagnostic choice never falls through to career navigation, even without a handler.
         check(task.startTests()) { "Requested diagnostic is unavailable for this campaign" }
         return TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "Diagnostic completed.")
     }
 
-    /** Begins automation and returns the task's result. */
     fun start(): TaskResult {
         watchRun()
         MessageLog.i(TAG, "Started at ${MessageLog.getSystemTimeString()}.")
@@ -1093,8 +932,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             )
         }
         if (debugMode) MessageLog.w(TAG, "[WARN] ⚠️ Debug Mode is enabled. All bot operations will be significantly slower as a result.")
-        // toDoubleOrNull (not toDouble) — an empty/unset manual-scale setting threw NumberFormatException
-        // and crashed the bot at startup. Mirrors the fix already in CustomImageUtils.
+        // toDoubleOrNull: an empty/unset manual-scale setting threw NumberFormatException at startup.
         val templateMatchCustomScale = SettingsHelper.getStringSetting("debug", "templateMatchCustomScale").toDoubleOrNull() ?: 1.0
         if (templateMatchCustomScale != 1.0) {
             MessageLog.w(TAG, "[WARN] Manual scale has been set to $templateMatchCustomScale")
@@ -1112,8 +950,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         // A small delay here to ensure any notifications are out of the way.
         wait(3.0)
 
-        // The emulator can wipe the Accessibility grant even while idle - without it no gesture
-        // lands. Verify (and restore if possible) before doing anything else.
+        // The emulator can wipe the Accessibility grant even while idle; verify and restore it first.
         if (!ensureAccessibilityService()) {
             return accessibilityHaltResult(
                 A11Y_GRANT_MISSING,
@@ -1144,20 +981,13 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
         if (!isMiscTask && !isOnTrainingMenu()) {
             if (isOnCareerEndScreen()) {
-                // Started on a career-end screen (End screen or the Learn skill list). The
-                // campaign loop buys skills and completes the career bookkeeping from here;
-                // the navigator would instead close the skill list and press Complete Career
-                // with the points unspent.
+                // Started on a career-end screen: the campaign loop buys skills and finishes the bookkeeping; the navigator would press Complete Career with points unspent.
                 MessageLog.i(TAG, "[INFO] Bot started on a career-end screen. Skipping auto-navigation; the campaign will buy skills and finish the career.")
             } else {
                 MessageLog.i(TAG, "[INFO] Bot is not on the training menu. Attempting auto-navigation...")
                 val navigator = CareerLaunchNavigator(myContext)
                 val reuseSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
-                // Single (non-queue) runs verify Trainee Select against the applied preset's
-                // trainee: the game preselects whoever was picked last, and an interrupted queue
-                // once left El Condor preselected while Rudolf's preset was applied - this launch
-                // path would have run her career under his settings (2026-07-09, twice). Queue
-                // runs keep their rotation-managed targeting and pass no expectation.
+                // Single runs verify Trainee Select against the applied preset's trainee: the game preselects the last pick, and an interrupted queue once left the wrong trainee preselected. Queue runs pass no expectation.
                 val singleRun = !SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", true)
                 val expectedTrainee = if (singleRun) SettingsHelper.getStringSetting("general", "appliedPresetTrainee") else ""
                 val expectedExcludes = if (singleRun) SettingsHelper.getStringSetting("general", "appliedPresetTraineeExcludes") else ""
@@ -1198,20 +1028,12 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             if (enableRemoteLogViewer) {
                 // Notify the user that the Remote Log Viewer is enabled and is viewable at the indicated address.
                 val port = SettingsHelper.getIntSetting("debug", "remoteLogViewerPort", 9000)
-                // The viewer now binds to loopback (127.0.0.1) for safety, so the device's LAN IP is no
-                // longer reachable - advertise the adb-forward path instead of a dead LAN URL.
+                // The viewer binds to loopback, so advertise the port-forward path instead of a dead LAN URL.
                 logViewerString = "\nRemote Log Viewer enabled (loopback). From a computer: adb forward tcp:$port tcp:$port then open http://localhost:$port"
             }
             DiscordUtils.queue.add("```diff\n+ ${MessageLog.getSystemTimeString()} Bot run started! Scenario: $scenario```$logViewerString")
         }
-        // CAREER ATTACHMENT: the bot is about to hand control to the career task, which is the
-        // first point that proves a real career exists - exactly one of "already on the training
-        // menu", "started on a career-end screen", or "auto-navigation reported reaching the
-        // training menu" holds here. This is the ONLY place a spark reroll transaction is
-        // created. Arming any earlier (the queue run loop used to) puts the transaction on the
-        // wrong side of the cold-start launch navigation, whose legitimate pass through the
-        // game's Home screen then destroyed it and left a whole live career unable to price its
-        // redraw (2026-07-19). Misc tasks are not careers and never arm.
+        // CAREER ATTACHMENT: the first point proving a real career exists, and the ONLY place a spark reroll transaction is created. Arming earlier lets the cold-start navigation's pass through Home destroy it. Misc tasks never arm.
         if (!isMiscTask) {
             val queueRun =
                 if (SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", true)) {
@@ -1224,21 +1046,14 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                 queueRun = queueRun,
                 nowMs = System.currentTimeMillis(),
             )
-            // Adopt the pending launch-transaction id minted by the launch navigation into this
-            // career's active correlation, so the career's own telemetry stamps its own launch id and
-            // a lineage read taken during that launch can be joined to this career. A resumed career
-            // (no launch navigation) mints a fresh active id here instead; no lineage event joins it.
+            // Adopt the launch navigation's pending transaction id so the career's telemetry and lineage reads join; a resumed career mints a fresh id.
             LaunchTransactionGate.adopt(System.currentTimeMillis())
-            // Capture the launch-critical config identity for this career. The React Start barrier
-            // verified this same settingsRevision on disk before launching; logging it here makes
-            // the cross-layer identity explicit, so a mid-career settings drift is visible.
+            // Capture the launch-critical config identity (the React Start barrier verified this settingsRevision) so mid-career drift is visible.
             val runConfig = RunConfigSnapshot.armFromSettings(System.currentTimeMillis())
             MessageLog.i(TAG, "[CONFIG_DRIFT] [KOTLIN] loaded_run_config ${RunConfigSnapshot.describe(runConfig)}")
         }
 
-        // Read the per-run safety timeout from the run queue settings. Defaults to 180 min
-        // (3 hours), matching the TS-side default. Single-run sessions (queue disabled)
-        // also use this same setting since they call Game.start() the same way.
+        // Per-run safety timeout (default 180 min, matching the TS side); single runs use it too.
         val maxRuntimeMinutes = SettingsHelper.getIntSetting("runQueue", "maxRuntimePerRunMinutes", 180)
         MessageLog.i(TAG, "[INFO] Per-run max runtime timeout: $maxRuntimeMinutes minutes.")
         val taskResult: TaskResult = task.start(maxRuntimeMinutes = maxRuntimeMinutes)

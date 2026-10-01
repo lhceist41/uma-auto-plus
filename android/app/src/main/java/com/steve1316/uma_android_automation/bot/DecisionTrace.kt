@@ -5,98 +5,38 @@ import com.steve1316.uma_android_automation.types.StatName
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Immutable copy of one turn's decision evidence, produced by [DecisionTracer.turnEvidence] and
- * handed to the trace sink by [DecisionTracer.emit].
- *
- * Copied rather than shared so a sink cannot mutate the tracer's live buffers, and so the record
- * a sink serializes is exactly what the turn's Decision Report rendered.
- */
+/** Immutable copy, so a sink cannot mutate the tracer's live buffers and the record matches the rendered Decision Report. */
 data class TurnEvidence(
-    /** Game date captured when the turn opened, or null when no turn was ever opened. */
     val date: GameDate?,
-    /** State snapshot captured when the turn opened, or null when no turn was ever opened. */
     val state: DecisionTracer.StateSnapshot?,
-    /** Decision-relevant settings captured when the turn opened. */
     val settings: Map<String, String>,
-    /** Decision events recorded during the turn, in recording order. */
     val events: List<DecisionTracer.DecisionEvent>,
 )
 
 /**
- * Serializes one turn's [TurnEvidence] into a single append-only JSON record.
+ * Serializes one turn's [TurnEvidence] into one append-only JSON record. Observability only: built after the turn's
+ * action executed, never re-reads the screen or re-runs scorers. Unavailable optional fields are OMITTED, never
+ * placeholder-filled, because a fabricated value silently mis-attributes the turn.
  *
- * This is observability only. It reads what [DecisionTracer] already captured for the turn's
- * human-readable Decision Report and re-renders it machine-readably; it performs no screen reads,
- * asks the scorers nothing, and never participates in choosing an action. The record is built
- * after the turn's action has already executed, so nothing here can reach gameplay control flow.
- *
- * Honesty rules, matching [SkillSpendTelemetry]:
- * - Optional identity and optional numbers are OMITTED when unavailable, never filled with a
- *   placeholder. A missing field means "not known at decision time"; a fabricated one silently
- *   mis-attributes the turn.
- * - `turn` is written only when the date was actually read from the screen. `observation` carries
- *   the read flags explicitly so a consumer can tell an unobserved value from an absent one.
- * - Candidate scores, failure chances and stat gains appear only where the existing decision code
- *   already handed them to the tracer. No scorer is re-run to manufacture them.
- *
- * Pure and Context-free so JUnit can pin the shape without a live Campaign. [Campaign] appends the
- * result via `OutcomeCorpus.append` from inside the trace sink; isolation comes from two layers, not
- * a runCatching here: `DecisionTracer.emit()` wraps the sink in a try/catch that bounds a serializer
- * exception to one warning per career, and `OutcomeCorpus.append` swallows its own disk-append
- * failures. So a telemetry failure cannot change a turn.
+ * A telemetry failure cannot change a turn: `DecisionTracer.emit()` try/catches the sink and `OutcomeCorpus.append`
+ * swallows its own disk failures.
  */
 object DecisionTrace {
-    /** Record type discriminator, matching the `type` field the other corpus records carry. */
     const val SCHEMA: String = "decision_trace"
 
-    /**
-     * Schema version. Bump on any change that a reader cannot absorb by tolerating new fields:
-     * renaming or removing a field, or changing the meaning or units of an existing one. Purely
-     * additive fields keep the current version, so readers must ignore fields they do not know.
-     */
+    /** Bump on a change readers cannot absorb by tolerating new fields (rename, removal, new meaning); additive fields keep it. */
     const val SCHEMA_VERSION: Int = 1
 
-    /**
-     * Byte cap for the decision-trace file. This factual per-turn decision-corpus record runs about
-     * 2 KB in practice (roughly 1,900 bytes measured live), so 32 MB still holds a few hundred careers;
-     * past it the writer drops records rather than filling the device. Nothing is rotated or deleted;
-     * the corpus may record in normal release play when Record Decision Data is enabled, so this
-     * 32 MiB cap is what prevents unbounded local growth.
-     */
+    /** Past 32 MiB the writer drops records rather than filling the device (about 1.9 KB per turn measured live). Nothing is rotated. */
     const val MAX_FILE_BYTES: Long = 32L * 1024 * 1024
 
-    /** Candidate type token for a main-screen action considered this turn. */
     private const val CANDIDATE_ACTION: String = "action"
 
-    /** Candidate type token for a training considered this turn. */
     private const val CANDIDATE_TRAINING: String = "training"
 
-    /** Fixed stat order so every record's stat maps read the same way. */
     private val STAT_KEYS: List<Pair<StatName, String>> =
         listOf(StatName.SPEED to "spd", StatName.STAMINA to "sta", StatName.POWER to "pwr", StatName.GUTS to "grt", StatName.WIT to "wit")
 
-    /**
-     * Builds the `decision_trace` record for one turn.
-     *
-     * @param timestamp Wall-clock epoch milliseconds at emit time.
-     * @param evidence The turn's captured evidence.
-     * @param app App versionName, or null when unavailable.
-     * @param fp Config-arm fingerprint shared with the outcome records, or null when unavailable.
-     * @param scenario Scenario name, or null/blank when unavailable.
-     * @param trainee Trainee name as read in-career, or null/blank when unavailable.
-     * @param preset Applied preset identity, or null/blank when no preset was applied.
-     * @param careerToken The career identity token shared with the finalize records, or null.
-     * @param queueRun Run queue index when a queue is driving this career, or null.
-     * @param seq This turn's per-career CareerState decision sequence, or null when no CareerState was
-     * built for the turn (release/non-debug, or a swallowed build). Additive and version-neutral: it
-     * is the offline join key to the separate `career_state` records and replaces no existing field.
-     * @param enteredRace The identity of a race that actually COMPLETED this turn, or null when no race
-     * completed (including a RACE decision whose race aborted). Additive and version-neutral: omitted
-     * entirely when null, so historical records without it stay valid. Only a RACE turn can carry it,
-     * because it is written only from a proven race-completion tail.
-     * @return The record, ready to append as one JSONL line.
-     */
     @Suppress("LongParameterList")
     fun buildRecord(
         timestamp: Long,
@@ -115,7 +55,6 @@ object DecisionTrace {
         record.put("type", SCHEMA)
         record.put("v", SCHEMA_VERSION)
         record.put("ts", timestamp)
-        // Additive join key to the separate career_state stream; omitted when no CareerState was built.
         seq?.let { record.put("seq", it) }
         app?.takeIf { it.isNotBlank() }?.let { record.put("app", it) }
         fp?.takeIf { it.isNotBlank() }?.let { record.put("fp", it) }
@@ -127,8 +66,7 @@ object DecisionTrace {
 
         val date = evidence.date
         if (date != null) {
-            // Only a date the bot actually read becomes a turn number. An unread date still holds the
-            // constructed default (turn 1), which the outcome corpus already learned not to record.
+            // An unread date still holds the constructed default (turn 1), so only a date actually read becomes a turn number.
             if (date.dayObserved) record.put("turn", date.day)
             record.put("year", date.year.name)
             record.put("month", date.month.name)
@@ -141,9 +79,7 @@ object DecisionTrace {
             record.put("settings", JSONObject().apply { evidence.settings.forEach { (key, value) -> put(key, value) } })
         }
 
-        // Unity Cup is the only scenario that computes Spirit Explosion gauges, so gauge counts are emitted
-        // onto candidates only there. Off Unity Cup they are an uncomputed default, which the honesty rule
-        // omits rather than serialize as a measured zero.
+        // Only Unity Cup computes Spirit Explosion gauges; elsewhere they are an uncomputed default, omitted rather than a measured zero.
         val candidates = buildCandidates(evidence.events, unityCup = scenario == "Unity Cup")
         if (candidates.length() > 0) record.put("candidates", candidates)
         record.put("selected", buildSelected(evidence.events))
@@ -154,20 +90,11 @@ object DecisionTrace {
         val notes = evidence.events.filterIsInstance<DecisionTracer.DecisionEvent.Note>().map { it.message }
         if (notes.isNotEmpty()) record.put("notes", JSONArray().apply { notes.forEach { put(it) } })
 
-        // Post-decision execution evidence: the race that actually completed this turn. Omitted when
-        // none did, so only a RACE turn ever carries it and old records stay valid without it.
         enteredRace?.let { record.put("enteredRace", buildEnteredRace(it)) }
 
         return record
     }
 
-    /**
-     * Renders the completed-race identity fact.
-     *
-     * Deterministic field order (turnNumber, resolution, path, then the optional name/matchCount).
-     * Optional identity is OMITTED, never null-filled: an absent `name` means the runtime did not
-     * resolve a catalog name it could stand behind, and a fabricated one would mis-attribute the entry.
-     */
     private fun buildEnteredRace(entered: EnteredRace): JSONObject =
         JSONObject().apply {
             put("turnNumber", entered.turnNumber)
@@ -177,13 +104,7 @@ object DecisionTrace {
             entered.matchCount?.let { put("matchCount", it) }
         }
 
-    /**
-     * Renders the state the decision engine saw when the turn opened.
-     *
-     * Deliberately the turn-open snapshot, not live state at emit time: the turn's action has
-     * already executed by then, so reading the trainee again would record the consequence of the
-     * decision as though it were its input.
-     */
+    /** Turn-open snapshot, not live state: the action already executed, so a re-read would record the consequence as the input. */
     private fun buildState(state: DecisionTracer.StateSnapshot): JSONObject =
         JSONObject().apply {
             put("energy", state.energy)
@@ -209,14 +130,7 @@ object DecisionTrace {
             }
         }
 
-    /**
-     * Renders which parts of the state were genuinely read this turn.
-     *
-     * These are the read flags the existing readers already maintain. They are not confidence
-     * scores: the stat/skill-point/aptitude readers do not expose one, so none is invented here.
-     * A false flag means the corresponding value is a carried-over or default value rather than a
-     * fresh observation, and must not be read as evidence of what was on screen.
-     */
+    /** Read flags are not confidence scores. A false flag means a carried-over or default value, not a fresh observation. */
     private fun buildObservation(date: GameDate?, state: DecisionTracer.StateSnapshot?): JSONObject =
         JSONObject().apply {
             put("turnObserved", date?.dayObserved ?: false)
@@ -225,22 +139,12 @@ object DecisionTrace {
             put("aptitudesObserved", state?.aptitudesObserved ?: false)
         }
 
-    /**
-     * Flattens every candidate the turn's events exposed into one list.
-     *
-     * The main-screen cascade only names the alternatives it explicitly ruled out on the way down,
-     * so this list is the honest subset the decision code hands over - not an exhaustive action
-     * space. Training candidates carry the analyzer's own scores because the analyzer already
-     * passes them to the tracer.
-     */
+    /** The honest subset the decision code hands over, not an exhaustive action space: the cascade names only what it ruled out. */
     private fun buildCandidates(events: List<DecisionTracer.DecisionEvent>, unityCup: Boolean): JSONArray {
         val candidates = JSONArray()
-        // Only the FINAL training contest is authoritative. Trackblazer Irregular Training legitimately
-        // calls recommendTraining twice in one turn - the pre-screen evaluation and then the executed
-        // fast path - so the turn holds two TrainingSelection events, each with a non-null pick. Rendering
-        // both would emit two selected:true training candidates, a self-contradiction the analyzer rightly
-        // rejects. Serialize only the last event, matching buildSelected's lastOrNull(), so the candidate
-        // contest and selected.training describe the same final selection.
+        // Only the FINAL training contest is authoritative: Trackblazer Irregular Training calls recommendTraining twice in a
+        // turn (pre-screen, then the executed fast path), and rendering both would emit two selected:true candidates. Matches
+        // buildSelected's lastOrNull().
         val finalTraining = events.filterIsInstance<DecisionTracer.DecisionEvent.TrainingSelection>().lastOrNull()
         events.forEach { event ->
             when (event) {
@@ -267,8 +171,6 @@ object DecisionTrace {
                 }
 
                 is DecisionTracer.DecisionEvent.TrainingSelection -> {
-                    // Skip earlier provisional evaluations; only the final selection is the authoritative
-                    // contest for the turn, matching buildSelected's lastOrNull() (see note above).
                     if (event !== finalTraining) return@forEach
                     event.selected?.let { picked ->
                         candidates.put(
@@ -291,8 +193,7 @@ object DecisionTrace {
                                 put("selected", false)
                                 put("rejected", runnerUp.rejected)
                                 put("reason", runnerUp.reason)
-                                // Absent for a hard-excluded training: the tracer drops the -Infinity
-                                // sentinel rather than pass a score that is not a real ranking.
+                                // Absent for a hard-excluded training: the tracer drops the -Infinity sentinel.
                                 runnerUp.score?.takeIf { it.isFinite() }?.let { put("score", it) }
                                 runnerUp.failureChance?.let { put("failChance", it) }
                                 runnerUp.statGains?.let { put("gains", statGains(it)) }
@@ -308,14 +209,7 @@ object DecisionTrace {
         return candidates
     }
 
-    /**
-     * Renders the action the turn actually committed to.
-     *
-     * `action` is the main-screen cascade's pick and `source` names the recorder that produced it.
-     * A `recovery` block means the turn abandoned that pick and executed a recovery instead, so a
-     * consumer reading only `action` would be wrong about what ran. Everything is omitted when the
-     * turn recorded no selection at all (the tracer opened but a dialog ended the tick).
-     */
+    /** A `recovery` block means the turn abandoned the cascade's pick, so reading only `action` would be wrong about what ran. */
     private fun buildSelected(events: List<DecisionTracer.DecisionEvent>): JSONObject {
         val selected = JSONObject()
         events.filterIsInstance<DecisionTracer.DecisionEvent.ActionChoice>().lastOrNull()?.let { choice ->
@@ -340,7 +234,6 @@ object DecisionTrace {
         return selected
     }
 
-    /** Renders the turn's extra-race eligibility verdict, or null when none was recorded. */
     private fun buildRaceEligibility(events: List<DecisionTracer.DecisionEvent>): JSONObject? {
         val eligibility = events.filterIsInstance<DecisionTracer.DecisionEvent.RaceEligibility>().lastOrNull() ?: return null
         return JSONObject().apply {
@@ -349,7 +242,6 @@ object DecisionTrace {
         }
     }
 
-    /** Renders the turn's item, charm and whistle verdicts. Empty when the campaign tracks no items. */
     private fun buildItems(events: List<DecisionTracer.DecisionEvent>): JSONArray {
         val items = JSONArray()
         events.forEach { event ->
@@ -388,21 +280,12 @@ object DecisionTrace {
         return items
     }
 
-    /** Renders a stat-gain map with the canonical short keys, omitting stats the caller did not supply. */
     private fun statGains(gains: Map<StatName, Int>): JSONObject =
         JSONObject().apply {
             STAT_KEYS.forEach { (stat, key) -> gains[stat]?.let { put(key, it) } }
         }
 
-    /**
-     * Attaches one training candidate's already-computed scorer inputs onto [target].
-     *
-     * Additive, honesty-preserving: `numRainbow`/`numSkillHints` are computed every scenario so they are
-     * written unconditionally (a real zero, not a placeholder); `trainingLevel` appears only when the OCR
-     * read one; the Spirit Explosion gauge counts are meaningful only under Unity Cup and are written only
-     * when [unityCup] is true; `relationshipBars` and `performanceGains` are written only when non-empty, so
-     * a facility with no supports and a non-Grand-Concert turn add nothing rather than an empty container.
-     */
+    /** `numRainbow`/`numSkillHints` always written (a real zero); gauge counts only when [unityCup]; bars and gains only when non-empty. */
     private fun putCandidateEvidence(target: JSONObject, evidence: DecisionTracer.TrainingCandidateEvidence, unityCup: Boolean) {
         target.put("numRainbow", evidence.numRainbow)
         target.put("numSkillHints", evidence.numSkillHints)
@@ -422,13 +305,6 @@ object DecisionTrace {
         }
     }
 
-    /**
-     * Renders the per-bar relationship evidence in analysis order.
-     *
-     * Only the fields the relationship scorer reads are written. `support` is emitted only when true and
-     * `trainer` only when a canonical identity is known, so a plain non-support bar stays compact and no
-     * identity is fabricated for an unread one.
-     */
     private fun buildRelationshipBars(bars: List<DecisionTracer.RelationshipBarEvidence>): JSONArray =
         JSONArray().apply {
             bars.forEach { bar ->

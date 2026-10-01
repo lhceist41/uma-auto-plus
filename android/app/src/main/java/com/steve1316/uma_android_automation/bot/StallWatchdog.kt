@@ -15,21 +15,17 @@ import java.util.concurrent.atomic.AtomicReference
 // only: MessageLog's process-wide lock, Game.wait and SettingsHelper can be exactly what stalled
 // (both watchdogs have deadlocked on their own MessageLog call before), so no rung touches them.
 
-/** The watchdog's steps. RESET and RECOVERED end a stall; the others are its rungs, in order. */
 internal enum class WatchdogRung { NONE, RESET, RECOVERED, TOGGLE_ACCESSIBILITY, SKIP_TOGGLE, INTERRUPT_GAME_THREAD, KILL }
 
 internal const val WATCHDOG_TOGGLE_AT_MS = 120_000L
 internal const val WATCHDOG_INTERRUPT_AT_MS = 150_000L
 
-/** The kill, unchanged: 3 minutes so popup animations and dialog chains do not false-trigger it. */
+/** 3 minutes, so popup animations and dialog chains do not false-trigger the kill. */
 internal const val WATCHDOG_KILL_AT_MS = 180_000L
 
 /**
- * The watchdog's next step, [ageMs] after the last heartbeat, with [rungsDone] rungs taken in this
- * stall (1 once the accessibility rung is taken or skipped, 2 once the Game thread was interrupted).
- * An interrupted Game thread that has exited is a recovery: the queue owns the run from there. A
- * stall with no live Game thread (between runs, where the queue thread itself is stuck) still ends
- * in the kill, as before this ladder existed.
+ * An interrupted Game thread that has exited is a recovery (the queue owns the run). A stall with no
+ * live Game thread (the queue thread itself stuck) still ends in the kill.
  */
 internal fun decideWatchdogRung(ageMs: Long, rungsDone: Int, gameThreadAlive: Boolean, grantPresent: Boolean): WatchdogRung =
     when {
@@ -42,7 +38,6 @@ internal fun decideWatchdogRung(ageMs: Long, rungsDone: Int, gameThreadAlive: Bo
         else -> WatchdogRung.NONE
     }
 
-/** The stall's rung count once [rung] is taken: a recovery starts over, a taken or skipped rung counts. */
 internal fun rungsDoneAfter(rung: WatchdogRung, rungsDone: Int): Int =
     when (rung) {
         WatchdogRung.RESET, WatchdogRung.RECOVERED -> 0
@@ -51,11 +46,7 @@ internal fun rungsDoneAfter(rung: WatchdogRung, rungsDone: Int): Int =
         WatchdogRung.NONE, WatchdogRung.KILL -> rungsDone
     }
 
-/**
- * Which run is current. A run claims a token as it starts; a thread still running an older run (a
- * zombie that woke after the watchdog gave up on it) is stale and stops at its next wait or tap.
- * Zero is never claimed, so a Game that never started a run (the navigator's) is never stale.
- */
+/** Zero is never claimed, so a Game that never started a run (the navigator's) is never stale; a zombie thread from an older run stops at its next wait or tap. */
 internal object GameGeneration {
     @Volatile
     private var current = 0
@@ -66,7 +57,6 @@ internal object GameGeneration {
     fun isStale(token: Int): Boolean = token != 0 && token != current
 }
 
-/** Why the watchdog interrupted the run, for the interrupted run's result. Taken once. */
 internal object WatchdogReason {
     private val reason = AtomicReference<String?>(null)
 
@@ -79,7 +69,6 @@ internal object WatchdogReason {
 
 internal fun watchdogInterruptReason(ageMs: Long): String = "No progress for ${ageMs / 1000} seconds, so the stall watchdog interrupted the run."
 
-/** A watchdog rung this process had taken when it died, from its breadcrumb. */
 internal data class WatchdogBreadcrumb(val rung: String)
 
 private const val BREADCRUMB_PREFIX = "uma-watchdog"
@@ -98,10 +87,9 @@ internal fun decodeWatchdogBreadcrumb(text: String?): WatchdogBreadcrumb? {
     return WatchdogBreadcrumb(parts[1])
 }
 
-/** The breadcrumb file below API 30, where Android keeps no process-state summary. */
 internal const val WATCHDOG_BREADCRUMB_FILE = "watchdog_breadcrumb"
 
-/** Writes `pid:millis:breadcrumb` to a temp file and renames it over the old one, as the queue heartbeat does. */
+/** Temp file renamed over the old one, as the queue heartbeat does. */
 internal fun writeWatchdogBreadcrumbFile(dir: File, pid: Int, now: Long, text: String): Boolean {
     val target = File(dir, WATCHDOG_BREADCRUMB_FILE)
     val temp = File(dir, "$WATCHDOG_BREADCRUMB_FILE.tmp")
@@ -111,7 +99,6 @@ internal fun writeWatchdogBreadcrumbFile(dir: File, pid: Int, now: Long, text: S
     return temp.renameTo(target)
 }
 
-/** The breadcrumb [pid] wrote at or after [since], or null when the file is missing, unreadable or another process's. */
 internal fun readWatchdogBreadcrumbFile(dir: File, pid: Int, since: Long): WatchdogBreadcrumb? =
     try {
         val parts = File(dir, WATCHDOG_BREADCRUMB_FILE).readText().split(':', limit = 3)
@@ -121,10 +108,8 @@ internal fun readWatchdogBreadcrumbFile(dir: File, pid: Int, since: Long): Watch
     }
 
 /**
- * Records [text] as this process's watchdog breadcrumb on a detached daemon thread that nothing
- * waits for: Android's process-state summary from API 30 (no file I/O; it comes back with the exit
- * record at the next start), the breadcrumb file below that. Call it only after the rung it
- * describes has acted, so a slow binder call or disk can never delay a recovery or the kill.
+ * Runs on a detached daemon thread nothing waits for, and only after the rung it describes has
+ * acted, so a slow binder call or disk can never delay a recovery or the kill.
  */
 internal fun recordWatchdogBreadcrumb(context: Context?, text: String) {
     val app = context ?: return
@@ -160,10 +145,8 @@ internal fun hasSecureSettingsGrant(context: Context): Boolean =
     }
 
 /**
- * The watchdog's accessibility rung: removes this app's entry from the enabled accessibility
- * services and adds it back, as Game.forceRebindAccessibilityService does, but with the application
- * Context and Thread.sleep only, since that function waits through Game.wait and logs through
- * MessageLog. Runs on its own daemon thread. Returns false when WRITE_SECURE_SETTINGS is missing.
+ * Removes and re-adds this app's accessibility service like Game.forceRebindAccessibilityService, but with only the
+ * application Context and Thread.sleep: that one waits through Game.wait and logs through MessageLog.
  */
 internal fun toggleAccessibilityForWatchdog(context: Context): Boolean {
     val expected = "${context.packageName}/com.steve1316.automation_library.utils.MyAccessibilityService"

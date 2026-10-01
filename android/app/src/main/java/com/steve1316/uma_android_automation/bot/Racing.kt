@@ -101,11 +101,7 @@ enum class GoalCriteriaTier(val label: ComponentInterface, val description: Stri
  * @property campaign A reference to the current [Campaign] instance.
  */
 class Racing(private val game: Game, private val campaign: Campaign) {
-    /**
-     * The career screen's Races button for the active scenario. Grand Concert restyles it, so the
-     * stock template misses there and every voluntary race silently became impossible. Resolved per
-     * access rather than cached because the scenario is read from live game state.
-     */
+    /** Races button for the active scenario; Grand Concert restyles it so the stock template misses. Resolved per access because the scenario is live game state. */
     private val racesButton: ButtonInterface
         get() = if (GrandConcertScenario.matches(game.scenario)) ButtonRacesGrandConcert else ButtonRaces
 
@@ -216,7 +212,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Indicates that a G3 or above requirement has been detected. */
     val hasG3OrAboveRequirement: Boolean get() = goalCriteriaTier == GoalCriteriaTier.G3_OR_ABOVE
 
-    /** Indicates that a positively read G1-only requirement has been detected. Never true from a mere failure to read the other tiers - see [restrictsToG1Only]. */
+    /** True only for a positively read G1-only requirement, never from a failed read of the other tiers (see [restrictsToG1Only]). */
     val hasG1OnlyRequirement: Boolean get() = restrictsToG1Only(goalCriteriaTier)
 
     /** How the active trophy goal's criteria reads in the log, including the case where its tier could not be read at all. */
@@ -228,22 +224,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Indicates that an insufficient goal race result pts requirement has been detected. */
     var hasInsufficientGoalRacePtsRequirement = false
 
-    /** True when the next goal deadline is within [FAN_EMERGENCY_TURN_WINDOW] turns.
-     * Cached on the main screen by [checkEligibilityToStartExtraRacingProcess] because the
-     * turns-remaining OCR anchors on the energy label, which is not visible on the race list. */
+    /** True when the next goal deadline is within [FAN_EMERGENCY_TURN_WINDOW] turns; cached on the main screen because the turns-remaining OCR anchors on the energy label, absent on the race list. */
     var bGoalDeadlineNear = false
 
-    /** The cached turns-remaining value behind [bGoalDeadlineNear], for urgency tiering on
-     * screens where the OCR anchor is unavailable. Int.MAX_VALUE when unknown. */
+    /** Cached turns-remaining behind [bGoalDeadlineNear]; Int.MAX_VALUE when unknown. */
     var goalDeadlineTurnsRemaining = Int.MAX_VALUE
 
-    /** Fan-emergency mode: an unmet fan goal is due within [FAN_EMERGENCY_TURN_WINDOW] turns. It
-     * still gates the GENERIC (non-Grand-Concert) fan-pressure path, where it admits single-star
-     * prediction races and the Junior scroll instead of skipping to training, so a weak trainee whose
-     * whole pool draws only single-star predictions is not left with every extra race invisible. Pure
-     * Grand Concert fan pressure no longer relies on this: it takes a dedicated fans-first branch
-     * (processGrandConcertForcedFanRace) that ignores the row star, because a GC list draws no
-     * finish-prediction mark and its distance-aptitude star false-matches the single-star template. */
+    /**
+     * An unmet fan goal is due within [FAN_EMERGENCY_TURN_WINDOW] turns. Gates the generic (non-Grand-Concert) path, admitting single-star
+     * predictions and the Junior scroll. Grand Concert uses processGrandConcertForcedFanRace, which ignores the row star.
+     */
     var bFanEmergencyActive = false
 
     /** Tracks the specific day to race based on opportunity cost analysis. */
@@ -256,11 +246,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     var lastRaceGrade: RaceGrade? = null
     var lastRaceFans: Int = 0
 
-    /** Whether the Purchase Alarm Clock dialog was rejected this race per the user's `alarmClockPolicy`.
-     * Once rejected, [shouldRetryRace] short-circuits further retries for the SAME race even with
-     * [raceRetries] positive — the only retry option was the carat purchase, which the user declined.
-     * Without it the bot loops: tap retry, get the alarm-clock popup, reject, land back on the still-active
-     * retry button, tap again, until raceRetries hits zero. Reset alongside [lastRaceGrade].
+    /**
+     * The alarm-clock purchase was rejected per `alarmClockPolicy`: [shouldRetryRace] stops retrying this race, else the bot loops
+     * retry, popup, reject until [raceRetries] hits zero. Reset with [lastRaceGrade].
      */
     var bAlarmClockPolicySkippedThisRace: Boolean = false
 
@@ -272,22 +260,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
     var bRetryingLostGoalRace: Boolean = false
 
-    /** Which tier resolved the LAST [lookupRaceInDatabase] call, so a caller can label entered-race telemetry
-     * `exact` vs `fuzzy` truthfully. Reset to NONE at each lookup entry; only meaningful when read
-     * immediately after a single lookup, before any intervening lookup runs. */
+    /** Tier of the LAST [lookupRaceInDatabase] call, reset at each lookup entry; read it immediately after a single lookup. */
     private var lastLookupTier: LookupTier = LookupTier.NONE
 
-    /** Result tier of a [lookupRaceInDatabase] call, for entered-race telemetry resolution labeling. */
     internal enum class LookupTier { NONE, EXACT, FUZZY }
 
-    /**
-     * One suitable Trackblazer race row, carrying the star tier used for ranking AND the lookup
-     * provenance ([lookupTier] / [matchCount]) captured at THIS row's database lookup. Hoisted out of
-     * [findSuitableTrackblazerRace] so the pure winner-selection ([trackblazerWinner]) and its
-     * entered-race fact ([selectTrackblazerRaceFact]) can be unit-tested without a device, and so the
-     * selected row's own tier travels with it instead of being read from the mutable [lastLookupTier]
-     * after later rows overwrite it.
-     */
+    /** One suitable Trackblazer race row with the lookup provenance ([lookupTier] / [matchCount]) captured at its own lookup, since [lastLookupTier] is overwritten by later rows. */
     internal data class TrackblazerCandidate(
         val point: Point,
         val race: RaceData,
@@ -298,22 +276,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val matchCount: Int,
     )
 
-    /** Selection + point + entered-race provenance returned by [findSuitableTrackblazerRace]. */
     data class TrackblazerRaceSelection(val point: Point, val raceData: RaceData, val enteredRace: EnteredRace)
 
-    /** The identity of the optional race the extra-race selection committed to this attempt, staged by
-     * [processSmartRacing] (or a scenario) and read at the extra-race completion tail. Null means the
-     * selection did not resolve a name (e.g. positional standard racing), yielding an `unresolved` fact.
-     * Cleared at the top of [handleExtraRace] so a prior attempt's target never carries over. */
+    /** The race the extra-race selection committed to this attempt, read at the completion tail; null yields an `unresolved` fact. Cleared at the top of [handleExtraRace]. */
     private var stagedExtraRaceEntry: EnteredRace? = null
 
-    /**
-     * Builds an [EnteredRace] fact from a single turn-scoped [lookupRaceInDatabase] result, preserving
-     * resolution truthfully: `unresolved` when nothing matched, `fuzzy` from the fuzzy tier (named only
-     * when the fuzzy match was unique), `exact` for a single exact match, and `ambiguousSet` (with
-     * [EnteredRace.matchCount], no name) when several turn-scoped candidates matched. Never flattens an
-     * ambiguous set to the first row. Must be called immediately after the lookup, before another runs.
-     */
+    /** Builds an [EnteredRace] fact from one turn-scoped lookup; an ambiguous set is never flattened to the first row. Call immediately after the lookup. */
     private fun enteredRaceFromLookup(path: EnteredRacePath, turn: Int, matches: List<RaceData>): EnteredRace =
         enteredRaceFromResolution(path, turn, lastLookupTier, matches.size, matches.singleOrNull()?.name)
 
@@ -412,12 +380,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      */
     data class ScoredRace(val raceData: RaceData, val score: Double, val fansScore: Double, val gradeScore: Double, val aptitudeBonus: Double)
 
-    /**
-     * A race-list prediction icon match and its tier.
-     *
-     * @property location The screen (or entry-bitmap) coordinates of the prediction icon.
-     * @property tier The prediction tier of the matched icon.
-     */
     data class PredictionAnchor(val location: Point, val tier: PredictionTier)
 
     /**
@@ -438,16 +400,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             mapOf(RaceGrade.G1 to 1, RaceGrade.G2 to 2, RaceGrade.G3 to 3, RaceGrade.OP to 4, RaceGrade.PRE_OP to 5)
 
         /**
-         * Pure resolution mapping shared by every lookup-derived entered-race fact, so the exact/
-         * ambiguousSet/fuzzy/unresolved taxonomy lives in one place. Callers that scan multiple rows
-         * (Trackblazer) must capture [tier] and [matchCount] per row AT its lookup and pass them here,
-         * never read the mutable `lastLookupTier` later - a subsequent lookup overwrites it. [uniqueName]
-         * is used only when [matchCount] is 1; an ambiguous set never serializes a name (no index-0
-         * flattening).
-         *
-         * [unitMatchCount] is the matchCount stamped on a UNIQUE (size-1) match: null (the default) omits
-         * it, matching the mandatory/scheduled base facts; the Trackblazer path passes 1 to keep its
-         * landed, live-validated `exact/1` shape. An ambiguous set always carries the real match count.
+         * Shared mapping for every lookup-derived entered-race fact. Multi-row callers must capture [tier] and [matchCount] per row at its lookup,
+         * since the mutable `lastLookupTier` is overwritten. [unitMatchCount] stamps a unique match (null omits it; Trackblazer passes 1 to keep its
+         * `exact/1` shape); an ambiguous set always carries the real count and never a name.
          */
         internal fun enteredRaceFromResolution(
             path: EnteredRacePath,
@@ -465,10 +420,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 else -> EnteredRace(turn, EnteredRaceResolution.AMBIGUOUS_SET, path, matchCount = matchCount)
             }
 
-        /**
-         * Pure Trackblazer winner selection: Rival first, then prediction tier, then grade, then fans.
-         * No device access, so it is unit-testable and its ordering is exactly the landed policy.
-         */
+        /** Pure Trackblazer winner selection: Rival first, then prediction tier, then grade, then fans. */
         internal fun trackblazerWinner(candidates: List<TrackblazerCandidate>): TrackblazerCandidate? {
             if (candidates.isEmpty()) return null
             return candidates
@@ -480,12 +432,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 ).first()
         }
 
-        /**
-         * Pure entered-race fact for the Trackblazer-selected optional race: the SELECTED winner's own
-         * lookup provenance, not a global tier. `path=smart` (the landed, live-proven Trackblazer path),
-         * turn is the caller's current turn, and `unitMatchCount=1` keeps the live-validated `exact/1`
-         * shape. Returns null when no candidate was suitable.
-         */
+        /** Entered-race fact for the Trackblazer-selected race, using the winner's own lookup provenance; `unitMatchCount=1` keeps the `exact/1` shape. Null when no candidate was suitable. */
         internal fun selectTrackblazerRaceFact(candidates: List<TrackblazerCandidate>, turn: Int): EnteredRace? {
             val winner = trackblazerWinner(candidates) ?: return null
             return enteredRaceFromResolution(EnteredRacePath.SMART, turn, winner.lookupTier, winner.matchCount, winner.race.name, unitMatchCount = 1)
@@ -518,48 +465,27 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         /** The threshold for fuzzy string matching (0.0 to 1.0). */
         private const val SIMILARITY_THRESHOLD = 0.7
 
-        /** How many turns before an unmet goal deadline the fan-emergency policy activates. */
         internal const val FAN_EMERGENCY_TURN_WINDOW = 6
 
-        /** Score multiplier applied to single-star prediction races during smart racing. A weak
-         * predicted placement scales the realized fan payout down sharply, so a single-star race
-         * has to be roughly twice as good on paper to outrank a double-star one. */
+        /** Score multiplier for single-star races: a weak predicted placement scales the fan payout down, so one must be roughly twice as good to outrank a double-star. */
         internal const val SINGLE_STAR_SCORE_MULTIPLIER = 0.5
 
-        /** Center-to-center offset from a race row's fans icon to the same row's prediction-star
-         * column, measured on a 1080-wide capture with both elements visible (both supported
-         * screen configs are 1080 wide and the row layout is fixed-size, so the intra-row offset
-         * is resolution-stable). Projecting a fans-icon match onto the star column lets a row
-         * with NO prediction icon reuse all star-anchored geometry (name OCR crop, taps). */
+        /** Center-to-center offset from a row's fans icon to its prediction-star column, measured on a 1080-wide capture (fixed-size rows). Lets an icon-less row reuse star-anchored geometry. */
         internal const val FANS_ICON_TO_STAR_OFFSET_X = 424.0
         internal const val FANS_ICON_TO_STAR_OFFSET_Y = 1.5
 
-        /** Expected X of a row fans-icon match center (1080-wide). The same coral glyph also
-         * appears on the goal banner and the fans header; only hits inside this column are race
-         * rows. */
+        /** Expected X of a row's fans icon (1080-wide); the same glyph on the goal banner and fans header must be ignored. */
         internal const val FANS_ICON_ROW_COLUMN_X = 457.0
         internal const val FANS_ICON_ROW_COLUMN_TOLERANCE = 25.0
 
-        /** Decides whether the fan-emergency policy is active.
-         *
-         * @param hasFanRequirement Whether an unmet fan goal is shown on the main screen.
-         * @param turnsRemaining Turns until the next goal deadline (-1 when OCR failed).
-         * @return True when the fan goal is due within [FAN_EMERGENCY_TURN_WINDOW] turns.
-         */
         internal fun isFanEmergency(hasFanRequirement: Boolean, turnsRemaining: Int): Boolean {
             return hasFanRequirement && turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
         }
 
         /**
-         * Whether an active career race requirement forces an extra race at the eligibility gate.
-         *
-         * [ignoreFanRequirement] suppresses ONLY the fan-requirement arm and only for this turn:
-         * the caller sets it when the campaign has already made an explicit turn-local decision to
-         * defer the fan requirement to a training turn (Grand Concert). It never touches the
-         * force-racing, trophy, or goal-points arms, each of which remains an independent reason to
-         * race even while the fan requirement is deferred. Without this guard a deferred fan
-         * requirement leaks back into a forced race here, because the same [hasFanRequirement] flag
-         * is still set - the exact defect this predicate exists to make impossible and testable.
+         * Whether an active career race requirement forces an extra race. [ignoreFanRequirement] suppresses only the fan arm for this turn
+         * (Grand Concert deferring fans to a training turn); force-racing, trophy and goal-points arms still apply, else the
+         * still-set [hasFanRequirement] leaks a deferred requirement back into a forced race.
          */
         internal fun requirementForcesExtraRace(
             enableForceRacing: Boolean,
@@ -574,29 +500,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 hasInsufficientGoalRacePtsRequirement
 
         /**
-         * Whether race-list selection must be restricted to G1 races only, given the goal criteria [tier] read from the main screen.
-         *
-         * True for exactly one case: a positively read [GoalCriteriaTier.G1_ONLY]. Pre-OP, G3, and an unread tier (null) all stay permissive. Deriving G1-only from the absence of a Pre-OP or G3
-         * read is the defect this replaces: a criteria line the game shrank to fit its slot failed both templates, was taken for "G1 races only", filtered the list down to zero on a G1-less turn,
-         * and cancelled required racing until the goal expired and the career was lost. An unread tier must therefore race any grade, never restrict to G1.
+         * True only for a positively read [GoalCriteriaTier.G1_ONLY]; Pre-OP, G3 and an unread tier stay permissive. Inferring G1-only from two
+         * failed template reads once filtered a G1-less list to zero and cancelled required racing until the goal expired.
          */
         internal fun restrictsToG1Only(tier: GoalCriteriaTier?): Boolean = tier == GoalCriteriaTier.G1_ONLY
 
-        /** Merges double- and single-star prediction matches into one row-deduplicated list.
-         *
-         * The single-star template can also weakly match inside a taller star stack, so any
-         * single match within [rowProximityPx] of an already-accepted match is treated as the
-         * same row and dropped (the double wins). Result is sorted top to bottom.
-         *
-         * @param doubles Locations matched by the double-star template.
-         * @param singles Locations matched by the single-star template.
-         * @param starless Star-column points derived from fans-icon matches (rows showing no
-         *    prediction icon at all). A point on the same row as a star match re-anchors that row
-         *    onto the fans glyph (the reliable name line) while keeping the star's tier, rather
-         *    than being dropped; the star only supplies the tier, the fans glyph supplies the row.
-         * @param rowProximityPx Maximum distance for two matches to count as the same row. Race
-         *    list rows are ~200px tall, so 80px is safely under one row.
-         * @return The merged list of [PredictionAnchor] entries.
+        /**
+         * Merges double- and single-star matches into one row-deduplicated list sorted top to bottom. A single within [rowProximityPx] (rows are
+         * ~200px tall) of an accepted match is dropped; a [starless] fans-derived point on a star's row re-anchors that row on the fans glyph
+         * (the reliable name line) while keeping the star's tier.
          */
         internal fun mergePredictionAnchors(
             doubles: List<Point>,
@@ -622,23 +534,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 if (sameRowIndex < 0) {
                     merged.add(PredictionAnchor(point, PredictionTier.NONE))
                 } else {
-                    // A star match and this row's fans glyph coincide. The fans glyph reliably marks the
-                    // row's name line, but a star can sit off that line: a distance-aptitude star renders
-                    // below the name and even cross-fires the single-star template. Re-anchor the row on
-                    // the fans point so the name OCR reads the correct row, keeping the star's tier. Fixes
-                    // a Grand Concert row whose aptitude star shadowed its real fans anchor and mislocated
-                    // the OCR crop onto the "Turf" distance tag.
+                    // A star can sit off the name line (a distance-aptitude star renders below it and cross-fires the single-star template): re-anchor on the fans point, keep the star's tier.
                     merged[sameRowIndex] = PredictionAnchor(point, merged[sameRowIndex].tier)
                 }
             }
             return merged.sortedBy { it.location.y }
         }
 
-        /** Picks the best extra-race entry: highest prediction tier first, then most fans.
-         *
-         * @param races The walked race-list entries.
-         * @return The index of the best entry, or -1 when the list is empty.
-         */
+        /** Index of the best extra-race entry (highest prediction tier, then most fans), or -1 when empty. */
         internal fun indexOfBestByTierThenFans(races: List<RaceDetails>): Int {
             var bestIndex = -1
             for (i in races.indices) {
@@ -652,18 +555,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return bestIndex
         }
 
-        /** A distance-meter token: a run of digits (and OCR-confused uppercase O) that contains at
-         * least one real digit and ends in "m", at word boundaries. Requiring a digit keeps pure-letter
-         * tokens (a stray "Om") out, so only real distances like "1600m"/"160Om" ever match. */
+        /** A distance token: digits (or OCR-confused uppercase O) with at least one real digit, ending in "m"; keeps stray "Om" out. */
         private val DISTANCE_METER_TOKEN = Regex("\\b[0-9O]*[0-9][0-9O]*m\\b")
 
         /**
-         * Canonicalizes an OCR'd race label for database lookup by fixing the one proven OCR confusion:
-         * an uppercase letter O misread for the digit 0 INSIDE a distance-meter token (live example
-         * "Chukyo Turf 160Om (Mile) Left" -> "...1600m..."). Scoped to a digits/O run ending in "m" and
-         * containing at least one digit, so venue words and unrelated O characters (Tokyo, OP, Ooi) are
-         * never touched. Audited to rewrite none of the 402 committed race labels. Returns the input
-         * unchanged when nothing matches; never mutates a stored DB string.
+         * Fixes the one proven OCR confusion: uppercase O read for 0 inside a distance token ("160Om" -> "1600m"). Venue words (Tokyo, OP, Ooi) are
+         * never touched; returns the input unchanged when nothing matches and never mutates a stored DB string.
          */
         internal fun canonicalizeRaceLabelForLookup(detectedName: String): String =
             DISTANCE_METER_TOKEN.replace(detectedName) { match -> match.value.replace('O', '0') }
@@ -759,8 +656,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Detect the current date first.
         campaign.updateDate(isOnMainScreen = false)
 
-        // Check for all row anchors: single- and double-star predictions plus icon-less rows
-        // anchored via their fans icon.
         val anchors = findPredictionAnchors(includeSingles = true, includeStarless = true)
         MessageLog.i(
             TAG,
@@ -836,8 +731,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         return null
     }
 
-    /** The parsed racing plan, memoized for the Phase 2A critical-race plan arm. Respects
-     * enableRacingPlan (disabled -> empty -> the arm is structurally inert). */
+    /** The parsed racing plan, memoized; empty when enableRacingPlan is off. */
     internal val plannedRacesForTriggers: List<PlannedRace> by lazy { loadUserPlannedRaces() }
 
     /**
@@ -900,10 +794,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             var skippedRows = 0
             while (keys.hasNext()) {
                 val key = keys.next()
-                // Per-row guard: one unparseable entry (a new/renamed grade-surface-distance label
-                // the enums don't know yet, or a malformed row) throws from the RaceData ctor's
-                // fromName(...)!!, and the outer catch then discarded the ENTIRE race database. Skip
-                // only the bad row.
+                // Skip only an unparseable row: its RaceData ctor throws from fromName(...)!! and the outer catch would discard the whole database.
                 try {
                     val raceObj = jsonObject.getJSONObject(key)
                     val raceData =
@@ -1190,17 +1081,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
     }
 
-    /**
-     * Finds all prediction anchors (race-list entry icons) in the source.
-     *
-     * @param includeSingles Whether to also detect single-star predictions.
-     * @param sourceBitmap Optional bitmap to search instead of taking a screenshot.
-     * @param region Optional search region override (applies to the star templates only).
-     * @param includeStarless Whether rows WITHOUT any prediction icon should also be anchored,
-     *    via their fans icon projected onto the star column. Full-screen coordinates only — the
-     *    column filter assumes an uncropped frame, so do not combine with per-entry bitmaps.
-     * @return Row-deduplicated anchors sorted top to bottom.
-     */
+    /** Prediction anchors in the source, row-deduplicated and sorted top to bottom. [includeStarless] also anchors icon-less rows via their fans icon and needs full-screen coordinates (the column filter assumes an uncropped frame). */
     private fun findPredictionAnchors(
         includeSingles: Boolean,
         sourceBitmap: Bitmap? = null,
@@ -1218,11 +1099,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
         val starless =
             if (includeStarless) {
-                // The fans glyph appears on every race row, so it anchors rows that show no
-                // prediction icon at all. The goal banner and the fans header carry the same
-                // glyph - only hits in the row column count. Each hit is projected onto the
-                // star column so downstream geometry (name OCR crop, taps) stays identical to
-                // star-anchored rows; rows that do have a star are dropped by the merge.
+                // The fans glyph is on every race row, so it anchors icon-less rows; only hits in the row column count (the goal banner and fans header carry it too).
                 IconRaceListFansIcon.findAll(game.imageUtils, sourceBitmap = bitmap)
                     .filter { abs(it.x - FANS_ICON_ROW_COLUMN_X) <= FANS_ICON_ROW_COLUMN_TOLERANCE }
                     .map { Point(it.x + FANS_ICON_TO_STAR_OFFSET_X, it.y + FANS_ICON_TO_STAR_OFFSET_Y) }
@@ -1318,11 +1195,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         return Pair(matchingPlannedRace, raceData)
     }
 
-    /**
-     * Whether the racing plan is in mandatory mode and a planned race is scheduled for the
-     * current turn. Campaign-level overrides (pre-summer rest prep) consult this so an explicit
-     * plan entry is never consumed by a rest or mood-recovery turn.
-     */
+    /** Whether the plan is in mandatory mode with a race scheduled this turn, so a rest or mood-recovery turn never consumes it. */
     fun hasMandatoryPlannedRaceToday(): Boolean = findMandatoryExtraRaceForCurrentTurn().first != null
 
     /**
@@ -1378,23 +1251,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
         }
 
-        // Grand Concert derives its fan requirement from committed route facts, applied here as the
-        // authoritative per-turn value. The race_criteria_fans template is dead in Grand Concert
-        // (verified live), so a template miss above must not veto a facts-derived requirement, and a
-        // met current scope must clear it. Non-facts scenarios return Unknown and keep the template
-        // result untouched. With clearRacingRequirementFlags this keeps hasFanRequirement written
-        // from the single requirement-refresh path. Placed after the Summer early-return above, so a
-        // Summer turn (no race entries) never re-arms it from facts.
+        // Grand Concert derives its fan requirement from committed route facts, authoritative per turn: the race_criteria_fans template is dead there, so a miss must not veto it
+        // and a met scope must clear it. Placed after the Summer early-return so a Summer turn never re-arms it.
         val scenarioFanRequirement = campaign.currentFanRequirementFromScenarioFacts()
         hasFanRequirement = GrandConcertFanRequirement.resolveHasFanRequirement(hasFanRequirement, scenarioFanRequirement)
         logScenarioFanRequirement(scenarioFanRequirement)
     }
 
-    /**
-     * Logs one compact [GC_FAN_REQ] provenance line per requirement refresh when the scenario
-     * actually supplied a facts signal. Silent for non-facts scenarios (the base no-scenario-facts
-     * sentinel), so URA/Unity Cup/Trackblazer turns add no Grand Concert noise.
-     */
+    /** Logs one [GC_FAN_REQ] provenance line per refresh when the scenario supplied a facts signal; silent otherwise. */
     private fun logScenarioFanRequirement(result: GrandConcertFanRequirement.Result) {
         val fans = campaign.trainee.fans
         val turn = campaign.date.day
@@ -1434,37 +1298,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         StatusBoard.goal(campaign.date.day, turnsRemaining)
         MessageLog.i(TAG, "[RACE] Current remaining number of days before the next mandatory race: $turnsRemaining.")
 
-        // Cache goal-deadline proximity while the OCR anchor (the energy label) is still visible.
-        // This flag drives single-star fallback inside selectMaidenRace, which runs on the race
-        // list screen where this OCR is unavailable.
+        // Cache deadline proximity while the energy-label OCR anchor is visible; selectMaidenRace needs it on the race list, where the anchor is gone.
         bGoalDeadlineNear = turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
         goalDeadlineTurnsRemaining = if (turnsRemaining >= 0) turnsRemaining else Int.MAX_VALUE
 
-        // Fan-emergency: an unmet fan goal within the deadline window. Detect the "fan(s) to go"
-        // banner here on a FRESH screenshot rather than trusting cached hasFanRequirement — that
-        // flag is computed on a shared turn-start bitmap in a parallel thread and was seen missing
-        // the banner on a mid-transition frame (trained instead of racing on the final checkpoint
-        // turn). When active, race selection admits single-star races and eligibility is forced
-        // below. Deliberately NOT gated on enableFarmingFans: that toggle governs optional fan
-        // padding, while an unmet fan goal force-ends the career — survival is not a tuning knob,
-        // and since every shipped preset has farming off, a farming gate would make this dead code.
-        // Not-summer stays: no race entries exist at summer camp.
-        //
-        // The PRIMARY signal is goal-text OCR ("Acquire 3,000 fans" etc.): the race_criteria_*
-        // template family has been dead since the v1.22.0 UI update (zero post-update detections,
-        // which also silently killed the old hasFanRequirement forcing for all trainees). Both
-        // template arms stay as cheap fast paths that self-heal if the templates get recaptured.
-        // Matching "fans" (plural) on purpose: "Japan Cup" race goals contain "fan". OCR runs at
-        // most once per turn and only near a deadline.
+        // Fan emergency: re-detect the "fans to go" banner on a FRESH screenshot (the cached hasFanRequirement comes from a parallel thread and has missed it mid-transition).
+        // Not gated on enableFarmingFans: an unmet fan goal force-ends the career. The primary signal is goal-text OCR since the race_criteria_* templates are dead;
+        // both template arms stay as fast paths. Match "fans" (plural): "Japan Cup" goals contain "fan". OCR runs at most once per turn, near a deadline.
         val goalTextNearDeadline: String =
             if (bGoalDeadlineNear && !campaign.date.isSummer()) game.imageUtils.getGoalText() else ""
         if (bGoalDeadlineNear && goalTextNearDeadline.isNotEmpty()) {
             MessageLog.i(TAG, "[RACE] Goal deadline near ($turnsRemaining turn(s) left). Goal text: \"$goalTextNearDeadline\"")
         }
-        // Stand down once the goal is already satisfied: parse the required count from the goal
-        // text ("Earn 3000 fans") and compare against the tracked fan count — otherwise the
-        // emergency keeps forcing races after the goal is met. If either number is unavailable,
-        // err toward racing.
+        // Stand down once the parsed goal count is met by the tracked fan count; if either is unavailable, err toward racing.
         val goalFanTarget: Int? =
             Regex("([0-9][0-9,]*)\\s*fans", RegexOption.IGNORE_CASE)
                 .find(goalTextNearDeadline)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()
@@ -1473,12 +1319,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (bFanGoalAlreadyMet) {
             MessageLog.i(TAG, "[RACE] Fan goal already met (${campaign.trainee.fans}/$goalFanTarget). Fan emergency stands down.")
         }
-        // Race goals gated on a fan ENTRY criteria show the shortfall on the criteria line under
-        // the goal title ("Criteria: 1,223 fan(s) to go") while the title itself never says "fans",
-        // so the title arm below is blind to them - King Halo trained through 24 straight turns of
-        // "fan farming is disabled" and force-ended 1,223 fans short of the Satsuki Sho gate. Read
-        // that line whenever the deadline is near and the title arm did not already match; the line
-        // only shows a number while the criteria is unmet, so no separate already-met check needed.
+        // Fan ENTRY-criteria goals show the shortfall on the criteria line ("Criteria: 1,223 fan(s) to go") while the title never says "fans", so the title arm
+        // is blind to them. Read that line near a deadline; it only shows a number while the criteria is unmet.
         val criteriaFanShortfall: Int? =
             if (bGoalDeadlineNear &&
                 !campaign.date.isSummer() &&
@@ -1508,14 +1350,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[RACE] Fan emergency: unmet fan goal due in $turnsRemaining turn(s). Forcing racing; single-star prediction races are acceptable entries.")
         }
 
-        // Result-Points emergency (Trackblazer checkpoints). The game only pops the "insufficient
-        // Result Pts" dialog one turn from the deadline (where Campaign sets this flag) — too late
-        // for a weak-prediction trainee (Medium/Long aptitude drawing single-star on Junior's
-        // Mile-heavy pool) to bank the 60-pt Junior goal. Mirror the fan emergency: raise the
-        // requirement PROACTIVELY when a Result-Pts goal is unmet near its deadline so single-star
-        // races become enterable. The admission site gates these to good-aptitude races so we enter
-        // winnable ones (the Junior-Dec G1, Medium/Long OPs) not unwinnable Mile/Sprint single-stars
-        // that bank ~nothing. Stand down if the goal reads met.
+        // Result-Points emergency (Trackblazer): the game pops the "insufficient Result Pts" dialog only one turn before the deadline, too late for a weak-prediction
+        // trainee. Raise the requirement proactively near an unmet deadline so single-star races become enterable (the admission site restricts them to
+        // good-aptitude races); stand down when the goal reads met.
         if (bGoalDeadlineNear &&
             !campaign.date.isSummer() &&
             !hasInsufficientGoalRacePtsRequirement &&
@@ -1569,11 +1406,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return !raceRepeatWarningCheck
         }
 
-        // Fan emergency (non-Trackblazer): unmet fan goal within the deadline window. Force racing
-        // this turn regardless of the interval/smart cadence that would otherwise skip it. This is
-        // the path that clears the Junior 3000-fan checkpoint for trainees whose early race pool is
-        // single-star only (e.g. Medium specialists); without it the bot trains on the final turn
-        // and the career force-ends short of the gate.
+        // Fan emergency (non-Trackblazer): force racing this turn regardless of the interval/smart cadence, so single-star-only early pools still clear the Junior 3000-fan checkpoint.
         if (bFanEmergencyActive) {
             MessageLog.i(TAG, "[RACE] Fan emergency active. Forcing eligibility to race this turn.")
             return !raceRepeatWarningCheck
@@ -1746,10 +1579,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // This fallback only applies when Racing Plan is disabled, so use interval-based logic.
         val eligibleForStandardRacing = enableFarmingFans && !enableRacingPlan && (turnsRemaining % daysToRunExtraRaces == 0) && !raceRepeatWarningCheck
         if (!eligibleForStandardRacing) {
-            // Name the gate that closed. This return used to be silent, which hid a career-killing
-            // config for a whole run: a trainee whose mandatory racing plan had no Junior/Classic
-            // entries with fan farming off trained nearly every turn, and nothing in the log said
-            // why no extra race was ever considered.
+            // Name the gate that closed: a silent return here once hid a career-killing config (mandatory plan with no Junior/Classic entries and fan farming off).
             val reason =
                 when {
                     enableRacingPlan && enableMandatoryRacingPlan ->
@@ -1940,19 +1770,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         retriesThisRace = 0
         bRetryingLostGoalRace = false
 
-        // Time budget rather than an iteration count. A race the ACCOUNT has never run has no
-        // View Results / Skip (both unlock only after the first playthrough), so it MUST be watched
-        // live - a full animated race runs ~60-120s. The old fixed 100-iteration cap burned out on
-        // that un-skippable playback in ~30-60s, returned false, and dropped control to the campaign
-        // loop, which counted the still-playing race to its 25-cycle unknown-screen stop and killed
-        // the career (2026-07-11, El Condor first-time dirt G1s, twice). A wall-clock budget lets a
-        // watched first-time race reach its results screen while a genuinely hung race still bails.
+        // Wall-clock budget, not an iteration count: a first-time race has no View Results/Skip (both unlock after the first playthrough), so it must be watched live for
+        // ~60-120s, which a fixed iteration cap outlasted before control fell to the campaign loop's unknown-screen stop. A genuinely hung race still bails.
         val raceStartMs = System.currentTimeMillis()
         val maxRaceDurationMs = 210_000L
 
         do {
-            // Scale the budget per attempt: a retried race runs the playback again, and a retry of a
-            // FIRST-TIME race may replay live a second time - a single fixed window would bail mid-retry.
+            // Scale the budget per attempt: a retried first-time race may replay live again.
             val budgetMs = maxRaceDurationMs * (1 + retriesThisRace)
             if (System.currentTimeMillis() - raceStartMs > budgetMs) {
                 MessageLog.w(TAG, "[WARN] runRaceWithRetries:: Race exceeded the ${budgetMs / 1000}s budget without reaching results. Exiting race retry loop...")
@@ -2007,11 +1831,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         }
 
                         null -> {
-                            // ButtonViewResults can occasionally fall below the confidence threshold
-                            // even when the button is visible. ButtonChangeRunningStyle already
-                            // confirms we're on the race-prep screen, so fall back to ButtonRaceManual
-                            // (the Race button) to get the race started rather than looping forever.
-                            // The race plays with full animation instead of being skipped.
+                            // ButtonViewResults can fall below the confidence threshold while visible; ButtonChangeRunningStyle confirms the race-prep screen, so press ButtonRaceManual to start (played unskipped).
                             if (ButtonRaceManual.click(game.imageUtils, sourceBitmap = bitmap)) {
                                 MessageLog.i(TAG, "[RACE] ViewResults template did not match at threshold; fell back to clicking the Race button manually.")
                                 game.waitForLoading()
@@ -2046,13 +1866,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     return true
                 }
 
-                // Otherwise click to progress through screens. This also carries a first-time race
-                // that has to be watched live: none of the buttons above are present while the race
-                // animates (Skip is locked until the account has run the race once), so tap to reveal
-                // and dismiss the auto-hiding playback overlay, then wait a beat to pace with the
-                // animation rather than spinning the loop. A single tap (not three) avoids toggling
-                // the overlay straight back off. The race ends on its own and lands on the results
-                // screen, where the ButtonNext branch above returns true.
+                // Tap to reveal and dismiss the auto-hiding playback overlay (no buttons exist while a first-time race animates, since Skip is locked), then wait a beat. A single tap, not three, avoids toggling it back off.
                 else -> {
                     if (!game.holdBlindInputForOwnUi()) {
                         Log.d(TAG, "[DEBUG] runRaceWithRetries:: No components detected. Tapping to progress...")
@@ -2083,8 +1897,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
-        // A race definitively ran. Any non-maiden grade proves the in-game maiden requirement is
-        // cleared, so the maiden-race check stops re-firing every turn when the fan-tier OCR reads stale.
+        // Any non-maiden grade proves the maiden requirement is cleared, stopping the maiden check re-firing on stale fan-tier OCR.
         campaign.trainee.noteCompletedRaceGrade(lastRaceGrade)
 
         // Close the outcome loop for the finale: read the gold "1st" laurel on the results screen, NOT the text banner (the URA Qualifier and
@@ -2146,10 +1959,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private fun lookupRaceInDatabase(turnNumber: Int, detectedName: String): ArrayList<RaceData> {
         // Default to NONE; only the two found-returns below promote it to EXACT/FUZZY for telemetry.
         lastLookupTier = LookupTier.NONE
-        // Fix the one proven OCR confusion before matching: an uppercase O for the digit 0 inside a
-        // distance token (e.g. "160Om" -> "1600m"). Scoped to distance tokens, so no other label is
-        // altered, and the exact-only trust policy is preserved (a normalized label still matches by
-        // exact turn-scoped identity). Stored DB strings are never mutated.
+        // Fix the proven O-for-0 OCR confusion inside distance tokens before matching; stored DB strings are never mutated.
         val lookupName = canonicalizeRaceLabelForLookup(detectedName)
         if (lookupName != detectedName) {
             MessageLog.i(TAG, "[RACE] Canonicalized race label for lookup: \"$detectedName\" -> \"$lookupName\".")
@@ -2195,9 +2005,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Collect all exact matches (may have different fan counts).
             if (exactCursor.moveToFirst()) {
                 do {
-                    // Per-row guard: a DB row whose grade/surface/distance string doesn't map to its
-                    // enum throws from the RaceData ctor's fromName(...)!! and the outer catch would
-                    // drop ALL candidates for this turn. Skip just the bad row (continue -> moveToNext).
+                    // Skip only an unmappable row: its ctor throws from fromName(...)!! and the outer catch would drop every candidate this turn.
                     val race =
                         try {
                             RaceData(
@@ -2266,8 +2074,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 val similarity = similarityService.score(lookupName, nameFormatted)
 
                 if (similarity >= SIMILARITY_THRESHOLD) {
-                    // Per-row guard, same as the exact loop above: skip an unmappable row instead of
-                    // letting its ctor throw and the outer catch drop every candidate for this turn.
+                    // Skip an unmappable row, as in the exact loop.
                     val race =
                         try {
                             RaceData(
@@ -2730,14 +2537,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      * @return Pair of the best suitable race's location and [RaceData], or null if none found.
      */
     fun findSuitableTrackblazerRace(consecutiveRaceCount: Int): TrackblazerRaceSelection? {
-        // Fan-emergency, force racing, OR a Trackblazer Grade-Point wall (the game's own
-        // insufficient_goal_race_result_pts dialog forced this race) admit single-star prediction
-        // races as last-resort candidates, always ranked below every double-star one. Without the
-        // goal-pts trigger, a slow trainee blocked at the 60/300/300 gate whose only remaining rows
-        // are single-star couldn't even see them (single-star rows aren't scanned unless allowSingles),
-        // leaving forced-race recovery with nothing to enter. The flag is per-episode — set only by
-        // that dialog, cleared by clearRacingRequirementFlags on race completion — so it can't
-        // over-admit single-star races outside a real Grade-Point block.
+        // Fan emergency, force racing, or a Trackblazer Grade-Point wall (the insufficient_goal_race_result_pts dialog) admits single-star races as last-resort candidates ranked below every
+        // double-star. The flag is per-episode (set by that dialog, cleared by clearRacingRequirementFlags on race completion), so it cannot over-admit outside a real block.
         val allowSingles = bFanEmergencyActive || enableForceRacing || hasInsufficientGoalRacePtsRequirement
 
         val sb = StringBuilder()
@@ -2747,16 +2548,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         sb.appendLine("Fan Emergency: $bFanEmergencyActive")
 
         // ============================ PRE-FLIGHT CHECK ============================
-        // The full scan below scrolls through and template-matches every visible race-list entry —
-        // ~12-15s on a fully-populated list with zero eligible races. Trackblazer opens the race
-        // list every turn, so an early-Junior trainee with weak aptitudes pays that ~12s per turn
-        // even when nothing's eligible.
-        //
-        // Short-circuit only with STRONG evidence the list has no eligible races. Create the
-        // ScrollList first as a render-readiness gate: if anchors aren't detected, the page hasn't
-        // finished rendering, so an empty findAll can't be trusted — fall through to the full-scan
-        // path (which has its own retries). Only when ScrollList.create succeeds AND top has zero
-        // AND (non-scrollable OR scrollable with empty bottom) is it safe to declare nothing eligible.
+        // The full scan takes ~12-15s on a full list with no eligible races, paid every Trackblazer turn. Short-circuit only on strong evidence: create the ScrollList first as a
+        // render-readiness gate (no anchors means the page has not rendered, so an empty findAll is untrustworthy); declare nothing eligible only when the top is empty
+        // and the list is non-scrollable or its bottom is empty.
         val preflightScrollList = ScrollList.create(game)
         if (preflightScrollList != null) {
             val preflightTopBitmap = game.imageUtils.getSourceBitmap()
@@ -2764,7 +2558,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             if (preflightTopMatches.isEmpty()) {
                 val skipFullScan: Boolean =
                     if (!preflightScrollList.bIsScrollable) {
-                        // Whole list visible, zero matches found. Definitively nothing.
                         true
                     } else {
                         // List is scrollable — check the bottom too, in case later-dated races
@@ -2788,9 +2581,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         // ========================== END PRE-FLIGHT CHECK ==========================
 
-        // Cache: entry.index → list of (location-within-entry-bitmap, OCR'd race name, tier) triples.
-        // Eliminates the redundant prediction findAll the original did inside onEntry on top of the
-        // keyExtractor's findAll, halving the template-match work per scroll page.
+        // Per-entry cache of (location, OCR'd name, tier), so the prediction findAll is not repeated inside onEntry.
         data class StarMatch(val location: Point, val name: String, val tier: PredictionTier)
 
         val allSuitableRaces = mutableListOf<TrackblazerCandidate>()
@@ -2800,9 +2591,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[RACE] Scanning the whole race list for suitable Trackblazer races...")
             val entryStarMatches = mutableMapOf<Int, List<StarMatch>>()
             scrollList.process(
-                // Hard cap (10s). Was effectively 60s before the ScrollList shadow-bug fix that made
-                // the maxTimeMs parameter silently ignored. Pre-flight + cache rarely approach this
-                // cap; it's a backstop against pathological lists.
+                // Hard cap (10s) as a backstop against pathological lists.
                 maxTimeMs = 10000,
                 keyExtractor = { entry ->
                     val entryAnchors = findPredictionAnchors(includeSingles = allowSingles, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
@@ -2815,10 +2604,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     if (matches.isEmpty()) null else matches.joinToString("|") { it.name }
                 },
             ) { _, entry ->
-                // First-page fallback: ScrollList.process only calls keyExtractor for overlap detection
-                // on subsequent pages, so the first page's entries never populate entryStarMatches before
-                // onEntry runs. Compute matches inline on a cache miss so first-page races aren't skipped;
-                // subsequent pages still hit the cached fast path.
+                // ScrollList.process calls keyExtractor only for overlap detection on later pages, so compute matches inline on a cache miss to keep first-page races.
                 val matchesForEntry: List<StarMatch> =
                     entryStarMatches[entry.index] ?: run {
                         val entryAnchors = findPredictionAnchors(includeSingles = allowSingles, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
@@ -2857,8 +2643,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     val screenPoint = Point(entry.bbox.x + predictionLocation.x, entry.bbox.y + predictionLocation.y)
                     val detectedName = sm.name
                     val matches = lookupRaceInDatabase(campaign.date.day, detectedName)
-                    // Capture THIS row's lookup provenance immediately, before any later row overwrites
-                    // the mutable lastLookupTier, so the selected candidate carries its own tier/count.
+                    // Capture this row's lookup provenance before a later row overwrites lastLookupTier.
                     val rowLookupTier = lastLookupTier
                     val rowMatchCount = matches.size
 
@@ -2873,12 +2658,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                             // Fan emergency admits any race regardless of grade — fans are the point.
                             isSuitable = true
                         } else if (sm.tier == PredictionTier.SINGLE) {
-                            // Single-star matches only exist when allowSingles admitted them (fan
-                            // emergency, force-racing, or a Result-Pts shortfall); tier-aware sorting
-                            // keeps them below every double-star candidate. For the Result-Pts case
-                            // (not force-racing), require good aptitude so we enter winnable races
-                            // (the Junior G1, Medium/Long OPs) and skip poor-aptitude single-stars
-                            // that bank ~nothing while burning energy/fatigue.
+                            // Single-star matches exist only when allowSingles admitted them; sorting keeps them below double-stars. For the Result-Pts case (not force-racing) require good aptitude so
+                            // winnable races are entered, not poor-aptitude ones that burn energy for nothing.
                             isSuitable = if (hasInsufficientGoalRacePtsRequirement && !enableForceRacing) checkRaceAptitudeMatch(race) else true
                         } else if (campaign.date.year == DateYear.JUNIOR) {
                             // Junior Year: G1, G2, or G3 with double predictions.
@@ -2941,7 +2722,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
                 val detectedName = game.imageUtils.extractRaceName(location)
                 val matches = lookupRaceInDatabase(campaign.date.day, detectedName)
-                // Capture this row's provenance before the next iteration's lookup overwrites it.
                 val rowLookupTier = lastLookupTier
                 val rowMatchCount = matches.size
 
@@ -2955,8 +2735,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     if (bFanEmergencyActive) {
                         isSuitable = true
                     } else if (fallbackAnchor.tier == PredictionTier.SINGLE) {
-                        // Same aptitude-gated admission as the scroll-scan path above: a Result-Pts
-                        // shortfall admits single-stars only if the trainee has the aptitude to place.
+                        // Same aptitude-gated admission as the scroll-scan path.
                         isSuitable = if (hasInsufficientGoalRacePtsRequirement && !enableForceRacing) checkRaceAptitudeMatch(race) else true
                     } else if (campaign.date.year == DateYear.JUNIOR) {
                         if (listOf(RaceGrade.G1, RaceGrade.G2, RaceGrade.G3).contains(race.grade)) {
@@ -2983,7 +2762,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
         }
 
-        // Prioritize Rival Races, then prediction tier, then Grade, then fans (pure, unchanged policy).
         val winner = trackblazerWinner(allSuitableRaces)
         if (winner == null) {
             sb.appendLine("\nSummary: No suitable races found after analysis.")
@@ -2992,7 +2770,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return null
         }
 
-        // Entered-race provenance for the SELECTED row, built from its own captured lookup tier/count.
         val winnerEnteredRace = selectTrackblazerRaceFact(allSuitableRaces, campaign.date.day) ?: return null
 
         sb.appendLine("\nSelected Race: ${winner.race.name} (${winner.race.grade}) Rival: ${winner.isRival} Prediction: ${winner.starTier}")
@@ -3119,11 +2896,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         return false
     }
 
-    /**
-     * The entry point for handling standalone races if the user started the bot on the Racing screen.
-     *
-     * @return True if both the race itself and the post-race finalization completed successfully; false otherwise.
-     */
     fun handleStandaloneRace(): Boolean {
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Standalone Racing process...")
@@ -3210,8 +2982,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private fun handleMandatoryRace(): Boolean {
         MessageLog.v(TAG, "[RACE] Starting process for handling a mandatory race.")
 
-        // Strongest identity fact we resolve for this mandatory race (from the turn-scoped OCR+lookup
-        // below), read at the completion tail. Stays null until the lookup resolves something.
+        // Strongest identity resolved for this mandatory race; null until the lookup resolves something.
         var enteredRaceFact: EnteredRace? = null
 
         if (enableStopOnMandatoryRace) {
@@ -3246,13 +3017,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             lastRaceFans = if (campaign.date.day == 75) 30000 else 10000
         }
 
-        // OCR the mandatory race name so lastRaceGrade is known. Without it the alarm-clock
-        // purchase policies (G1Only / G1AndFinale) silently decline on the races where they
-        // matter most - this was gated behind a per-distance-strategy flag no frontend ever
-        // wrote, leaving mandatory races gradeless on every scenario.
+        // OCR the mandatory race name so lastRaceGrade is known; without it the alarm-clock policies (G1Only / G1AndFinale) silently decline on the races where they matter most.
         if (lastRaceGrade == null) {
-            // Anchor on any prediction tier — a mandatory race can show a single-star prediction
-            // when the trainee is weak, and we are racing it regardless.
+            // Anchor on any tier: a weak trainee's mandatory race can show a single-star prediction.
             val predictionAnchors = findPredictionAnchors(includeSingles = true)
             if (predictionAnchors.isNotEmpty()) {
                 val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
@@ -3308,8 +3075,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
-        // Record the completed mandatory race. Falls back to an unresolved fact when no anchor/lookup
-        // resolved a name (e.g. a finale race, whose grade was set directly without a catalog lookup).
+        // Record the completed race; unresolved when no lookup named it (e.g. a finale race).
         campaign.recordEnteredRace(enteredRaceFact ?: EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.MANDATORY_GOAL))
         MessageLog.v(TAG, "[RACE] Racing process for Mandatory Race is completed. Grade: ${lastRaceGrade ?: "Mandatory"}")
         MessageLog.v(TAG, "********************")
@@ -3455,18 +3221,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 return true
             }
 
-            // Goal-deadline fallback: with the next goal (typically Make Debut) due within the
-            // emergency window and no double-star maiden visible, take a single-star one instead
-            // of skipping the day. A weak trainee may never draw a double-star maiden prediction
-            // before the deadline, and a failed debut force-ends the career.
-            //
-            // Tiered, not unconditional: an unguarded fallback raced four single-star maidens
-            // back-to-back and lost them all while energy drained. A single-star prediction is the
-            // game forecasting a loss, and each loss keeps maiden status, re-arming the loop next
-            // turn. While there is slack, defer so the bot can rest/train — better stats flip the
-            // prediction to double-star. Race a single-star maiden only when the deadline forces it
-            // or energy gives it a chance: last turn = race regardless; 1-2 turns left = need 30%
-            // energy; otherwise 50%.
+            // Goal-deadline fallback: with the next goal (typically Make Debut) due within the emergency window and no double-star maiden visible, take a single-star one. Tiered, not unconditional:
+            // an unguarded fallback lost four single-star maidens back-to-back while energy drained, since a single-star prediction forecasts a loss. With slack, defer to rest/train;
+            // race only when forced (last turn) or energy allows (1-2 turns left: 30%; otherwise 50%).
             if (bGoalDeadlineNear) {
                 val bSingleStarJustified: Boolean =
                     when {
@@ -3545,15 +3302,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             } else {
                 MessageLog.v(TAG, "[RACE] Could not find any maiden races with good aptitudes. Aborting racing...")
                 ButtonBack.click(game.imageUtils)
-                // Leave bHasCheckedForMaidenRaceToday unset so a subsequent turn can retry
-                // this transient failure. The flag will be cleared on date change anyway.
+                // Leave bHasCheckedForMaidenRaceToday unset so a later turn retries this transient failure.
                 return false
             }
         } else {
             // No maiden races available on this day. Check for extra races instead.
             MessageLog.v(TAG, "[RACE] No maiden races available on this day. Checking for extra races instead...")
-            // We confirmed there is no maiden race available today, so mark the daily maiden
-            // check as done before delegating to extra-race handling.
             campaign.bHasCheckedForMaidenRaceToday = true
             return handleExtraRace()
         }
@@ -3564,9 +3318,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val result: DialogHandlerResult = campaign.handleDialogs()
         if (result !is DialogHandlerResult.Handled || result.dialog.name != "race_details") {
             Log.w(TAG, "[WARN] handleMaidenRace:: Failed to handle dialogs. Aborting racing...")
-            // Navigate back so the bot isn't left stranded on the race confirmation screen. Without this
-            // the main loop has to rely on tryHandleAllDialogs / screen detection to recover, which can
-            // waste cycles or re-enter this flow in an inconsistent state on the next turn.
+            // Navigate back so the bot is not stranded on the race confirmation screen.
             ButtonBack.click(game.imageUtils)
             game.wait(0.5)
             return false
@@ -3594,7 +3346,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         campaign.recordEnteredRace(EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.MAIDEN))
         MessageLog.v(TAG, "[RACE] Racing process for Maiden Race is completed. Grade: ${lastRaceGrade ?: "Maiden"}")
         MessageLog.v(TAG, "********************")
-        // Mark the daily maiden check as done now that the race actually ran.
         campaign.bHasCheckedForMaidenRaceToday = true
         return true
     }
@@ -3610,7 +3361,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Drop any target the previous extra-race attempt staged; only this attempt's selection counts.
         stagedExtraRaceEntry = null
-        // Identity fact for the scheduled sub-branch (resolved from its own turn-scoped lookup below).
         var scheduledEntry: EnteredRace? = null
 
         // If there is a scheduled race pending, proceed to run it immediately.
@@ -3737,16 +3487,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 campaign.updateDate(isOnMainScreen = false)
             }
 
-            // Detect the scheduled race's grade on every scenario: the alarm-clock purchase
-            // policies (G1Only / G1AndFinale) need it, and Trackblazer additionally times its
-            // shop checks off it. Was Trackblazer-only, leaving URA/Unity scheduled races
-            // gradeless and those policies silently declining.
+            // Detect the scheduled race's grade on every scenario: the alarm-clock policies need it and Trackblazer times its shop checks off it.
             run {
                 val predictionAnchors = findPredictionAnchors(includeSingles = true)
                 if (predictionAnchors.isNotEmpty()) {
                     val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
                     val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
-                    // Capture identity from the same turn-scoped lookup before reading [0] for grade.
                     scheduledEntry = enteredRaceFromLookup(EnteredRacePath.SCHEDULED, campaign.date.day, raceDataList)
                     if (raceDataList.isNotEmpty()) {
                         lastRaceGrade = raceDataList[0].grade
@@ -3787,9 +3533,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Clear the next smart race day tracker since we just completed a race.
         nextSmartRaceDay = null
 
-        // Record the completed extra race. Scheduled races carry their turn-scoped lookup identity;
-        // non-scheduled races carry whatever smart racing staged, else an unresolved standard-path fact
-        // (the positional standard picker does not resolve a name).
+        // Record the completed extra race: scheduled races carry their lookup identity, others what smart racing staged, else unresolved (the positional picker names nothing).
         val extraFact =
             if (isScheduledRace) {
                 scheduledEntry ?: EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.SCHEDULED)
@@ -3814,13 +3558,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Update the current date and aptitudes for accurate scoring.
         campaign.updateDate()
 
-        // Detect all race predictions on screen. Singles are a scoring input only — without any
-        // double-star entry (or force racing), smart racing still skips the day, so singles can't
-        // create a race day the old double-only logic would have trained through. In mandatory mode,
-        // icon-less rows are anchored too (via their fans icon): a planned race is entered by name
-        // regardless of tier, and the game renders no icon on some rows, which previously made a
-        // scheduled race invisible. Starless anchors join only the by-name search set below; the
-        // scored path keeps seeing exactly the star anchors it always did.
+        // Detect all predictions. Singles are a scoring input only: without a double-star entry (or force racing) smart racing still skips the day. In mandatory mode icon-less
+        // rows are anchored via their fans icon, since a planned race is entered by name and some rows render no icon; starless anchors join only the by-name search set.
         val allAnchors = findPredictionAnchors(includeSingles = true, includeStarless = mandatoryExtraRaceData != null)
         val anchors = allAnchors.filter { it.tier != PredictionTier.NONE }
         MessageLog.i(
@@ -3842,8 +3581,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Track the best prediction tier seen per race name so scoring can penalize single-star entries.
         MessageLog.i(TAG, "[RACE] Extracting race names and matching with database...")
         val tierByName = mutableMapOf<String, PredictionTier>()
-        // Per-name lookup resolution (exact vs fuzzy), so the selected target's entered-race fact stays
-        // truthful about how its name resolved. EXACT wins over FUZZY if a name resolved both ways.
+        // Per-name resolution (exact vs fuzzy) keeps the target's entered-race fact truthful; EXACT wins if a name resolved both ways.
         val resolutionByName = mutableMapOf<String, EnteredRaceResolution>()
         val currentRaces =
             anchors.flatMap { anchor ->
@@ -3875,9 +3613,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (mandatoryExtraRaceData != null) {
             MessageLog.v(TAG, "[RACE] Mandatory mode for extra races enabled. Looking for planned race \"${mandatoryExtraRaceData.name}\" on screen for turn ${campaign.date.day}.")
 
-            // Stage the planned race's identity by its explicit tuple: name from the plan, turn from the
-            // current turn (never the bare-name map's turnNumber). Only entries that actually complete
-            // reach the extra-race completion tail, so a not-found abort below never emits it.
+            // Stage the planned race's identity from the plan name and the current turn; a not-found abort below never reaches the completion tail.
             stagedExtraRaceEntry =
                 EnteredRace(campaign.date.day, EnteredRaceResolution.EXACT, EnteredRacePath.PLANNED_MANDATORY, name = mandatoryExtraRaceData.name, matchCount = 1)
 
@@ -3968,8 +3704,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         MessageLog.i(TAG, "[RACE] Successfully matched ${currentRaces.size} races in database.")
 
-        // Filter to only G1 races only for a positively read G1-only goal. Trophy requirement is independent of racing plan and farming fans settings. Pre-OP, G3, and an unread criteria tier all
-        // accept any grade, so they use the full list - an unread tier must never restrict to G1, which on a G1-less turn would cancel racing and let the goal expire.
+        // G1-only filter applies only to a positively read G1-only goal; Pre-OP, G3 and an unread tier use the full list, since restricting on an unread tier would cancel racing on a G1-less turn.
         val racesForSelection =
             if (hasG1OnlyRequirement) {
                 val g1Races = currentRaces.filter { it.grade == RaceGrade.G1 }
@@ -4082,7 +3817,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 effectiveRegularRaces
             }
 
-        // Score all eligible races with a tier penalty for single-star entries and a bonus for planned races.
         val scoredRaces =
             racesToScore.map { race ->
                 var scored = scoreRace(race)
@@ -4108,8 +3842,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val sortedScoredRaces = scoredRaces.sortedByDescending { it.score }
         val bestRace = sortedScoredRaces.first()
 
-        // Stage the scored selection's identity for the completion tail: the turn-scoped name the bot
-        // chose and taps by name, with the resolution tier its own lookup produced (never overclaimed).
+        // Stage the selection's identity (name and its own lookup tier, never overclaimed) for the completion tail.
         stagedExtraRaceEntry =
             EnteredRace(
                 campaign.date.day,
@@ -4200,9 +3933,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private fun processStandardRacing(): Boolean {
         MessageLog.v(TAG, "[RACE] Using traditional racing logic for extra races...")
 
-        // Pure Grand Concert fan pressure takes a dedicated fans-first branch that does not depend on
-        // the row prediction star (absent/false on a live GC list). Every other context - non-GC, or a
-        // mixed trophy/goal-points requirement - keeps the generic tier-gated path below unchanged.
+        // Pure Grand Concert fan pressure takes the fans-first branch, since its row star is absent/false; other contexts keep the generic tier-gated path.
         if (GrandConcertFanRaceSelector.appliesToForcedRace(
                 scenarioIsGrandConcert = GrandConcertScenario.matches(game.scenario),
                 fanPressureActive = bFanEmergencyActive || hasFanRequirement,
@@ -4213,24 +3944,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return processGrandConcertForcedFanRace()
         }
 
-        // Fan-emergency (or force racing) admits single-star prediction races. Outside of that,
-        // singles are detected for logging only and the old double-star-only entry gate stands.
+        // Fan emergency or force racing admits single-star races; otherwise singles are logged only.
         val allowSingles = bFanEmergencyActive || enableForceRacing
 
-        // Detect prediction anchors on screen, deduplicated by row.
         var anchors = findPredictionAnchors(includeSingles = true)
 
-        /** Entries the bot may actually enter under the current policy. */
         fun enterable(list: List<PredictionAnchor>) = list.filter { allowSingles || it.tier == PredictionTier.DOUBLE }
 
-        // If no enterable race was found and a requirement that any grade can satisfy is active, scroll
-        // to find more. Originally this never ran in Junior year; the fan emergency extends it there
-        // because the Junior fan checkpoint is exactly when weak trainees need below-the-fold races.
-        // bFanEmergencyActive is a member of the disjunction in its own right: the OCR-driven
-        // emergency arms without hasFanRequirement (that flag's template family is dead), and the
-        // weak-prediction trainee it exists for is exactly the one whose visible rows draw no icon.
-        // A trophy goal that is not positively G1-only (Pre-OP, G3, or unread) also scrolls, since any
-        // grade below the fold can satisfy it; a G1-only goal is gated separately and does not scroll here.
+        // With no enterable race and an any-grade requirement active, scroll for more. bFanEmergencyActive counts on its own: the OCR-driven emergency arms without hasFanRequirement
+        // (dead templates), and its weak-prediction trainee's visible rows draw no icon. A trophy goal not positively G1-only also scrolls; a G1-only goal is gated separately.
         if (enterable(anchors).isEmpty() &&
             (campaign.date.year != DateYear.JUNIOR || bFanEmergencyActive) &&
             (hasFanRequirement || bFanEmergencyActive || (hasTrophyRequirement && !hasG1OnlyRequirement) || hasInsufficientGoalRacePtsRequirement)
@@ -4274,8 +3996,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val onlyAnchorTemplatePath =
             if (onlyAnchor.tier == PredictionTier.SINGLE) IconRaceListPredictionSingleStar.template.path else IconRaceListPredictionDoubleStar.template.path
 
-        // If only one race is enterable, require G1 only for a positively read G1-only goal.
-        // Pre-OP, G3, and an unread criteria tier all accept any grade, so the single race is selected.
+        // With one enterable race, require G1 only for a positively read G1-only goal; Pre-OP, G3 and an unread tier accept any grade.
         if (maxCount == 1) {
             if (hasG1OnlyRequirement) {
                 campaign.updateDate(isOnMainScreen = false)
@@ -4287,7 +4008,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                     return true
                 } else {
-                    // Not G1. A G1-only goal specifically needs G1 races, so cancel.
                     MessageLog.i(TAG, "[RACE] Trophy requirement active but only non-G1 race available. Canceling racing process...")
                     return false
                 }
@@ -4302,10 +4022,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
         }
 
-        // Otherwise, iterate through each enterable race to determine fan gain and prediction tier.
-        // The original walk tapped "one row below the selection bracket" maxCount times, assuming
-        // every visible row was an enterable double-star one. That breaks with mixed single/double
-        // tiers on screen, so select each anchor row directly instead.
+        // Select each anchor row directly: the old "one row below the bracket" walk assumed every visible row was an enterable double-star, which breaks with mixed tiers.
         val sourceBitmap: Bitmap = game.imageUtils.getSourceBitmap()
         val listOfRaces = ArrayList<RaceDetails>()
         val extraRaceLocations = ArrayList<Point>()
@@ -4369,9 +4086,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             "[RACE] Detected extra races (fans/tier): ${filteredRaces.joinToString(", ") { "${it.fans}/${it.predictionTier}" }}",
         )
 
-        // Legacy pick: Rival races first, then prediction tier, then fans. Tier outranks raw fans: a
-        // weak predicted placement scales the realized fan payout down more than a smaller race's
-        // lower base, so a double-star race beats a bigger single-star one.
+        // Legacy pick: Rival first, then tier, then fans. Tier outranks raw fans because a weak predicted placement scales the realized payout down.
         fun legacyIndex(): Int =
             if (filteredRaces.any { it.isRival }) {
                 MessageLog.v(TAG, "[RACE] Rival Race(s) detected. Prioritizing Rival Races.")
@@ -4381,9 +4096,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 indexOfBestByTierThenFans(filteredRaces)
             }
 
-        // Pure Grand Concert fan pressure is handled earlier by processGrandConcertForcedFanRace(), so
-        // this generic tail only runs for non-GC and mixed-requirement contexts. They keep the legacy
-        // tier-first pick unchanged.
+        // Pure GC fan pressure was handled earlier by processGrandConcertForcedFanRace(); this tail runs for the others.
         val index = legacyIndex()
 
         // Determine the grade of the selected race and store it for retry purposes.
@@ -4414,26 +4127,18 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Dedicated pure Grand Concert fan-pressure race selection. GC race rows carry no trustworthy
-     * finish-prediction star (a live list draws none, and the distance-aptitude star false-matches the
-     * single-star template), so this branch never uses the row star as a gate. It enumerates every
-     * visible row from the universal fans-icon anchors, resolves each to the turn-scoped race DB (with
-     * the O/0 label fix), and ranks fans-first with aptitude only as a soft tie-break. A required fan
-     * race is never skipped over an absent star or an OCR miss: if rows exist but none resolves, a
-     * deterministic visible row is still chosen. Only a total row-detection failure returns false.
-     * Visible page only; no scrolling and no below-the-fold scan are wired here.
+     * Pure Grand Concert fan-pressure selection. GC rows carry no trustworthy prediction star (the aptitude star false-matches the single template), so it
+     * enumerates visible rows from the fans anchors, resolves them via the turn-scoped DB (with the O/0 fix) and ranks fans-first, aptitude as a soft tie-break.
+     * A required fan race is never skipped over an OCR miss: if rows exist but none resolves, a deterministic row is chosen. Visible page only.
      */
     private fun processGrandConcertForcedFanRace(): Boolean {
         val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
 
-        // Raw star telemetry, evidence only: GC ranking ignores these counts, but logging them answers
-        // the state-dependent prediction-rendering question in future careers for free.
+        // Raw star counts are logged as evidence only; GC ranking ignores them.
         val doubleHits = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = bitmap).size
         val singleHits = IconRaceListPredictionSingleStar.findAll(game.imageUtils, sourceBitmap = bitmap).size
 
-        // Enumerate visible rows from the fans anchors only. Singles are excluded because the aptitude
-        // star false-matches the single template; the fans glyph is on every row and the merge repair
-        // gives reliable row geometry. A genuine double still merges, but its tier is ignored here.
+        // Enumerate rows from the fans anchors only: singles are excluded because the aptitude star false-matches, and a genuine double's tier is ignored here.
         val anchors = findPredictionAnchors(includeSingles = false, sourceBitmap = bitmap, includeStarless = true)
         if (anchors.isEmpty()) {
             MessageLog.w(TAG, "[WARN] [GRAND_CONCERT] processGrandConcertForcedFanRace:: No visible race rows detected (fans-anchor CV failure). Canceling racing process.")
@@ -4449,8 +4154,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         for (anchor in anchors) {
             val detectedName = game.imageUtils.extractRaceName(anchor.location)
             val matches = lookupRaceInDatabase(turn, detectedName)
-            // Trust DB fans and aptitude ONLY for a unique exact resolution; a fuzzy/ambiguous row stays
-            // enterable but carries an unknown fan value so it can never mis-rank.
+            // Trust DB fans and aptitude only for a unique exact resolution; fuzzy/ambiguous rows stay enterable with unknown fans.
             val trusted = lastLookupTier == LookupTier.EXACT && matches.size == 1
             val fans: Int? = if (trusted) matches[0].fans else null
             val aptitude: Boolean? = if (trusted) checkRaceAptitudeMatch(matches[0]) else null
@@ -4479,17 +4183,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             TAG,
             "[GRAND_CONCERT] Selecting fan-pressure race at row #${selection.index + 1} (fans=${candidates[selection.index].fans ?: "unknown"}).",
         )
-        // Fans-row geometry only: the same fresh anchor is used for OCR and the winner tap, with no
-        // prediction-star template path and no scroll.
+        // The same fresh fans anchor serves OCR and the winner tap.
         game.tap(winner.location.x, winner.location.y, IconRaceListFansIcon.template.path, ignoreWaiting = true)
         return true
     }
 
-    /**
-     * Read-only per-row Rival check from the visible list without opening a row: crops the row band
-     * around the fans anchor and matches the Rival badge, mirroring the Trackblazer list scan. Rival is
-     * only a tie-break for GC, so a miss (or a crop failure) simply reports false.
-     */
+    /** Read-only Rival check on a visible row via the Rival badge near the fans anchor; a miss or crop failure reports false (Rival is only a tie-break). */
     private fun detectRowRival(sourceBitmap: Bitmap, anchorLocation: Point): Boolean {
         val rivalBitmap =
             game.imageUtils.createSafeBitmap(

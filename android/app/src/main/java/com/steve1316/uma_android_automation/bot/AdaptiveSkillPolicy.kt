@@ -4,81 +4,55 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.types.TrackDistance
 
 /*
- * V1 of the account-adaptive Skill Point policy: resolves the high-water threshold that
- * decideSkillCheck receives, and nothing else. Manual mode passes the user's configured
- * `skills.skillPointCheck` through untouched, so the default behavior is bit-for-bit identical
- * to the pre-adaptive bot. Adaptive mode maps an account-strength tier to a threshold from a
- * fixed table - no learning, no Team Rank reads, no optimizer changes.
- *
- * The tier labels are deliberately about the account's practical strength (support quality,
- * roster depth), not literal Team Rank: rank is a lifetime-accumulation number and a poor proxy
- * for what the current deck can fund. AUTO exists so a user who does not want to self-assess
- * gets a conservative middle value; in V1 it is a fixed alias for DEVELOPING.
+ * Resolves the high-water Skill Point threshold given to decideSkillCheck: Manual passes `skills.skillPointCheck` through untouched, Adaptive maps
+ * an account-strength tier to a fixed threshold. Tiers describe practical strength (support quality, roster depth), not Team Rank, a poor proxy for what the deck can fund.
  */
 
 /** How the high-water Skill Point threshold is chosen. */
 internal enum class SkillSpendMode {
-    /** Use `skills.skillPointCheck` exactly as configured - the pre-adaptive behavior. */
     MANUAL,
 
-    /** Derive the threshold from the configured [AccountTier]. */
     ADAPTIVE,
 
     ;
 
     companion object {
-        /** Parses the persisted setting. Anything unrecognized falls back to [MANUAL] - the safe
-         * default is always the long-standing behavior, never a policy the user did not pick. */
+        /** Unrecognized values fall back to [MANUAL], never a policy the user did not pick. */
         fun fromPersisted(value: String): SkillSpendMode = if (value.trim().equals("adaptive", ignoreCase = true)) ADAPTIVE else MANUAL
     }
 }
 
-/** User-declared account strength. Labels describe roster/support quality, not literal Team Rank. */
 internal enum class AccountTier {
-    /** No self-assessment: resolves to [DEVELOPING] in V1 (conservative middle). */
+    /** Resolves to [DEVELOPING] (conservative middle). */
     AUTO,
 
-    /** Early account, thin supports: spend early so mid-career races are not run skill-less. */
     NEW,
 
-    /** Growing roster: the long-standing default threshold. */
     DEVELOPING,
 
-    /** Reliable roster: can hold points longer for more efficient buys. */
     ESTABLISHED,
 
-    /** Strong roster: hold for big knapsack-efficient purchases (the proven 1000 arm). */
     ENDGAME,
 
     ;
 
     companion object {
-        /** Parses the persisted setting; unrecognized values fall back to [AUTO]. */
         fun fromPersisted(value: String): AccountTier = entries.firstOrNull { it.name.equals(value.trim(), ignoreCase = true) } ?: AUTO
     }
 }
 
-/**
- * The threshold decision for one career: the value [decideSkillCheck] will receive, how it was
- * chosen, and a stable human-readable reason. The reason explains threshold RESOLUTION only -
- * the telemetry `trigger` field keeps recording what actually caused a spend (HIGH_WATER,
- * SCENARIO_FINALS, CAREER_COMPLETE, MANUAL) and must not be blurred with this.
- */
+/** Why the threshold was chosen. Explains resolution only; the telemetry `trigger` field still records what actually caused a spend. */
 internal data class ResolvedSkillThreshold(
     val value: Int,
     val mode: SkillSpendMode,
     val resolvedTier: AccountTier,
     val reason: String,
 ) {
-    /** Corpus token for the `tier` telemetry field: `manual` in manual mode (no tier governs),
-     * else the RESOLVED tier - AUTO records as `developing`, with the auto provenance kept in
-     * [reason]. */
+    /** Corpus token for `tier`: `manual` in manual mode, else the resolved tier (AUTO records as `developing`, provenance kept in [reason]). */
     fun tierToken(): String = if (mode == SkillSpendMode.MANUAL) "manual" else resolvedTier.name.lowercase()
 }
 
-/** The V1 tier table. DEVELOPING matches the long-standing 350 default arm and ENDGAME matches
- * the maintainer's proven 1000 arm; NEW sits below the default so weak accounts still trigger
- * mid-career, ESTABLISHED between the two. AUTO is resolved before this is consulted. */
+/** DEVELOPING matches the long-standing 350 default arm and ENDGAME the maintainer's proven 1000 arm; AUTO is resolved before this is consulted. */
 internal fun adaptiveThresholdFor(tier: AccountTier): Int =
     when (tier) {
         AccountTier.NEW -> 300
@@ -87,15 +61,7 @@ internal fun adaptiveThresholdFor(tier: AccountTier): Int =
         AccountTier.ENDGAME -> 1000
     }
 
-/**
- * Resolves the effective high-water threshold. Pure - all inputs are parameters, so the table
- * and the manual passthrough are pinned by JUnit without a live Campaign.
- *
- * @param mode The persisted `skills.skillSpendMode`.
- * @param configuredTier The persisted `skills.accountTier` (may be [AccountTier.AUTO]).
- * @param manualThreshold The persisted `skills.skillPointCheck`, passed through untouched in
- *   manual mode - no clamping, so manual behavior stays bit-for-bit identical.
- */
+/** Manual mode passes the configured threshold through unclamped, so its behavior stays bit-for-bit unchanged. */
 internal fun resolveSkillThreshold(
     mode: SkillSpendMode,
     configuredTier: AccountTier,
@@ -120,11 +86,7 @@ internal fun resolveSkillThreshold(
     return ResolvedSkillThreshold(value = value, mode = mode, resolvedTier = resolvedTier, reason = reason)
 }
 
-/**
- * Settings-reading shim over [resolveSkillThreshold]: reads the two mode/tier settings (with
- * their safe fallbacks) and the manual threshold with the exact same call Campaign has always
- * used, so manual mode cannot drift from the historical read path.
- */
+/** Reads the mode/tier settings and the manual threshold exactly as Campaign always has, so manual mode cannot drift from the historical read path. */
 internal fun resolveSkillThresholdFromSettings(): ResolvedSkillThreshold {
     val mode = SkillSpendMode.fromPersisted(SettingsHelper.getStringSetting("skills", "skillSpendMode", "manual"))
     val tier = AccountTier.fromPersisted(SettingsHelper.getStringSetting("skills", "accountTier", "auto"))
@@ -133,49 +95,33 @@ internal fun resolveSkillThresholdFromSettings(): ResolvedSkillThreshold {
 }
 
 /*
- * Phase 2A: profile-objective gating and the two adaptive-only dynamic triggers.
- *
- * The objective is PRESET-owned (stamped on every preset apply, defaulting to RANK) while mode
- * and tier stay user-global. Both triggers are gated so that a RANK objective - every preset
- * that has not opted in - reproduces V1 adaptive behavior exactly.
+ * The objective is preset-owned (stamped on every preset apply, default RANK) while mode and tier stay user-global;
+ * RANK reproduces the base adaptive behavior exactly.
  */
 
-/** What the applied preset's career is trying to achieve. Gates the Phase 2A triggers and, in
- * Adaptive mode only, the planner's strategy tail (2B-1); Manual mode ignores it entirely. */
+/** What the applied preset's career is trying to achieve. Gates the dynamic triggers and, in Adaptive mode only, the planner's strategy tail. */
 internal enum class SkillSpendObjective {
-    /** Reliability first: spend before critical races, lock planned skills when affordable. */
     SAFE_COMPLETION,
 
-    /** Evaluation efficiency - the default, and the V1-identical behavior (both triggers inert). */
     RANK,
 
-    /** Inheritance farming. 2A enables the planned-skill trigger; 2B-1 adds planned-only
-     * purchasing - the broad strategy tail is skipped so leftover SP is accepted instead of
-     * drained into spark-diluting filler. */
+    /** Inheritance farming: planned-only purchasing, so leftover SP is accepted instead of drained into spark-diluting filler. */
     SPARKS,
 
-    /** A must-win race is the career's point (e.g. the Kashiwa sash). Both triggers enabled. */
     RACE_REWARD,
 
     ;
 
-    /** CRITICAL_RACE gate: reliability-driven objectives only. */
     fun allowsCriticalRace(): Boolean = this == SAFE_COMPLETION || this == RACE_REWARD
 
-    /** PLANNED_SKILL_AFFORDABLE gate: everything except pure rank farming. */
     fun allowsPlannedSkillAffordable(): Boolean = this != RANK
 
-    /** Strategy-tail gate (2B-1): a sparks career buys only planned skills (plus the existing
-     * inherited/negative toggles); every other objective keeps the full tail. Consulted only in
-     * Adaptive mode - see [strategyTailAllowed]. */
+    /** A sparks career buys only planned skills (plus the inherited/negative toggles); consulted only in Adaptive mode, see [strategyTailAllowed]. */
     fun allowsStrategyTail(): Boolean = this != SPARKS
 
-    /** Corpus token, e.g. `race_reward`. */
     fun token(): String = name.lowercase()
 
     companion object {
-        /** Parses the persisted preset value; blank/unknown falls back to [RANK] - the safe
-         * default is always the behavior every existing preset already has. */
         fun fromPersisted(value: String?): SkillSpendObjective =
             when (value?.trim()?.lowercase()) {
                 "safe_completion" -> SAFE_COMPLETION
@@ -186,23 +132,13 @@ internal enum class SkillSpendObjective {
     }
 }
 
-/**
- * The one planner-shaping decision of 2B-1: whether this session's strategy tail may run.
- * Manual mode always allows it (objective shaping is Adaptive-only, so Manual behavior stays
- * bit-for-bit identical); Adaptive mode delegates to the objective. Pure so the exact semantic
- * `mode != ADAPTIVE || objective.allowsStrategyTail()` is pinned by JUnit.
- */
+/** Manual mode always allows the strategy tail; Adaptive delegates to the objective. */
 internal fun strategyTailAllowed(mode: SkillSpendMode, objective: SkillSpendObjective): Boolean =
     mode != SkillSpendMode.ADAPTIVE || objective.allowsStrategyTail()
 
 /**
- * Whether a planned-only session may extend into the constrained career-end fallback: buying
- * profile-compatible skills through the knapsack once the plan is exhausted. Career end is the
- * one moment the sparks trade-off inverts - unspent points are DISCARDED by the game at Finish,
- * so refusing to spend protects nothing (a live sparks career handed 716 points to the Finish
- * click this way). Only Adaptive + sparks + CAREER_COMPLETE qualifies: mid-career sparks
- * sessions stay planned-only (2B-1), every other objective already runs the full tail, and
- * Manual mode never consults objectives at all.
+ * Whether a planned-only session may extend into the career-end knapsack fallback. Unspent points are discarded by the game at Finish,
+ * so refusing to spend then protects nothing. Only Adaptive + sparks + CAREER_COMPLETE qualifies.
  */
 internal fun careerEndConstrainedFallbackAllowed(
     mode: SkillSpendMode,
@@ -235,11 +171,8 @@ internal fun careerEndTailFilter(objective: SkillSpendObjective, trigger: SkillC
         else -> CareerEndTailFilter.PROFILE
     }
 
-/** How a skill relates to stamina recovery, decided purely by icon family. 20021 is the white
- * recovery family (which also contains inherited-unique recoveries - the candidate predicate,
- * not this classifier, excludes those from injection), 20022 the gold upgrades. The 20024
- * debuff variants and every other icon are NONE: debuffs already belong to the negative-skill
- * machinery (iconId % 10 == 4). No description parsing anywhere. */
+/** Icon-family classifier: 20021 is white recovery (including inherited-unique recoveries, which the candidate predicate excludes), 20022 gold upgrades.
+ * 20024 debuffs and every other icon are NONE (debuffs belong to the negative-skill machinery, iconId % 10 == 4). */
 internal enum class RecoveryClass {
     NONE,
     WHITE,
@@ -253,10 +186,8 @@ internal fun recoveryClassOf(iconId: Int): RecoveryClass =
         else -> RecoveryClass.NONE
     }
 
-/** Axis-free recovery skills verified safe as general injection candidates: the corner and
- * straightaway recovery pairs (white + gold). Everything else without a matching distance,
- * style, or surface axis is excluded - that is what keeps condition-trap skills like
- * Triple 7s (fires only at 776-778m remaining) and Shake It Out out of injection. */
+/** Axis-free recovery skills safe as injection candidates (corner and straightaway pairs). Everything else is excluded, which keeps
+ * condition-trap skills like Triple 7s (fires only at 776-778m remaining) and Shake It Out out. */
 internal val GENERAL_RECOVERY_IDS: Set<Int> =
     setOf(
         200352, // Corner Recovery ○
@@ -265,14 +196,7 @@ internal val GENERAL_RECOVERY_IDS: Set<Int> =
         200381, // Breath of Fresh Air
     )
 
-/**
- * The 2B-2 recovery-deficit gate: whether this career may inject a recovery purchase at all.
- * Adaptive-only (Manual is always off), and armed by objective + the planner's resolved
- * preferred distance: Long careers under safe_completion or race_reward, Medium only under
- * safe_completion. An unresolved distance (null) fails inertly. This decides only whether the
- * planner LOOKS for a deficit - satisfaction and candidate choice are separate, and no new
- * trigger exists (the check runs inside sessions that already opened).
- */
+/** Whether this career may inject a recovery purchase: Adaptive only; Long under safe_completion or race_reward, Medium only under safe_completion; an unresolved distance fails inertly. */
 internal fun allowsRecoveryInjection(
     mode: SkillSpendMode,
     objective: SkillSpendObjective,
@@ -286,7 +210,6 @@ internal fun allowsRecoveryInjection(
     }
 }
 
-/** Classification of the Main screen's current-goal text. */
 internal enum class GoalKind {
     /** The goal is a race objective whose name matched the races table. */
     RACE,
@@ -297,18 +220,12 @@ internal enum class GoalKind {
     /** A Trackblazer Result-Pts goal (its own emergency owns these). */
     RESULT_PTS,
 
-    /** Readable text that is none of the above - inert for the critical-race trigger. */
     OTHER,
 
-    /** Countdown or text unavailable this turn - inert. */
     UNKNOWN,
 }
 
-/**
- * One turn's mandatory-goal reading, produced by Campaign at most once per [turn] inside the
- * global checks. Valid ONLY while `turn == date.day`: a previous turn's race snapshot must never
- * drive a spend, so consumers re-check the key instead of trusting whatever is stored.
- */
+/** One turn's mandatory-goal reading, valid only while `turn == date.day`: a previous turn's race snapshot must never drive a spend. */
 internal data class GoalDeadlineSnapshot(
     val turn: Int,
     val turnsRemaining: Int?,
@@ -317,35 +234,23 @@ internal data class GoalDeadlineSnapshot(
     val raceName: String?,
 )
 
-/** The critical-race window: spend when the race is this many turns away (race day itself is 0
- * and never fires - the spend must land before the race). */
+/** Spend when the race is this many turns away; race day (0) never fires since the spend must land before the race. */
 internal const val CRITICAL_RACE_MIN_TURNS = 1
 internal const val CRITICAL_RACE_MAX_TURNS = 2
 
-/** Minimum SP for a critical-race spend to be worth opening the screen: real white skills start
- * around 100-180 base (Deep Breaths 160, Corner Recovery o 170), so 150 buys something useful
- * while never opening on shrapnel. */
+/** Minimum SP worth opening the screen for a critical-race spend: real white skills start around 100-180 base (Deep Breaths 160, Corner Recovery o 170). */
 internal const val MIN_CRITICAL_SPEND = 150
 
-/** SP growth required after an AFFORDABLE-triggered session before another may fire - the belt
- * that bounds repeated opens even when evidence stays qualifying. Roughly one training turn's
- * income plus slack. */
+/** SP growth required after an AFFORDABLE-triggered session before another may fire; bounds repeated opens. */
 internal const val AFFORDABLE_REARM_SP_GROWTH = 120
 
-/** Normalizes goal text / race names for matching: lowercase, apostrophe variants dropped,
- * punctuation to spaces, whitespace (including OCR line breaks) collapsed. */
 internal fun normalizeGoalText(raw: String): String =
     raw.lowercase()
         .replace(Regex("['’‘`]"), "")
         .replace(Regex("[^a-z0-9]+"), " ")
         .trim()
 
-/**
- * Finds the race a goal text refers to: a normalized known race name must appear as a whole
- * substring of the normalized text, longest known name winning when several overlap. No
- * edit-distance fuzzing - garbled OCR fails to null, which keeps the trigger inert rather than
- * guessing the wrong race.
- */
+/** A normalized known race name must appear as a whole substring, longest wins. No edit-distance fuzzing: garbled OCR fails to null, keeping the trigger inert rather than guessing the wrong race. */
 internal fun matchGoalRace(text: String, raceNames: Collection<String>): String? {
     val normalizedText = normalizeGoalText(text)
     if (normalizedText.isEmpty()) return null
@@ -358,24 +263,18 @@ internal fun matchGoalRace(text: String, raceNames: Collection<String>): String?
         ?.first
 }
 
-/**
- * Classifies one goal text. The fan and Result-Pt arms reuse the production wording rules from
- * Racing's emergencies ("fans" plural on purpose; "Result Pt" with the achieved/MAX stand-down)
- * so the two classifiers can never disagree about whose emergency a goal belongs to.
- */
+/** The fan and Result-Pt arms reuse Racing's emergency wording rules ("fans" plural on purpose; "Result Pt" with the achieved/MAX stand-down) so the two classifiers never disagree. */
 internal fun classifyGoalText(text: String?, raceNames: Collection<String>): Pair<GoalKind, String?> {
     if (text.isNullOrBlank()) return GoalKind.UNKNOWN to null
     if (text.contains("fans", ignoreCase = true)) return GoalKind.FANS to null
-    // Achieved/MAX stand-down BEFORE the Result-Pt arm, mirroring Racing's own emergency rule:
-    // "Result Pt goal Achieved" is a met goal, not an active Result-Pts objective.
+    // Achieved/MAX stand-down comes before the Result-Pt arm, as in Racing's emergency rule.
     if (text.contains("Achieved", ignoreCase = true) || text.contains("MAX", ignoreCase = false)) return GoalKind.OTHER to null
     if (text.contains("Result Pt", ignoreCase = true)) return GoalKind.RESULT_PTS to null
     val race = matchGoalRace(text, raceNames)
     return if (race != null) GoalKind.RACE to race else GoalKind.OTHER to null
 }
 
-/** Trigger-specific rationale for the skill-spend record being written, set by Campaign around
- * the session and consumed by SkillPlan's telemetry. Null fields simply stay off the record. */
+/** Trigger-specific rationale for the skill-spend record, set by Campaign around the session; null fields stay off the record. */
 internal data class SkillTriggerContext(
     val trigger: SkillCheckTrigger,
     val criticalRace: String? = null,
@@ -386,14 +285,8 @@ internal data class SkillTriggerContext(
 )
 
 /**
- * Observed-availability evidence behind PLANNED_SKILL_AFFORDABLE. Only skills SEEN available on
- * a real parsed skill screen this career can qualify, priced at their OBSERVED screen price -
- * prices only fall as hint levels rise, so `SP >= observedPrice` stays a sufficient condition on
- * the current price. No speculative opens, no permanent absent-marking: a skill that unlocks
- * later becomes eligible at the next organic parse, and a Potential-gated skill that never
- * appears simply never qualifies (zero wasted opens - the Copano lesson).
- *
- * Pure Kotlin so JUnit pins the whole lifecycle; Campaign holds one instance per career.
+ * Observed-availability evidence behind PLANNED_SKILL_AFFORDABLE: only skills seen available on a parsed skill screen this career qualify, at their
+ * observed price (prices only fall as hint levels rise, so `SP >= observedPrice` stays sufficient). A Potential-gated skill that never appears never qualifies.
  */
 internal class PlannedSkillEvidenceStore {
     private data class Observed(val price: Int, val parseTurn: Int)
@@ -403,12 +296,7 @@ internal class PlannedSkillEvidenceStore {
     private val suppressed = mutableSetOf<String>()
     private var lastAffordableTriggerSp: Int? = null
 
-    /**
-     * Replaces the observation set from one successful skill-screen parse. Failed parses must
-     * simply not call this - prior evidence stays. An AFFORDABLE-triggered session that bought
-     * nothing suppresses the skills it saw until a non-AFFORDABLE parse refreshes them (the
-     * no-buy guard); any session that did buy, or any organic parse, clears the suppression.
-     */
+    /** Replaces the observations from one successful parse; failed parses must not call this. An AFFORDABLE session that bought nothing suppresses the skills it saw until a non-AFFORDABLE parse; a buying session or organic parse clears it. */
     fun recordParse(availableWithPrices: Map<String, Int>, parseTurn: Int, fromAffordableSession: Boolean, confirmedPurchases: Collection<String>) {
         purchased.addAll(confirmedPurchases)
         observed.clear()
@@ -420,16 +308,11 @@ internal class PlannedSkillEvidenceStore {
         }
     }
 
-    /** Marks an AFFORDABLE firing so the SP-growth belt arms against the SP it fired at. */
     fun markAffordableFired(skillPoints: Int) {
         lastAffordableTriggerSp = skillPoints
     }
 
-    /**
-     * The qualifying planned skill, or null. Deterministic representative: highest observed
-     * price, plan order breaking ties. Belt: once an AFFORDABLE session fired, the next needs
-     * [AFFORDABLE_REARM_SP_GROWTH] more SP than the last firing regardless of its outcome.
-     */
+    /** Deterministic representative: highest observed price, plan order breaking ties. After an AFFORDABLE firing the next needs [AFFORDABLE_REARM_SP_GROWTH] more SP regardless of outcome. */
     fun affordableCandidate(planNames: Collection<String>, skillPoints: Int): Pair<String, Int>? {
         val last = lastAffordableTriggerSp
         if (last != null && skillPoints < last + AFFORDABLE_REARM_SP_GROWTH) return null
@@ -441,6 +324,5 @@ internal class PlannedSkillEvidenceStore {
             .maxByOrNull { (_, price) -> price }
     }
 
-    /** True once any parse has been recorded - before first contact the trigger is inert. */
     fun hasAnyObservation(): Boolean = observed.isNotEmpty()
 }

@@ -15,8 +15,8 @@ import com.steve1316.uma_android_automation.types.StatName
  * @property game The [Game] instance for interacting with the game state.
  */
 class UraFinale(game: Game) : Campaign(game) {
-    // The URA finale's three climax races show the 1st-place "Congratulations" banner, so the base
-    // finalizeRaceResults capture can record a true win/lose signal into the career ledger.
+    // The climax races show the 1st-place "Congratulations" banner, so finalizeRaceResults can record a win/lose
+    // signal.
     override val capturesFinaleWins: Boolean = true
 
     override fun openFansDialog() {
@@ -26,17 +26,10 @@ class UraFinale(game: Game) : Campaign(game) {
     }
 
     /**
-     * Detects and handles the URA Duel screen (the July 2026 "Happy Meek" stat contest): pages the
-     * option carousel to the trainee's highest stat and confirms.
-     *
-     * CALIBRATION: the detect band, the right-arrow coordinate, and the "contest of" header string
-     * were derived from a capture, not measured on our own supported resolutions - so the first live
-     * firing on a real URA duel must be supervised. The handler self-gates on the header text and only
-     * reports the screen handled once the confirm has actually cleared it: a detection miss OR a confirm
-     * that does not clear the duel returns false, so the normal unknown-screen recovery still applies and
-     * an uncalibrated tap can never wedge the run.
-     *
-     * @return True only if the duel screen was detected AND confirmed away, false otherwise.
+     * Handles the URA Duel screen: pages the option carousel to the trainee's highest stat and confirms.
+     * The detect band, arrow coordinate and "contest of" header string came from a capture, not our supported
+     * resolutions, so the first live firing needs supervision. Self-gates on the header and returns true only
+     * once the confirm cleared the duel; a miss returns false so normal unknown-screen recovery applies.
      */
     private fun handleUraDuel(): Boolean {
         val detectX = (SharedData.displayWidth * 0.10).toInt()
@@ -44,7 +37,6 @@ class UraFinale(game: Game) : Campaign(game) {
         val detectW = (SharedData.displayWidth * 0.80).toInt()
         val detectH = (SharedData.displayHeight * 0.15).toInt()
 
-        // Fresh capture + OCR of the header band each call - the confirm-verify at the end re-reads it.
         fun readDuelHeader(debugName: String): String =
             game.imageUtils.performOCROnRegion(
                 game.imageUtils.getSourceBitmap(),
@@ -90,8 +82,7 @@ class UraFinale(game: Game) : Campaign(game) {
         val rightArrowX = SharedData.displayWidth * 0.88
         val rightArrowY = SharedData.displayHeight * 0.48
 
-        // Page the carousel until the option band reads the target stat, capped so a misread arrow or
-        // an unexpected layout can never spin forever (the duel offers five stats + energy = six cells).
+        // Capped so a misread arrow or unexpected layout cannot spin forever (five stats + energy = six cells).
         for (attempt in 0 until 6) {
             val current = readDuelHeader("ura_duel_option_$attempt")
             MessageLog.i(TAG, "[URA_DUEL] Attempt $attempt option text: \"$current\"")
@@ -107,11 +98,8 @@ class UraFinale(game: Game) : Campaign(game) {
         game.wait(1.0)
         game.waitForLoading()
 
-        // Report handled ONLY if the confirm actually cleared the duel. Returning true unconditionally
-        // would pin Campaign's consecutiveUnknownScreenCount at 0 and keep the stall-watchdog heartbeat
-        // fresh, so an uncalibrated confirm that never lands would spin on this screen to the per-run
-        // runtime cap with BOTH safety nets blind. If the header persists, hand back to the unknown-screen
-        // recovery so the run stops cleanly with diagnostics instead of hanging.
+        // Returning true unconditionally would hold consecutiveUnknownScreenCount at 0 and keep the stall watchdog
+        // fed, blinding both safety nets if the confirm never lands; if the header persists, hand back to recovery.
         if (readDuelHeader("ura_duel_verify").contains("contest of")) {
             MessageLog.w(TAG, "[URA_DUEL] Confirm did not clear the duel screen (uncalibrated tap); handing back to unknown-screen recovery.")
             return false
