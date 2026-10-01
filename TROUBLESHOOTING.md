@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Common issues and how to fix them. If none of this helps, open an issue (see [Reporting a bug](#reporting-a-bug)) and **attach a log file** — that's the single most useful thing for diagnosing a stop.
+Common issues and how to fix them. If none of this helps, ask in `#help` on the [UMA Auto+ Discord](https://discord.gg/JNhCDs4MSF), or open an issue (see [Reporting a bug](#reporting-a-bug)) and **attach a log file**: that's the single most useful thing for diagnosing a stop.
 
 ## The bot stopped or got stuck
 

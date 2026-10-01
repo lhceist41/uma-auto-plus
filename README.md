@@ -6,8 +6,11 @@
 
 [![Latest release](https://img.shields.io/github/v/release/lhceist41/uma-auto-plus?label=latest%20release&color=blue)](https://github.com/lhceist41/uma-auto-plus/releases/latest)
 [![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-informational)](CHANGELOG.md)
+[![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/JNhCDs4MSF)
 
 A hands-off distribution of [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation) for Umamusume: Pretty Derby. Pick a trainee, press Start, walk away: the bot plays whole careers, and can queue several in a row without you.
+
+Questions, help and career results: join the [UMA Auto+ Discord](https://discord.gg/JNhCDs4MSF).
 
 > [!IMPORTANT]
 > **This is a personal fork.** All original credit goes to **steve1316** and the contributors of the upstream project. The core bot engine -- the screen reading, the training/racing/event logic, and the app itself -- is their work. This fork adds features and decision logic on top of it. If you are looking for the original project, please visit the [upstream repository](https://github.com/steve1316/uma-android-automation).
@@ -44,7 +47,7 @@ Upstream improvements are merged in as they land. This fork extends that engine'
 |---|---|
 | **Original repo** | [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation) |
 | **Original author** | [steve1316](https://github.com/steve1316) |
-| **Discord** | https://discord.gg/5Yv4kqjAbm |
+| **Original Discord** | https://discord.gg/5Yv4kqjAbm |
 | **Fork base version** | v5.4.8 |
 
 # Disclaimer
