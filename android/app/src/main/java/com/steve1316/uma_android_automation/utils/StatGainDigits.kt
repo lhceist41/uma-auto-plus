@@ -1,17 +1,12 @@
 package com.steve1316.uma_android_automation.utils
 
 /**
- * Pure-pixel reader for one training stat-gain row: "+N" under a stat, or "^^+N" once the training
- * would take that stat past 1200, when the game draws the gain in gold behind a double chevron.
+ * Pixel reader for one stat-gain row: "+N", or "^^+N" in gold once the stat would pass 1200.
  *
- * The template matcher in [CustomImageUtils.determineStatGainFromTraining] matches orange grayscale
- * digits, so it reads every gold row as 0, and its crops sit on a 180 px pitch while the stat columns
- * are 169 px apart, so a gold Speed value also loses its last digit off the crop. This reader keys on
- * the glyph shape instead of its colour: every glyph, orange, red or gold, is a warm-hued silhouette
- * (fill plus its darker inner outline) inside a thick white outline. Each warm component enclosed by
- * white is resized to a fixed grid and matched against silhouettes measured from real Grand Concert
- * training captures; a glyph is accepted only when it clears a floor and beats the runner-up label
- * by a margin, and anything doubtful returns an unread value rather than a guess.
+ * [CustomImageUtils.determineStatGainFromTraining] matches orange digits, so it reads gold rows as 0,
+ * and its 180 px crop pitch against the 169 px column pitch drops a gold Speed value's last digit.
+ * This reader matches glyph silhouettes (warm fill inside a white outline) regardless of colour, and
+ * returns an unread value rather than a guess when a glyph is doubtful.
  */
 object StatGainDigits {
     /** One row's reading: [value] is null when a "+" was found but its digits could not be read. */
@@ -24,23 +19,18 @@ object StatGainDigits {
 
     private fun isWhite(r: Int, g: Int, b: Int): Boolean = r >= 225 && g >= 218 && b >= 200
 
-    // Warm hue covers the orange, red and gold fills and their darker inner outlines, and excludes
-    // the lavender bonus bubble.
+    // Warm hue covers orange, red and gold fills and excludes the lavender bonus bubble.
     private fun isGlyph(r: Int, b: Int): Boolean = r >= 90 && r - b >= 45
 
-    /** Minimum share of a component's surrounding ring that is white outline (glyphs read 0.62 and up). */
+    /** Glyphs read 0.62 and up. */
     private const val WHITE_ADJ_MIN = 0.6
 
-    // Template grid and classifier acceptance, measured on the capture corpus.
     private const val TW = 18
     private const val TH = 26
     private const val SCORE_MIN = 0.80
     private const val MARGIN_MIN = 0.03
 
-    /**
-     * Reads the gain row inside one stat column's box, or returns null when the box holds no "+".
-     * The size gates are measured at [COLUMN_WIDTH] and scale with [width].
-     */
+    /** Returns null when the box holds no "+". Size gates are measured at [COLUMN_WIDTH] and scale with [width]. */
     fun readRow(sampler: SparkPixelSampler, left: Int, top: Int, width: Int, height: Int): Row? {
         val scale = width / COLUMN_WIDTH.toDouble()
         val glyph = BooleanArray(width * height)
@@ -61,7 +51,6 @@ object StatGainDigits {
         if (plus < 0) return null
         val gold = comps.subList(0, plus).any { it.label == '^' }
 
-        // Digits follow the "+" left to right, at most a glyph-sized gap apart.
         val maxGap = 22 * scale
         val noiseArea = 450 * scale * scale
         var value = 0
@@ -76,8 +65,7 @@ object StatGainDigits {
                 prev = c
                 continue
             }
-            // Background art can sit inside the outline between glyphs: skip it when it is too small to
-            // be a digit or overlaps a glyph that did read; anything digit-sized and unread stops the read.
+            // Background art can sit inside the outline: skip it when too small for a digit or overlapping a read glyph.
             val overlapsRead = comps.any { o -> o !== c && o.label != null && o.x0 - 2 <= c.x1 && c.x0 <= o.x1 + 2 }
             if (c.area < noiseArea || overlapsRead) continue
             return Row(null, gold)
@@ -86,13 +74,11 @@ object StatGainDigits {
         return Row(value, gold)
     }
 
-    /** The value a gain row contributes: a gold row's pixel read replaces the template read, which cannot
-     * see gold digits; every other row keeps the template read. */
+    /** A gold row's pixel read replaces the template read, which cannot see gold digits. */
     fun resolveRowValue(templateValue: Int, pixel: Row?): Int = if (pixel != null && pixel.gold) pixel.value ?: 0 else templateValue
 
     private class Comp(val x0: Int, val x1: Int, val area: Int, val label: Char?)
 
-    /** 8-connected glyph components enclosed by white outline, labelled where confident, left to right. */
     private fun components(glyph: BooleanArray, white: BooleanArray, w: Int, h: Int, scale: Double): List<Comp> {
         val labels = IntArray(w * h) { -1 }
         val stack = ArrayDeque<Int>()
@@ -142,7 +128,6 @@ object StatGainDigits {
         return result
     }
 
-    /** Share of the component's Manhattan-distance<=2 ring (cells outside it) that is white outline. */
     private fun whiteAdjacency(cells: List<Int>, white: BooleanArray, w: Int, h: Int): Double {
         val ring = HashSet<Int>()
         for (c in cells) {
@@ -161,7 +146,6 @@ object StatGainDigits {
         return ring.count { white[it] }.toDouble() / ring.size
     }
 
-    /** Nearest-neighbour resize of one component's mask (within its box) to the [TW]x[TH] grid. */
     private fun toGrid(labels: IntArray, id: Int, x0: Int, x1: Int, y0: Int, y1: Int, w: Int): BooleanArray {
         val bw = x1 - x0 + 1
         val bh = y1 - y0 + 1
@@ -175,8 +159,6 @@ object StatGainDigits {
         return out
     }
 
-    /** Best label for a resized glyph, or null when it is not confident enough. A label scores its best
-     * template variant, and the margin is to the best other label. */
     private fun classify(grid: BooleanArray): Char? {
         val best = HashMap<Char, Double>()
         for ((label, tmpl) in TEMPLATES) {
@@ -190,9 +172,7 @@ object StatGainDigits {
         return ranked[0].key
     }
 
-    /** Glyph silhouettes (18x26) measured from real Grand Concert training captures: digits, the "+", and
-     * the gold double chevron ('^'). A second variant of a label is its shape in the bonus row above the
-     * gain row. */
+    /** 18x26 silhouettes measured from real Grand Concert captures; a second variant of a label is its shape in the bonus row. */
     private val TEMPLATES: List<Pair<Char, BooleanArray>> = listOf(
         '0' to rows(
             "000000111111000000", "000001111111110000", "000111111111111000", "000111111111111100",

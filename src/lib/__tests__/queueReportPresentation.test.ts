@@ -172,7 +172,6 @@ describe("parseLastSession: one line per run", () => {
             run(2, "TASK_RESULT_SKIPPED_BY_QUEUE", { traineeName: "Vodka", reasonKey: "TRAINEE_IN_DECK" }),
         ]
         expect(view({ runs }).runs).toEqual(["Run 1: Special Week, Completed", "Run 2: Vodka, Skipped"])
-        // A skip is neither a finished career nor an error.
         expect(view({ queueEnabled: true, totalRuns: 2, completedRuns: 1, runs }).progress).toBe("1 of 2 runs done")
     })
 })

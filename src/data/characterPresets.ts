@@ -173,10 +173,8 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         ],
     },
     "Air Groove": {
-        // Mi=A, Md=A, Lg=B, Pc=A, Ls=A, Turf=A. v1.2.0 switched her skills to Late Surger for Blazing
-        // Pride, but her strategy stayed Default, which races her card's Pace; her plans now buy Pace skills
-        // to match. Char-event coverage 7-9 across the three scenarios, under the >=14 threshold for a
-        // "recommended" badge.
+        // Mi=A, Md=A, Lg=B, Pc=A, Ls=A, Turf=A. Her strategy stays Default, which races her card's Pace, so the plans buy Pace
+        // skills. Char-event coverage 7-9 across the three scenarios, under the >=14 threshold for a "recommended" badge.
         recommended: [],
     },
     "El Condor Pasa": {
@@ -360,47 +358,31 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         recommended: ["URA Finale", "Trackblazer"],
     },
     "Copano Rickey": {
-        // Dirt=A, Mile=A, Medium=A, Pace=A/Front=A, Turf=F; Power+10%/Wit+20%. Third pure dirt body after Haru
-        // Urara and Smart Falcon, and the only one built as a Pace Chaser: her unique (Luck Runs My Way) and her
-        // whole innate kit read the back half of the field (order_rate>=40 / running_style==2), which a Front
-        // build never satisfies.
+        // Dirt=A, Mile=A, Medium=A, Pace=A/Front=A, Turf=F; Power+10%/Wit+20%. The only dirt body built as a Pace Chaser: her
+        // unique (Luck Runs My Way) and innate kit read the back half of the field (order_rate>=40 / running_style==2), which a
+        // Front build never satisfies.
         //
-        // URA is THE profile: it ships the curated dirt agenda and exists to farm Kashiwa Kinen Winner's Sashes
-        // (t57, G1 Dirt Mile 1600m, Funabashi). Two things about it are easy to get wrong. First, the career
-        // objective only asks for 3rd or better, but a sash needs 1st - a completed career is NOT evidence the
-        // sash farm works, and the [CAREER_END] line cannot tell you which happened. Check the t57 race result and
-        // the sash count itself. Second, the agenda deliberately leaves Senior unpinned so she reaches t57 rested;
-        // more races would mean more fans and a worse Kashiwa.
+        // URA is the profile: it ships the curated dirt agenda and exists to farm Kashiwa Kinen Winner's Sashes (t57, G1 Dirt
+        // Mile 1600m). The objective only asks for 3rd or better but a sash needs 1st, so a completed career is NOT evidence
+        // the sash farm works: check the t57 result and the sash count. The agenda leaves Senior unpinned so she reaches t57
+        // rested.
         //
-        // Observed baseline, first live career 2026-07-17 (n=1, so this proves the profile VIABLE, not
-        // repeatable): she WON Kashiwa and took the sash while arriving at t57 on Spd 657 / Sta 337 / Pow 656 /
-        // Guts 452 / Wit 413 at 43% energy, and finished the career on 850 / 479 / 838 / 645 / 625 (A rank, URA
-        // finals swept 3/3). Treat those as the only numbers with evidence behind them. Higher stats are of course
-        // better - aim for them as ceilings, not as thresholds - but nothing here requires ~900 Speed at Kashiwa
-        // or ~1050 at the end: the run that earned the sash cleared neither. Note her growth is Power +10% / Wit
-        // +20% with NO Speed growth, so Speed is the expensive stat on this body; Speed still leads the scorer (it
-        // leads every winning build here and one career is not evidence to demote it), but do not read the gap
-        // between these numbers and the old targets as a training failure.
+        // Observed baseline (one career, so viable, not repeatable): she won Kashiwa arriving at t57 on Spd 657 / Sta 337 / Pow
+        // 656 / Guts 452 / Wit 413 at 43% energy and finished on 850 / 479 / 838 / 645 / 625 (A rank). Treat higher stats as
+        // ceilings, not thresholds. Her growth has no Speed bonus, so Speed is the expensive stat, but it still leads the
+        // scorer.
         //
-        // Potential gating: Chance of Victory (Lv3), Collaborative Graded Races o (Lv4) and Strong Steps (Lv5) sit
-        // behind Potential levels. The plans carry Chance of Victory, bought once they are unlocked or offered by
-        // a support card. Strong Steps is held out: it chains from her own Solid Steps, and while locked the buyer
-        // would treat it as an upgrade of that row. Collaborative Graded Races o is not planned.
+        // Potential gating: the plans carry Chance of Victory (Lv3). Strong Steps (Lv5) is held out: it chains from her own
+        // Solid Steps, and while locked the buyer treats it as an upgrade of that row. Collaborative Graded Races o (Lv4) is
+        // not planned.
         //
-        // Green skills: an external guide claims her unique needs six greens for full effect. The only scaling
-        // term in the game data this repo can see is `phase_laterhalf_random==1`, which does not support that
-        // claim, so no preset here chases a green count. The greens in her plan are there because each is
-        // individually useful on a Dirt Mile Pace Chaser.
+        // No preset chases a green count: an external guide claims her unique needs six greens, but the only scaling term in
+        // the game data is `phase_laterhalf_random==1`. Every extra skill she learns also enters the white-spark pool, so a
+        // wide buy dilutes the dirt whites this profile farms.
         //
-        // Inheritance tradeoff: every extra skill she learns also enters the white-spark pool, so a wider buy
-        // dilutes the dirt whites this profile exists to farm. The plan stays compact partly for that reason.
-        //
-        // Deck archetype (advisory only - read SUPPORT_CARD_INVENTORY.md before acting on it, and remember the
-        // borrowed slot counts against the no-duplicate-character rule): Speed + Power + Wit + a dirt-hint card +
-        // one flexible slot, borrowing the strongest dirt/Speed card available. TP restoration for unattended
-        // queues is a global setting and is unrelated to the free race retries this preset enables.
-        //
-        // Research-graded (2026-07-17). Global release 2026-07-16, card 109801.
+        // Deck archetype (advisory; the borrowed slot counts against the no-duplicate-character rule): Speed + Power + Wit + a
+        // dirt-hint card + one flexible slot. TP restoration for unattended queues is a global setting, unrelated to the free
+        // race retries this preset enables.
         recommended: ["URA Finale"],
         avoid: [
             {
@@ -728,9 +710,8 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         recommended: [],
     },
     "Aston Machan": {
-        // Sprint=A, Mile=B, Medium=G, Long=G, Front=A; Speed+20%/Guts+10%. Sakura Bakushin O's grid, so the
-        // same Trackblazer caution: after Junior her winnable pool is thin. No recommended badge until her own
-        // careers complete.
+        // Sprint=A, Mile=B, Medium=G, Long=G, Front=A; Speed+20%/Guts+10%. Sakura Bakushin O's grid, so the same Trackblazer
+        // caution: her winnable pool is thin after Junior.
         recommended: [],
         avoid: [
             {
@@ -740,16 +721,15 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         ],
     },
     "Kawakami Princess": {
-        // Medium=A, Mile=B, Late=A, Long=F; Power+10%/Guts+20%. A Late Surger Medium like Nakayama Festa.
-        // Her URA preset banks the t31 7000-fan goal with a curated Junior agenda; Unity Cup farms fans for
-        // it. No avoid: Long=F touches no goal (Takarazuka Kinen is 2200m). No recommended badge until her own
-        // careers complete.
+        // Medium=A, Mile=B, Late=A, Long=F; Power+10%/Guts+20%. A Late Surger Medium like Nakayama Festa; her URA preset banks
+        // the t31 7000-fan goal with a curated Junior agenda and Unity Cup farms fans for it. No avoid: Long=F touches no goal
+        // (Takarazuka Kinen is 2200m).
         recommended: [],
     },
     "Seeking the Pearl": {
-        // Sprint=A, Mile=A, Medium=E, Long=G, Pace=A; Speed+10%/Wit+20%. Nishino Flower's grid on a
-        // Mile-first chain. Sprint/Mile-only, so Trackblazer gets the narrow-pool caution (Game8 also notes she
-        // settles for a Sprint-Mile schedule there). No recommended badge until her own careers complete.
+        // Sprint=A, Mile=A, Medium=E, Long=G, Pace=A; Speed+10%/Wit+20%. Nishino Flower's grid on a Mile-first chain.
+        // Sprint/Mile-only, so Trackblazer gets the narrow-pool caution (Game8 notes she settles for a Sprint-Mile schedule
+        // there).
         recommended: [],
         avoid: [
             {
@@ -759,23 +739,20 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         ],
     },
     "T.M. Opera O (O Sole Suo!)": {
-        // Medium=A, Long=A, Pace=A; Stamina+20%/Wit+10%. Same grid and goal route as her New Year outfit,
-        // whose URA fan-build agenda this preset follows. Mile=E hurts only the Junior pool. No recommended
-        // badge until her own careers complete.
+        // Medium=A, Long=A, Pace=A; Stamina+20%/Wit+10%. Same grid and goal route as her New Year outfit, whose URA fan-build
+        // agenda this preset follows. Mile=E hurts only the Junior pool.
         recommended: [],
     },
     "Yamanin Zephyr": {
-        // Sprint=B, Mile=A, Medium=A, Pace=A; Speed/Guts/Wit +10%. A Pace Chaser miler like Taiki Shuttle;
-        // Medium=A keeps the Trackblazer pool open. No recommended badge until her own careers complete.
+        // Sprint=B, Mile=A, Medium=A, Pace=A; Speed/Guts/Wit +10%. A Pace Chaser miler like Taiki Shuttle; Medium=A keeps the
+        // Trackblazer pool open.
         recommended: [],
     },
     "Yukino Bijin": {
         // Mile=A, Medium=A, Pace=A, Dirt=B; Speed+10%/Guts+20%. A turf Pace Chaser Medium like Fine Motion.
-        // No recommended badge until her own careers complete.
         recommended: [],
     },
-    // Alternate outfits: same grid and goal route as the base outfit above, so each carries that outfit's
-    // avoid advisories. No recommended badge until the outfit's own careers complete.
+    // Alternate outfits: same grid and goal route as the base outfit above, so each carries that outfit's avoid advisories.
     "Biwa Hayahide (Rouge Caroler)": {
         recommended: [],
     },
@@ -26681,10 +26658,9 @@ const basePresets: CharacterPreset[] = [
                 ignoreConsecutiveRaceWarning: false,
                 daysToRunExtraRaces: 5,
                 disableRaceRetries: false,
-                // The Kashiwa sash needs a WIN, not the 3rd place the objective accepts, and the bot
-                // does not retry a goal it passed, so the win has to come from the build. A lost goal
-                // race uses the career's retries; Carat spending stays governed by the user's global
-                // alarmClockPolicy, which is a separate system from the queue's TP restoration.
+                // The Kashiwa sash needs a WIN, not the 3rd the objective accepts, and the bot does not retry a passed goal, so
+                // the win has to come from the build. A lost goal race uses the career's retries; Carat spending stays under
+                // the global alarmClockPolicy.
                 enableFreeRaceRetry: true,
                 enableCompleteCareerOnFailure: true,
                 enableStopOnMandatoryRaces: false,
@@ -26734,17 +26710,14 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "dirt",
                 plans: {
-                    // Compact and Dirt/Mile/Pace-only. Of the three otherwise-ideal picks her Potential tree
-                    // gates, it plans Chance of Victory (Lv3), bought once they are unlocked or offered by a
-                    // support card. Strong Steps (Lv5) is held out: it chains from her own Solid Steps, and while
-                    // locked the buyer would treat it as an upgrade of that row. Collaborative Graded Races o
-                    // (Lv4) is not planned.
+                    // Compact and Dirt/Mile/Pace-only. Plans Chance of Victory (Lv3) from her Potential tree; Strong Steps
+                    // (Lv5) is held out because it chains from her own Solid Steps and, while locked, the buyer treats it as an
+                    // upgrade of that row. Collaborative Graded Races o (Lv4) is not planned.
                     //
-                    // Deliberately NOT built to hit any fixed green count: the only scaling term in her unique
-                    // (Luck Runs My Way, 100981) that this repo can see is `phase_laterhalf_random==1`, so the
-                    // external "six greens for full effect" claim is unsupported here and is not encoded as an
-                    // invariant. Greens are in because each is individually useful on a Dirt Mile Pace Chaser:
-                    // Standard Distance covers 1600m and Muddy/Wet cover an off-condition Kashiwa.
+                    // Not built to a fixed green count: the only scaling term in her unique (Luck Runs My Way, 100981) visible
+                    // here is `phase_laterhalf_random==1`, so the external "six greens" claim is unsupported. Greens are in
+                    // because each is useful on a Dirt Mile Pace Chaser: Standard Distance covers 1600m, Muddy/Wet cover an
+                    // off-condition Kashiwa.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -33352,11 +33325,10 @@ const basePresets: CharacterPreset[] = [
                 dialogWaitDelay: 0.5,
             },
             racing: {
-                // Turf A / Dirt A with Mile A / Medium A. The turn 47-60 "top-3 in a G1 x3"
-                // objective is unscheduled by the game, so the plan below pins five
-                // aptitude-matched G1s inside the window. Farming stays ON because the
-                // non-mandatory plan path only runs when fan farming is enabled;
-                // minFansThreshold 0 keeps it from over-racing outside the plan.
+                // Turf A / Dirt A with Mile A / Medium A. The turn 47-60 "top-3 in a G1 x3" objective is unscheduled by the
+                // game, so the plan pins five aptitude-matched G1s inside the window. Farming stays ON because the
+                // non-mandatory plan path only runs with fan farming; minFansThreshold 0 keeps it from over-racing outside the
+                // plan.
                 enableFarmingFans: true,
                 ignoreConsecutiveRaceWarning: false,
                 daysToRunExtraRaces: 5,
@@ -33370,10 +33342,8 @@ const basePresets: CharacterPreset[] = [
                 skipSummerTrainingForAgenda: false,
                 selectedUserAgenda: "Agenda 1",
                 customAgendaTitle: "",
-                // Non-mandatory: bias the pick toward these without locking out organically
-                // better races. Champions Cup / February Stakes ride Dirt A + Mile A; Osaka
-                // Hai / Victoria Mile / Yasuda Kinen ride Turf A + Medium/Mile A. Five
-                // candidates for a three-race goal leaves margin for missed placements.
+                // Non-mandatory: bias the pick toward these without locking out better races. Five candidates for a three-race
+                // goal leave margin for missed placements.
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: false,
                 racingPlan: JSON.stringify([
@@ -33384,8 +33354,7 @@ const basePresets: CharacterPreset[] = [
                     { raceName: "Yasuda Kinen", date: "Senior Class June, First Half", priority: 5, turnNumber: 59 },
                 ]),
                 minFansThreshold: 0,
-                // "Any", not "Turf": the terrain preference is a hard filter and two of the
-                // planned window G1s are dirt. Both surfaces are A for her.
+                // "Any", not "Turf": the terrain preference is a hard filter and two of the planned window G1s are dirt.
                 preferredTerrain: "Any",
                 preferredGrades: ["G1", "G2", "G3", "OP", "Pre-OP"],
                 // Mile primary, Medium secondary; Sprint F / Long G are dead ends.
@@ -33405,13 +33374,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Late Surger Mile build on a dual-surface body. Golds first: Superstan
-                    // (201592, velocity in traffic - her event chain hands the hint), Fast &
-                    // Furious (200591), On Your Left! (200601), Lead the Charge! (201681,
-                    // dirt leg), Swinging Maestro (200351, generic recovery), Professor of
-                    // Curvature (200331). Then Updrafters (200702) + Slipstream (201651) from
-                    // her research kit, LS/Mile passives, and the white fallbacks of the
-                    // position golds (200602, 201682) for the knapsack chains.
+                    // Late Surger Mile build on a dual-surface body: golds first, then her research kit and the white fallbacks
+                    // of the position golds (200602, 201682) for the knapsack chains.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -33486,10 +33450,8 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Tuned to Speed > Power > Wit: take Power/Speed sides, keep the energy
-                // trades, and grab the quiz hints that feed her plan (Mile Corners, Kyoto
-                // Racecourse for the Mile Championship venue). Event keys exist in
-                // characters.json under "Agnes Digital".
+                // Tuned to Speed > Power > Wit: take Power/Speed sides, keep the energy trades, and grab the quiz hints that
+                // feed her plan (Mile Corners, Kyoto Racecourse).
                 characterEventOverrides: {
                     "Agnes Digital|Teach Us Your Ways, Digital!": 1,
                     "Agnes Digital|I \"Simp\"ly Wanna Help...": 0,
@@ -33530,9 +33492,8 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                // Speed > Power > Wit > Stamina > Guts per the build research. Growth is
-                // flat-ish (Spd+8/Sta+8/Pow+7/Wit+7), so the ranking follows race needs:
-                // Mile/Medium G1s want Speed/Power, Stamina only needs the 2000m floor.
+                // Speed > Power > Wit > Stamina > Guts per the build research. Growth is flat-ish (Spd+8/Sta+8/Pow+7/Wit+7), so
+                // the ranking follows race needs; Stamina only needs the 2000m floor.
                 statPrioritization: ["Speed", "Power", "Wit", "Stamina", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
@@ -33548,9 +33509,8 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Trackblazer Mile/Medium dual-surface build: Speed 1200, Power 1000, Wit 800,
-            // Stamina 700, Guts 500 per the research targets. Stamina 700 covers the 2000m
-            // ceiling of her pool (Japan Dirt Derby, Tenno Sho Autumn).
+            // Trackblazer Mile/Medium dual-surface build; Stamina 700 covers the 2000m ceiling of her pool (Japan Dirt Derby,
+            // Tenno Sho Autumn).
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1200,
                 trainingSprintStatTarget_staminaStatTarget: 700,
@@ -33581,8 +33541,7 @@ const basePresets: CharacterPreset[] = [
                 trackblazerWhistleForcesTraining: true,
                 trackblazerEnableIrregularTraining: false,
                 trackblazerIrregularTrainingMinStatGain: 20,
-                // Guts is last in her build, so skip the Guts items alongside the standard
-                // Climax energy-item reservation.
+                // Guts is last in her build, so its items are skipped.
                 trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone", "Guts Scroll", "Guts Manual"],
                 trackblazerShopCheckFrequency: 1,
             },
@@ -33603,11 +33562,8 @@ const basePresets: CharacterPreset[] = [
                 dialogWaitDelay: 0.5,
             },
             racing: {
-                // The turn 47-60 "top-3 in a G1 x3" window goal is unscheduled, so the plan
-                // pins five aptitude-matched G1s inside it. This is the scenario where the
-                // window is tightest (Unity Cup race slots compete for the same turns) -
-                // hence the yellow advisory. Farming ON because the non-mandatory plan path
-                // only runs when fan farming is enabled; minFansThreshold 0 avoids
+                // The turn 47-60 "top-3 in a G1 x3" window is tightest here (Unity Cup race slots compete for the same turns),
+                // hence the yellow advisory. Farming ON because the non-mandatory plan path needs it; minFansThreshold 0 avoids
                 // over-racing outside the plan.
                 enableFarmingFans: true,
                 ignoreConsecutiveRaceWarning: false,
@@ -33778,8 +33734,7 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Unity Cup Mile/Medium build: Speed 1200, Power 950, Wit 750, Stamina 650,
-            // Guts 450 - the Trackblazer targets trimmed to a no-item-shop ceiling.
+            // Unity Cup Mile/Medium build: the Trackblazer targets trimmed to a no-item-shop ceiling.
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1200,
                 trainingSprintStatTarget_staminaStatTarget: 650,
@@ -33819,10 +33774,9 @@ const basePresets: CharacterPreset[] = [
                 dialogWaitDelay: 0.5,
             },
             racing: {
-                // The turn 47-60 "top-3 in a G1 x3" window goal is unscheduled, so the plan
-                // pins five aptitude-matched G1s inside it. Farming ON because the
-                // non-mandatory plan path only runs when fan farming is enabled;
-                // minFansThreshold 0 avoids over-racing outside the plan.
+                // The turn 47-60 "top-3 in a G1 x3" window goal is unscheduled, so the plan pins five aptitude-matched G1s
+                // inside it. Farming ON because the non-mandatory plan path needs it; minFansThreshold 0 avoids over-racing
+                // outside the plan.
                 enableFarmingFans: true,
                 ignoreConsecutiveRaceWarning: false,
                 daysToRunExtraRaces: 5,
@@ -45878,15 +45832,12 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Grass Wonder (Saintly Jade Cleric)",
-        // Saintly Jade Cleric alt (EN 2025-09-21): same aptitude grid and same 8-goal
-        // objective chain as the base card (both read in-game 2026-07-17), so the proven
-        // base racing config carries over. The diffs are the body and the kit: growth is
-        // Stamina/Wit +15%, and the kit is recovery-rich - unique Superior Heal, innate
-        // Deep Breaths / A Small Breather / Pace Strategy, awakening Trick (Front) (Lv2)
-        // and gold Cooldown (Lv3). Her Potential Lv4 Late Surger Savvy ○ and Lv5 Relax
-        // (201542, 201421) are not planned. Plans swap the base card's Be Still line (no hint
-        // discount on this outfit) for her own Long chain (200742 Deep Breaths -> 200741
-        // Cooldown) plus 201422 A Small Breather, and promote Stamina over Power.
+        // Saintly Jade Cleric alt: same aptitude grid and 8-goal objective chain as the base card, so the proven base racing
+        // config carries over. Growth is Stamina/Wit +15% and the kit is recovery-rich (unique Superior Heal, innate Deep
+        // Breaths / A Small Breather / Pace Strategy, awakening Trick (Front) (Lv2), gold Cooldown (Lv3)). Her Potential Lv4
+        // Late Surger Savvy ○ and Lv5 Relax (201542, 201421) are not planned. Plans swap the base card's Be Still line (no hint
+        // discount on this outfit) for her own Long chain (200742 Deep Breaths -> 200741 Cooldown) plus 201422 A Small
+        // Breather, and promote Stamina over Power.
         scenario: "URA Finale",
         settings: {
             general: {
@@ -46509,12 +46460,10 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Wonder Acute (Butterfly Sting), EN 2026-09-24, card 110001. Grid and growth read from the
-    // game's master data, cross-checked on GameTora: Turf G / Dirt A | Sprint D / Mile A / Medium A /
-    // Long E | Front C / Pace A / Late C / End E. Growth Guts +15% / Wit +15%. A Dirt Pace Chaser
-    // in the Copano Rickey mold. Goal chain: debut t12, 5000 fans by t30, then dirt goals at
-    // t37/42/48/51/57/60/69/71/72, with Kashiwa Kinen (t57, Mile) and the Senior Tokyo Daishoten
-    // (t72) needing a win. Unique Never Say Never adds a surge near the lead on dirt.
+    // Wonder Acute (Butterfly Sting), card 110001. Grid and growth from master data, cross-checked on GameTora: Turf G / Dirt A
+    // | Sprint D / Mile A / Medium A / Long E | Front C / Pace A / Late C / End E. Growth Guts +15% / Wit +15%. A Dirt Pace
+    // Chaser: 5000 fans are due by t30, and Kashiwa Kinen (t57, Mile) and the Senior Tokyo Daishoten (t72) need a win. Unique
+    // Never Say Never adds a surge near the lead on dirt.
     {
         name: "Wonder Acute",
         scenario: "URA Finale",
@@ -46543,13 +46492,11 @@ const basePresets: CharacterPreset[] = [
                 skipSummerTrainingForAgenda: false,
                 selectedUserAgenda: "Agenda 1",
                 customAgendaTitle: "",
-                // Curated dirt agenda (mandatory mode). Nothing in her chain races between the t12 debut
-                // and the t37 Japan Dirt Derby, but the t30 goal asks for 5000 fans, so the plan banks
-                // them with two Junior dirt Mile Pre-OPs, the Junior dirt G1 and the Hyacinth Stakes
-                // (8100 fans if all four are won), then fills the Classic gap with JBC Classic. Senior is
-                // left to the goal chain so she reaches Kashiwa rested. No entry sits on or next to a goal
-                // turn. The plan has to bank the t30 fans itself: the fan emergency only admits B+
-                // aptitude races, and before t30 the only such dirt races are the ones planned here.
+                // Curated dirt agenda (mandatory mode). The t30 goal asks for 5000 fans but nothing in her chain races between
+                // the t12 debut and the t37 Japan Dirt Derby, so the plan banks them with two Junior dirt Mile Pre-OPs, the
+                // Junior dirt G1 and the Hyacinth Stakes, then fills the Classic gap with JBC Classic. Senior is left to the
+                // goal chain so she reaches Kashiwa rested. The fan emergency only admits B+ aptitude races, and before t30 the
+                // only such dirt races are the planned ones.
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: true,
                 racingPlan: JSON.stringify([
@@ -46578,12 +46525,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "dirt",
                 plans: {
-                    // Dirt / Mile / Pace Chaser plan: her own Down in the Dirt ○, Pace Chaser Savvy ○ and
-                    // Unyielding Spirit, plus dirt, Mile and Pace greens and golds (Got the Spirit! and Head-On
-                    // per the Game8 build) and two recoveries (Corner Recovery ○, Hydrate) for the 2000-2100m dirt
-                    // goals. Of her Potential tree (Mile Straightaways ○ (Lv2), Big-Sisterly (Lv3), Solid Steps
-                    // (Lv4) and Dancer in the Dirt (Lv5)), it plans Mile Straightaways ○, Big-Sisterly and Dancer
-                    // in the Dirt, bought once they are unlocked or offered by a support card.
+                    // Dirt / Mile / Pace Chaser plan with two recoveries (Corner Recovery ○, Hydrate) for the 2000-2100m dirt
+                    // goals. Potential-gated skills planned: Mile Straightaways ○, Big-Sisterly, Dancer in the Dirt.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -46658,8 +46601,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched
-                // yet, so the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -46687,9 +46628,8 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Mile is the must-win distance (Kashiwa Kinen 1600m) and Medium mirrors it with more
-            // Stamina for the 2000-2100m dirt goals. Speed and Power lead, per the Game8 build (Stamina
-            // 600, Guts 500); Guts and Wit ride her +15% growth.
+            // Mile is the must-win distance (Kashiwa Kinen 1600m); Medium mirrors it with more Stamina for the 2000-2100m dirt
+            // goals. Speed and Power lead per the Game8 build; Guts and Wit ride her +15% growth.
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1200,
                 trainingSprintStatTarget_staminaStatTarget: 450,
@@ -46716,7 +46656,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Wonder Acute",
-        // Dirt Pace Chaser: see the URA entry above for the grid, goal chain and kit.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -46839,8 +46778,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched
-                // yet, so the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -46894,7 +46831,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Wonder Acute",
-        // Dirt Pace Chaser: see the URA entry above for the grid, goal chain and kit.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -47017,8 +46953,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched
-                // yet, so the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -47081,13 +47015,11 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Nakayama Festa (Desperate Measures), EN 2026-09-15, card 104901. Grid and growth read from
-    // the game's master data, cross-checked on GameTora: Turf A / Dirt G | Sprint G / Mile C /
-    // Medium A / Long B | Front G / Pace A / Late A / End D. Growth Speed / Stamina / Power +10%.
-    // Built as a Late Surger Medium (her card default and the Game8 build) in the Mejiro Ryan mold.
-    // Goal chain: debut t12, top 5 in Keisei Hai, Satsuki Sho and the Derby, top 3 in the 3000m
-    // Kikuka Sho (t44), then wins in Chunichi Shimbun Hai (t47), Takarazuka Kinen (t60) and Japan
-    // Cup (t70). Unique Laugh at the Odds fires in the last 400m after a pass attempt.
+    // Nakayama Festa (Desperate Measures), card 104901. Grid and growth from master data, cross-checked on GameTora: Turf A /
+    // Dirt G | Sprint G / Mile C / Medium A / Long B | Front G / Pace A / Late A / End D. Growth Speed / Stamina / Power +10%.
+    // A Late Surger Medium (her card default and the Game8 build). Kikuka Sho (3000m, t44) needs top 3; Chunichi Shimbun Hai
+    // (t47), Takarazuka Kinen (t60) and Japan Cup (t70) need wins. Unique Laugh at the Odds fires in the last 400m after a pass
+    // attempt.
     {
         name: "Nakayama Festa",
         scenario: "URA Finale",
@@ -47116,8 +47048,8 @@ const basePresets: CharacterPreset[] = [
                 skipSummerTrainingForAgenda: false,
                 selectedUserAgenda: "Agenda 1",
                 customAgendaTitle: "",
-                // Smart racing with fan farming, like Mejiro Ryan's URA build: her chain is sparse in Junior
-                // and early Senior, and a mandatory plan would race only on planned turns.
+                // Smart racing with fan farming: her chain is sparse in Junior and early Senior, and a mandatory plan would
+                // race only on planned turns.
                 enableRacingPlan: false,
                 enableMandatoryRacingPlan: false,
                 racingPlan: "",
@@ -47140,15 +47072,11 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Late Surger / Medium plan in the Mejiro Ryan mold. She has no recovery in her kit, so the
-                    // plan carries Be Still (hinted by her own event The Gold Beyond the Ship, with Nimble
-                    // Navigator), A Small Breather and the Corner Recovery line. Her own All I've Got and
-                    // Risk-Taker are in; Risky Business is left out because its fatigue spike can cost the wins
-                    // her Senior goals demand. Of her Potential tree (Late Surger Straightaways ○ (Lv2), Nothing
-                    // Ventured (Lv3), Medium Straightaways ○ (Lv4) and Risk-Maker (Lv5)), it plans Late Surger
-                    // Straightaways ○ and Medium Straightaways ○, bought once they are unlocked or offered by a
-                    // support card. Risk-Maker is held out: it chains from her own Risk-Taker, and while locked
-                    // the buyer would treat it as an upgrade of that row.
+                    // Late Surger / Medium plan. No recovery in her kit, so it carries Be Still (hinted by her event The Gold
+                    // Beyond the Ship), A Small Breather and the Corner Recovery line. Risky Business is left out because its
+                    // fatigue spike can cost the wins her Senior goals demand. Potential-gated skills planned: Late Surger
+                    // Straightaways ○ and Medium Straightaways ○. Risk-Maker (Lv5) is held out: it chains from her own
+                    // Risk-Taker and, while locked, the buyer treats it as an upgrade of that row.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -47223,7 +47151,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // No per-event picks researched yet; the bot's option heuristics handle her events.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -47251,8 +47178,7 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Stamina sits above Ryan's for the 3000m Kikuka Sho and the 2400m Japan Cup win; Speed,
-            // Stamina and Power all grow +10%, so Wit and Guts stay modest.
+            // Stamina sits above Ryan's for the 3000m Kikuka Sho and the 2400m Japan Cup win.
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1100,
                 trainingSprintStatTarget_staminaStatTarget: 800,
@@ -47279,7 +47205,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Nakayama Festa",
-        // Late Surger Medium: see the URA entry above for the grid, goal chain and kit.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -47402,7 +47327,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // No per-event picks researched yet; the bot's option heuristics handle her events.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -47456,7 +47380,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Nakayama Festa",
-        // Late Surger Medium: see the URA entry above for the grid, goal chain and kit.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -47579,7 +47502,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // No per-event picks researched yet; the bot's option heuristics handle her events.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -47642,13 +47564,10 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Aston Machan (Flare), EN 2026-08-25, card 108701. Grid and growth read from the game's master data, grid
-    // cross-checked on GameTora and Game8: Turf A / Dirt G | Sprint A / Mile B / Medium G / Long G | Front A /
-    // Pace A / Late G / End G. Growth Speed +20% / Guts +10%. A Front Runner sprinter (Game8's build) in the
-    // Sakura Bakushin O mold, whose grid she shares. Goal chain: debut t12, Fantasy Stakes t21, Hanshin Juvenile
-    // Fillies t23, Fillies' Revue t29, Oka Sho t31, Sprinters Stakes t42 and t66, Takamatsunomiya Kinen t54; no
-    // fan goal. Seven goals is dense enough for smart racing. Unique Silent Letter pushes out of the pack when
-    // pressed toward the front in the last 400m.
+    // Aston Machan (Flare), card 108701. Grid and growth from master data, grid cross-checked on GameTora and Game8: Turf A /
+    // Dirt G | Sprint A / Mile B / Medium G / Long G | Front A / Pace A / Late G / End G. Growth Speed +20% / Guts +10%. A
+    // Front Runner sprinter (Game8's build) with Sakura Bakushin O's grid. No fan goal, and seven goals is dense enough for
+    // smart racing. Unique Silent Letter pushes out of the pack when pressed toward the front in the last 400m.
     {
         name: "Aston Machan",
         scenario: "URA Finale",
@@ -47699,12 +47618,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "sprint",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Front Runner / Sprint plan: her own Light as a Feather, Early Lead and Wet Conditions ○, the
-                    // Game8 core picks she can learn (Front Runner Savvy ○, See Ya Later!, Second Wind, Sprinting
-                    // Gear, Focus, Professor of Curvature), and Front Runner and Sprint golds. Of her Potential
-                    // tree (Sprint Corners ○ (Lv2), Taking the Lead (Lv3), Groundwork (Lv4) and In High Spirits
-                    // (Lv5)), it plans Sprint Corners ○, Taking the Lead and In High Spirits, bought once they are
-                    // unlocked or offered by a support card.
+                    // Front Runner / Sprint plan. Potential-gated skills planned: Sprint Corners ○, Taking the Lead, In High
+                    // Spirits.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -47779,8 +47694,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -47835,7 +47748,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Aston Machan",
-        // Front Runner sprinter: see the URA entry above for the grid, goal chain and kit.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -47958,8 +47870,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -48013,7 +47923,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Aston Machan",
-        // Front Runner sprinter: see the URA entry above for the grid, goal chain and kit.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -48136,8 +48045,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 // Front Runner hints taken; Prepared to Pass is a Pace Chaser skill, so its event takes the stats.
@@ -48209,13 +48116,10 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Kawakami Princess (Princess of Pink), EN 2025-12-01, card 103901. Grid and growth read from the game's
-    // master data, grid cross-checked on GameTora and Game8: Turf A / Dirt G | Sprint D / Mile B / Medium A / Long
-    // F | Front G / Pace C / Late A / End D. Growth Power +10% / Guts +20%. A Late Surger Medium (Game8's build)
-    // in the Nakayama Festa mold. Goal chain: debut t12, 7000 fans by t31, then Japanese Oaks t34, Shuka Sho t44,
-    // Queen Elizabeth II Cup t45 and t69, Kinko Sho t53, Victoria Mile t57 and Takarazuka Kinen t60. Unique A
-    // Princess Must Seize Victory! adds velocity when challenging on the final straight; Game8 notes it is hard to
-    // trigger.
+    // Kawakami Princess (Princess of Pink), card 103901. Grid and growth from master data, grid cross-checked on GameTora and
+    // Game8: Turf A / Dirt G | Sprint D / Mile B / Medium A / Long F | Front G / Pace C / Late A / End D. Growth Power +10% /
+    // Guts +20%. A Late Surger Medium (Game8's build); 7000 fans are due by t31. Unique A Princess Must Seize Victory! adds
+    // velocity when challenging on the final straight; Game8 notes it is hard to trigger.
     {
         name: "Kawakami Princess",
         scenario: "URA Finale",
@@ -48244,10 +48148,9 @@ const basePresets: CharacterPreset[] = [
                 skipSummerTrainingForAgenda: false,
                 selectedUserAgenda: "Agenda 1",
                 customAgendaTitle: "",
-                // Curated agenda (mandatory mode) for the t31 7000-fan goal: nothing in her chain races between
-                // the t12 debut and the t34 Oaks, so the plan banks the fans on Junior and early Classic
-                // Mile/Medium turf races (19000 fans if all four are won). No entry sits on or next to a goal
-                // turn, and everything after the fan deadline is left to her dense goal chain.
+                // Curated agenda (mandatory mode) for the t31 7000-fan goal: nothing in her chain races between the t12 debut
+                // and the t34 Oaks, so the plan banks the fans on Junior and early Classic Mile/Medium turf races. Everything
+                // after the fan deadline is left to her dense goal chain.
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: true,
                 racingPlan: JSON.stringify([
@@ -48275,14 +48178,9 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Late Surger / Medium plan: her own Outer Swell, Nimble Navigator and Unyielding Spirit, the
-                    // Game8 core picks she can learn (On Your Left!, Position Pilfer, Ramp Up, Medium
-                    // Straightaways ○, Professor of Curvature), and Late Surger and Medium golds. Her kit has no
-                    // recovery, so the plan carries Corner Recovery ○ / Swinging Maestro, Be Still and A Small
-                    // Breather for the 2200-2400m goals. Of her Potential tree (Late Surger Straightaways ○ (Lv2),
-                    // No Stopping Me! (Lv3), Standard Distance ○ (Lv4) and Rising Dragon (Lv5)), it plans Late
-                    // Surger Straightaways ○ and No Stopping Me!, bought once they are unlocked or offered by a
-                    // support card.
+                    // Late Surger / Medium plan. Her kit has no recovery, so it carries Corner Recovery ○ / Swinging Maestro,
+                    // Be Still and A Small Breather for the 2200-2400m goals. Potential-gated skills planned: Late Surger
+                    // Straightaways ○, No Stopping Me!.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -48357,8 +48255,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -48386,8 +48282,7 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Nakayama Festa's targets with Power and Wit raised toward the Game8 build (Stamina 800, Power 1000,
-            // Wit 1000+).
+            // Nakayama Festa's targets with Power and Wit raised toward the Game8 build (Stamina 800, Power 1000, Wit 1000+).
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1100,
                 trainingSprintStatTarget_staminaStatTarget: 800,
@@ -48414,7 +48309,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Kawakami Princess",
-        // Late Surger Medium: see the URA entry above for the grid, goal chain and kit.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -48537,8 +48431,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -48593,7 +48485,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Kawakami Princess",
-        // Late Surger Medium: see the URA entry above for the grid, goal chain and kit.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -48716,12 +48607,9 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
-                // The Front Runner and Pace Chaser hints are dead for a Late Surger, so those events take the
-                // stats.
+                // The Front Runner and Pace Chaser hints are dead for a Late Surger, so those events take the stats.
                 scenarioEventOverrides: {
                     "Trackblazer|The Inescapable Ardan": 0,
                     "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
@@ -48790,13 +48678,10 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Seeking the Pearl (Rocket☆Star), EN 2026-08-12, card 104201. Grid and growth read from the game's master
-    // data, grid cross-checked on GameTora and Game8: Turf A / Dirt F | Sprint A / Mile A / Medium E / Long G |
-    // Front C / Pace A / Late A / End B. Growth Speed +10% / Wit +20%. A Pace Chaser miler (Game8's build) in the
-    // Taiki Shuttle mold; her grid matches Nishino Flower's, but her chain is Mile-first. Goal chain: debut t12,
-    // Daily Hai Junior Stakes t21, Hanshin Juvenile Fillies t23, Oka Sho t31, NHK Mile Cup t33, Rose Stakes t41,
-    // Mile Championship t46 and t70, Takamatsunomiya Kinen t54, Yasuda Kinen t59, Sprinters Stakes t66; no fan
-    // goal. Unique I'm Possible! adds velocity from 2nd or later near the lead in the last 200m.
+    // Seeking the Pearl (Rocket☆Star), card 104201. Grid and growth from master data, grid cross-checked on GameTora and Game8:
+    // Turf A / Dirt F | Sprint A / Mile A / Medium E / Long G | Front C / Pace A / Late A / End B. Growth Speed +10% / Wit
+    // +20%. A Pace Chaser miler (Game8's build) with Taiki Shuttle's shape; her grid matches Nishino Flower's but her chain is
+    // Mile-first. No fan goal. Unique I'm Possible! adds velocity from 2nd or later near the lead in the last 200m.
     {
         name: "Seeking the Pearl",
         scenario: "URA Finale",
@@ -48847,12 +48732,7 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Pace Chaser / Mile plan: her own Unyielding Spirit, Sprint Straightaways ○ and Firm
-                    // Conditions ○, the Game8 core picks she can learn (Mile Corners ○, Mile Straightaways ○, Pace
-                    // Chaser Corners ○, Homestretch Haste), and Pace Chaser, Mile and Sprint golds. Of her
-                    // Potential tree (Light as a Feather (Lv2), Shocking Flash (Lv3), Head-On (Lv4) and
-                    // Big-Sisterly (Lv5)), it plans Big-Sisterly, bought once they are unlocked or offered by a
-                    // support card.
+                    // Pace Chaser / Mile plan. Potential-gated skills planned: Big-Sisterly.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -48927,8 +48807,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -48956,8 +48834,7 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Taiki Shuttle's targets with Mile Stamina, Guts and Wit raised toward the Game8 build (Stamina 700,
-            // Wit 1000).
+            // Taiki Shuttle's targets with Mile Stamina, Guts and Wit raised toward the Game8 build (Stamina 700, Wit 1000).
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1200,
                 trainingSprintStatTarget_staminaStatTarget: 400,
@@ -48984,7 +48861,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Seeking the Pearl",
-        // Pace Chaser miler: see the URA entry above for the grid, goal chain and kit.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -49107,8 +48983,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -49162,7 +49036,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Seeking the Pearl",
-        // Pace Chaser miler: see the URA entry above for the grid, goal chain and kit.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -49285,12 +49158,9 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
-                // Prepared to Pass hint taken; the Front Runner hints are dead for a Pace Chaser, so those events
-                // take the stats.
+                // Prepared to Pass hint taken; Front Runner hints are dead for a Pace Chaser, so those events take the stats.
                 scenarioEventOverrides: {
                     "Trackblazer|The Inescapable Ardan": 0,
                     "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
@@ -49359,14 +49229,12 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // T.M. Opera O (O Sole Suo!), EN 2025-06-26, card 101501. Grid and growth read from the game's master data,
-    // grid cross-checked on GameTora and Game8: Turf A / Dirt E | Sprint G / Mile E / Medium A / Long A | Front C
-    // / Pace A / Late A / End G, the same grid and goal route as her New Year outfit above. Growth Stamina +20% /
-    // Wit +10%, so Speed and Power get no growth help. Built as a Medium Pace Chaser like the New Year outfit:
-    // Game8 lists Long first with Medium viable, but four of her seven goals are Medium and the Stamina targets
-    // cover the Long ones. Goal chain: debut t12, 5000 fans by t28, Satsuki Sho t31, Derby t34, Arima Kinen t48
-    // and t72, Tenno Sho (Spring) t56, Takarazuka Kinen t60, Japan Cup t70. Unique This Dance Is for Vittoria!
-    // adds velocity near the front and close to a rival from the final corner on.
+    // T.M. Opera O (O Sole Suo!), card 101501. Grid and growth from master data, grid cross-checked on GameTora and Game8: Turf
+    // A / Dirt E | Sprint G / Mile E / Medium A / Long A | Front C / Pace A / Late A / End G; same grid and goal route as her
+    // New Year outfit above. Growth Stamina +20% / Wit +10%, so Speed and Power get no growth help. Built as a Medium Pace
+    // Chaser like the New Year outfit: Game8 lists Long first with Medium viable, but four of her seven goals are Medium and
+    // the Stamina targets cover the Long ones. 5000 fans are due by t28. Unique This Dance Is for Vittoria! adds velocity near
+    // the front and close to a rival from the final corner on.
     {
         name: "T.M. Opera O (O Sole Suo!)",
         scenario: "URA Finale",
@@ -49395,9 +49263,8 @@ const basePresets: CharacterPreset[] = [
                 skipSummerTrainingForAgenda: false,
                 selectedUserAgenda: "Agenda 1",
                 customAgendaTitle: "",
-                // Medium fan build toward the t28 5000-fan goal (12300 fans if all three are won), with farming on
-                // as in her New Year preset. Wakagoma Stakes stands in for Keisei Hai so the plan has no
-                // back-to-back pair. No entry sits on or next to a goal turn.
+                // Medium fan build toward the t28 5000-fan goal, with farming on as in her New Year preset. Wakagoma Stakes
+                // stands in for Keisei Hai so the plan has no back-to-back pair.
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: true,
                 racingPlan: JSON.stringify([
@@ -49424,12 +49291,9 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Pace Chaser / Medium plan with the Long greens for the 2500m and 3200m goals: her own
-                    // Prepared to Pass, Up-Tempo and Non-Standard Distance ○, and the Game8 core picks she can
-                    // learn (My True Strength, Long Corners ○, Pace Chaser Corners ○, Gourmand, Swinging Maestro).
-                    // Her kit has no recovery, so the plan carries Corner Recovery ○ / Swinging Maestro,
-                    // Straightaway Recovery and Hydrate / Gourmand. Her tree gates Straightaway Adept (Lv2), Speed
-                    // Star (Lv3), Stamina to Spare (Lv4) and Killer Tunes (Lv5); none of them is planned.
+                    // Pace Chaser / Medium plan with the Long greens for the 2500m and 3200m goals. Her kit has no recovery, so
+                    // it carries Corner Recovery ○ / Swinging Maestro, Straightaway Recovery and Hydrate / Gourmand. None of
+                    // her Potential tree is planned.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -49504,8 +49368,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -49533,8 +49395,8 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Her New Year outfit's targets with Power and Wit raised toward the Game8 build (Stamina 1000, Power
-            // 1000, Wit 800+); Stamina 900 covers the 2500m Arima and 3200m Tenno Sho (Spring) goals.
+            // Her New Year outfit's targets with Power and Wit raised toward the Game8 build; Stamina 900 covers the 2500m
+            // Arima and 3200m Tenno Sho (Spring) goals.
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1000,
                 trainingSprintStatTarget_staminaStatTarget: 900,
@@ -49561,7 +49423,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "T.M. Opera O (O Sole Suo!)",
-        // Medium/Long Pace Chaser: see the URA entry above for the grid, goal chain and kit.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -49684,8 +49545,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -49739,7 +49598,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "T.M. Opera O (O Sole Suo!)",
-        // Medium/Long Pace Chaser: see the URA entry above for the grid, goal chain and kit.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -49862,12 +49720,9 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
-                // Prepared to Pass hint taken; the Front Runner hints are dead for a Pace Chaser, so those events
-                // take the stats.
+                // Prepared to Pass hint taken; Front Runner hints are dead for a Pace Chaser, so those events take the stats.
                 scenarioEventOverrides: {
                     "Trackblazer|The Inescapable Ardan": 0,
                     "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
@@ -49936,13 +49791,11 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Yamanin Zephyr (Fluttertail Spirit), EN 2026-09-01, card 107801. Grid and growth read from the game's master
-    // data, grid cross-checked on GameTora and Game8: Turf A / Dirt D | Sprint B / Mile A / Medium A / Long G |
-    // Front E / Pace A / Late C / End G. Growth Speed / Guts / Wit +10%. A Pace Chaser miler (Game8's build) in
-    // the Taiki Shuttle mold. Goal chain: debut t12, New Zealand Trophy t31, Aoi Stakes t34, Sprinters Stakes t42
-    // and t66, Mile Championship t46, Yasuda Kinen t59, Tenno Sho (Autumn) t68; no fan goal. Junior has no goal
-    // after the debut, so smart racing (not a mandatory plan) fills it. Unique Sunny Breeze adds acceleration late
-    // in the final corner after biding time early.
+    // Yamanin Zephyr (Fluttertail Spirit), card 107801. Grid and growth from master data, grid cross-checked on GameTora and
+    // Game8: Turf A / Dirt D | Sprint B / Mile A / Medium A / Long G | Front E / Pace A / Late C / End G. Growth Speed / Guts /
+    // Wit +10%. A Pace Chaser miler (Game8's build) with Taiki Shuttle's shape. No fan goal, and Junior has no goal after the
+    // debut, so smart racing (not a mandatory plan) fills it. Unique Sunny Breeze adds acceleration late in the final corner
+    // after biding time early.
     {
         name: "Yamanin Zephyr",
         scenario: "URA Finale",
@@ -49993,11 +49846,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Pace Chaser / Mile plan: her own Shifting Gears, Aspire and Long Shot ○, the Game8 core
-                    // picks she can learn (Pace Chaser Corners ○, Head-On), and Pace Chaser, Mile and Sprint
-                    // greens and golds. Of her Potential tree (Mile Corners ○ (Lv2), Changing Gears (Lv3), Corner
-                    // Acceleration ○ (Lv4) and Ambitious Breeze (Lv5)), it plans Mile Corners ○, Changing Gears
-                    // and Ambitious Breeze, bought once they are unlocked or offered by a support card.
+                    // Pace Chaser / Mile plan. Potential-gated skills planned: Mile Corners ○, Changing Gears, Ambitious
+                    // Breeze.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -50072,8 +49922,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -50101,8 +49949,8 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Taiki Shuttle's targets with the Game8 build's Mile Stamina 600 (for the 2000m Tenno Sho (Autumn)
-            // goal), Guts and Wit.
+            // Taiki Shuttle's targets with the Game8 build's Mile Stamina 600 (for the 2000m Tenno Sho (Autumn) goal), Guts and
+            // Wit.
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1200,
                 trainingSprintStatTarget_staminaStatTarget: 400,
@@ -50129,7 +49977,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Yamanin Zephyr",
-        // Pace Chaser miler: see the URA entry above for the grid, goal chain and kit.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -50252,8 +50099,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -50307,7 +50152,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Yamanin Zephyr",
-        // Pace Chaser miler: see the URA entry above for the grid, goal chain and kit.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -50430,12 +50274,9 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
-                // Prepared to Pass hint taken; the Front Runner hints are dead for a Pace Chaser, so those events
-                // take the stats.
+                // Prepared to Pass hint taken; Front Runner hints are dead for a Pace Chaser, so those events take the stats.
                 scenarioEventOverrides: {
                     "Trackblazer|The Inescapable Ardan": 0,
                     "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
@@ -50504,13 +50345,10 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Yukino Bijin (Darl'n Snowflake), EN 2026-08-05, card 102901. Grid and growth read from the game's master
-    // data, grid cross-checked on GameTora and Game8: Turf A / Dirt B | Sprint D / Mile A / Medium A / Long E |
-    // Front C / Pace A / Late F / End G. Growth Speed +10% / Guts +20%. A turf Pace Chaser Medium (Game8's build;
-    // it calls Medium steadier than Dirt) in the Fine Motion mold, with a similar Oka Sho, Oaks, Shuka Sho, Queen
-    // Elizabeth II Cup chain. Goal chain: debut t12, Hanshin Juvenile Fillies t23, Oka Sho t31, Japanese Oaks t34,
-    // Queen Stakes t38, Shuka Sho t44, Osaka Hai t54, Victoria Mile t57, Queen Elizabeth II Cup t69, Japan Cup
-    // t70; no fan goal. Unique Snow Bright, Snow Flight adds velocity near the lead in the last 300m.
+    // Yukino Bijin (Darl'n Snowflake), card 102901. Grid and growth from master data, grid cross-checked on GameTora and Game8:
+    // Turf A / Dirt B | Sprint D / Mile A / Medium A / Long E | Front C / Pace A / Late F / End G. Growth Speed +10% / Guts
+    // +20%. A turf Pace Chaser Medium (Game8's build; it calls Medium steadier than Dirt) with Fine Motion's shape. No fan
+    // goal. Unique Snow Bright, Snow Flight adds velocity near the lead in the last 300m.
     {
         name: "Yukino Bijin",
         scenario: "URA Finale",
@@ -50561,13 +50399,9 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Pace Chaser / Medium plan with Mile-safe golds: her own Nimble Navigator, Medium
-                    // Straightaways ○ and Straight Descent, and the Game8 core picks she can learn (Head-On,
-                    // Professor of Curvature, Come What May, Pace Chaser Straightaways ○, Swinging Maestro, Corner
-                    // Recovery ○; Game8 asks for a gold recovery). Hydrate adds a Pace recovery for the 2400m Oaks
-                    // and Japan Cup. Of her Potential tree (Snowy Days ○ (Lv2), No Stopping Me! (Lv3), Pace Chaser
-                    // Corners ○ (Lv4) and Determined Descent (Lv5)), it plans No Stopping Me! and Pace Chaser
-                    // Corners ○, bought once they are unlocked or offered by a support card.
+                    // Pace Chaser / Medium plan with Mile-safe golds (Game8 asks for a gold recovery); Hydrate adds a Pace
+                    // recovery for the 2400m Oaks and Japan Cup. Potential-gated skills planned: No Stopping Me!, Pace Chaser
+                    // Corners ○.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -50642,8 +50476,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -50671,8 +50503,7 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Fine Motion's shape with Power and Wit raised toward the Game8 build (Stamina 800, Power 1000, Wit
-            // 1000).
+            // Fine Motion's shape with Power and Wit raised toward the Game8 build (Stamina 800, Power 1000, Wit 1000).
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1100,
                 trainingSprintStatTarget_staminaStatTarget: 800,
@@ -50699,7 +50530,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Yukino Bijin",
-        // Pace Chaser Medium: see the URA entry above for the grid, goal chain and kit.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -50822,8 +50652,6 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
@@ -50877,7 +50705,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Yukino Bijin",
-        // Pace Chaser Medium: see the URA entry above for the grid, goal chain and kit.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -51000,12 +50827,9 @@ const basePresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Her character events are in the scraped event data but no per-event picks are researched yet, so
-                // the bot's option heuristics handle them, as for Copano Rickey.
                 characterEventOverrides: {},
                 supportEventOverrides: {},
-                // Prepared to Pass hint taken; the Front Runner hints are dead for a Pace Chaser, so those events
-                // take the stats.
+                // Prepared to Pass hint taken; Front Runner hints are dead for a Pace Chaser, so those events take the stats.
                 scenarioEventOverrides: {
                     "Trackblazer|The Inescapable Ardan": 0,
                     "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
@@ -51074,11 +50898,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Biwa Hayahide (Rouge Caroler), EN 2026-01-05, card 102302. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Biwa
-    // Hayahide preset, so this is that build carried over with the outfit's own kit. Card style Pace Chaser;
-    // growth Stamina +12% / Power +12% / Wit +6%; unique Presents from X. Game8 builds her as a Pace Chaser for
-    // Long (Medium also named).
+    // Biwa Hayahide (Rouge Caroler), card 102302. Same goal route and grid as the base preset (checked on GameTora/Game8). Card
+    // style Pace Chaser; growth Stamina +12% / Power +12% / Wit +6%; Game8 builds it for Long (Medium also named).
     {
         name: "Biwa Hayahide (Rouge Caroler)",
         scenario: "URA Finale",
@@ -51128,11 +50949,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The base Biwa Hayahide preset's plan with this card's own kit up to Potential Lv3 (Homestretch
-                // Haste, Passing Pro, Preferred Position, Pace Chaser Savvy ○ and VIP Pass). Of what its higher
-                // Potential levels gate (Pace Chaser Straightaways ○, In Body and Mind and Pace Chaser
-                // Straightaways ◎), it plans Pace Chaser Straightaways ○ and In Body and Mind, bought once they
-                // are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -51283,7 +51099,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Biwa Hayahide (Rouge Caroler)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -51481,7 +51296,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Biwa Hayahide (Rouge Caroler)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -51690,11 +51504,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Mihono Bourbon (CODE: ICING), EN 2026-02-18, card 102602. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Mihono
-    // Bourbon preset, so this is that build carried over with the outfit's own kit. Card style Front Runner;
-    // growth Speed +10% / Stamina +10% / Power +10%; unique Operation Cacao. Game8 builds her as a Front Runner
-    // for Medium.
+    // Mihono Bourbon (CODE: ICING), card 102602. Same goal route and grid as the base preset (checked on GameTora/Game8). Card
+    // style Front Runner; growth Speed +10% / Stamina +10% / Power +10%; Game8 builds it for Medium.
     {
         name: "Mihono Bourbon (CODE: ICING)",
         scenario: "URA Finale",
@@ -51748,10 +51559,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "front_runner",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Mihono Bourbon preset's plan with this card's own kit up to Potential Lv3 (Focus,
-                // Fast-Paced, Extra Tank, Front Runner Savvy ○ and Escape Artist). Of what its higher Potential
-                // levels gate (Groundwork and Concentration), it plans Concentration, bought once they are
-                // unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -51880,7 +51687,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Mihono Bourbon (CODE: ICING)",
-        // Front Runner Medium: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -52056,7 +51862,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Mihono Bourbon (CODE: ICING)",
-        // Front Runner Medium: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -52243,10 +52048,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Tamamo Cross (Raging Thunder), EN 2026-09-07, card 102102. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Tamamo
-    // Cross preset, so this is that build carried over with the outfit's own kit. Card style Pace Chaser; growth
-    // Speed +14% / Stamina +8% / Guts +8%; unique Lightning Flare. Game8 builds her as a Pace Chaser for Medium.
+    // Tamamo Cross (Raging Thunder), card 102102. Same goal route and grid as the base preset (checked on GameTora/Game8). Card
+    // style Pace Chaser; growth Speed +14% / Stamina +8% / Guts +8%; Game8 builds it for Medium.
     {
         name: "Tamamo Cross (Raging Thunder)",
         scenario: "URA Finale",
@@ -52305,10 +52108,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The base Tamamo Cross preset's plan with this card's own kit (Ramp Up, Up-Tempo and Head-On). Of
-                // what its higher Potential levels gate (Wet Conditions ○, Killer Tunes, Tail Held High, It's On!
-                // and Wet Conditions ◎), it plans Tail Held High and It's On!, bought once they are unlocked or
-                // offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -52437,7 +52236,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Tamamo Cross (Raging Thunder)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -52613,7 +52411,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Tamamo Cross (Raging Thunder)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -52800,10 +52597,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Inari One (Golden Dream), EN 2026-09-07, card 103402. Read from the game's master data, grid cross-checked
-    // on GameTora and Game8: the same character, goal route and aptitude grid as the base Inari One preset, so
-    // this is that build carried over with the outfit's own kit. Card style End Closer; growth Speed +14% / Power
-    // +8% / Wit +8%; unique Firelight. Game8 builds her as an End Closer for Long (Mile as the alternative).
+    // Inari One (Golden Dream), card 103402. Same goal route and grid as the base preset (checked on GameTora/Game8). Card
+    // style End Closer; growth Speed +14% / Power +8% / Wit +8%; Game8 builds it for Long (Mile as the alternative).
     {
         name: "Inari One (Golden Dream)",
         scenario: "URA Finale",
@@ -52853,10 +52648,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "end_closer",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Inari One preset's plan with this card's own kit (Oi Racecourse ○, Inside Scoop and
-                // Straightaway Spurt). Of what its higher Potential levels gate (I Can See Right Through You,
-                // Innate Experience, Rapid Gain, Encroaching Shadow, The Coast Is Clear! and Run Like Crazy!), it
-                // plans Encroaching Shadow, bought once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -53007,7 +52798,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Inari One (Golden Dream)",
-        // End Closer: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -53205,7 +52995,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Inari One (Golden Dream)",
-        // End Closer: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -53414,10 +53203,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Smart Falcon (Twilight Triumph), EN 2026-07-22, card 104602. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Smart
-    // Falcon preset, so this is that build carried over with the outfit's own kit. Card style Front Runner; growth
-    // Speed +20% / Guts +10%; unique α-star*. Game8 builds her as a Front Runner for dirt Medium.
+    // Smart Falcon (Twilight Triumph), card 104602. Same goal route and grid as the base preset (checked on GameTora/Game8).
+    // Card style Front Runner; growth Speed +20% / Guts +10%; Game8 builds it for dirt Medium.
     {
         name: "Smart Falcon (Twilight Triumph)",
         scenario: "URA Finale",
@@ -53478,10 +53265,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "front_runner",
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "dirt",
-                // The base Smart Falcon preset's plan with this card's own kit (Top Pick, Front Runner Corners ○
-                // and With All My Soul). Of what its higher Potential levels gate (Got the Spirit!, Trending in
-                // the Charts!, Dust Cloud, Be the Center! and Dust Cloud Idol), it plans Be the Center!, bought
-                // once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -53610,7 +53393,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Smart Falcon (Twilight Triumph)",
-        // Dirt Front Runner: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -53786,7 +53568,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Smart Falcon (Twilight Triumph)",
-        // Dirt Front Runner: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -53973,12 +53754,10 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Special Week (Ruler of Japan), EN 2026-06-25, card 100103. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Special
-    // Week preset, so this is that build carried over with the outfit's own kit. Card style Late Surger; growth
-    // Speed +10% / Stamina +10% / Wit +10%; unique Dreams Donned with Pride!. Game8 builds her as a Late Surger
-    // for Long (Pace Chaser or End Closer as alternatives). Unlike the base preset (Pace Chaser skills on the base
-    // card's Late style), this outfit races and buys as a Late Surger, matching both its card style and Game8.
+    // Special Week (Ruler of Japan), card 100103. Same goal route and grid as the base preset (checked on GameTora/Game8). Card
+    // style Late Surger; growth Speed +10% / Stamina +10% / Wit +10%; Game8 builds it for Long (Pace Chaser or End Closer as
+    // alternatives). Unlike the base preset (Pace Chaser skills on the base card's Late style), this outfit races and buys as a
+    // Late Surger, matching both its card style and Game8.
     {
         name: "Special Week (Ruler of Japan)",
         scenario: "URA Finale",
@@ -54034,11 +53813,9 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // Late Surger / Medium plan: her own Corner Adept ○ and Outer Swell, Late Surger and Medium greens
-                // and golds, and Corner Recovery ○ / Swinging Maestro, A Small Breather and Be Still for the
-                // 2400m-3200m goals. Her own Pressure is not planned; her tree gates Long Straightaways ○ (Lv2), Overwhelming Pressure (Lv3), Long Corners ○
-                // (Lv4) and Best in Japan (Lv5); none of them is planned. The Grandkid Get-Together hint is
-                // Pace-only, so that Trackblazer event takes the stats.
+                // Late Surger / Medium plan with Corner Recovery ○ / Swinging Maestro, A Small Breather and Be Still for the
+                // 2400m-3200m goals. None of her Potential tree is planned, nor is her own Pressure. The Grandkid Get-Together
+                // hint is Pace-only, so that Trackblazer event takes the stats.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -54191,7 +53968,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Special Week (Ruler of Japan)",
-        // Late Surger: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -54391,7 +54167,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Special Week (Ruler of Japan)",
-        // Late Surger: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -54602,10 +54377,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Curren Chan (Ma Chérie of the New Moon), EN 2026-05-18, card 103802. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Curren
-    // Chan preset, so this is that build carried over with the outfit's own kit. Card style Pace Chaser; growth
-    // Speed +10% / Power +10% / Wit +10%; unique One True Color. Game8 builds her as a Pace Chaser for Sprint.
+    // Curren Chan (Ma Chérie of the New Moon), card 103802. Same goal route and grid as the base preset (checked on
+    // GameTora/Game8). Card style Pace Chaser; growth Speed +10% / Power +10% / Wit +10%; Game8 builds it for Sprint.
     {
         name: "Curren Chan (Ma Chérie of the New Moon)",
         scenario: "URA Finale",
@@ -54658,10 +54431,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "sprint",
                 preferredTrackSurface: "turf",
-                // The base Curren Chan preset's plan with this card's own kit (Hesitant Front Runners, Pace Chaser
-                // Corners ○ and Intimidate). Of what its higher Potential levels gate (Sprinting Gear, Adored by
-                // All, Pace Chaser Savvy ○, Turbo Sprint and Pace Chaser Savvy ◎), it plans Turbo Sprint, bought
-                // once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -54816,7 +54585,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Curren Chan (Ma Chérie of the New Moon)",
-        // Pace Chaser sprinter: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -55021,7 +54789,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Curren Chan (Ma Chérie of the New Moon)",
-        // Pace Chaser sprinter: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -55234,10 +55001,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Meisho Doto (Dot-o'-Lantern), EN 2026-08-18, card 105802. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Meisho
-    // Doto preset, so this is that build carried over with the outfit's own kit. Card style Pace Chaser; growth
-    // Power +15% / Wit +15%; unique Spooky, Scary, Happy. Game8 builds her as a Pace Chaser for Medium.
+    // Meisho Doto (Dot-o'-Lantern), card 105802. Same goal route and grid as the base preset (checked on GameTora/Game8). Card
+    // style Pace Chaser; growth Power +15% / Wit +15%; Game8 builds it for Medium.
     {
         name: "Meisho Doto (Dot-o'-Lantern)",
         scenario: "URA Finale",
@@ -55297,10 +55062,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Meisho Doto preset's plan with this card's own kit (Corner Recovery ○, Head-On and
-                // Medium Straightaways ○). Of what its higher Potential levels gate (On the Attack, Neck and Neck,
-                // Right-Handed ○, Swinging Maestro, Unstoppable and Right-Handed ◎), it plans Neck and Neck and
-                // Swinging Maestro, bought once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -55429,7 +55190,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Meisho Doto (Dot-o'-Lantern)",
-        // Pace Chaser Medium: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -55605,7 +55365,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Meisho Doto (Dot-o'-Lantern)",
-        // Pace Chaser Medium: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -55792,11 +55551,9 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Agnes Digital (Fanatic♡Jiangshi), EN 2026-08-18, card 101902. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Agnes
-    // Digital preset, so this is that build carried over with the outfit's own kit. Card style Late Surger; growth
-    // Speed +7% / Stamina +7% / Power +8% / Guts +8%; unique THE MOE AAAA Thanks for My Life. Game8 builds her as
-    // a Late Surger for dirt Mile (turf viable).
+    // Agnes Digital (Fanatic♡Jiangshi), card 101902. Same goal route and grid as the base preset (checked on GameTora/Game8).
+    // Card style Late Surger; growth Speed +7% / Stamina +7% / Power +8% / Guts +8%; Game8 builds it for dirt Mile (turf
+    // viable).
     {
         name: "Agnes Digital (Fanatic♡Jiangshi)",
         scenario: "URA Finale",
@@ -55852,10 +55609,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
-                // The base Agnes Digital preset's plan with this card's own kit (Comeback, Ramp Up and
-                // Updrafters). Of what its higher Potential levels gate (Uma Stan, It's On!, Forward, March!,
-                // Can't Keep Me Down and Lead the Charge!), it plans Uma Stan, bought once they are unlocked or
-                // offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -56010,7 +55763,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Agnes Digital (Fanatic♡Jiangshi)",
-        // Late Surger miler: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -56218,7 +55970,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Agnes Digital (Fanatic♡Jiangshi)",
-        // Late Surger miler: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -56437,10 +56188,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Narita Taishin (Difference Engineer), EN 2026-07-27, card 105002. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Narita
-    // Taishin preset, so this is that build carried over with the outfit's own kit. Card style End Closer; growth
-    // Stamina +8% / Guts +8% / Wit +14%; unique Hephaestus. Game8 builds her as an End Closer for Medium.
+    // Narita Taishin (Difference Engineer), card 105002. Same goal route and grid as the base preset (checked on
+    // GameTora/Game8). Card style End Closer; growth Stamina +8% / Guts +8% / Wit +14%; Game8 builds it for Medium.
     {
         name: "Narita Taishin (Difference Engineer)",
         scenario: "URA Finale",
@@ -56495,11 +56244,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "end_closer",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Narita Taishin preset's plan with this card's own kit (Nimble Navigator, Breakin' Out
-                // and Take the Chance). Of what its higher Potential levels gate (End Closer Savvy ○, Breakin'
-                // Ahead, End Closer Straightaways ○, From the Brink, End Closer Savvy ◎ and End Closer
-                // Straightaways ◎), it plans End Closer Straightaways ○ and From the Brink, bought once they are
-                // unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -56651,7 +56395,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Narita Taishin (Difference Engineer)",
-        // End Closer Medium: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -56850,7 +56593,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Narita Taishin (Difference Engineer)",
-        // End Closer Medium: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -57060,11 +56802,9 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Winning Ticket (Dream Deliverer), EN 2026-07-27, card 103502. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the Winning Ticket
-    // (Get to Winning!) preset, so this is that build carried over with the outfit's own kit. Card style Late
-    // Surger; growth Speed +8% / Power +14% / Guts +8%; unique Ticket to Your Dreams!. Game8 builds her as a Late
-    // Surger for Medium.
+    // Winning Ticket (Dream Deliverer), card 103502. Same goal route and grid as the Winning Ticket (Get to Winning!) preset
+    // (checked on GameTora/Game8). Card style Late Surger; growth Speed +8% / Power +14% / Guts +8%; Game8 builds it for
+    // Medium.
     {
         name: "Winning Ticket (Dream Deliverer)",
         scenario: "URA Finale",
@@ -57114,10 +56854,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The Winning Ticket (Get to Winning!) preset's plan with this card's own kit (Downhill Speedster,
-                // 1,500,000 CC and All I've Got). Of what its higher Potential levels gate (Position Pilfer,
-                // 15,000,000 CC, Full Throttle, Come What May, Fast & Furious and Keep Going!), it plans Come What
-                // May, bought once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -57267,7 +57003,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Winning Ticket (Dream Deliverer)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -57464,7 +57199,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Winning Ticket (Dream Deliverer)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -57672,11 +57406,9 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Mejiro McQueen (Fair Lady of the Waves), EN 2026-07-02, card 101303. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the Mejiro McQueen
-    // (Frontline Elegance) preset, so this is that build carried over with the outfit's own kit. Card style Pace
-    // Chaser; growth Speed +8% / Stamina +8% / Wit +14%; unique Your Smile Sparkles as the Waves. Game8 builds her
-    // as a Pace Chaser for Long.
+    // Mejiro McQueen (Fair Lady of the Waves), card 101303. Same goal route and grid as the Mejiro McQueen (Frontline Elegance)
+    // preset (checked on GameTora/Game8). Card style Pace Chaser; growth Speed +8% / Stamina +8% / Wit +14%; Game8 builds it
+    // for Long.
     {
         name: "Mejiro McQueen (Fair Lady of the Waves)",
         scenario: "URA Finale",
@@ -57726,9 +57458,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The Mejiro McQueen (Frontline Elegance) preset's plan with this card's own kit (Focus, Pace
-                // Chaser Savvy ○ and Feature Act). Its higher Potential levels gate All Set, Headliner, Stamina to
-                // Spare, Heart All Set and Calm and Collected; none of them is planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -57880,7 +57609,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Mejiro McQueen (Fair Lady of the Waves)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -58079,7 +57807,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Mejiro McQueen (Fair Lady of the Waves)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -58289,12 +58016,10 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Air Groove (Quercus Civilis), EN 2025-08-28, card 101802. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Air Groove
-    // preset, so this is that build carried over with the outfit's own kit. Card style Pace Chaser; growth Speed
-    // +10% / Power +10% / Guts +10%; unique Eternal Moments. Game8 builds her as a Pace Chaser for Mile. Unlike
-    // the base preset (Late Surger skills on a Pace card), this outfit races and buys as a Pace Chaser, matching
-    // both its card style and Game8; the goal route, targets and distance stay the base preset's.
+    // Air Groove (Quercus Civilis), card 101802. Same goal route and grid as the base preset (checked on GameTora/Game8). Card
+    // style Pace Chaser; growth Speed +10% / Power +10% / Guts +10%; Game8 builds it for Mile. Unlike the base preset (Late
+    // Surger skills on a Pace card), this outfit races and buys as a Pace Chaser, matching both its card style and Game8; the
+    // goal route, targets and distance stay the base preset's.
     {
         name: "Air Groove (Quercus Civilis)",
         scenario: "URA Finale",
@@ -58344,10 +58069,8 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // Pace Chaser plan on the base route: her own Corner Acceleration ○, Unyielding Spirit and Pace
-                // Chaser Corners ○, Pace Chaser and Medium greens and golds, and recovery. Her tree gates Pace
-                // Chaser Savvy ○, Big-Sisterly, Ramp Up, Corner Connoisseur, Pace Chaser Savvy ◎ and It's On!;
-                // none of them is planned.
+                // Pace Chaser plan on the base route, with Pace Chaser and Medium greens and golds and recovery. None of her
+                // Potential tree is planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -58499,7 +58222,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Air Groove (Quercus Civilis)",
-        // Pace Chaser: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -58698,7 +58420,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Air Groove (Quercus Civilis)",
-        // Pace Chaser: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -58911,10 +58632,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Eishin Flash (Precise Chocolatier), EN 2026-02-18, card 103702. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Eishin
-    // Flash preset, so this is that build carried over with the outfit's own kit. Card style Late Surger; growth
-    // Stamina +8% / Power +8% / Wit +14%; unique Guten Appetit ♪. Game8 builds her as a Late Surger for Medium.
+    // Eishin Flash (Precise Chocolatier), card 103702. Same goal route and grid as the base preset (checked on GameTora/Game8).
+    // Card style Late Surger; growth Stamina +8% / Power +8% / Wit +14%; Game8 builds it for Medium.
     {
         name: "Eishin Flash (Precise Chocolatier)",
         scenario: "URA Finale",
@@ -58967,11 +58686,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Eishin Flash preset's plan with this card's own kit (Long Shot ○, Position Pilfer and
-                // Tether). Of what its higher Potential levels gate (Medium Straightaways ○, Dominator, Late
-                // Surger Corners ○, Flash Forward, Medium Straightaways ◎ and Late Surger Corners ◎), it plans
-                // Medium Straightaways ○, Late Surger Corners ○ and Flash Forward, bought once they are unlocked
-                // or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -59130,7 +58844,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Eishin Flash (Precise Chocolatier)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -59339,7 +59052,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Eishin Flash (Precise Chocolatier)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -59555,10 +59267,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Fine Motion (Titania), EN 2026-05-18, card 102202. Read from the game's master data, grid cross-checked on
-    // GameTora and Game8: the same character, goal route and aptitude grid as the base Fine Motion preset, so this
-    // is that build carried over with the outfit's own kit. Card style Pace Chaser; growth Guts +10% / Wit +20%;
-    // unique Best Day Ever. Game8 builds her as a Pace Chaser for Mile.
+    // Fine Motion (Titania), card 102202. Same goal route and grid as the base preset (checked on GameTora/Game8). Card style
+    // Pace Chaser; growth Guts +10% / Wit +20%; Game8 builds it for Mile.
     {
         name: "Fine Motion (Titania)",
         scenario: "URA Finale",
@@ -59608,11 +59318,7 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Fine Motion preset's plan with this card's own kit (Firm Conditions ○, Head-On and
-                // Shifting Gears). Of what its higher Potential levels gate (Mile Corners ○, Changing Gears, Fall
-                // Runner ○, Neck and Neck, Mile Corners ◎ and Fall Runner ◎), it plans Neck and Neck, bought once
-                // they are unlocked or offered by a support card. The base plan carries no recovery for her Medium
-                // goals, so it is topped up with Hydrate and Corner Recovery ○.
+                // The base plan carries no recovery for her Medium goals, so it is topped up.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -59773,7 +59479,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Fine Motion (Titania)",
-        // Pace Chaser: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -59981,7 +59686,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Fine Motion (Titania)",
-        // Pace Chaser: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -60200,11 +59904,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Fuji Kiseki (Succès Étoilé), EN 2026-04-05, card 100502. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Fuji
-    // Kiseki preset, so this is that build carried over with the outfit's own kit. Card style Pace Chaser; growth
-    // Speed +8% / Power +14% / Wit +8%; unique Ravissant. Game8 builds her as a Pace Chaser for Mile (Sprint also
-    // viable).
+    // Fuji Kiseki (Succès Étoilé), card 100502. Same goal route and grid as the base preset (checked on GameTora/Game8). Card
+    // style Pace Chaser; growth Speed +8% / Power +14% / Wit +8%; Game8 builds it for Mile (Sprint also viable).
     {
         name: "Fuji Kiseki (Succès Étoilé)",
         scenario: "URA Finale",
@@ -60254,12 +59955,7 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
-                // The base Fuji Kiseki preset's plan with this card's own kit (Trick (Front), Mile Corners ○ and
-                // Prepared to Pass). Of what its higher Potential levels gate (Shrewd Step, Tantalizing Trick,
-                // Head-On, Speed Star, Technician and Neck and Neck), it plans Speed Star, bought once they are
-                // unlocked or offered by a support card. The base plan is short, so it is topped up with Mile
-                // Corners ◎, Mile Straightaways ○, Mile Maven, Preferred Position, Swinging Maestro, Corner
-                // Recovery ○, Homestretch Haste and Pace Chaser Savvy ○.
+                // The base plan is short, so it is topped up.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -60416,7 +60112,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Fuji Kiseki (Succès Étoilé)",
-        // Pace Chaser miler: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -60620,7 +60315,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Fuji Kiseki (Succès Étoilé)",
-        // Pace Chaser miler: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -60835,10 +60529,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Gold City (Authentic / 1928), EN 2025-10-07, card 104001. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the Gold City
-    // (Autumn Cosmos) preset, so this is that build carried over with the outfit's own kit. Card style Late
-    // Surger; growth Power +10% / Guts +20%; unique KEEP IT REAL. Game8 builds her as a Late Surger for Mile.
+    // Gold City (Authentic / 1928), card 104001. Same goal route and grid as the Gold City (Autumn Cosmos) preset (checked on
+    // GameTora/Game8). Card style Late Surger; growth Power +10% / Guts +20%; Game8 builds it for Mile.
     {
         name: "Gold City (Authentic / 1928)",
         scenario: "URA Finale",
@@ -60888,10 +60580,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
-                // The Gold City (Autumn Cosmos) preset's plan with this card's own kit (Hanshin Racecourse ○,
-                // Watchful Eye and Slick Surge). Of what its higher Potential levels gate (Slipstream, Keen Eye,
-                // Acceleration, On Your Left! and Step on the Gas!), it plans Keen Eye, bought once they are
-                // unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -61041,7 +60729,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Gold City (Authentic / 1928)",
-        // Late Surger miler: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -61238,7 +60925,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Gold City (Authentic / 1928)",
-        // Late Surger miler: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -61447,11 +61133,9 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Haru Urara (New Year ♪ New Urara!), EN 2026-01-29, card 105202. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character and goal route as the base Haru Urara preset, so
-    // this is that build carried over with the outfit's own kit. Card style Late Surger; growth Power
-    // +20% / Guts +10%; unique 114th Time's the Charm. Game8 builds her as a Late Surger on dirt. Her Mile
-    // aptitude is A where the base outfit's is B; nothing else in the grid differs.
+    // Haru Urara (New Year ♪ New Urara!), card 105202. Same goal route as the base preset (checked on GameTora/Game8). Card
+    // style Late Surger; growth Power +20% / Guts +10%. Game8 build: Late Surger on dirt. Her Mile aptitude is A where the base
+    // outfit's is B; nothing else in the grid differs.
     {
         name: "Haru Urara (New Year ♪ New Urara!)",
         scenario: "URA Finale",
@@ -61509,9 +61193,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "sprint",
                 preferredTrackSurface: "dirt",
-                // The base Haru Urara preset's plan with this card's own kit (Prudent Positioning, Unyielding
-                // Spirit and Fighter). Its higher Potential levels gate Shake It Out, Center Stage, Snowy Days ○,
-                // Hard Worker and Snowy Days ◎; none of them is planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -61660,7 +61341,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Haru Urara (New Year ♪ New Urara!)",
-        // Dirt Late Surger: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -61856,7 +61536,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Haru Urara (New Year ♪ New Urara!)",
-        // Dirt Late Surger: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -62063,11 +61742,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Matikanefukukitaru (Lucky Tidings), EN 2025-11-06, card 105602. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base
-    // Matikanefukukitaru preset, so this is that build carried over with the outfit's own kit. Card style Late
-    // Surger; growth Stamina +10% / Guts +10% / Wit +10%; unique Bountiful Harvest. Game8 builds her as a Late
-    // Surger for Long.
+    // Matikanefukukitaru (Lucky Tidings), card 105602. Same goal route and grid as the base preset (checked on GameTora/Game8).
+    // Card style Late Surger; growth Stamina +10% / Guts +10% / Wit +10%; Game8 builds it for Long.
     {
         name: "Matikanefukukitaru (Lucky Tidings)",
         scenario: "URA Finale",
@@ -62117,10 +61793,7 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The base Matikanefukukitaru preset's plan with this card's own kit (Right-Handed ○ and Slick
-                // Surge). Its higher Potential levels gate Inside Scoop, Overwhelming Pressure, Kyoto Racecourse
-                // ○, Innate Experience and Kyoto Racecourse ◎; none of them is planned. Her own Pressure is not
-                // planned either.
+                // Her own Pressure is not planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -62272,7 +61945,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Matikanefukukitaru (Lucky Tidings)",
-        // Late Surger stayer: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -62471,7 +62143,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Matikanefukukitaru (Lucky Tidings)",
-        // Late Surger stayer: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -62681,10 +62352,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Mejiro Dober (Sapphire Sojourn), EN 2026-06-11, card 105902. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Mejiro
-    // Dober preset, so this is that build carried over with the outfit's own kit. Card style Late Surger; growth
-    // Speed +20% / Wit +10%; unique Wherever This Wonder Leads. Game8 builds her as a Late Surger for Medium.
+    // Mejiro Dober (Sapphire Sojourn), card 105902. Same goal route and grid as the base preset (checked on GameTora/Game8).
+    // Card style Late Surger; growth Speed +20% / Wit +10%; Game8 builds it for Medium.
     {
         name: "Mejiro Dober (Sapphire Sojourn)",
         scenario: "URA Finale",
@@ -62734,11 +62403,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Mejiro Dober preset's plan with this card's own kit (Kyoto Racecourse ○, Fearless and
-                // Take the Chance). Of what its higher Potential levels gate (Medium Straightaways ○, Dauntless,
-                // Full Throttle, From the Brink, Medium Straightaways ◎ and Keep Going!), it plans Medium
-                // Straightaways ○, Dauntless and From the Brink, bought once they are unlocked or offered by a
-                // support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -62867,7 +62531,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Mejiro Dober (Sapphire Sojourn)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -63043,7 +62706,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Mejiro Dober (Sapphire Sojourn)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -63230,11 +62892,9 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Mejiro McQueen (End of the Skies), EN 2025-07-16, card 101302. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the Mejiro McQueen
-    // (Frontline Elegance) preset, so this is that build carried over with the outfit's own kit. Card style Pace
-    // Chaser; growth Stamina +10% / Power +10% / Wit +10%; unique Legacy of the Strong. Game8 builds her as a Pace
-    // Chaser for Long.
+    // Mejiro McQueen (End of the Skies), card 101302. Same goal route and grid as the Mejiro McQueen (Frontline Elegance)
+    // preset (checked on GameTora/Game8). Card style Pace Chaser; growth Stamina +10% / Power +10% / Wit +10%; Game8 builds it
+    // for Long.
     {
         name: "Mejiro McQueen (End of the Skies)",
         scenario: "URA Finale",
@@ -63284,10 +62944,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The Mejiro McQueen (Frontline Elegance) preset's plan with this card's own kit (Straightaway
-                // Adept, Stamina to Spare and Deep Breaths). Of what its higher Potential levels gate (Fall Runner
-                // ○, Cooldown, Ramp Up, Beeline Burst, Fall Runner ◎ and It's On!), it plans Cooldown, bought once
-                // they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -63439,7 +63095,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Mejiro McQueen (End of the Skies)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -63638,7 +63293,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Mejiro McQueen (End of the Skies)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -63848,10 +63502,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Nice Nature (Run & Win), EN 2026-04-26, card 106002. Read from the game's master data, grid cross-checked on
-    // GameTora and Game8: the same character, goal route and aptitude grid as the base Nice Nature preset, so this
-    // is that build carried over with the outfit's own kit. Card style Late Surger; growth Stamina +10% / Power
-    // +10% / Wit +10%; unique Go☆Go☆Goal!. Game8 builds her as a Late Surger for Medium.
+    // Nice Nature (Run & Win), card 106002. Same goal route and grid as the base preset (checked on GameTora/Game8). Card style
+    // Late Surger; growth Stamina +10% / Power +10% / Wit +10%; Game8 builds it for Medium.
     {
         name: "Nice Nature (Run & Win)",
         scenario: "URA Finale",
@@ -63901,10 +63553,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Nice Nature preset's plan with this card's own kit (Nimble Navigator, Tether and Late
-                // Surger Savvy ○). Of what its higher Potential levels gate (Take the Chance, Dominator, Long Shot
-                // ○, No Stopping Me!, From the Brink and Long Shot ◎), it plans No Stopping Me!, bought once they
-                // are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -64053,7 +63701,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Nice Nature (Run & Win)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -64249,7 +63896,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Nice Nature (Run & Win)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -64456,11 +64102,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Rice Shower (Vampire Makeover!), EN 2025-11-24, card 103002. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Rice
-    // Shower preset, so this is that build carried over with the outfit's own kit. Card style Pace Chaser; growth
-    // Stamina +15% / Power +15%; unique Every Rose Has Its Fangs. Game8 builds her as a Pace Chaser for Long
-    // (Medium also).
+    // Rice Shower (Vampire Makeover!), card 103002. Same goal route and grid as the base preset (checked on GameTora/Game8).
+    // Card style Pace Chaser; growth Stamina +15% / Power +15%; Game8 builds it for Long (Medium also).
     {
         name: "Rice Shower (Vampire Makeover!)",
         scenario: "URA Finale",
@@ -64514,10 +64157,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The base Rice Shower preset's plan with this card's own kit (Trick (Front), Long Straightaways ○
-                // and Stamina to Spare). Of what its higher Potential levels gate (Corner Recovery ○, Calm and
-                // Collected, Hesitant Front Runners, Tantalizing Trick and Swinging Maestro), it plans Corner
-                // Recovery ○ and Calm and Collected, bought once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -64672,7 +64311,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Rice Shower (Vampire Makeover!)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -64878,7 +64516,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Rice Shower (Vampire Makeover!)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -65091,11 +64728,9 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Super Creek (Chiffon-Wrapped Mummy), EN 2025-11-24, card 104502. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the base Super
-    // Creek preset, so this is that build carried over with the outfit's own kit. Card style Pace Chaser; growth
-    // Speed +14% / Stamina +8% / Guts +8%; unique Give Mummy a Hug ♡. Game8 builds her as a Pace Chaser for Medium
-    // (Long as the alternative).
+    // Super Creek (Chiffon-Wrapped Mummy), card 104502. Same goal route and grid as the base preset (checked on
+    // GameTora/Game8). Card style Pace Chaser; growth Speed +14% / Stamina +8% / Guts +8%; Game8 builds it for Medium (Long as
+    // the alternative).
     {
         name: "Super Creek (Chiffon-Wrapped Mummy)",
         scenario: "URA Finale",
@@ -65156,13 +64791,7 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The base Super Creek preset's plan with this card's own kit (Corner Adept ○, Murmur and
-                // Hydrate). Of what its higher Potential levels gate (Pace Chaser Corners ○, Professor of
-                // Curvature, Medium Straightaways ○, Mystifying Murmur, Pace Chaser Corners ◎ and Medium
-                // Straightaways ◎), it plans Pace Chaser Corners ○ and Professor of Curvature, bought once they
-                // are unlocked or offered by a support card. The base plan is short, so it is topped up with Pace
-                // Chaser Straightaways ○, Pace Chaser Savvy ○, Prepared to Pass, Preferred Position, Long Corners
-                // ○, Long Straightaways ○, Swinging Maestro and Corner Recovery ○.
+                // The base plan is short, so it is topped up.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -65291,7 +64920,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Super Creek (Chiffon-Wrapped Mummy)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -65467,7 +65095,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Super Creek (Chiffon-Wrapped Mummy)",
-        // Pace Chaser stayer: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -65654,13 +65281,10 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Symboli Rudolf (Archer by Moonlight), EN 2025-12-14, card 101702. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character, goal route and aptitude grid as the Symboli Rudolf
-    // (Emperor's Path) preset, so this is that build carried over with the outfit's own kit. Card style Pace
-    // Chaser; growth Speed +8% / Stamina +14% / Wit +8%; unique Arrows Whistle, Shadows Disperse. Game8 builds her
-    // as a Pace Chaser for Long (Medium secondary). Unlike the base preset (Late Surger skills on a Pace card),
-    // this outfit races and buys as a Pace Chaser, matching both its card style and Game8; the goal route, targets
-    // and distance stay the base preset's.
+    // Symboli Rudolf (Archer by Moonlight), card 101702. Same goal route and grid as the Symboli Rudolf (Emperor's Path) preset
+    // (checked on GameTora/Game8). Card style Pace Chaser; growth Speed +8% / Stamina +14% / Wit +8%; Game8 builds it for Long
+    // (Medium secondary). Unlike the base preset (Late Surger skills on a Pace card), this outfit races and buys as a Pace
+    // Chaser, matching both its card style and Game8; the goal route, targets and distance stay the base preset's.
     {
         name: "Symboli Rudolf (Archer by Moonlight)",
         scenario: "URA Finale",
@@ -65710,11 +65334,8 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // Pace Chaser plan on the base route: her own Fall Runner ○, Inside Scoop and Stamina to Spare,
-                // Pace Chaser and Medium greens and golds, and recovery. Of her Potential tree (Straight Descent,
-                // Calm and Collected, Pace Chaser Straightaways ○, Fall Frenzy, Determined Descent and Pace Chaser
-                // Straightaways ◎), it plans Pace Chaser Straightaways ○, bought once they are unlocked or offered
-                // by a support card.
+                // Pace Chaser plan on the base route, with Pace Chaser and Medium greens and golds and recovery.
+                // Potential-gated skills planned: Pace Chaser Straightaways ○.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -65869,7 +65490,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Symboli Rudolf (Archer by Moonlight)",
-        // Pace Chaser: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -66071,7 +65691,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Symboli Rudolf (Archer by Moonlight)",
-        // Pace Chaser: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -66284,13 +65903,11 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Daiwa Scarlet (Nuit Étoilée de Scarlet), EN 2026-09-28, card 100902. Read from the game's master data, grid
-    // cross-checked on GameTora and Game8: the same character and goal route as the base Daiwa Scarlet preset, so
-    // this is that build carried over with the outfit's own kit. Card style Front Runner; growth Speed +20% / Wit
-    // +10%; unique Queen's Lumination. Game8 builds her as a Front Runner for Long. Her grid differs from the base
-    // card's: Mile B and Long A where the base has Mile A and Long B, and her card style is Front Runner, which the
-    // base preset already races and buys. She aims at Medium rather than the base's Mile: 5 of her 8 goals are
-    // Medium, where she is A, and Mile (B) covers only two early goals.
+    // Daiwa Scarlet (Nuit Étoilée de Scarlet), card 100902. Same goal route as the base preset (checked on GameTora/Game8).
+    // Card style Front Runner; growth Speed +20% / Wit +10%; Game8 builds it for Long. Her grid differs from the base card's:
+    // Mile B and Long A where the base has Mile A and Long B, and her card style is Front Runner, which the base preset already
+    // races and buys. She aims at Medium rather than the base's Mile: 5 of her 8 goals are Medium, where she is A, and Mile (B)
+    // covers only two early goals.
     {
         name: "Daiwa Scarlet (Nuit Étoilée de Scarlet)",
         scenario: "URA Finale",
@@ -66340,12 +65957,9 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "front_runner",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Daiwa Scarlet preset's plan with this card's own kit (Firm Resolve, Moxie and Feature
-                // Act). Its higher Potential levels gate Long Straightaways ○, Restless, Long Corners ○, Can't
-                // Even Catch My Shadow, Long Straightaways ◎ and Long Corners ◎; none of them is planned. The base
-                // plan carries only white recoveries and Game8 asks for two gold ones, so it is topped up with
-                // Swinging Maestro and Breath of Fresh Air. Aimed at Medium, the base's Mile Corners ◎, Mile
-                // Straightaways ◎ and Mile Maven become Medium Corners ◎, Medium Straightaways ◎ and Up-Tempo.
+                // The base plan carries only white recoveries and Game8 asks for two gold ones, so it is topped up with
+                // Swinging Maestro and Breath of Fresh Air. Aimed at Medium, the base's Mile skills become their Medium
+                // equivalents (Up-Tempo for Mile Maven).
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -66490,7 +66104,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Daiwa Scarlet (Nuit Étoilée de Scarlet)",
-        // Front Runner: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -66682,7 +66295,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Daiwa Scarlet (Nuit Étoilée de Scarlet)",
-        // Front Runner: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {
@@ -66895,10 +66507,8 @@ const basePresets: CharacterPreset[] = [
             },
         },
     },
-    // Vodka (Fiery Aqua Vitae), EN 2026-09-28, card 100802. Read from the game's master data, grid cross-checked
-    // on GameTora and Game8: the same character and goal route as the base Vodka preset, so this is that build
-    // carried over with the outfit's own kit. Card style Late Surger; growth Speed +20% / Guts +10%; unique Into
-    // High Gear! Game8 builds her as a Late Surger for Medium. Her Long aptitude is E where the base outfit's is F;
+    // Vodka (Fiery Aqua Vitae), card 100802. Same goal route as the base preset (checked on GameTora/Game8). Card style Late
+    // Surger; growth Speed +20% / Guts +10%; Game8 builds it for Medium. Her Long aptitude is E where the base outfit's is F;
     // nothing else in the grid differs.
     {
         name: "Vodka (Fiery Aqua Vitae)",
@@ -66949,9 +66559,6 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Vodka preset's plan with this card's own kit (Pedal to the Metal, Nimble Navigator and
-                // Medium Corners ○). Its higher Potential levels gate Full Throttle, No Stopping Me!, Late Surger
-                // Straightaways ○, Top Gear, Keep Going! and Late Surger Straightaways ◎; none of them is planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -67101,7 +66708,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Vodka (Fiery Aqua Vitae)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Unity Cup",
         settings: {
             general: {
@@ -67298,7 +66904,6 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Vodka (Fiery Aqua Vitae)",
-        // Late Surger Medium: see the URA entry above for the card, kit and base build.
         scenario: "Trackblazer",
         settings: {
             general: {

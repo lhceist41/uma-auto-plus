@@ -64,9 +64,7 @@ sealed interface TaskResult {
      *
      * @property code The [TaskResultCode] associated with the result.
      * @property message A descriptive message about the error.
-     * @property reasonKey A single run's launch-navigation reason key for its report, or "".
-     * @property reasonTrainee The preset trainee [reasonKey] names, or "".
-     * @property reasonOutfit The preset outfit [reasonKey] names, or "".
+     * @property reasonKey A single run's launch-navigation reason key for the report, or "".
      */
     data class Error(
         override val code: TaskResultCode = TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
@@ -98,11 +96,7 @@ abstract class Task(game: Game) : DialogHandler(game) {
                 else -> TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION
             }
 
-        /**
-         * The career ledger's `result` word. A stop the bot requested itself (it always sets
-         * [StartModule.queueStopReason]) reads STOPPED_BY_BOT, so it is never counted as the user's
-         * MANUALLY_STOPPED; every other code keeps its name without the prefix.
-         */
+        /** A stop the bot requested itself (it always sets [StartModule.queueStopReason]) reads STOPPED_BY_BOT, never the user's MANUALLY_STOPPED. */
         internal fun careerLedgerResult(code: TaskResultCode, botStopReason: String?): String =
             if (code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED && botStopReason != null) "STOPPED_BY_BOT" else code.name.removePrefix("TASK_RESULT_")
     }

@@ -10,12 +10,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * A Stop the player presses during a run's launch navigation comes back from the run as a failed
- * navigation (live 2026-10-01: "Run 2 stopped: user stop." then "ended with
- * TASK_RESULT_QUEUE_NAVIGATION_FAILED", shown on the card as "Run 2: Error"). The run result for a
- * player's Stop must be MANUALLY_STOPPED; the bot's own stops and real outcomes keep theirs.
- */
+/** A Stop pressed during launch navigation came back as a failed navigation and showed as an error on the card. */
 @DisplayName("A run the player stops is reported as stopped, not as an error")
 class UserStopRunResultTest {
     private val errorCodes =
@@ -74,7 +69,6 @@ class UserStopRunResultTest {
     @Test
     fun `an overlay stop reads as a player stop, never as the navigation error it came back as`() {
         val navigationError = TaskResult.Error(TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED, "Auto-navigation to training menu failed: Queue stopped during trainee selection.")
-        // The queue loop sets queueStopRequested for an overlay stop, then reports the run through resultForStoppedRun.
         val stopRequested = StartModule.isOverlayStop(botRunning = false, botStopReason = null, runPostedException = false)
         val reported = if (stopRequested) StartModule.resultForStoppedRun(navigationError, botStopReason = null) else navigationError
         assertEquals(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, reported.code)
@@ -85,7 +79,6 @@ class UserStopRunResultTest {
         val crash = RuntimeException("uncaught in a worker thread")
         assertTrue(StartModule.isCrash(crash))
         assertFalse(StartModule.isCrash(InterruptedException()), "the library reads an InterruptedException as a manual stop")
-        // The crash ends the service; with it recorded the run is not an overlay stop, so no stop flag is set and the error stands.
         val overlayStop = StartModule.isOverlayStop(botRunning = false, botStopReason = null, runPostedException = StartModule.isCrash(crash))
         assertFalse(overlayStop)
         val error = TaskResult.Error(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, "crashed")
@@ -98,14 +91,12 @@ class UserStopRunResultTest {
     fun `the module records every posted ExceptionEvent as a crash`() {
         val source = loopSource()
         val handler = source.substringAfter("fun onExceptionEvent(event: ExceptionEvent) {").substringBefore("\n    }\n")
-        // Priority 1 (the library's subscriber is 0): the flag is written before the library clears isRunning, whatever order the two registered in.
         assertTrue(source.contains("@Subscribe(priority = 1)\n    fun onExceptionEvent(event: ExceptionEvent) {"), "StartModule no longer subscribes to ExceptionEvent ahead of the library")
         assertTrue(handler.contains("if (isCrash(event.exception)) lastRunPostedException = true"), "a posted exception no longer marks the run as crashed")
     }
 
     @Test
     fun `an overlay stop that unwinds through a wait is a stop, not a crash`() {
-        // The Stop interrupts a navigation wait: the InterruptedException escapes the run and is posted, with the service already down.
         assertTrue(StartModule.isOverlayStop(botRunning = false, botStopReason = null, runPostedException = StartModule.isCrash(InterruptedException())))
         assertFalse(StartModule.isOverlayStop(botRunning = false, botStopReason = null, runPostedException = StartModule.isCrash(IllegalStateException())))
         val catchBlock = loopSource().substringAfter("EventBus.getDefault().postSticky(ExceptionEvent(e))").substringBefore("taskResult =")

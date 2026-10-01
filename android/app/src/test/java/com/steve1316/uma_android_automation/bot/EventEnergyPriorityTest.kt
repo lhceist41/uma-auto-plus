@@ -8,17 +8,9 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * Event option weights for energy and random outcomes.
- *
- * Every preset turns Prioritize Energy on, and it used to weigh each energy point x100 at any energy, so a
- * +15 energy option beat +15 Speed at 84% energy and +20 energy beat 30 skill points at full energy. The
- * fixtures below are logged events (Vodka and Taiki Shuttle careers): each option's non-energy weight is the
- * logged weight minus its energy part.
- */
+/** Event option weights for energy and random outcomes. Prioritize Energy used to weigh energy x100 at any energy; fixtures are logged events. */
 @DisplayName("Event energy priority")
 class EventEnergyPriorityTest {
-    /** The option the bot takes: the first one with the highest weight. */
     private fun pick(energy: Int, vararg options: Pair<Int, Int>): Int {
         val weights = options.map { (nonEnergyWeight, energyGain) -> nonEnergyWeight + energyGain * TrainingEvent.eventEnergyMultiplier(energy, prioritizeEnergy = true) }
         return weights.indexOf(weights.max())
@@ -98,11 +90,9 @@ class EventEnergyPriorityTest {
         @Test
         fun `a stated chance line separates two outcomes and gives the second its chance`() {
             val option = "Randomly either\n----------\nWit +4\n----------\nor (~30%)\n----------\nAll stats +7".split("\n")
-            // Wit +4 at the remaining 70%, All stats +7 at 30%.
             assertEquals(50 + (4 * 70 + 35 * 30) / 100, TrainingEvent.weighEventOption(option, weigh))
         }
 
-        /** Line weights for the stated-chance cases. */
         private val weighChance: (String) -> Int = { line ->
             when (line.trim()) {
                 "Randomly either" -> 50
@@ -119,15 +109,13 @@ class EventEnergyPriorityTest {
 
         @Test
         fun `an option weighs its outcomes by the chances the event states`() {
-            // "Acupuncture (Just an Acupuncturist, No Worries! ☆)" option 1, as the event data ships it: the good outcome
-            // at 30%, the bad one at 70%. The plain average (50 + (100 - 250) / 2 = -25) would overvalue it.
+            // Acupuncture option 1 as the event data ships it: the good outcome at 30%, the bad one at 70%. The plain average would overvalue it.
             val option = "Randomly either\n----------\nAll stats +20\nor (~70%)\nor (~70%)\nMood -2\nAll stats -15\nGet Night Owl status".split("\n")
             assertEquals(50 + (100 * 30 + -250 * 70) / 100, TrainingEvent.weighEventOption(option, weighChance))
         }
 
         @Test
         fun `a rare good outcome no longer outweighs a sure small gain`() {
-            // A 15% chance of All stats +40 against an 85% chance of Speed -8, beside a sure Speed +10.
             val gamble = "Randomly either\n----------\nSpeed -8\nor (~15%)\nAll stats +40".split("\n")
             val sure = listOf("Speed +10")
             val gambleWeight = TrainingEvent.weighEventOption(gamble, weighChance)

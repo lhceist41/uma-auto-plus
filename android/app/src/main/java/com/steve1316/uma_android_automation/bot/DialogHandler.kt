@@ -473,8 +473,7 @@ open class DialogHandler(val game: Game) {
 
             // Skill List Dialogs.
             "skill_list_confirmation" -> {
-                // A Grand Concert lesson Learn dialog has this title and these buttons. Only the lesson
-                // spend loop, after its verify-before-Learn gate, may press its Learn.
+                // Only the lesson spend loop, after its verify-before-Learn gate, may press a Grand Concert lesson Learn.
                 if (grandConcertLessonConfirmationShowing()) {
                     MessageLog.w(TAG, "[GRAND_CONCERT] A lesson Learn dialog reached the generic dialog handler. Cancelling it; only the lesson spend loop learns.")
                     dialog.close(game.imageUtils)

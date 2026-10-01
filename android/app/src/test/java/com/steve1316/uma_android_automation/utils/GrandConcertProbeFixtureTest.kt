@@ -118,8 +118,6 @@ class GrandConcertProbeFixtureTest {
 
         @Test
         fun `a performance with a menu button reads as menu, never as skip`() {
-            // The disc that holds the skip glyph on the numbered concerts held a menu button on a
-            // black-rendered Grand finale; tapping it as a skip only toggled the menu, forever.
             assertTrue(grandConcertPlaybackMenuButtonPresent(sampler("concert_playback_menu")))
             assertFalse(grandConcertPlaybackSkipPresent(sampler("concert_playback_menu")))
             assertFalse(grandConcertPlaybackMenuSkipPresent(sampler("concert_playback_menu")))
@@ -159,7 +157,7 @@ class GrandConcertProbeFixtureTest {
             val r = (p shr 16) and 0xFF
             val b = p and 0xFF
             assertTrue(r - b >= 80, "expected the brown skip glyph under the tap, got r=$r b=$b")
-            // Rotate's icon starts below the Skip label; the tap and its jitter stay well above it.
+            // Rotate's icon starts below the Skip label.
             assertTrue(GrandConcertEscort.MENU_SKIP_Y + 25 < 1650)
         }
 

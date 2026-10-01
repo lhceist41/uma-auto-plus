@@ -713,8 +713,7 @@ class TrainingScoringTest {
     @Test
     @DisplayName("The skill-hint bonus stays inside the bounded 0-100 misc score")
     fun testSkillHintBonusStaysBounded() {
-        // A hint must not inflate the Year 2+ score past its bounded misc band: the preference for a
-        // hinted training is decided only in selectBestTrainingWithHintPriority.
+        // A hint must not inflate the Year 2+ score past its bounded misc band; the preference is decided in selectBestTrainingWithHintPriority.
         val training = createDefaultTrainingOption(name = StatName.SPEED)
         val oneHint = createDefaultConfig(trainingOptions = listOf(training),
                 skillHintsPerLocation =
@@ -740,10 +739,6 @@ class TrainingScoringTest {
         assertEquals(60.0, calculateMiscScore(oneHint, training), 1e-9)
         assertEquals(100.0, calculateMiscScore(manyHints, training), 1e-9)
     }
-
-    // ============================================================================
-    // selectBestTrainingWithHintPriority Tests (issue #372: all-years gated hint priority)
-    // ============================================================================
 
     @Test
     @DisplayName("A hinted training at 80% of the best score wins")
@@ -832,8 +827,7 @@ class TrainingScoringTest {
     @Test
     @DisplayName("Logged career: a weak hinted Guts turn no longer beats a double-rainbow Speed turn")
     fun testLoggedDoubleRainbowSpeedBeatsWeakHintedGuts() {
-        // Unity Cup Vodka, Senior Early October: the bot trained hinted GUTS (7/0/15/14/0) over
-        // SPEED 55/0/24/0/0 with two rainbows. Inputs are the logged stats, targets and options.
+        // Unity Cup Vodka, Senior Early October: hinted GUTS 7/0/15/14/0 was trained over SPEED 55/0/24/0/0 with two rainbows (logged).
         val senior = GameDate(year = DateYear.SENIOR, month = DateMonth.OCTOBER, phase = DatePhase.EARLY)
         val speed = loggedOption(StatName.SPEED, intArrayOf(55, 0, 24, 0, 0), rainbows = 2, level = 5, bars = listOf("orange" to 100.0, "orange" to 100.0))
         val stamina = loggedOption(StatName.STAMINA, intArrayOf(0, 27, 0, 17, 0), level = 3, bars = listOf("orange" to 38.0, "orange" to 100.0, "orange" to 88.0))
@@ -861,8 +855,8 @@ class TrainingScoringTest {
     @Test
     @DisplayName("Logged career: a strong hinted Guts turn keeps its preference over a nearby Speed turn")
     fun testLoggedStrongHintedGutsKeepsPreference() {
-        // URA Super Creek, Senior Early January: hinted GUTS 7/0/77/80/0 against SPEED 30/0/22/0/0 with two
-        // rainbows. The hinted option lands between 75% and 85% of the best, so it keeps the preference.
+        // URA Super Creek, Senior Early January: hinted GUTS 7/0/77/80/0 against SPEED 30/0/22/0/0 with two rainbows; the hinted option
+        // lands between 75% and 85% of the best, so it keeps the preference.
         val senior = GameDate(year = DateYear.SENIOR, month = DateMonth.JANUARY, phase = DatePhase.EARLY)
         val speed = loggedOption(StatName.SPEED, intArrayOf(30, 0, 22, 0, 0), rainbows = 2, level = 4, bars = listOf("green" to 50.0, "orange" to 87.0, "orange" to 77.0, "orange" to 75.0))
         val stamina = loggedOption(StatName.STAMINA, intArrayOf(0, 17, 0, 7, 0), level = 1, bars = listOf("blue" to 33.0))

@@ -174,7 +174,6 @@ private fun singleRunText(code: String?): ReportText =
 /** One finished run's reason in the same words, for a run that did not finish its career; null for a finished career. */
 internal fun runWords(code: String?): String? = if (code == "TASK_RESULT_COMPLETE") null else singleRunText(code).reason
 
-/** [runWords] for a run record: a run whose launch stopped before Start Career says why, in the report's words. */
 internal fun runWords(run: RunRecord): String? {
     val key = run.reasonKey ?: return runWords(run.resultCode)
     val skipped = run.resultCode == "TASK_RESULT_SKIPPED_BY_QUEUE"
@@ -248,13 +247,9 @@ private fun errorSentence(r: JSONObject): String {
     }
 }
 
-/** How many runs ended with an error, then each run the queue skipped because its trainee cannot start. */
 private fun runNotes(r: JSONObject): String = errorSentence(r) + skipSentences(r)
 
-/**
- * One sentence per run skipped at its launch, in the words a halt on the same key uses, with its fix.
- * Only a rotation skips, so the fix names the rotation.
- */
+/** Only a rotation skips, so the fix names the rotation. */
 private fun skipSentences(r: JSONObject): String {
     val runs = r.optJSONArray("runs") ?: return ""
     return (0 until runs.length())
@@ -368,7 +363,6 @@ private val STUCK_TEXT get() = KeyText("it reached a screen it could not get pas
 
 private fun keyText(key: String, r: JSONObject): KeyText =
     namedOutfit(key, r)?.let { (trainee, outfit) ->
-        // A rotation's trainee is fixed in its rotation row; a queue without rotation runs the preset applied on Home.
         val fix =
             if (r.optBoolean("reasonRotation")) {
                 "Pick the $trainee ($outfit) preset for this trainee under Rotate Trainees in Run Queue Settings"
@@ -378,10 +372,9 @@ private fun keyText(key: String, r: JSONObject): KeyText =
         KeyText("$trainee is on your roster only as $outfit, which has its own preset.", fix)
     } ?: REPORT_REASON_KEYS[key] ?: STUCK_TEXT
 
-/** Set when Trainee Select found the trainee only in an outfit her plain preset skips; the report names both. */
+/** Trainee Select found the trainee only in an outfit her plain preset skips. */
 private const val ONLY_OTHER_OUTFIT = "TRAINEE_ONLY_OTHER_OUTFIT"
 
-/** The preset trainee and outfit an [ONLY_OTHER_OUTFIT] report names, or null for any other key or a report without them. */
 private fun namedOutfit(key: String, r: JSONObject): Pair<String, String>? {
     if (key != ONLY_OTHER_OUTFIT) return null
     val trainee = r.optString("reasonTrainee").trim()
@@ -389,7 +382,7 @@ private fun namedOutfit(key: String, r: JSONObject): Pair<String, String>? {
     return if (trainee.isEmpty() || outfit.isEmpty()) null else trainee to outfit
 }
 
-/** A single run stops at Trainee Select before anything is spent; its fix is on Home, not in a rotation. */
+/** The fix is on Home, not in a rotation. */
 private fun singleRunOutfitText(r: JSONObject): ReportText {
     val named = namedOutfit(ONLY_OTHER_OUTFIT, r)
     val why =

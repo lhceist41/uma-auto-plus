@@ -303,10 +303,7 @@ object LabelDailySale : ComponentInterface {
     override val template = Template("components/label/daily_sale", region = Region.middle)
 }
 
-/** The gold "1st" laurel shown on any 1st-place race result, independent of the victory-text banner
- * (the URA Finals shows "Congratulations!" but the Qualifier/Semi-Final show "You did it!"). Trainee-
- * agnostic, so it detects a finale win where the "Congratulations!" text banner misses the two
- * qualifier banners - used by the finale-result win capture in Racing.finalizeRaceResults. */
+/** The gold "1st" laurel: unlike the "Congratulations!" banner, it also appears on the finale Qualifier/Semi-Final wins ("You did it!"). */
 object LabelFirstPlace : ComponentInterface {
     override val template = Template("components/label/first_place", region = Region.topHalf)
 }

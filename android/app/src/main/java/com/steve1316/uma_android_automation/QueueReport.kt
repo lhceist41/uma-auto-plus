@@ -184,18 +184,16 @@ internal data class RunRecord(
     /** The kept spark set, attached after the career-end flow read it; null when it was not read. */
     val sparks: List<KeptSpark>? = null,
     val sparksNote: String? = null,
-    /** Why this run's launch stopped before Start Career, as a report reason key; null for a run that launched. */
+    /** Report reason key for a launch that stopped before Start Career; null for a run that launched. */
     val reasonKey: String? = null,
-    /** The preset trainee and outfit [reasonKey] names, when it names them. */
     val reasonTrainee: String? = null,
     val reasonOutfit: String? = null,
 )
 
 /**
- * A finished career's result as the bot computed it at its end. A value the bot did not read is
- * null. [finalStats] is speed, stamina, power, guts, wit. [lastKnownStats] names the [finalStats]
- * entries the career-end reads did not confirm: each holds the last value the bot accepted, not a
- * final one. [finaleOf] counts the finale races the bot saw, not the scenario's total.
+ * A finished career's result as the bot computed it at its end; a value it did not read is null. [finalStats] is
+ * speed, stamina, power, guts, wit. [lastKnownStats] names the entries the career-end reads did not confirm (the
+ * last accepted value, not a final one). [finaleOf] counts the finale races seen, not the scenario's total.
  */
 internal data class CareerResult(
     val rank: String?,
@@ -209,7 +207,6 @@ internal data class CareerResult(
 
 private val FINAL_STAT_NAMES = listOf("speed", "stamina", "power", "guts", "wit")
 
-/** [finalStats] names by the `[CAREER_END]` ledger key the career-end read reports them under. */
 private val FINAL_STAT_NAME_BY_LEDGER_KEY = mapOf("spd" to "speed", "sta" to "stamina", "pwr" to "power", "grt" to "guts", "wit" to "wit")
 
 /** One kept spark; [type] is `stat`, `aptitude`, `unique`, `skill` or `other`. */
@@ -351,10 +348,9 @@ internal data class QueueReport(
     val recoveries: JSONObject,
     val tpRestores: JSONArray,
     val exitInfo: JSONObject?,
-    /** The preset trainee and outfit [reasonKey] names, only for a key that names them; null otherwise. */
     val reasonTrainee: String? = null,
     val reasonOutfit: String? = null,
-    /** True when the named trainee was a rotation's target, so the fix is in the rotation; written only when true. */
+    /** Written only when true: the fix is in the rotation. */
     val reasonRotation: Boolean = false,
 ) {
     fun toJson(): JSONObject =
@@ -439,12 +435,10 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
     /** The navigation `reasonKey` of a failed launch, or the bot's own stop key. */
     @Volatile var reasonKey = ""
 
-    /** The preset trainee and outfit the navigation [reasonKey] names, or "". */
     @Volatile var reasonTrainee = ""
 
     @Volatile var reasonOutfit = ""
 
-    /** Whether the trainee the navigation [reasonKey] names came from the rotation (else an applied preset). */
     @Volatile var reasonRotation = false
 
     /** Whether the last run ended by posting an ExceptionEvent (splits an error from an overlay Stop). */
@@ -468,11 +462,6 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
         return runs[index].copy(sparks = kept.sparks, sparksNote = kept.note).also { runs[index] = it }
     }
 
-    /**
-     * Adds why [run]'s launch stopped before Start Career ([reasonKey], and the preset trainee and outfit
-     * it names) to its latest record, with [trainee] as its shown name when it has none. Returns the
-     * updated record, or null when [run] has none.
-     */
     @Synchronized
     fun attachLaunchStop(
         run: Int,
@@ -564,10 +553,6 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
         )
 }
 
-/**
- * The endings a reason key explains: the two navigation failures, a single run's own launch
- * navigation failing, and the bot's own stop.
- */
 private val ENDINGS_WITH_REASON_KEY = setOf(SessionEnd.LAUNCH_FAILED_BEFORE_RUN, SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS, SessionEnd.SINGLE_RUN_ENDED, SessionEnd.STOPPED_BY_BOT)
 
 internal fun runRecordJson(r: RunRecord): JSONObject =
@@ -611,7 +596,6 @@ internal fun finalStatsJson(result: CareerResult): JSONObject? {
     return JSONObject().apply { FINAL_STAT_NAMES.forEachIndexed { i, name -> put(name, stats.getOrNull(i) ?: JSONObject.NULL) } }
 }
 
-/** The [CareerResult.finalStats] names held at a last-known value, or null when every stat is a confirmed final read. */
 internal fun lastKnownStatsJson(result: CareerResult): JSONArray? = result.lastKnownStats.takeIf { it.isNotEmpty() }?.let { JSONArray(it) }
 
 internal fun sparksJson(sparks: List<KeptSpark>): JSONArray = JSONArray().also { arr -> sparks.forEach { arr.put(JSONObject().put("name", it.name).put("type", it.type).put("stars", it.stars)) } }

@@ -5,13 +5,10 @@ package com.steve1316.uma_android_automation.bot
  * confirmation dialogs (learn and schedule), the scheduling-complete dialog, the scheduled-state
  * lifecycle, the Concert Info screen, and the Hype model.
  *
- * Every type here is total, Android-free, and JUnit-pinned against the 2026-07-23 launch-night
- * captures (fixtures/grandconcert/PROVENANCE.md). Nothing here taps.
+ * Android-free and pinned by fixtures (fixtures/grandconcert/PROVENANCE.md); nothing here taps.
  *
- * The distinction the whole file protects is scheduling vs learning. Scheduling a card is free and
- * inert - it queues nothing, spends nothing, and changes no counter - while learning is the only
- * transition that applies effects. Conflating the two would let the bot believe it had banked a
- * song's stat gain, concert bonus, and hype when it had merely reserved it.
+ * Scheduling a card is free and inert, while learning is the only transition that applies effects.
+ * Conflating them would bank a song's stat gain, concert bonus, and hype that was merely reserved.
  */
 
 /** A five-type performance-point vector (costs, balances, or "points left over" which can go

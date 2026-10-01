@@ -194,12 +194,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var gameRecoveryFailed: Boolean = false
 
-        /**
-         * Set by a run whose taps changed nothing and whose repair could not help (A11Y_GRANT_MISSING,
-         * A11Y_INPUT_DEAD, TAPS_HAD_NO_EFFECT when the own-input probe could not tell taps from game, or
-         * GAME_NOT_RESPONDING when the game ignored taps that still reached the screen). The run is not replayed and the queue halts after it, keeping the saved queue so
-         * Start continues it once MuMu or the game is restarted or the grant given. Reset every session.
-         */
+        /** Set by a run whose taps changed nothing and whose repair could not help; the queue halts after it, keeping the saved queue for Start. Reset every session. */
         @Volatile
         var accessibilityHaltKey: String? = null
 
@@ -493,25 +488,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             return ResumePlan(if (phase == PHASE_CAREER) currentRun else currentRun + 1, prior)
         }
 
-        /**
-         * Whether a queue that ended without a halt or a pause keeps its resume record. Only the bot's
-         * own stops set [queueStopReason] (trainee mismatch, an unanswered data prompt, unresponsive
-         * navigation); the app, overlay and notification Stops set only [queueStopRequested]. A bot stop
-         * keeps the record as a halt does, so Start resumes the saved run instead of starting run 1 on
-         * the career still in the game's slot. A user stop still clears it, and so does a bot stop after
-         * the last career finished ([finishesLastCareer]): the record still names that run, so keeping it
-         * would replay it on a finished queue.
-         */
+        /** A bot stop keeps the resume record so Start resumes the saved run; a user stop clears it, and so does a bot stop after the last career (it would replay a finished run). */
         fun keepsResumeRecordAfterStop(queueStopRequested: Boolean, botStopReason: String?, lastCareerFinished: Boolean): Boolean =
             queueStopRequested && botStopReason != null && !lastCareerFinished
 
-        /**
-         * The result a run reports when a Stop was requested while it ended. A player's Stop (the app,
-         * overlay or notification button: no [botStopReason]) is MANUALLY_STOPPED even when the run came
-         * back as an error, which it does when the Stop lands inside launch navigation and the navigator
-         * reports a failed transition; the card and the notification would otherwise show the player's
-         * own Stop as an error. A bot stop keeps its result, and a run that did not error keeps its own.
-         */
+        /** A Stop landing inside launch navigation comes back as an error; report the player's own Stop as MANUALLY_STOPPED. */
         fun resultForStoppedRun(result: TaskResult, botStopReason: String?): TaskResult =
             if (botStopReason == null && result is TaskResult.Error) {
                 TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, "Bot was manually stopped by the user.")
@@ -519,27 +500,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 result
             }
 
-        /**
-         * Whether the player stopped a run through the overlay button. The overlay Stop interrupts the bot
-         * thread and ends the service ([BotService.isRunning] false) without setting [queueStopRequested]
-         * (the app and notification Stops do), so a launch navigation that sees the service down before any
-         * wait reports a failure. No bot stop reason and no posted exception (which also ends the service)
-         * means it was the player.
-         */
+        /** The overlay Stop ends the service without setting [queueStopRequested]; no bot stop reason and no posted exception means the player. */
         fun isOverlayStop(botRunning: Boolean, botStopReason: String?, runPostedException: Boolean): Boolean =
             !botRunning && botStopReason == null && !runPostedException
 
-        /**
-         * Whether an [ExceptionEvent] is a crash rather than a player's Stop. The library posts one from any
-         * thread's uncaught exception (and ends the service), and treats an InterruptedException as a manual stop.
-         */
+        /** The library treats an InterruptedException as a manual stop; any other posted exception is a crash. */
         fun isCrash(exception: Throwable): Boolean = exception !is InterruptedException
 
-        /**
-         * Whether run [runIndex] finished the queue's last career. Decided from that run's own result, not
-         * from a count of completed runs: an earlier errored or skipped run is not counted as completed,
-         * yet the queue still reaches and finishes its last run.
-         */
+        /** Judged from the run's own result: an earlier errored or skipped run is not counted as completed. */
         fun finishesLastCareer(runIndex: Int, totalRuns: Int, resultCode: TaskResultCode): Boolean =
             runIndex == totalRuns && resultCode == TaskResultCode.TASK_RESULT_COMPLETE
 
@@ -1473,7 +1441,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     taskResult = entryPoint.start()
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
-                    // An InterruptedException is a Stop unwinding through a wait, not a crash: the overlay Stop must stay a Stop.
                     lastRunPostedException = isCrash(e)
                     taskResult =
                         TaskResult.Error(
@@ -1788,26 +1755,19 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         return rows
     }
 
-    /** The trainee a rotation plays in run [run], or "" without a rotation. */
     private fun rotationTraineeFor(rotation: RotationConfig, run: Int): String =
         if (rotation.enabled) rotation.inGameNames.getOrElse(rotation.indexForRun(run, rotationCursorOffset)) { "" } else ""
 
-    /** A launch that stopped on its trainee's own conflict, which a rotation skips ([unplayableRunStep]). */
     private fun skipsTrainee(navResult: NavigationResult, rotation: RotationConfig): Boolean =
         !navResult.success && navResult.lastDetectedState != "STOPPED" && unplayableRunStep(navResult.reasonKey, rotation.enabled) == UnplayableRunStep.SKIP
 
-    /** Adds why run [run]'s launch stopped ([stop]) to its record, so the report says why it did not play. */
     private fun attachLaunchStop(ledger: SessionLedger, run: Int, stop: TaskResult.Error, trainee: String) {
         val record = ledger.attachLaunchStop(run, stop.reasonKey, stop.reasonTrainee, stop.reasonOutfit, trainee) ?: return
         StatusBoard.runUpdated(record)
         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
     }
 
-    /**
-     * Leaves skipped run [run]: saves the resume record past it (no career of it is in the slot, and it
-     * is not counted as done) and backs the game out of the stopped launch to Home, where the next run's
-     * own launch starts. True once Home shows.
-     */
+    /** Saves the resume record past skipped run [run] (no career of it is in the slot) and backs out to Home; true once Home shows. */
     private fun leaveSkippedRun(ledger: SessionLedger, run: Int, totalRuns: Int, completedRuns: Int): Boolean {
         saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)
         ledger.phase = StartModule.PHASE_LAUNCHING
@@ -2191,8 +2151,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // actually confirmed.
                 var coldStartConfirmedCareer = false
 
-                // A skip that could not go on: the game did not come back to Home after skipped run [run], or
-                // the setup of the trainee for run [run] is missing.
                 fun haltSkipping(run: Int, snapshotMissing: Boolean) {
                     if (snapshotMissing) {
                         queueHaltReason = "missing rotation snapshot for the trainee of run $run"
@@ -2378,11 +2336,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         result = runSingleGame()
                     }
 
-                    // The overlay Stop sets no flag; give it the one the other Stops set, so everything below treats it alike.
                     if (isOverlayStop(BotService.isRunning, queueStopReason, lastRunPostedException)) queueStopRequested = true
 
-                    // A queue run whose launch stopped before Start Career keeps its reason. One stopped by its
-                    // trainee's own conflict started no career: a rotation skips it, and without one it halts.
+                    // A launch stopped by its trainee's own conflict started no career: a rotation skips it, else it halts.
                     val launchStop = (result as? TaskResult.Error)?.takeIf { enableRunQueue && it.reasonKey.isNotEmpty() }
                     val unplayable = if (queueSkipRequested || queueStopRequested) null else launchStop?.let { unplayableRunStep(it.reasonKey, rotation.enabled) }
 
@@ -2404,7 +2360,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             else -> result
                         }
                     if (finishesLastCareer(i, totalRuns, effectiveResult.code)) lastCareerFinished = true
-                    // A single run's launch navigation reports why it stopped, as a queue's navigation does.
                     val runError = effectiveResult as? TaskResult.Error
                     if (!enableRunQueue && runError != null && runError.reasonKey.isNotEmpty()) {
                         ledger.reasonKey = runError.reasonKey
@@ -2434,8 +2389,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     }
 
                     if (unplayable == UnplayableRunStep.HALT && launchStop != null) {
-                        // Without a rotation every run is this trainee and would stop the same way, whatever
-                        // Stop Queue on Error says.
+                        // Without a rotation every run is this trainee and would stop the same way.
                         MessageLog.e(TAG, "[QUEUE] Run $i cannot start its trainee (${launchStop.reasonKey}). Without a rotation every run is this trainee, so the queue stops here.")
                         queueHaltReason = "run $i could not start its trainee (${launchStop.reasonKey})"
                         ledger.haltEnd = SessionEnd.LAUNCH_FAILED_BEFORE_RUN
@@ -2446,7 +2400,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         queueHaltResultCode = effectiveResult.code.name
                         queueHaltRun = i - 1
                         queueHaltCareerInFlight = false
-                        // No career of this run is in the slot, so Start launches it again.
                         if (i > 1) saveQueueState(context, active = true, currentRun = i - 1, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns) else clearQueueState(context)
                         break
                     }
@@ -2505,9 +2458,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             }
                             val accessibilityKey = accessibilityHaltKey
                             if (accessibilityKey != null) {
-                                // The repair could not help (no grant, dead taps, or a game that ignores them), so the next
-                                // run would fail the same way. Pause regardless of stopOnError, keeping the saved queue
-                                // for a Start after MuMu is restarted or the grant given.
+                                // The repair could not help, so the next run would fail the same way: pause regardless of
+                                // stopOnError, keeping the saved queue.
                                 MessageLog.e(TAG, "[QUEUE] Run $i stopped because its taps changed nothing and could not be repaired ($accessibilityKey). Pausing the queue.")
                                 queueHaltReason = "run $i stopped because its taps changed nothing and could not be repaired ($accessibilityKey)"
                                 ledger.haltEnd = SessionEnd.RUN_HALTED
@@ -2532,8 +2484,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     }
 
                     if (unplayable == UnplayableRunStep.SKIP) {
-                        // Leave the stopped launch from Home: the next run's own launch starts there, for the
-                        // rotation's next trainee. No career played, so there is no career end and no wait.
+                        // No career was played: no career end and no wait.
                         if (!leaveSkippedRun(ledger, i, totalRuns, completedRuns)) {
                             haltSkipping(i, snapshotMissing = false)
                             break
@@ -2785,16 +2736,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.i(TAG, "[QUEUE] ========================================\n")
                     } else {
                         // Clear persisted queue state since queue finished normally.
-                        // A bot stop keeps it, as a halt does (above); every other outcome below clears it.
                         val stopReason = queueStopReason
                         if (!keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished)) clearQueueState(context)
                         when {
                             queueStopRequested && stopReason != null -> {
-                                // A controlled internal stop (trainee mismatch, or an unresponsive
-                                // between-run navigation) rather than a plain user Stop or a
-                                // failure. stopReason is always developer-authored prose (set at
-                                // its three call sites, in StartModule.kt, Campaign.kt and DialogHandler.kt), never exception
-                                // text, so it is safe to show verbatim.
+                                // A controlled internal stop rather than a user Stop or failure. stopReason is always
+                                // developer-authored prose, never exception text, so it is safe to show verbatim.
                                 sendQueueProgressEvent(completedRuns, totalRuns, "queueHalted", message = stopReason)
                                 MessageLog.w(TAG, "\n[QUEUE] ========================================")
                                 MessageLog.w(TAG, "[QUEUE] Queue halted after $completedRuns of $totalRuns runs.")
@@ -3048,11 +2995,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         enqueueJsEvent(event)
     }
 
-    /**
-     * A crash ends the service like the overlay Stop does; recording it keeps [isOverlayStop] from reading it as the player's.
-     * Priority 1 runs this before the library's subscriber (priority 0), which clears [BotService.isRunning], whatever order
-     * the two registered in.
-     */
+    /** A crash ends the service like the overlay Stop; priority 1 records it before the library's subscriber clears [BotService.isRunning]. */
     @Subscribe(priority = 1)
     fun onExceptionEvent(event: ExceptionEvent) {
         if (isCrash(event.exception)) lastRunPostedException = true

@@ -10,10 +10,6 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
-/**
- * Restarting a frozen game: when the kill route applies, the Home check on real captures, and the
- * order and bounds of the close-and-relaunch sequence against scripted fakes.
- */
 @DisplayName("Frozen game restart")
 class GameRestartTest {
     @Nested
@@ -67,7 +63,6 @@ class GameRestartTest {
 
         @Test
         fun `an animated game that changes enough between frames still does not count as Home landing`() {
-            // The title changed 0.837 of the cells between two frames: enough to pass the share alone.
             assertEquals(0.837, changedShare(grids.getValue("title_20s"), grids.getValue("title_60s")), 0.001)
             assertTrue(screenLeftGame(grids.getValue("title_20s"), grids.getValue("title_60s")))
             assertFalse(homeLanded(grids.getValue("title_20s"), grids.getValue("title_60s"), grids.getValue("title_40s")))
@@ -88,7 +83,6 @@ class GameRestartTest {
         }
     }
 
-    /** Scripted fakes that record every step with the time it happened. */
     private class Script(
         val homePressed: Boolean = true,
         val leavesGame: Boolean = true,
@@ -201,7 +195,6 @@ class GameRestartTest {
             assertEquals(FrozenGameRestart.RESTARTED, s.run())
             assertEquals(listOf("home") + List(6) { "kill" } + "launch-fresh", s.steps)
             assertEquals(listOf(5.0, 15.0, 25.0, 35.0, 45.0, 55.0), s.killTimes)
-            // The launch waits for the whole window: the settle took 33 s mid-career.
             assertEquals(GAME_LAUNCH_SECONDS_AFTER_HOME + GAME_TITLE_POLL_SECONDS, s.now, 1e-9)
         }
 

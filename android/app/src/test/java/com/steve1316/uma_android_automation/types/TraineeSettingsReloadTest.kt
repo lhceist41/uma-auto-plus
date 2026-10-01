@@ -7,22 +7,15 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * A rotation resync swaps another trainee's settings snapshot into the DB mid-career while the same
- * [Trainee] and Campaign objects keep playing. Their preset-owned values (preferred distance override,
- * stat targets, summer rest rule, mood floor) must follow the new snapshot, and everything observed
- * from the screen must survive.
- */
+/** A rotation resync swaps in another trainee's settings mid-career: preset-owned values must follow, observed values must survive. */
 @DisplayName("Trainee training settings follow a mid-career settings swap")
 class TraineeSettingsReloadTest {
-    /** Distinct targets per distance, so a distance-key mix-up cannot pass unnoticed. */
     private fun targets(base: Int): Map<TrackDistance, Stats> =
         TrackDistance.entries.withIndex().associate { (i, distance) ->
             val offset = base + i * 10
             distance to Stats(speed = 1100 + offset, stamina = 400 + offset, power = 700 + offset, guts = 200 + offset, wit = 300 + offset)
         }
 
-    // A Mile trainee's slot, then a Long stayer's slot, as in the live incident.
     private val mileTargets = targets(0)
     private val longTargets = targets(5)
 

@@ -245,10 +245,7 @@ class TrackblazerShopList(private val game: Game) {
             return Pair(autoUsed, remaining)
         }
 
-        /**
-         * The shop row's name, read at most once per detected entry: the scroll loop asks for a row's key
-         * twice per frame, and an unreadable row (greyed checkbox: unaffordable or already bought) stays unread.
-         */
+        /** The scroll loop asks for a row's key twice per frame; an unreadable row (greyed checkbox) stays unread. */
         internal fun cachedRowName(cache: MutableMap<Int, String?>, index: Int, read: () -> String?): String? =
             if (cache.containsKey(index)) cache[index] else read().also { cache[index] = it }
 
@@ -276,8 +273,7 @@ class TrackblazerShopList(private val game: Game) {
     /** Mapping of shop items to their price, effect, and whether they are allowed for quick usage. */
     val shopItems: Map<String, TrackblazerItemInfo> get() = Companion.shopItems
 
-    /** Items to not purchase from the Shop. Read on each use: the list is preset-owned, and a rotation resync
-     * swaps in another trainee's settings mid-career while this object keeps its shop and inventory state. */
+    /** Read on each use: a rotation resync swaps in another trainee's settings while this object keeps its state. */
     private val excludedItemsString: String
         get() = SettingsHelper.getStringSetting(
             "scenarioOverrides",
@@ -313,7 +309,6 @@ class TrackblazerShopList(private val game: Game) {
         }
     }
 
-    /** A per-pass shop row name reader: see [cachedRowName]. */
     private fun shopRowNameReader(): (ScrollListEntry) -> String? {
         val names = HashMap<Int, String?>()
         return { entry -> cachedRowName(names, entry.index) { getShopItemName(entry, isEntryDisabled(entry.bitmap)) } }

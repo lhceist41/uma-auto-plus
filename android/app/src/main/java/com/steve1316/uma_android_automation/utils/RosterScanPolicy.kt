@@ -1,15 +1,9 @@
 package com.steve1316.uma_android_automation.utils
 
 /**
- * Certainty rules for the trainee roster scan.
- *
- * On 2026-07-28 five cells read blank and were silently dropped (no log, no retry), and a page skip
- * built on that page then started the next page below them. Those five cells held Hishi Amazon,
- * Haru Urara, both Grass Wonders and Gold Ship, so an owned trainee was reported as absent and the
- * queue halted. The scan therefore reads every page from row 0 (the name dedup absorbs the
- * re-reads), retries a blank cell, and earns a second pass when a read failed.
- *
- * Kept free of Android types so the arithmetic is unit-testable.
+ * Certainty rules for the trainee roster scan: every page is read from row 0 (name dedup absorbs the
+ * re-reads), a blank cell is retried, and a failed read earns a second pass, so a dropped cell never
+ * reports an owned trainee as absent. Kept free of Android types so it is unit-testable.
  */
 object RosterScanPolicy {
     /**
@@ -32,13 +26,7 @@ object RosterScanPolicy {
      */
     fun needsSecondPass(failedReads: Int, passIndex: Int): Boolean = failedReads > 0 && passIndex == 0
 
-    /**
-     * Whether a not-found scan is explained by the target owning only an outfit her preset skips.
-     *
-     * Only on a complete read with no near-miss name: with a failed cell the plain outfit may simply not
-     * have been read, and a non-excluded cell at or above [nearNameSimilarity] may be her plain outfit
-     * misread, so "she is on the roster only as that outfit" would be an unsupported claim either way.
-     */
+    /** Only on a complete read with no near-miss name: otherwise her plain outfit may be unread or misread. */
     fun onlyExcludedOutfitOwned(failedReads: Int, excludedOutfitSeen: String?, nearestSimilarity: Double, nearNameSimilarity: Double): Boolean =
         failedReads == 0 && excludedOutfitSeen != null && nearestSimilarity < nearNameSimilarity
 }

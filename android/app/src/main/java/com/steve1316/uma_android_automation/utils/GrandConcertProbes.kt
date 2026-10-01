@@ -348,9 +348,7 @@ fun grandConcertDialogHeaderPresent(sampler: SparkPixelSampler): Boolean {
     return isLessonDialogGreen(r, g, b)
 }
 
-/** True when a lesson Learn or Schedule dialog is up: the dialog header plus its technique or song kind
- * pill. The skill list's Learn "Confirmation" has the same header, title, Cancel and Learn, but a grey
- * row under the pill, measured (241, 241, 241) against (150, 219, 70) and (171, 130, 245). */
+/** The skill list's Learn "Confirmation" shares the header, but its row under the pill is grey (241, 241, 241) against (150, 219, 70) / (171, 130, 245). */
 fun grandConcertLessonConfirmationPresent(sampler: SparkPixelSampler): Boolean {
     if (!grandConcertDialogHeaderPresent(sampler)) return false
     val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_X, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_Y)
@@ -811,28 +809,21 @@ object GrandConcertEscort {
     const val SKIP_GLYPH_Y = 1850
     val SKIP_DISC_WHITE_POINTS = listOf(975 to 1870, 1025 to 1840)
 
-    /** The skip glyph's vertical bar. The menu (three bars) and close (cross) glyphs that take the
-     * same disc on some performances have no ink there. */
+    /** The menu and close glyphs that can take the same disc have no ink on the skip glyph's bar. */
     val SKIP_GLYPH_BAR_POINTS = listOf(1001 to 1815, 1001 to 1827, 1001 to 1839)
 
-    /** Some performances show a menu button in the skip disc instead of the skip glyph: three
-     * brown bars (the Grand finale of 2026-09-30, whose 3D rendered black on MuMu). A tap opens a
-     * pill of Skip and Rotate above the disc and turns the button into a close cross. */
+    /** Some performances show a three-bar menu button in the skip disc; a tap opens a Skip/Rotate pill and turns it into a close cross. */
     val PLAYBACK_MENU_BAR_POINTS = listOf(955 to 1804, 1000 to 1804, 955 to 1826, 1000 to 1826, 955 to 1850, 1000 to 1850)
     val PLAYBACK_MENU_GAP_POINTS = listOf(977 to 1815, 977 to 1838)
     const val PLAYBACK_MENU_X = 977
     const val PLAYBACK_MENU_Y = 1826
 
-    /** The open menu: the close cross in the disc (ink at its centre, clear either side) and the
-     * Skip entry, identified by its glyph (bar and triangles with the gaps between them clear),
-     * the pill's white above the glyph and below the label, and the "Skip" label's ink. */
     val PLAYBACK_MENU_CROSS_INK_POINTS = listOf(977 to 1826)
     val PLAYBACK_MENU_CROSS_CLEAR_POINTS = listOf(955 to 1826, 1000 to 1826)
     val MENU_SKIP_GLYPH_INK_POINTS = listOf(996 to 1536, 996 to 1548, 996 to 1561, 958 to 1548, 977 to 1548)
     val MENU_SKIP_GLYPH_CLEAR_POINTS = listOf(966 to 1560, 985 to 1560, 977 to 1515, 977 to 1630)
 
-    /** The "Skip" label under the glyph (x, y, width, height), and the least brown pixels it
-     * holds: 395 on the capture, 0 with the menu closed. */
+    /** Label region (x, y, width, height); the ink minimum is below 395 on the capture and above 0 with the menu closed. */
     val MENU_SKIP_LABEL_REGION = intArrayOf(950, 1588, 56, 31)
     const val MENU_SKIP_LABEL_MIN_INK = 120
     const val MENU_SKIP_X = 977
@@ -917,10 +908,7 @@ fun grandConcertCutsceneCheckboxState(sampler: SparkPixelSampler): GrandCutscene
     return if (checked) GrandCutsceneCheckbox.CHECKED else GrandCutsceneCheckbox.UNCHECKED
 }
 
-/** True when the concert playback is on screen, identified by its skip control: the brown glyph
- * inside a white disc at the bottom right. The 3D scene itself is too dynamic to anchor on. The
- * glyph's vertical bar keeps the menu and close buttons that can take the same disc from reading
- * as a skip. */
+/** The 3D scene is too dynamic to anchor on, so playback is identified by the skip disc; the glyph's bar keeps the menu and close buttons from reading as a skip. */
 fun grandConcertPlaybackSkipPresent(sampler: SparkPixelSampler): Boolean {
     val glyph = dominantSaturated(sampler, GrandConcertEscort.SKIP_GLYPH_X, GrandConcertEscort.SKIP_GLYPH_Y, 12)
     val brown = glyph != null && glyph.first >= 100 && glyph.first - glyph.third >= 60 && glyph.second in 40..110
@@ -928,15 +916,11 @@ fun grandConcertPlaybackSkipPresent(sampler: SparkPixelSampler): Boolean {
     return skipDiscWhite(sampler) && allGlyphBrown(sampler, GrandConcertEscort.SKIP_GLYPH_BAR_POINTS)
 }
 
-/** True when a performance shows the menu button (three bars) in the skip disc, with its menu
- * closed. */
 fun grandConcertPlaybackMenuButtonPresent(sampler: SparkPixelSampler): Boolean =
     skipDiscWhite(sampler) &&
         allGlyphBrown(sampler, GrandConcertEscort.PLAYBACK_MENU_BAR_POINTS) &&
         allGlyphClear(sampler, GrandConcertEscort.PLAYBACK_MENU_GAP_POINTS)
 
-/** True when the performance menu is open and its Skip entry is positively identified: the close
- * cross in the disc, and the skip glyph with its "Skip" label in the pill above it. */
 fun grandConcertPlaybackMenuSkipPresent(sampler: SparkPixelSampler): Boolean {
     val cross =
         skipDiscWhite(sampler) &&
@@ -956,7 +940,7 @@ fun grandConcertPlaybackMenuSkipPresent(sampler: SparkPixelSampler): Boolean {
     return ink >= GrandConcertEscort.MENU_SKIP_LABEL_MIN_INK
 }
 
-/** The brown of the playback controls' glyphs, lighter at the top of a glyph than at its foot. */
+/** Glyph brown is lighter at the top of a glyph than at its foot. */
 private fun isGlyphBrown(r: Int, g: Int, b: Int): Boolean = r >= 100 && r - b >= 80 && g in 40..130
 
 private fun allGlyphBrown(sampler: SparkPixelSampler, points: List<Pair<Int, Int>>): Boolean =

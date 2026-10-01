@@ -44,20 +44,13 @@ data class SparkListGeometry(
  * real sets (the 2026-07-08 capture shows 9 full rows + 1 clipped). */
 val SPARKS_SCREEN_GEOMETRY = SparkListGeometry(firstRowY = 307, rowPitch = 119, maxRows = 9, starXs = listOf(846, 894, 941), debugPrefix = "sparkRow")
 
-/** The "Keep this set of Sparks?" / Spark Selection Confirmation dialog list: a fixed-size
- * card whose list window holds exactly 11 rows from y=315. A shorter set leaves the grey list
- * body (241) below its last row; a 12+ row set scrolls (live 2026-09-30: 11 visible, the 12th
- * below the fold). The slot under the window is the dialog footer, which samples the same
- * near-white on every set size, so it must never count as an end marker: an 11-row window
- * proves nothing and the scrolling reader has to show the list cannot move.
+/** The keep-set confirmation list: the window holds exactly 11 rows from y=315 and a 12+ row set scrolls.
+ * A shorter set leaves the grey list body (241) below its last row. The slot under the window is the
+ * dialog footer, near-white on every set size, so it is never an end marker.
  *
- * starXs are the measured CENTERS of the three star glyphs (gold runs 835..856 / 881..902 /
- * 926..947 on every confirmation-family capture, including the 2026-07-21 live-failure frame).
- * The first calibration used 855/901/947 - the glyphs' last gold column - so a filled star's
- * 5x5 mean was half background (third slot read r=220 against the r>200 gold test, vs 255 at
- * center) and one live settle/glint frame undercounted Medium 3* as 2*, hard-blocking a
- * finished no-spend career (2026-07-21 21:12). Centered sampling reads filled (255,216,78)
- * vs empty (231,227,223): the blue channel alone separates by ~145. */
+ * starXs are the centers of the star glyphs (gold runs 835..856 / 881..902 / 926..947): sampling a
+ * glyph's edge halves the 5x5 mean and undercounts a filled star. Filled reads (255,216,78) against
+ * empty (231,227,223), so the blue channel alone separates by ~145. */
 val SPARKS_CONFIRM_GEOMETRY = SparkListGeometry(firstRowY = 315, rowPitch = 119, maxRows = 11, starXs = listOf(845, 891, 936), debugPrefix = "sparkKeepRow")
 
 /** The Spark Selection pager list: 8 full rows per page, 120 px pitch, stars on the SPARKS
@@ -193,9 +186,7 @@ fun parseSparkRowCellsWithEvidence(sampler: SparkPixelSampler, geometry: SparkLi
     return rows
 }
 
-/** True when a parsed window contains the end of its list: the grid break fell inside the
- * window, or the named read stopped on a starless, textless slot. A window whose every slot
- * holds a named row proves nothing; the list may continue below the fold. */
+/** A window whose every slot holds a named row proves nothing: the list may continue below the fold. */
 fun sparkWindowShowsListEnd(geometry: SparkListGeometry, cellCount: Int, namedCount: Int): Boolean =
     cellCount < geometry.maxRows || namedCount < cellCount
 
@@ -281,8 +272,7 @@ fun sparkCellsLeadCorrectly(cells: List<SparkRowCell>): Boolean =
         cells[1].kind == SparkRowKind.APTITUDE &&
         cells[2].kind == SparkRowKind.UNIQUE
 
-/** Whether one keep-dialog frame holds a complete kept set: a real spark list whose end is in the
- * window. A 12+ row set fills the window, so one frame of it is never the whole set. */
+/** A 12+ row set fills the window, so one frame of it is never the whole set. */
 fun keepDialogFrameIsCompleteSet(cells: List<SparkRowCell>, namedCount: Int): Boolean =
     namedCount >= 3 && sparkCellsLeadCorrectly(cells) && sparkWindowShowsListEnd(SPARKS_CONFIRM_GEOMETRY, cells.size, namedCount)
 

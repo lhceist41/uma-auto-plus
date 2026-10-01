@@ -55,8 +55,7 @@ class QueueLedgerWiringTest {
         @Test
         fun `each queueHaltReason assignment records its ending right beside it`() {
             val sites = Regex("queueHaltReason = \"").findAll(session).map { it.range.first }.toList()
-            // Thirteen: the ten halts, a launch whose trainee cannot start with no rotation (LAUNCH_FAILED_BEFORE_RUN),
-            // and a skip that cannot go on (the game not back on Home, or the next trainee's setup missing).
+            // Thirteen: the ten halts, a launch whose trainee cannot start with no rotation, and a skip that cannot go on.
             assertEquals(13, sites.size, "the halt sites")
             val ends =
                 sites.map { site ->
@@ -84,8 +83,6 @@ class QueueLedgerWiringTest {
 
         @Test
         fun `both navigation halts carry the navigation's reason key`() {
-            // Every site of both endings names its reason on the next line: a navigation's own key, the key of
-            // the run's own launch that stopped, or the screen a skipped run could not be left from.
             val reasons = setOf("ledger.reasonKey = navResult.reasonKey", "ledger.reasonKey = launchStop.reasonKey", "ledger.reasonKey = \"STUCK_ON_SCREEN\"")
             for (end in listOf("LAUNCH_FAILED_BEFORE_RUN", "NAVIGATION_FAILED_BETWEEN_RUNS")) {
                 val sites = Regex(Regex.escape("ledger.haltEnd = SessionEnd.$end")).findAll(session).toList()

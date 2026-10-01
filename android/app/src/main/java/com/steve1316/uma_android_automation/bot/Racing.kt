@@ -267,10 +267,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Retries used on the current race. Shared by the button-based and dialog-based retry paths so both honor the per-race limit. */
     var retriesThisRace: Int = 0
 
-    /** True while a goal race (the race-day ribbon's mandatory race) runs, so a Try Again dialog the bot declines is known to fail the goal. */
+    /** True while a goal race (the race-day ribbon's mandatory race) runs, so a declined Try Again is known to fail the goal. */
     var bRunningGoalRace: Boolean = false
 
-    /** True once this race's Try Again was accepted to retry a lost goal race, so the "GoalRaces" Alarm Clock policy knows the purchase is for one. */
     var bRetryingLostGoalRace: Boolean = false
 
     /** Which tier resolved the LAST [lookupRaceInDatabase] call, so a caller can label entered-race telemetry
@@ -669,8 +668,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         internal fun canonicalizeRaceLabelForLookup(detectedName: String): String =
             DISTANCE_METER_TOKEN.replace(detectedName) { match -> match.value.replace('O', '0') }
 
-        /** Whether `alarmClockPolicy` lets the bot buy an Alarm Clock (10 carats) to retry a race of [grade]; "GoalRaces" buys only to
-         * retry a lost goal race. An unknown policy never buys. */
+        /** "GoalRaces" buys an Alarm Clock (10 carats) only to retry a lost goal race; an unknown policy never buys. */
         internal fun alarmClockPurchaseAllowed(
             policy: String,
             grade: RaceGrade?,
@@ -684,8 +682,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 else -> false
             }
 
-        /** How many retries this race may use. A lost goal race ends the career, so it may use the rest of the career's retry
-         * budget; any other race keeps the per-race cap. */
+        /** A lost goal race ends the career, so it may use the rest of the career's retry budget; any other race keeps the per-race cap. */
         internal fun raceRetryLimit(
             lostGoalRace: Boolean,
             retriesThisRace: Int,
@@ -693,7 +690,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             maxRetriesPerRace: Int,
         ): Int = if (lostGoalRace) retriesThisRace + budgetLeft else maxRetriesPerRace
 
-        /** Whether the Try Again dialog may be accepted: budget left and this race under its [raceRetryLimit]. */
         internal fun retryAllowed(
             lostGoalRace: Boolean,
             retriesThisRace: Int,
@@ -701,7 +697,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             maxRetriesPerRace: Int,
         ): Boolean = budgetLeft > 0 && retriesThisRace < raceRetryLimit(lostGoalRace, retriesThisRace, budgetLeft, maxRetriesPerRace)
 
-        /** The log line for a retry taken from the Try Again dialog: what it spends, and what this race's limit and the career's retry budget leave. */
         internal fun raceRetryText(
             freeRetryShown: Boolean,
             retryNumber: Int,
@@ -721,7 +716,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return "[RACE] Retrying $race with $spends: retry $retryNumber of $raceLimit for this race, $budgetLeft left in this career's retry budget."
         }
 
-        /** The log line for a Try Again dialog the bot closes, naming the rule that stopped the retry. */
         internal fun raceRetryDeclinedText(
             alarmClockDeclined: Boolean,
             retriesThisRace: Int,
@@ -739,8 +733,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return "[RACE] Not retrying the failed race: $reason. Closing the Try Again dialog."
         }
 
-        /** Whether closing a Try Again dialog ends the career on a failed goal. Finale losses stay out: the finale win count records them
-         * (quality FINALE_LOST). */
+        /** Finale losses stay out: the finale win count records them (quality FINALE_LOST). */
         internal fun declinedRetryFailsGoal(runningGoalRace: Boolean, finaleSeason: Boolean): Boolean = runningGoalRace && !finaleSeason
     }
 
@@ -2094,13 +2087,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // cleared, so the maiden-race check stops re-firing every turn when the fan-tier OCR reads stale.
         campaign.trainee.noteCompletedRaceGrade(lastRaceGrade)
 
-        // Close the outcome loop for the finale: the gold "1st" laurel (= 1st place) is co-present with
-        // the results screen just confirmed above, before we click through it. Read the laurel, NOT the
-        // text banner - the URA Qualifier and Semi-Final show "You did it!" while only the Finals shows
-        // "Congratulations!", so a check of that text banner undercounts (validated live 2026-07-09:
-        // Rudolf swept 3/3 but the text-only check caught only the Finals). Record win/lose per finale
-        // race so the ledger tells a true finale win from a completed-but-lost run. Double-read since the
-        // result graphic can lag one frame.
+        // Close the outcome loop for the finale: read the gold "1st" laurel on the results screen, NOT the text banner (the URA Qualifier and
+        // Semi-Final show "You did it!", only the Finals "Congratulations!", so the banner undercounts). Double-read: the graphic can lag a frame.
         if (lastRaceGrade == RaceGrade.FINALE && campaign.capturesFinaleWins) {
             var wonFinaleRace = LabelFirstPlace.check(game.imageUtils)
             if (!wonFinaleRace) {
@@ -3240,12 +3228,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             tapRaceDayButton()
         }
 
-        // A goal race day opens straight from the previous turn's training without passing the Main
-        // screen, whose date read has not run, so the stored date is still the previous turn. Read it
-        // from the race list so the lookup, its grade (Alarm Clock policy, graded race events) and the
-        // recorded race belong to the race actually run. Finale days are dated on the Main screen
-        // before their race, and the race list does not name the finale round, so a read there could
-        // only move the date back to the first finale turn.
+        // A goal race day opens straight from training without the Main screen's date read, so the stored date is still the previous turn. Read it
+        // from the race list so the lookup, its grade and the recorded race belong to the race run. Finale days are dated on the Main screen and the
+        // race list does not name the finale round, so a read there could only move the date back.
         if (!campaign.date.bIsFinaleSeason) {
             val lastMainScreenTurn = campaign.date.day
             if (campaign.date.update(game.imageUtils, scenario = game.scenario, isOnMainScreen = false)) {

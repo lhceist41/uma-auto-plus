@@ -224,9 +224,8 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         private val TAG: String = "[${MainActivity.loggerTag}]TrainingEvent"
 
         /**
-         * The weight per point of energy an event option gives. With Prioritize Energy on, energy outweighs any
-         * stat only while it is short (below 50%): above that, a small energy gain used to beat a much larger
-         * stat gain even at full energy. Otherwise the weight falls as energy rises and is zero from 90%.
+         * With Prioritize Energy on, energy outweighs any stat only while it is short (below 50%): above that, a small energy gain beat a much
+         * larger stat gain even at full energy. Otherwise the weight falls as energy rises and is zero from 90%.
          */
         internal fun eventEnergyMultiplier(currentEnergy: Int, prioritizeEnergy: Boolean): Int =
             when {
@@ -238,13 +237,12 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                 else -> 1
             }
 
-        /** A line between two outcomes of a "Randomly either" option that states the next outcome's chance. */
+        /** The "or (~N%)" line between two outcomes of a "Randomly either" option. */
         private val RANDOM_OUTCOME_CHANCE = Regex("(?i)^or \\(~?(\\d+)%\\)$")
 
         /**
-         * An event option's weight from its reward lines. A "Randomly either" option gives only one of its
-         * outcomes (split by divider lines and "or (~N%)" lines), so it is weighed by what it is likely to give;
-         * its header line keeps its own weight. Any other option is the sum of its lines.
+         * A "Randomly either" option gives only one outcome (split by divider and "or (~N%)" lines), so it is weighed by what it is likely to give;
+         * its header line keeps its own weight.
          */
         internal fun weighEventOption(lines: List<String>, weighLine: (String) -> Int): Int {
             val header = lines.indexOfFirst { it.isNotBlank() }
@@ -273,10 +271,8 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * The weight a random option is likely to give: each outcome at its stated chance, the rest of the
-         * chance shared evenly by the outcomes that state none (the data states it only on the second of two
-         * outcomes, "or (~70%)", leaving the first 30%). Without stated chances, or when they do not add up,
-         * every outcome counts equally.
+         * Each outcome at its stated chance, the rest shared evenly by outcomes stating none (the data states it only on the second of two,
+         * "or (~70%)", leaving the first 30%). Without stated chances, or when they do not add up, outcomes count equally.
          */
         internal fun expectedOutcomeWeight(outcomes: List<Pair<Int, Int?>>): Int {
             if (outcomes.isEmpty()) return 0
@@ -1107,7 +1103,6 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                     }
                                 lineWeight += finalSkillPoints
                             } else if (line.trim().lowercase().startsWith("all stats")) {
-                                // Every one of the five stats gains the amount.
                                 lineWeight +=
                                     try {
                                         formattedLine.toInt() * 5

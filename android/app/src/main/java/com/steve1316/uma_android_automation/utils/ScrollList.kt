@@ -68,18 +68,13 @@ internal fun endOfListProven(atTrackBottom: Boolean, foundNewEntries: Boolean, e
     atTrackBottom && !foundNewEntries && entriesDetected
 
 /**
- * Whether the scrollbar proves the list already rests at its top, so a scroll-to-top swipe would
- * move nothing. The track must be at least twice the thumb's height: a faint scrollbar can
- * collapse the track bbox down to the thumb, which would otherwise read as "at top" anywhere.
- * [tolerancePx] absorbs the +-1-2 px detection jitter.
+ * The track must be at least twice the thumb's height: a faint scrollbar can collapse the track
+ * bbox to the thumb, which would read as "at top" anywhere. [tolerancePx] absorbs 1-2 px jitter.
  */
 internal fun listProvenAtTop(bar: BoundingBox?, thumb: BoundingBox?, tolerancePx: Int = 3): Boolean =
     bar != null && thumb != null && bar.h >= 2 * thumb.h && thumb.y - bar.y <= tolerancePx
 
-/**
- * The number of leading [currentKeys] that repeat the tail of [lastKeys]: the rows this frame
- * shares with the previous one. A frame whose every key overlaps revealed nothing new.
- */
+/** A frame whose every key overlaps the previous one revealed nothing new. */
 internal fun frameOverlapCount(lastKeys: List<String>, currentKeys: List<String>): Int {
     for (i in lastKeys.size.coerceAtMost(currentKeys.size) downTo 1) {
         if (lastKeys.takeLast(i) == currentKeys.take(i)) return i

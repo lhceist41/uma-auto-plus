@@ -9,13 +9,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * Retries on a lost goal race, and the "Goal races" Alarm Clock policy.
- *
- * Fixtures: a Mihono Bourbon URA career lost Tenno Sho (Spring) twice and ended with one retry of its career budget of 3 still
- * unused (it had used one on Kikuka Sho); a Biwa Hayahide Grand Concert career lost its Kikuka Sho goal twice with two retries
- * unused. In both, the per-race cap of 1 closed the second Try Again dialog.
- */
+/** Retries on a lost goal race, and the "Goal races" Alarm Clock policy: a lost Tenno Sho (Spring) ended a career with a retry of its budget unused. */
 @DisplayName("Goal race retries")
 class GoalRaceRetryTest {
     private fun source(relative: String): String {
@@ -42,7 +36,6 @@ class GoalRaceRetryTest {
 
     private val botDir = "android/app/src/main/java/com/steve1316/uma_android_automation/bot"
 
-    /** Retries taken on a race the bot keeps losing: the Try Again dialog is accepted while [Racing.retryAllowed] says so. */
     private fun retriesTaken(
         budgetAtRace: Int,
         lostGoalRace: Boolean,
@@ -103,7 +96,6 @@ class GoalRaceRetryTest {
             val allowed = retry.indexOf("if (Racing.retryAllowed(lostGoalRace, racing.retriesThisRace, racing.raceRetries, racing.maxRetriesPerRace)) {")
             assertTrue(skipped in 0 until allowed, "a declined purchase ends the retries before the budget is consulted")
             assertTrue(retry.contains("if (lostGoalRace) racing.bRetryingLostGoalRace = true"))
-            // Trackblazer takes the same path: its own override, which retried only G1-G3 races, is gone.
             assertFalse(source("$botDir/campaigns/Trackblazer.kt").contains("override fun shouldRetryRace("))
         }
     }
@@ -113,8 +105,7 @@ class GoalRaceRetryTest {
     inner class NoOtherRetries {
         @Test
         fun `the results-screen retry taps are gone, so nothing retries a won race, a passed goal or an optional race`() {
-            // A Trackblazer career at the default cap of 1 tapped retry after G1 wins and then declined its own
-            // confirmation, five times: the tap had already counted the retry, so these taps never retried anything.
+            // A Trackblazer career tapped retry after G1 wins, then declined its own confirmation: the tap had already counted the retry.
             val racing = source("$botDir/Racing.kt")
             val loop = body(racing, "fun runRaceWithRetries(): Boolean {", "private fun tapRaceDayButton(")
             assertFalse(loop.contains("TryAgain"), "no retry tap in the race loop")

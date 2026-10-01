@@ -20,10 +20,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * A game that ignores taps that still reach the screen is told apart from dead accessibility input
- * by the own-input probe, restarted on a screen the bot knows, and named truthfully when it cannot be.
- */
 @DisplayName("Unresponsive game on a known screen")
 class UnresponsiveGameTest {
     @Nested
@@ -45,8 +41,6 @@ class UnresponsiveGameTest {
 
         @Test
         fun `an inconclusive probe never claims dead input or a frozen game`() {
-            // The 2026-09-30 false negative: a healthy game, the tap dispatched on a window not yet
-            // proven touchable, and the stop called the input dead.
             assertEquals(TAPS_HAD_NO_EFFECT, stuckInputKey(A11Y_INPUT_DEAD, OwnInputProbeResult.INCONCLUSIVE))
             assertEquals(A11Y_GRANT_MISSING, stuckInputKey(A11Y_GRANT_MISSING, OwnInputProbeResult.INCONCLUSIVE), "a refused repair is a fact either way")
             assertEquals(null, stuckInputKey(null, OwnInputProbeResult.INCONCLUSIVE))
@@ -112,7 +106,6 @@ class UnresponsiveGameTest {
                 for (reopen in listOf(GameReopen.RESTARTED, GameReopen.NOT_RESTARTED, GameReopen.NOT_DISPATCHED)) {
                     assertEquals(1, unresponsiveReopensAfter(reopen, used = 1, sdk = sdk), "${reopen.name} sdk $sdk")
                 }
-                // After the re-front the next stuck stop halts instead of trying again.
                 assertFalse(reopensUnresponsiveGame(GAME_NOT_RESPONDING, careerObserved = true, reopensThisRun = unresponsiveReopensAfter(GameReopen.REFRONTED, used = 1, sdk = sdk)))
             }
         }
@@ -278,7 +271,6 @@ class UnresponsiveGameTest {
             val body = probe.substringAfter("internal fun ownInputReachesScreen(").substringBefore("\n}\n")
             assertTrue(body.indexOf("val probeY = ownInputProbeY(buttonX, buttonY, buttonSize)") in 0 until body.indexOf("windowManager.addView(view, ownInputProbeParams(probeY))"))
             assertTrue(body.contains("if (probeY == null) {"))
-            // One injection can block up to 30 s, so the tries run on their own thread and the probe waits a bounded time.
             assertTrue(body.contains("val selfTouchArrived = selfTouched.await(OWN_INPUT_PROBE_SELF_TOUCH_BUDGET_MS, TimeUnit.MILLISECONDS)"))
             assertTrue(body.indexOf("injectOwnTouch(") in body.indexOf("Thread {") until body.indexOf("injector.start()"), "injection off the probe's thread")
             assertTrue(OWN_INPUT_PROBE_SELF_TOUCH_BUDGET_MS in 1000L..4000L)

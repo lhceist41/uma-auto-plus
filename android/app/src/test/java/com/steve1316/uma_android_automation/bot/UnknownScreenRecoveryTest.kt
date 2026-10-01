@@ -74,8 +74,8 @@ class UnknownScreenRecoveryTest {
                 game.contains("fun restartGame(waitAfterLaunch: Double = 20.0): Boolean = reopenGame(attempt = 1, waitAfterLaunch = waitAfterLaunch)"),
                 "the navigator's single relaunch stays the first-attempt re-front",
             )
-            // CLEAR_TASK against a live game killed it on 2026-07-21: it exists only behind launchGame's
-            // clearTask flag, and only the restart sequence passes true, after its kill window.
+            // CLEAR_TASK against a live game killed it: it exists only behind launchGame's clearTask flag, and only the restart sequence passes true,
+            // after its kill window.
             assertEquals(1, Regex("FLAG_ACTIVITY_CLEAR_TASK").findAll(game).count())
             assertTrue(game.contains("if (clearTask) Intent.FLAG_ACTIVITY_CLEAR_TASK else Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED"))
             assertFalse(game.contains("launchGame(clearTask = true)") || game.contains("launchGame(true)"))
@@ -123,8 +123,7 @@ class UnknownScreenRecoveryTest {
 
         @Test
         fun `the recovery log says the game is reopened, since a running game keeps its process`() {
-            // The intent re-fronts a live game: the pid stays the same, so "relaunching" misled the
-            // reader of a stuck run into thinking the game had been restarted.
+            // The intent re-fronts a live game and the pid stays the same, so "relaunching" misled readers into thinking it was restarted.
             val game = sourceFile("bot/Game.kt").readText()
             val body = game.substring(game.indexOf("fun restartGame("), game.indexOf("fun start()"))
             assertFalse("Relaunching the game" in body)

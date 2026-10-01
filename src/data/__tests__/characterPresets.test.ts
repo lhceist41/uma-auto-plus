@@ -10,9 +10,8 @@ import { presetCharacter, presetOutfit, presetValidation } from "../presetMeta"
 import { SKILL_SPEND_OBJECTIVES } from "../../lib/adaptiveSkillPolicy"
 import { deriveExcludeOutfits, deriveInGameName } from "../../lib/rotationSnapshots"
 
-// Potential skills a preset may plan, except these green golds: each has its white version in the same card's own kit,
-// and while the gold is locked the planner counts it as an in-place upgrade of that white row and dead-taps it.
-// They stay out until a planner guard or a device check proves them safe.
+// Green golds a preset must not plan: each chains from a white in the same card's own kit, so while locked
+// the planner counts it as an upgrade of that white row and dead-taps it.
 const GREEN_CHAIN_POTENTIAL_GOLDS = [202331, 201561, 202441]
 
 describe("avoidAdvisoryFor", () => {
@@ -230,9 +229,7 @@ describe("Copano Rickey presets", () => {
     })
 
     it("never plans Strong Steps, her Potential Lv5 gold that chains from a white in her own kit", () => {
-        // Her tree gates Chance of Victory (Lv3), Collaborative Graded Races o (Lv4) and Strong Steps (Lv5); the card
-        // manifest files them under `skills_awakening`, which is easy to misread as star-gated. A locked skill is skipped
-        // by the planner, so presets may plan them, except the green-chain hold.
+        // The manifest files her Lv3-5 tree under `skills_awakening`, which looks star-gated but is not; the planner skips locked skills.
         const potentialGated: Record<number, string> = {
             202331: "Strong Steps (Potential Lv5)",
         }
@@ -402,9 +399,6 @@ describe("Grass Wonder (Saintly Jade Cleric) presets", () => {
     })
 
     it("plans her own Long recovery chain in every scenario (Deep Breaths -> Cooldown)", () => {
-        // Design decision for recovery protection: this profile PLANS its recovery (her own
-        // hint-discounted kit) rather than relying on automatic injection. 200741 Cooldown is her
-        // Potential Lv3 gold.
         for (const p of trio) {
             for (const planKey of ["skillPointCheck", "preFinals", "careerComplete"] as const) {
                 const ids = planIds(p, planKey)
@@ -469,8 +463,7 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
     const knownSkills = new Set<number>((Array.isArray(skills) ? skills : Object.values(skills)).map((s: any) => s.id))
     const goalTurns = (name: string): number[] => (objectives as Record<string, any>)[name].mandatoryRaces.map((m: any) => m.turn)
 
-    // Identity and kit read from the game's master data (card_rarity_data, available_skill_set).
-    // `gated` is each card's Potential Lv2-5 tree. Presets may plan it, except the green-chain holds.
+    // Identity and kit read from the game's master data (card_rarity_data, available_skill_set); `gated` is the Potential Lv2-5 tree.
     const trainees = [
         {
             name: "Wonder Acute",
@@ -682,9 +675,8 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
     const STYLE_CODE: Record<string, string> = { front_runner: "1", pace_chaser: "2", late_surger: "3", end_closer: "4" }
     const objectivesFor = (key: string) => (objectives as Record<string, any>)[key]
 
-    // Identity and kit read from the game's master data (card_data, available_skill_set). `ownSkills`
-    // is the card's Potential Lv1 kit; `gated` is its Lv2-5 tree plus the upgrades that sit above a
-    // gated skill. Presets may plan the tree, except the green-chain holds.
+    // Identity and kit read from master data (card_data, available_skill_set). `ownSkills` is the Potential Lv1 kit;
+    // `gated` is the Lv2-5 tree plus the upgrades above a gated skill.
     const trainees = [
         {
             name: "Aston Machan",
@@ -942,9 +934,8 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
     const cards = (buildBudget as any).traineeGrowth as { cardId: number; character: string; outfit: string; runningStyle: number }[]
     const find = (name: string, scenario: string) => characterPresets.find((p) => p.name === name && p.scenario === scenario)!
 
-    // Kit read from the game's master data (available_skill_set): `own` is the kit the plan counts on
-    // (the Lv1 kit, or up to Potential Lv3 for Rouge Caroler and CODE: ICING), `gated` the rest of the
-    // tree plus any upgrade above a gated skill. Grid and goal route are the base outfit's.
+    // Kit read from master data (available_skill_set): `own` is the kit the plan counts on (Lv1, or up to Potential Lv3
+    // for Rouge Caroler and CODE: ICING), `gated` the rest of the tree. Grid and goal route are the base outfit's.
     const outfits = [
         { name: "Biwa Hayahide (Rouge Caroler)", base: "Biwa Hayahide", cardId: 102302, own: [200512, 200572, 201202, 201532, 201201], gated: [201312, 200511, 201311] },
         { name: "Mihono Bourbon (CODE: ICING)", base: "Mihono Bourbon", cardId: 102602, own: [200432, 200542, 200762, 201522, 200541], gated: [201601, 200431] },
@@ -1065,10 +1056,8 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
         },
     ]
 
-    /** The settings a derived outfit may change: the skill plans, plus the restyled outfits' running style below. */
     const withoutPlans = (settings: any) => ({ ...settings, skills: { ...settings.skills, plans: undefined } })
     // Outfits whose card style (and Game8 build) differs from the base preset's skill style race and buy as their own style.
-    // Never planned: the three green-chain golds.
     const NEVER_PLANNED = [202331, 201561, 202441]
     const REAIMED = new Set(["Daiwa Scarlet (Nuit Étoilée de Scarlet)"])
     const RESTYLED = new Set(["Special Week (Ruler of Japan)", "Air Groove (Quercus Civilis)", "Symboli Rudolf (Archer by Moonlight)"])
@@ -1100,7 +1089,7 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
 
         it("keeps the base build in every scenario apart from the skill plans", () => {
             if (RESTYLED.has(t.name)) return
-            // Nuit Étoilée de Scarlet aims at Medium (5 of her 8 goals, Medium A) where the base card aims at Mile.
+            // Nuit Étoilée de Scarlet aims at Medium where the base card aims at Mile.
             const aim = (s: any) =>
                 REAIMED.has(t.name)
                     ? {
@@ -1153,7 +1142,7 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
             const p = find("Special Week (Ruler of Japan)", scenario)
             const base = find("Special Week", scenario)
             expect(p.settings.skills!.preferredRunningStyle).toBe("late_surger")
-            // Its base races explicit Pace; this outfit keeps Default, which races its Late card.
+            // The base races explicit Pace; this outfit keeps Default, which races its Late card.
             expect(p.settings.racing!.originalRaceStrategy).toBe("Default")
             const strip = (s: any) => ({
                 ...withoutPlans(s),
@@ -1520,9 +1509,8 @@ describe("Trackblazer scenario-event picks never take a hint for a style the pre
         "Mayano Top Gun|Trackblazer|A Grandkid Get-Together": "Default races the card's Front style; the preset buys Pace skills",
     }
 
-    // Validated presets keep the race behaviour their recorded careers had (card default style) until a live A/B
-    // settles them: Mayano Top Gun and Symboli Rudolf (Emperor's Path) everywhere, Daiwa Scarlet's Default URA and
-    // Unity Cup, and Sakura Bakushin O's URA, the source of her validated Grand Concert twin.
+    // Validated presets keep their recorded race behaviour (card default style) until a live A/B settles them:
+    // Mayano Top Gun, Symboli Rudolf (Emperor's Path), Daiwa Scarlet's Default URA and Unity Cup, Sakura Bakushin O's URA.
     const RACE_STYLE_HOLDS = new Set([
         "Mayano Top Gun|URA Finale",
         "Mayano Top Gun|Unity Cup",
@@ -1565,7 +1553,7 @@ describe("Trackblazer scenario-event picks never take a hint for a style the pre
                 }
             }
         }
-        // Tosen Jordan's URA preset is validated, and so is its Grand Concert twin: its Slick Surge stays until a live A/B.
+        // Tosen Jordan's URA preset and its Grand Concert twin are validated: Slick Surge stays until a live A/B.
         const held = ["Tosen Jordan|URA Finale", "Tosen Jordan|Grand Concert"].flatMap((k) => ["skillPointCheck", "preFinals", "careerComplete"].map((pk) => `${k} ${pk} 200602`))
         expect(offStyle.sort()).toEqual(held.sort())
     })
@@ -1648,8 +1636,7 @@ describe("Potential skills in preset plans", () => {
         expect(planned).toEqual([])
     })
 
-    // The Potential skills each preset gained, per preset and scenario (a Grand Concert twin copies its URA plans).
-    // Plan order is buying priority, so these must never outrank a gold the preset already planned.
+    // Plan order is buying priority, so a Potential addition must never outrank a gold the preset already planned.
     const POTENTIAL_ADDITIONS: Record<string, number[]> = {
         "Agnes Digital (Fanatic♡Jiangshi)|Trackblazer": [201591],
         "Agnes Digital (Fanatic♡Jiangshi)|URA Finale": [201591],
@@ -1802,7 +1789,7 @@ describe("Potential skills in preset plans", () => {
         "Yukino Bijin|URA Finale": [200491, 201322],
         "Yukino Bijin|Unity Cup": [200491, 201322],
     }
-    // Gold or higher: a gold icon (ending in 2) or an inherited unique. Matches the game's skill rarity for every planned id.
+    // Gold or higher: a gold icon (ending in 2) or an inherited unique.
     const skillById = new Map((Object.values(skills as any) as { id: number; icon_id: number; inherited?: boolean }[]).map((s) => [s.id, s]))
     const isGold = (id: number) => {
         const s = skillById.get(id)

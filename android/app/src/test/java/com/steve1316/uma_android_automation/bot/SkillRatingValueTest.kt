@@ -13,14 +13,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * Skill values the way the game's rating counts them.
- *
- * The game scores only the highest version of a skill the trainee owns, and the own unique through its
- * level bonus. On 8 careers with the game's own rating, counting each displayed skill at its own value
- * matched within the Details read's ○/◎ noise; folding a gold's white into it overshot by about 1,400,
- * and the estimate ran high by exactly the unique's inherited-version row.
- */
+/** Skill values the way the game's rating counts them: only the highest owned version of a skill scores, and the own unique through its level bonus. */
 @DisplayName("Skill rating value")
 class SkillRatingValueTest {
     // Late Surger Straightaways at aptitude A: ○ 217 x 1.1, ◎ 262 x 1.1.
@@ -61,7 +54,7 @@ class SkillRatingValueTest {
             careerEndTailFilter(SkillSpendObjective.RANK, SkillCheckTrigger.CAREER_COMPLETE, anySkill, styleKnown)
         }
 
-        /** Whether a Late Surger, Medium, Turf trainee's tail may buy a skill with these conditions. */
+        /** A Late Surger, Medium, Turf trainee. */
         private fun allows(filter: CareerEndTailFilter, style: RunningStyle?, distance: TrackDistance?, prefStyle: RunningStyle? = RunningStyle.LATE_SURGER) =
             SkillPlan.knapsackTailAllows(filter, distance, style, emptyList(), null, TrackDistance.MEDIUM, prefStyle, TrackSurface.TURF)
 

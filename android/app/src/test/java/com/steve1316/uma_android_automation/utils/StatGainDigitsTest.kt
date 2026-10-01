@@ -10,11 +10,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
-/**
- * Replay tests for the training stat-gain row reader over real Grand Concert training captures (see
- * src/test/resources/fixtures/statgain/PROVENANCE.md). Each fixture is the stat-gain band of one
- * analysis frame; the boxes are placed exactly as the runtime places them from the "Skill Pts" anchor.
- */
+/** Real Grand Concert captures (src/test/resources/fixtures/statgain/PROVENANCE.md); each fixture is the stat-gain band of one analysis frame. */
 @DisplayName("Training stat-gain row reader on real captures")
 class StatGainDigitsTest {
     private val cache = mutableMapOf<String, FixturePng>()
@@ -28,11 +24,10 @@ class StatGainDigitsTest {
         return SparkPixelSampler { x, y -> img.getRGB(x, y) }
     }
 
-    // The "Skill Pts" header anchor in fixture coordinates (971, 1259 on the full frame; bands start at y 1125).
     private val anchorX = 971
     private val anchorY = 134
 
-    /** Row 0 is the gain row, row 1 the bonus row above it (Grand Concert's music-note bubble). */
+    /** Row 1 is the bonus row above the gain row. */
     private fun read(name: String, stat: StatName, row: Int): StatGainDigits.Row? {
         val left = anchorX + StatGainDigits.FIRST_COLUMN_CENTER_FROM_SKILL_POINTS + stat.ordinal * StatGainDigits.COLUMN_PITCH - StatGainDigits.COLUMN_WIDTH / 2
         val rowStartY = if (row == 0) anchorY - 65 else anchorY - 65 - 55
@@ -61,7 +56,6 @@ class StatGainDigitsTest {
     @Test
     @DisplayName("A gold read equals the stat change the next turn showed")
     fun goldReadMatchesNextStatChange() {
-        // Speed 1218 trained at 0% failure on a clean turn; the next stat read showed Speed +19.
         val total = listOf(0, 1).sumOf { StatGainDigits.resolveRowValue(0, read("gold_speed_1218", StatName.SPEED, it)) }
         assertEquals(19, total)
     }
@@ -74,7 +68,7 @@ class StatGainDigitsTest {
         assertFalse(power!!.gold)
         assertEquals(17, read("gold_speed_1281", StatName.POWER, 1)?.value)
         assertEquals(10, read("gold_speed_1221", StatName.POWER, 1)?.value)
-        // Speed 1169 on Guts training only gains +3, so it stays below 1200 and the game keeps it orange.
+        // Speed 1169 + 3 stays below 1200, so the game keeps it orange.
         assertFalse(read("orange_speed_1169_guts", StatName.SPEED, 0)!!.gold)
         assertFalse(read("orange_speed_1169_guts", StatName.SPEED, 1)!!.gold)
     }

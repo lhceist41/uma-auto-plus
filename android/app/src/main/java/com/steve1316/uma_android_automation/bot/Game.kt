@@ -688,7 +688,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         return TrainingSelectionProbe.isTrainingSelection(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
     }
 
-    /** The facts [resumeSettleStep] decides on, from one capture. The lesson probes are Grand Concert 1080x1920 only. */
+    /** The lesson probes are Grand Concert 1080x1920 only. */
     private fun readResumeScreen(): ResumeScreen {
         val bitmap = imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
@@ -924,33 +924,22 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     }
 
     /**
-     * Brings the Umamusume game back to the front as a recovery from a screen no handler can identify
-     * or advance (e.g. the game itself soft-locking, distinct from MuMu's gesture death which
-     * [forceRebindAccessibilityService] handles). Career progress is saved server-side each turn, so
-     * the game comes back on its Continue-Career flow, which the campaign's lobby re-entry path
-     * resumes in place - no career is lost (validated manually 2026-07-11 via an adb force-stop +
-     * relaunch that resumed El Condor's career). The first attempt of [reopenGame]; the navigator's
-     * single relaunch uses it.
-     *
-     * @param waitAfterLaunch Seconds to wait after firing the intent for the game to come up.
-     * @return True if the intent was dispatched, false if it could not be resolved.
+     * Brings the game back to the front when no handler can identify the screen: the first attempt of [reopenGame]. The career is saved
+     * server-side, so it resumes through Continue Career. Returns whether the intent was dispatched.
      */
     fun restartGame(waitAfterLaunch: Double = 20.0): Boolean = reopenGame(attempt = 1, waitAfterLaunch = waitAfterLaunch) != GameReopen.NOT_DISPATCHED
 
     /**
      * Reopens the game for attempt [attempt] of a stuck episode.
      *
-     * The first attempt, and every attempt on Android 14 and later, only brings the game's task to the
-     * front (NEW_TASK | RESET_TASK_IF_NEEDED): a live game comes back as it was, a dead one cold-starts.
-     * That leaves a frozen game frozen: the game's process kept its pid for hours (2026-09-29).
+     * The first attempt, and every attempt on Android 14+, only brings the game's task to the front: a live game comes back as it was,
+     * so a frozen one stays frozen.
      *
-     * From the second attempt below Android 14, [restartFrozenGame] closes it instead: Home,
-     * `killBackgroundProcesses` across the settle window, a launch into a fresh task (CLEAR_TASK, only
-     * after that window: the earlier CLEAR_TASK against a live foreground game killed it with no
-     * relaunch landing, 2026-07-21), then the title screen as the proof. An ordinary app cannot
-     * force-stop another package or see its process, so the title is the only evidence of a restart.
+     * From the second attempt below Android 14, [restartFrozenGame] closes it: Home, `killBackgroundProcesses` across the settle window,
+     * then a launch into a fresh task. CLEAR_TASK comes only after that window: an earlier CLEAR_TASK against a live foreground game killed
+     * it with no relaunch landing. An ordinary app cannot see another package's process, so the title screen is the only proof of a restart.
      *
-     * Each step acts first and logs after, with [Log] inside the sequence: this is recovery code.
+     * Each step acts first and logs after, with [Log]: this is recovery code.
      */
     internal fun reopenGame(attempt: Int, waitAfterLaunch: Double = 20.0): GameReopen {
         if (myContext.packageManager.getLaunchIntentForPackage(GAME_PACKAGE) == null) {
@@ -1020,11 +1009,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
     }
 
-    /**
-     * Starts the game's launcher activity: into a fresh task with [clearTask], else to the front of
-     * its existing task. NEW_TASK is required to start an Activity from this (non-Activity) service
-     * context; RESET_TASK_IF_NEEDED lands on the task's entry Activity if it is resumed from history.
-     */
+    /** NEW_TASK is required to start an Activity from this non-Activity service context; RESET_TASK_IF_NEEDED lands on the entry Activity. */
     private fun launchGame(clearTask: Boolean): Boolean {
         val intent = myContext.packageManager.getLaunchIntentForPackage(GAME_PACKAGE) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or if (clearTask) Intent.FLAG_ACTIVITY_CLEAR_TASK else Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
@@ -1038,11 +1023,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
     }
 
-    /**
-     * The package of the window in front, or null when it cannot be read (no accessibility service, or
-     * no active window). Asks the app in front for its window root, so a hung app in front can hold the
-     * call for the accessibility timeout before it returns null.
-     */
+    /** Null when unreadable. Asks the app in front for its window root, so a hung app can hold the call for the accessibility timeout. */
     internal fun frontWindowPackage(): String? =
         try {
             gestureUtils.rootInActiveWindow?.packageName?.toString()
@@ -1051,10 +1032,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             null
         }
 
-    /**
-     * Whether the bot's own taps still reach the screen ([ownInputReachesScreen]): ARRIVED proves that a
-     * game ignoring them has stopped responding, LOST that the taps are dead, INCONCLUSIVE that it could not tell.
-     */
+    /** ARRIVED proves a game ignoring the bot's taps has stopped responding; LOST means the taps are dead. */
     internal fun ownInputReachesScreen(): OwnInputProbeResult =
         ownInputReachesScreen(myContext, runCatching { gestureUtils }.getOrNull(), MyAccessibilityService.isGestureAllowed)
 
@@ -1156,10 +1134,8 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         // there to their target mode. The user is expected to have the game open on
         // the Home Screen (or any screen with the bottom nav visible) when starting.
         //
-        // A stop, crash or restart during the training analysis leaves the career on the Training
-        // selection screen, whose Skip pill the navigator would read as the launch Quick Mode prompt
-        // (2026-09-27: two pill taps, then body taps until the run failed). The game's Back returns to
-        // the training menu there, as the training handler's own back-out does. A turn-committing
+        // A stop, crash or restart during the training analysis leaves the career on the Training selection screen, whose Skip pill the
+        // navigator would read as the launch Quick Mode prompt. The game's Back returns to the training menu; a turn-committing
         // confirmation or an in-career list is cancelled or backed out of first (ResumeSettle.kt).
         if (!isMiscTask) settleResumedCareer(::readResumeScreen, ::pressResumeSettle, { wait(1.0) }, ::isOnTrainingMenu)
         val onTrainingSelection = !isMiscTask && isOnTrainingSelection()

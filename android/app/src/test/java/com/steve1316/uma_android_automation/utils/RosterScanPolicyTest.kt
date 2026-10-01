@@ -5,10 +5,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
-/**
- * Unit tests for [RosterScanPolicy], the certainty rules added after a roster scan silently skipped
- * five owned trainees and halted the queue (2026-07-28).
- */
+/** Guards against a roster scan silently skipping owned trainees and halting the queue. */
 @DisplayName("RosterScanPolicy Tests")
 class RosterScanPolicyTest {
     @Nested
@@ -45,12 +42,10 @@ class RosterScanPolicyTest {
     @Nested
     @DisplayName("onlyExcludedOutfitOwned")
     inner class OnlyExcludedOutfitOwned {
-        /** The navigator's NEAR_NAME_SIMILARITY. */
         private val near = 0.70
 
         @Test
         fun `a near-miss name on a non-excluded cell keeps the name-matching diagnosis`() {
-            // She may own both outfits with her plain banner misread just under the match threshold.
             assertFalse(RosterScanPolicy.onlyExcludedOutfitOwned(failedReads = 0, excludedOutfitSeen = "Rouge Caroler", nearestSimilarity = 0.82, nearNameSimilarity = near))
             assertFalse(RosterScanPolicy.onlyExcludedOutfitOwned(failedReads = 0, excludedOutfitSeen = "Rouge Caroler", nearestSimilarity = near, nearNameSimilarity = near))
         }

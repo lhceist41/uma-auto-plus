@@ -350,7 +350,6 @@ describe("real committed dataset", () => {
         const r = compileMasterData(inputs())
         expect(r.ok).toBe(true)
         expect(r.manifest?.source.map((s) => s.family).sort()).toEqual(["characters", "objectives", "races", "scenarios", "skills", "supports"])
-        // Real data carries no warnings: every upgrade/downgrade reference resolves.
         expect(r.validation.warnings).toEqual([])
     })
 
@@ -418,8 +417,7 @@ describe("real committed dataset", () => {
         expect(source?.recordCount).toBe(Object.keys(JSON.parse(bytes.toString("utf8"))).length)
     })
 
-    // Part D: pin the exact unresolved-chain reference set so a dangling ref cannot pass silently
-    // merely by sharing the warning class. Refs are extracted structurally from the deterministic detail.
+    // Refs are extracted structurally from the deterministic detail, so a dangling ref cannot pass silently by sharing the warning class.
     it("the real dataset has no unresolved chain reference", () => {
         const r = compileMasterData(inputs())
         const refs = r.validation.warnings

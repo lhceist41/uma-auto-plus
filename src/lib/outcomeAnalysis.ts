@@ -28,7 +28,7 @@ export interface OutcomeRecord {
     outcome: string
     forceEndReason?: string
     stopReason?: string
-    /** Why the bot stopped the career itself (result STOPPED_BY_BOT), e.g. DATA_DOWNLOAD_PROMPT. */
+    /** Why the bot stopped the career itself (result STOPPED_BY_BOT). */
     stopKey?: string
     trainee: string
     scenario: string
@@ -40,7 +40,7 @@ export interface OutcomeRecord {
     pwr: number
     grt: number
     wit: number
-    /** Ledger keys (spd, sta, pwr, grt, wit) whose value is the last one the bot accepted, not a final read; absent when every stat was read. */
+    /** Ledger keys (spd, sta, pwr, grt, wit) whose value is the last accepted one, not a final read. */
     lastKnown?: string[]
     skillPts: number
     /** Finale races entered (URA finale only today; undefined on records predating the feature). */
@@ -537,7 +537,6 @@ export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
         // of an unfinished trainee and would drag every percentile down.
         const finished = list.filter((r) => classifyBucket(r) !== "incomplete")
         const fans = finished.map((r) => r.fans)
-        // A stat the bot could only report at its last-known value is left out of that stat's median.
         const median = (pick: (r: OutcomeRecord) => number, key: string) => percentile(finished.filter((r) => !r.lastKnown?.includes(key)).map(pick), 50)
         const nonIncomplete = list.length - buckets.incomplete
         const finaleReached = list.filter((r) => r.quality === "WIN" || r.quality === "FINALE_LOST").length

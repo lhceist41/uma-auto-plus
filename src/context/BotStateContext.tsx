@@ -125,8 +125,7 @@ export interface Settings {
         preferredTrackSurface: string
         // When true, the purchaser buys only the ○ version of a skill and skips its ◎ upgrade, spreading the SP budget across more distinct skills.
         skipDoubleCircleUpgrades: boolean
-        // Rank objective, career end only: when true the leftover points may buy any skill for rating, not only
-        // the ones the trainee's running style can activate. A player preference: presets never set it.
+        // Career end only: when true, leftover points may buy any skill for rating, not only those the running style can activate. Presets never set it.
         careerEndBuyAnySkill: boolean
         plans: Record<string, SkillPlanSettingsConfig>
     }
@@ -329,7 +328,7 @@ export interface Settings {
         veteranInspirationScanStartIndex: number
         // Read-only Veteran protection probe (PL-R2a). Park the game on the Veteran Roster list with Filters: OFF; probes whether any Veteran is favorited or has a memo via the filter dialog, applying nothing, and writes veteran_protection.jsonl.
         debugMode_startVeteranProtectionScanTest: boolean
-        // Live check of the stuck-game restart on a healthy game: checks the bot's own taps reach a window of its own, then sends the game Home, asks Android to close it, launches it fresh and checks for its title screen. Closes the game once; taps nothing in it.
+        // Live check of the stuck-game restart on a healthy game: closes the game once, relaunches it and checks for its title screen; taps nothing in it.
         debugMode_startGameRestartTest: boolean
         enableScreenRecording: boolean
         recordingBitRate: number
@@ -493,12 +492,8 @@ export const defaultSettings: Settings = {
         daysToRunExtraRaces: 5,
         disableRaceRetries: false,
         enableFreeRaceRetry: false,
-        // When a retry has no free retry or held Alarm Clock left, the game offers one for 10 carats:
-        //   - "Never"        -> cancel, never spend carats (the default).
-        //   - "GoalRaces"    -> spend only to retry a lost goal race.
-        //   - "G1Only"       -> spend only if the failed race was G1.
-        //   - "G1AndFinale"  -> spend for G1 races or Twinkle Star Climax finale races (turns 73-75 in Trackblazer).
-        //   - "Always"       -> always spend.
+        // Offered for 10 carats when a retry has no free retry or held Alarm Clock left. "G1AndFinale" also covers
+        // Twinkle Star Climax finale races (turns 73-75 in Trackblazer). "Never" cancels and never spends carats.
         alarmClockPolicy: "Never",
         enableCompleteCareerOnFailure: false,
         enableStopOnMandatoryRaces: false,

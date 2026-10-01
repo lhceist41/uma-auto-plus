@@ -10,12 +10,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * A queue run whose trainee cannot start (an own-character deck card, an outfit-only preset, a trainee
- * not on the roster) says why on its record and in the report. With a rotation the queue skips that
- * run and goes on with the next trainee from Home; without one it halts, because every run is the same
- * trainee. The decisions are pure; the queue loop's wiring is pinned by source guards.
- */
+/** The decisions are pure; the queue loop's wiring is pinned by source guards. */
 @DisplayName("Queue runs whose trainee cannot start")
 class QueueSkipTest {
     @Nested
@@ -41,7 +36,6 @@ class QueueSkipTest {
     @Nested
     @DisplayName("backing out of the stopped launch")
     inner class BackOut {
-        /** Plays [backOutOfLaunch] over [backsToHome] Back presses; returns (at home, presses). */
         private fun play(backsToHome: Int, backFound: Boolean = true, maxBacks: Int = LAUNCH_BACK_OUT_MAX_PRESSES): Pair<Boolean, Int> {
             var presses = 0
             val home = backOutOfLaunch(isHome = { presses >= backsToHome }, pressBack = { if (backFound) presses++; backFound }, settle = {}, maxBacks = maxBacks)
@@ -114,7 +108,6 @@ class QueueSkipTest {
         private val start by lazy { source("StartModule.kt") }
         private val navigator by lazy { source("CareerLaunchNavigator.kt") }
 
-        /** The text after [anchor], which must appear exactly once in [src]. */
         private fun after(anchor: String, src: String = start): String {
             assertEquals(1, Regex(Regex.escape(anchor)).findAll(src).count(), anchor)
             return src.substringAfter(anchor)

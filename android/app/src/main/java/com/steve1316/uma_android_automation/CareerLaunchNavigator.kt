@@ -177,10 +177,10 @@ data class NavigationResult(
     val screenshotPath: String = "",
     /** Player-safe cause for the queue report, set only where the player can act on it; "" otherwise. */
     val reasonKey: String = "",
-    /** The preset trainee and outfit a [reasonKey] names, taken from the preset roster (never OCR); "" otherwise. */
+    /** From the preset roster, never OCR. */
     val reasonTrainee: String = "",
     val reasonOutfit: String = "",
-    /** True when the trainee [reasonKey] names was the rotation's target; false for an applied preset's (Home). */
+    /** False when the trainee is an applied preset's rather than the rotation's target. */
     val reasonRotation: Boolean = false,
     /** True when the navigation clicked Resume on Continue Career: a career occupies the game's slot. */
     val careerResumed: Boolean = false,
@@ -808,10 +808,7 @@ class CareerLaunchNavigator(private val context: Context) {
         liveGameAttached = true
     }
 
-    /**
-     * Leaves a launch that stopped before Start Career (a trainee the queue skips) by pressing the
-     * game's Back until Home shows ([backOutOfLaunch]). Presses nothing on a screen without a Back.
-     */
+    /** Presses the game's Back until Home shows; presses nothing on a screen without a Back. */
     fun backOutToHome(): Boolean {
         if (!ensureInitialised()) return false
         return backOutOfLaunch(::isOnHomeScreen, { ButtonBack.click(iu) }, { waitSafe(1.5) }, LAUNCH_BACK_OUT_MAX_PRESSES)
@@ -1054,9 +1051,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // One-shot recovery for exceptions crossing the FSM boundary (see the catch blocks below).
         var exceptionRecoveryUsed = false
 
-        // A known screen the clicks no longer move while the bot's own taps still reach the screen: the
-        // game stopped responding. It is restarted in place of the navigation's one relaunch, only with
-        // no career in flight, and the launch starts over from the title.
+        // The game stopped responding: restarted in place of the navigation's one relaunch, only with no career in flight.
         fun restartUnresponsiveGame(key: String): NavigationResult? {
             if (key != GAME_NOT_RESPONDING || !betweenRunRecovery.mayRestartUnresponsiveGame(careerLaunchInitiated)) return null
             betweenRunRecovery.restartingUnresponsiveGame()
@@ -1456,10 +1451,7 @@ class CareerLaunchNavigator(private val context: Context) {
         return navigate(reuseLastLaunchSetup, finalizeToHome, singleRunTrainee, singleRunTraineeExcludes, previousCareerComplete, resumeInProgressCareer, coldStartOnHome, careerInFlight)
     }
 
-    /**
-     * [key] for a known screen the clicks did not move, checked by the own-input probe when it blames
-     * the bot's input ([stuckInputKey]): taps that still reach the screen mean the game stopped responding.
-     */
+    /** Taps that still reach the screen mean the game stopped responding, not that the bot's input died. */
     private fun probedStuckKey(key: String): String =
         if (key == A11Y_INPUT_DEAD || key == A11Y_GRANT_MISSING) stuckInputKey(key, tempGame?.ownInputReachesScreen() ?: OwnInputProbeResult.INCONCLUSIVE) ?: key else key
 
@@ -3368,13 +3360,10 @@ class CareerLaunchNavigator(private val context: Context) {
                     if (endMarkerSeen && named.isNotEmpty()) {
                         SparkSetReading(named, SparkScanTermination.COMPLETE_END_MARKER, 0)
                     } else {
-                        // A set that fills the window (11+ rows) or an unparseable frame: the
-                        // scrolling reader proves the end by a swipe that moves nothing.
+                        // 11+ rows or an unparseable frame: the scrolling reader proves the end.
                         readCompleteSparkSet(SPARKS_CONFIRM_GEOMETRY, "keep confirmation")
                     }
-                // The scrolling reader carries no per-slot evidence. This frame's evidence still
-                // describes the leading rows when they read identically; rows below the fold get
-                // none, so their star check stays strict.
+                // The scrolling reader carries no per-slot evidence; rows below the fold get none, so their star check stays strict.
                 val evidence =
                     when {
                         endMarkerSeen -> windowEvidence
@@ -3671,10 +3660,7 @@ class CareerLaunchNavigator(private val context: Context) {
     /** One-shot flag: the full spark set was read off the keep-set confirmation dialog. */
     private var sparksFullSetRecorded = false
 
-    /** Clicks Confirm on the SPARKS screen; falls back to re-detection when the click misses.
-     * The click raises the "Keep this set of Sparks?" confirmation, which shows up to 11 rows on
-     * one screen; a set it shows in full is recorded from it before the generic dialog handling
-     * confirms it away. */
+    /** Clicks Confirm on the SPARKS screen; falls back to re-detection when the click misses. */
     private fun confirmSparks(bitmap: Bitmap): TransitionResult {
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
             MessageLog.w(TAG, "[NAV] Confirm not clickable on the SPARKS screen. Re-detecting...")
@@ -3691,9 +3677,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 if (transaction == null && dialogBitmap.width >= 1000 && dialogBitmap.height >= 1000) {
                     val cells = parseSparkRowCells(sparkSampler(dialogBitmap), SPARKS_CONFIRM_GEOMETRY, dialogBitmap.height)
                     val rows = nameSparkCells(dialogBitmap, cells, SPARKS_CONFIRM_GEOMETRY)
-                    // A list that does not lead stat/aptitude/unique means the dialog is not up
-                    // (missed click, layout drift): skip silently. A list whose end is not on
-                    // screen would record its first 11 rows as the whole kept set: skip it too.
+                    // A list not leading stat/aptitude/unique means the dialog is not up; one whose end is off screen would record 11 rows as the whole set.
                     if (keepDialogFrameIsCompleteSet(cells, rows.size)) {
                         sparksFullSetRecorded = true
                         recordSparkRows(rows, "kept")
@@ -6477,8 +6461,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // Fast path: the game pre-highlights the last trainee, so within a trainee's block (no
         // switch) the target is already selected and the preview already reads her name. Confirm it
         // and advance without disturbing the grid - no scan, no risk of changing the selection.
-        // The first sibling-outfit banner of the target's own character that was read and skipped: when
-        // nothing else matches, the player owns her only in an outfit that has its own preset.
+        // The first skipped sibling-outfit banner of the target's character.
         var excludedOutfitSeen: String? = null
         var excludedBannerSeen = ""
         fun noteExcluded(banner: String) {
@@ -6605,10 +6588,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 scanBitmap = iu.getSourceBitmap()
                 failedReads = 0
             }
-            // Every page scans from row 0, whatever the swipe measured: the swipe moves about 1.2 tile
-            // rows (235px pitch) while the two tap rows are 190px apart, so a measured advance cannot
-            // prove that a row below the first tap was already read, and a skipped row is never
-            // retried. The name dedup absorbs the re-reads.
+            // Every page scans from row 0: the swipe moves about 1.2 rows (235px) while the tap rows are 190px apart, so a measured advance cannot prove a lower row was read. Name dedup absorbs the re-reads.
             val startRow = 0
             for (page in 0..traineeMaxSwipes) {
                 val bitmap = scanBitmap
@@ -6625,7 +6605,6 @@ class CareerLaunchNavigator(private val context: Context) {
                         val preview = readRosterCell(bitmap, page, col, row)
                         val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
                         if (norm.isEmpty()) {
-                            // Already logged by readRosterCell; counted so the second pass runs.
                             failedReads++
                             continue
                         }
@@ -6712,9 +6691,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // trainee the scan saw so the next launch starts from jumps, not scans.
         TraineePositionStore.putAll(context, discoveredCells)
 
-        // A plain preset skips its character's outfits that have their own preset. When the roster
-        // read completely and one of those was her, she is owned only in that outfit: say so and name
-        // the preset to apply, instead of calling her absent from the roster.
+        // A plain preset skips outfits that have their own preset; owned only in one, she is not absent from the roster.
         val ownedOutfit = excludedOutfitSeen
         if (ownedOutfit != null && RosterScanPolicy.onlyExcludedOutfitOwned(failedReads, ownedOutfit, nearestSim, NEAR_NAME_SIMILARITY)) {
             MessageLog.e(
@@ -6820,11 +6797,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * bidirectional scan whose down-swing overshot and skipped a whole row of trainees between
      * pages — see swipeTraineeGrid.)
      *
-     * The top-left tap selects that trainee and the preview shows the selection, so a read that
-     * [isTarget] accepts is the same proof the scan advances on: select her and stop here.
-     *
-     * @return [TransitionResult.Continue] after advancing on the target, a [TransitionResult.Failed] when
-     *   the queue was stopped mid-anchor or that Next click failed, else null once anchored.
+     * @return [TransitionResult.Continue] after advancing on the target, [TransitionResult.Failed] on a stop or a failed Next click, else null once anchored.
      */
     private fun anchorTraineeGridTop(isTarget: (String) -> Boolean): TransitionResult? {
         var prevTop = ""
@@ -9254,8 +9227,7 @@ class CareerLaunchNavigator(private val context: Context) {
     /**
      * Ticks the "Event Boost (TP Usage x2)" checkbox on the Final Confirmation screen if it is OFF.
      * The dim OFF-state bar is the anchor; the checkbox sits a fixed offset to its left. A no-op when
-     * the bar isn't matched: the boost may be offered and already ticked, or not offered (e.g.
-     * outside the event), and this cannot tell which.
+     * the bar isn't matched (already ticked, or not offered): this cannot tell which.
      */
     private fun tickEventBoostIfOff() {
         val (barLocation, _) = LabelEventBoostOff.find(iu)

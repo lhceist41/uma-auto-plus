@@ -67,13 +67,9 @@ class SkillListEntry(
             )
 
         /**
-         * The rating a purchase adds. The game scores only the highest version of a skill the trainee owns: buying
-         * through unowned lower versions yields this skill alone, and an upgrade replaces the owned version it
-         * builds on (◎ over an owned ○ adds only their difference).
-         *
-         * @param ownPoints This skill's own aptitude-adjusted points.
-         * @param lowerVersions The lower versions nearest first, as (own aptitude-adjusted points, obtained).
-         * @return The points this purchase adds to the rating.
+         * The game scores only the highest owned version of a skill: unowned lower versions add nothing,
+         * and an upgrade replaces the owned version it builds on (◎ over an owned ○ adds their difference).
+         * [lowerVersions] is nearest first, as (own aptitude-adjusted points, obtained).
          */
         internal fun purchaseRatingGain(ownPoints: Int, lowerVersions: List<Pair<Int, Boolean>>): Int =
             ownPoints - (lowerVersions.firstOrNull { it.second }?.first ?: 0)
@@ -274,20 +270,12 @@ class SkillListEntry(
         return EVALUATION_POINT_APTITUDE_RATIO_MAP[aptitude]
     }
 
-    /**
-     * This skill's own evaluation points. Aptitude modifiers (running style, distance, or surface) apply when the skill has those activation conditions.
-     */
     private val ownEvaluationPoints: Int
         get() {
             val modifier: Double = getRunningStyleAptitudeEvaluationModifier() ?: getTrackDistanceAptitudeEvaluationModifier() ?: getTrackSurfaceAptitudeEvaluationModifier() ?: 1.0
             return (skillData.evalPt * modifier).roundToInt()
         }
 
-    /**
-     * Calculates the rank gain of buying this skill (see [purchaseRatingGain]).
-     *
-     * @return The rank points gained upon purchase.
-     */
     private fun calculateEvaluationPoints(): Int {
         val lowerVersions = generateSequence(prev) { it.prev }.map { it.ownEvaluationPoints to it.bIsObtained }.toList()
         return purchaseRatingGain(ownEvaluationPoints, lowerVersions)

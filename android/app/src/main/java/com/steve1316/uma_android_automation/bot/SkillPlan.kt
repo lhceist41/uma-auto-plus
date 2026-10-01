@@ -256,10 +256,6 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return distanceOk && surfaceOk && styleOk
         }
 
-        /**
-         * Whether the knapsack tail may buy a skill under [filter] ([careerEndTailFilter]): the full profile,
-         * the running style alone at any distance or surface, or anything.
-         */
         internal fun knapsackTailAllows(
             filter: CareerEndTailFilter,
             skillDistance: TrackDistance?,

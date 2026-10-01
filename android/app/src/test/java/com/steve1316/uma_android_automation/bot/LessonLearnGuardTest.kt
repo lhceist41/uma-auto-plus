@@ -10,12 +10,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * A Grand Concert lesson Learn dialog carries the skill list's "Confirmation" title and its Cancel and
- * Learn buttons, so the shared dialog handler resolves it as skill_list_confirmation. Only the lesson
- * spend loop may press its Learn: the shared handler cancels a lesson dialog and still learns on a real
- * skill confirmation. The probe is pinned on the captures; the branch in DialogHandler by source guards.
- */
+/** A Grand Concert lesson Learn dialog resolves to the skill list's Confirmation handler, which must cancel it: only the lesson spend loop may press Learn. */
 @DisplayName("A lesson Learn dialog is never learned by the generic dialog handler")
 class LessonLearnGuardTest {
     private fun sampler(resource: String): SparkPixelSampler {

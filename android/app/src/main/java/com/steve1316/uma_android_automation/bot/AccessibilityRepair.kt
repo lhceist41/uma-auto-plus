@@ -13,19 +13,13 @@ internal const val A11Y_GRANT_MISSING = "A11Y_GRANT_MISSING"
 /** Rebinds were issued and the bot's taps still had no effect. */
 internal const val A11Y_INPUT_DEAD = "A11Y_INPUT_DEAD"
 
-/** The bot's own taps still reached the screen, and the game ignored them: the game stopped responding. */
+/** The bot's own taps still reached the screen, and the game ignored them. */
 internal const val GAME_NOT_RESPONDING = "GAME_NOT_RESPONDING"
 
-/** Rebinds were issued and the bot's taps still had no effect, and the own-input probe could not tell whether the taps or the game stopped responding. */
+/** As [A11Y_INPUT_DEAD], but the own-input probe could not tell the taps from the game. */
 internal const val TAPS_HAD_NO_EFFECT = "TAPS_HAD_NO_EFFECT"
 
-/**
- * The stop reason for taps that changed nothing, once the own-input probe has run. A tap that
- * reached the bot's own probe window proves its input works, so the game is the one not responding,
- * whatever the rebinds did. A tap lost on a window that provably took touches leaves [rebindKey]
- * standing. An inconclusive probe proves neither side, so dead input is not claimed: the stop is the
- * same, under a key that says only what was seen.
- */
+/** A tap that reached the probe window proves the bot's input works, so the game is not responding. An inconclusive probe proves neither side, so dead input is not claimed. */
 internal fun stuckInputKey(rebindKey: String?, probe: OwnInputProbeResult): String? =
     when (probe) {
         OwnInputProbeResult.ARRIVED -> GAME_NOT_RESPONDING
@@ -33,22 +27,13 @@ internal fun stuckInputKey(rebindKey: String?, probe: OwnInputProbeResult): Stri
         OwnInputProbeResult.INCONCLUSIVE -> if (rebindKey == A11Y_INPUT_DEAD) TAPS_HAD_NO_EFFECT else rebindKey
     }
 
-/**
- * Restarts of an unresponsive game allowed per run, on a screen the bot knows. A game that freezes
- * again on the same screen after that halts with [GAME_NOT_RESPONDING] instead of restarting forever.
- */
+/** A game that freezes again after this many restarts halts with [GAME_NOT_RESPONDING] instead of restarting forever. */
 internal const val MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN = 2
 
-/**
- * The run's restarts used after [reopen], counting the one just made in [used]. Where the game can
- * never be closed ([reopenClosesGame] false on [sdk], Android 14 and later), a re-front leaves a
- * frozen game as it was, so it is the run's one and last try: the next stop halts. Where it can, a
- * re-front means only that Home missed once, so it counts as one failed try and the next may close.
- */
+/** Where the game can never be closed (Android 14+), a re-front leaves it as it was, so it is the run's last try; where it can, a re-front only means Home missed once. */
 internal fun unresponsiveReopensAfter(reopen: GameReopen, used: Int, sdk: Int): Int =
     if (reopen == GameReopen.REFRONTED && !reopenClosesGame(attempt = 2, sdk = sdk)) MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN else used
 
-/** Whether a stop for [key] restarts the game instead: an unresponsive game, a career seen, and the run's restarts left. */
 internal fun reopensUnresponsiveGame(key: String?, careerObserved: Boolean, reopensThisRun: Int): Boolean =
     key == GAME_NOT_RESPONDING && careerObserved && reopensThisRun < MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN
 

@@ -145,9 +145,7 @@ class RunRetryAndResumeTest {
 
         @Test
         fun `launching is saved only after a finished career`() {
-            // Only where no career of the saved run is in the slot: after a finished career (below), after a
-            // run skipped before Start Career (currentRun = that run), and at a launch stopped before Start
-            // Career with no rotation (currentRun = the run before it, so Start launches it again).
+            // Only where no career of the saved run is in the slot.
             assertEquals(3, Regex("phase = PHASE_LAUNCHING").findAll(startModule).count(), "the launch boundary, a skipped run and a run that could not start")
             val leave = startModule.substringAfter("private fun leaveSkippedRun(").substringBefore("\n    }\n")
             assertTrue(leave.contains("saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)"))

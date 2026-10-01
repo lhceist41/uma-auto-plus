@@ -100,10 +100,7 @@ class GrandConcert(game: Game) : Campaign(game) {
     /** Reads the live Lesson list into telemetry. Never taps - navigation stays here in the campaign. */
     private val lessonReader = GrandConcertLessonReader(game)
 
-    /** The run's own training stat priority, taken from the Training instance so a rotation resync (which
-     * rebuilds Training) also updates it. Threading this into Lesson scoring is what lets a Stamina- or
-     * Guts-focused build outweigh a single-stat technique that used to be scored purely by the scenario's
-     * old Speed/Wit/Power preference. */
+    /** Read from the Training instance so a rotation resync, which rebuilds Training, updates it too. */
     private val statPriority: List<StatName>
         get() = training.statPrioritization
 
@@ -330,9 +327,7 @@ class GrandConcert(game: Game) : Campaign(game) {
                     game.tapCoordinate(GrandConcertEscort.SKIP_GLYPH_X.toDouble(), GrandConcertEscort.SKIP_GLYPH_Y.toDouble(), "gc_concert_skip")
                     game.wait(2.0)
                 }
-                // A performance with a menu button in the skip disc (seen on a Grand finale that
-                // rendered black): the disc only toggles the menu, so a tap there never skips. The
-                // Skip entry is tapped only once the open menu shows it; Rotate is never touched.
+                // With a menu button in the skip disc, a tap there only toggles the menu: tap the Skip entry once the menu shows it, never Rotate.
                 grandConcertPlaybackMenuSkipPresent(sampler) && menuSkips < MAX_PLAYBACK_MENU_TAPS -> {
                     menuSkips++
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Performance menu open; tapping its Skip (try $menuSkips of $MAX_PLAYBACK_MENU_TAPS).")
@@ -414,7 +409,6 @@ class GrandConcert(game: Game) : Campaign(game) {
         return false
     }
 
-    /** True while any playback control shows: the skip glyph, the menu button or the open menu. */
     private fun playbackControlsPresent(): Boolean {
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
@@ -1119,7 +1113,6 @@ class GrandConcert(game: Game) : Campaign(game) {
         /** Escort loop budget: playback plus a handful of result screens fits well inside this. */
         private const val MAX_ESCORT_TICKS = 40
 
-        /** Taps on the performance menu button, and separately on its Skip entry, per escort. */
         private const val MAX_PLAYBACK_MENU_TAPS = 3
 
         /**

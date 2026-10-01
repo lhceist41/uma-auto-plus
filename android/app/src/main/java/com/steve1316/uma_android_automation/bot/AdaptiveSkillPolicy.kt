@@ -213,26 +213,19 @@ internal fun careerEndConstrainedFallbackAllowed(
         objective == SkillSpendObjective.SPARKS &&
         trigger == SkillCheckTrigger.CAREER_COMPLETE
 
-/** Which skills the knapsack tail may buy. */
 internal enum class CareerEndTailFilter {
     /** The preset's running style, distance and surface. */
     PROFILE,
 
     /** Any skill the trainee's running style can activate, at any distance or surface. */
     RUNNING_STYLE,
-
-    /** Any skill, for rating alone. */
     ANY_SKILL,
 }
 
 /**
- * The knapsack tail's filter. Only the rank objective's CAREER_COMPLETE session widens the profile filter:
- * after the last race a skill no longer helps this career, and the planned skills were bought first. By
- * default it keeps the skills the trainee's running style can activate, since an off-distance or off-surface
- * skill still fires when the veteran races at that distance or surface (Team Trials lets the player pick);
- * [anySkill], the player's setting, drops the style check too. An unknown running style keeps the profile
- * filter, never any skill. Mid-career sessions keep the profile filter because those skills are bought for
- * the races still to come.
+ * Only the rank objective's CAREER_COMPLETE session widens the profile filter: after the last race a skill no longer helps this career.
+ * It keeps skills the running style can activate, since an off-distance or off-surface skill still fires when the veteran races there
+ * (Team Trials lets the player pick); [anySkill] drops the style check too. An unknown running style keeps the profile filter.
  */
 internal fun careerEndTailFilter(objective: SkillSpendObjective, trigger: SkillCheckTrigger?, anySkill: Boolean, runningStyleKnown: Boolean): CareerEndTailFilter =
     when {

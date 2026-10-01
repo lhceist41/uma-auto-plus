@@ -5,11 +5,10 @@
  *
  * Preset naming convention: outfit-specific presets are "Character (Outfit)"; plain names
  * model the character's base card, whose outfit title comes from characterBaseOutfits.
- * All base-outfit names below were read from the cards' gametora pages on 2026-07-06, except
- * Nakayama Festa and Wonder Acute, read from the game's master data on 2026-09-26, Agnes Digital,
- * Inari One, Ines Fujin, Mejiro Bright and Satono Diamond, read from it on 2026-09-28, and Aston Machan,
- * Kawakami Princess, Seeking the Pearl, Yamanin Zephyr and Yukino Bijin, read from it on 2026-09-29. The
- * base card is the character's lowest card id in build_budget_data.json.
+ * Base-outfit names come from the cards' gametora pages, except Nakayama Festa, Wonder Acute, Agnes Digital,
+ * Inari One, Ines Fujin, Mejiro Bright, Satono Diamond, Aston Machan, Kawakami Princess, Seeking the Pearl,
+ * Yamanin Zephyr and Yukino Bijin, which come from the game's master data. The base card is the character's
+ * lowest card id in build_budget_data.json.
  */
 
 /** EN base-card outfit title per character, for presets whose name carries no bracket. */
@@ -140,12 +139,8 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     "Sakura Bakushin O|Grand Concert",
     "Super Creek|Grand Concert",
     "Agnes Tachyon|Grand Concert",
-    // The 2026-07-27 evening endurance queue, four first-ever completions in one unattended
-    // sitting (A+ 12,532 / A 11,950 / A+ 13,480 / A 11,687). Biwa's run also survived a 17:00
-    // daily-reset lobby bounce mid-launch and a bot restart; Doto's race-dense build proved the
-    // song-carryover path (an unaffordable all-song trio banked across a concert and bought the
-    // next cycle). Biwa's run was on her Rouge Caroler outfit, so it does not promote the plain
-    // Biwa Hayahide preset, which models her base outfit.
+    // Biwa's validated run was on her Rouge Caroler outfit, so it does not promote the plain Biwa Hayahide preset,
+    // which models her base outfit.
     "Meisho Doto|Grand Concert",
     "Nice Nature|Grand Concert",
     "Tosen Jordan|Grand Concert",

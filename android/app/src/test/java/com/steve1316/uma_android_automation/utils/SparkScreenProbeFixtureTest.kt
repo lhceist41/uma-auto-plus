@@ -105,8 +105,7 @@ class SparkScreenProbeFixtureTest {
 
         @Test
         fun `the 11-row set fills the window, so one frame cannot prove its end`() {
-            // The 12-row dialog's top frame looks the same down to the footer; only a swipe that
-            // moves nothing can tell the two apart.
+            // The 12-row dialog's top frame looks the same down to the footer.
             val cells = parseSparkRowCells(sampler("keep_confirmation_plain"), SPARKS_CONFIRM_GEOMETRY, image("keep_confirmation_plain").height)
             assertEquals(SPARKS_CONFIRM_GEOMETRY.maxRows, cells.size)
             assertFalse(sparkWindowShowsListEnd(SPARKS_CONFIRM_GEOMETRY, cells.size, cells.size))
@@ -125,8 +124,7 @@ class SparkScreenProbeFixtureTest {
     @Nested
     @DisplayName("the 2026-09-30 12-row keep dialog with its last row below the fold")
     inner class KeepConfirmation12Rows {
-        /** The set the SPARKS screen read completely, in order, from the career log (see
-         * PROVENANCE.md). The dialog showed the first 11; Ignited Spirit SPD needed a scroll. */
+        /** The set the SPARKS screen read completely (see PROVENANCE.md); the dialog showed the first 11. */
         private val liveSet =
             listOf(
                 SparkRowFact("Stamina", 1, SparkRowKind.STAT),
@@ -143,7 +141,6 @@ class SparkScreenProbeFixtureTest {
                 SparkRowFact("Ignited Spirit SPD", 1, SparkRowKind.WHITE),
             )
 
-        /** Names the parsed cells by position, standing in for the OCR the fixtures cannot run. */
         private fun facts(cells: List<SparkRowCell>, firstIndex: Int): List<SparkRowFact> =
             cells.mapIndexed { i, cell -> SparkRowFact(liveSet[firstIndex + i].name, cell.stars, cell.kind) }
 
@@ -155,8 +152,6 @@ class SparkScreenProbeFixtureTest {
 
         @Test
         fun `the top frame shows the first 11 rows and does not claim the end of the list`() {
-            // The live read took the footer under the window for the grid break and reported
-            // rows=11 endMarker=true against a 12-row set.
             val cells = top()
             assertEquals(liveSet.take(11).map { it.kind to it.stars }, cells.map { it.kind to it.stars })
             assertFalse(sparkWindowShowsListEnd(SPARKS_CONFIRM_GEOMETRY, cells.size, cells.size))
@@ -191,7 +186,6 @@ class SparkScreenProbeFixtureTest {
 
         @Test
         fun `one frame of a list that runs past the window is never a complete kept set`() {
-            // The no-transaction fallback recorded this frame's 11 rows as the whole kept set.
             assertFalse(keepDialogFrameIsCompleteSet(top(), namedCount = 11))
             val plain = parseSparkRowCells(sampler("keep_confirmation_plain"), SPARKS_CONFIRM_GEOMETRY, 1920)
             assertFalse(keepDialogFrameIsCompleteSet(plain, namedCount = plain.size), "an 11-row window cannot prove its end either")
@@ -211,7 +205,7 @@ class SparkScreenProbeFixtureTest {
         fun `a shorter set still proves its end inside one frame on the grey list body`() {
             for ((name, size) in listOf("keep_confirmation_guts2" to 3, "keep_confirmation_medium3" to 6, "confirmation_original" to 10)) {
                 val cells = parseSparkRowCells(sampler(name), SPARKS_CONFIRM_GEOMETRY, 1920)
-                // The named read stops on the first starless slot (no real spark has 0 stars).
+                // No real spark has 0 stars.
                 val named = cells.indexOfFirst { it.stars == 0 }
                 assertEquals(size, named, name)
                 assertTrue(sparkWindowShowsListEnd(SPARKS_CONFIRM_GEOMETRY, cells.size, named), name)
@@ -220,8 +214,7 @@ class SparkScreenProbeFixtureTest {
 
         @Test
         fun `the fixtures are straight RGB, not BGR-swapped bot saves`() {
-            // Top frame: the sky-blue STAT bar. Scrolled frame: the pink APTITUDE bar, which a
-            // swapped file would read blue-dominant.
+            // A swapped file would read the pink APTITUDE bar blue-dominant.
             val t = image("keep_confirmation_12row_top").getRGB(770, 315)
             assertTrue((t and 0xFF) > 240 && ((t shr 16) and 0xFF) < 150, "expected a blue-dominant STAT bar")
             val s = image("keep_confirmation_12row_bottom").getRGB(770, 315)
@@ -428,8 +421,7 @@ class SparkScreenProbeFixtureTest {
                     "keep_confirmation_medium3" to listOf(false, true, false, false),
                     "keep_confirmation_guts2" to listOf(false, true, false, false),
                     "keep_confirmation_12row_top" to listOf(false, true, false, false),
-                    // Scrolled, the pill and the stat-blue first row leave the window, so the
-                    // complete-list reader must restore the top before the screen is re-detected.
+                    // Scrolled, the pill and the stat-blue first row leave the window.
                     "keep_confirmation_12row_bottom" to listOf(false, false, false, false),
                 )
             for (name in allFixtures) {

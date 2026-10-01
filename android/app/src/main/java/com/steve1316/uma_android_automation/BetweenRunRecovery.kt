@@ -61,7 +61,6 @@ internal class BetweenRunRecovery(
 
     fun mayTapTitleScreen(careerLaunchInitiated: Boolean): Boolean = !titleScreenTapped && noCareerInFlight(careerLaunchInitiated)
 
-    /** Whether a game that stopped responding on a known screen may be restarted: the navigation's one relaunch, with no career in flight. */
     fun mayRestartUnresponsiveGame(careerLaunchInitiated: Boolean): Boolean = !relaunched && noCareerInFlight(careerLaunchInitiated)
 
     fun restartingUnresponsiveGame() {

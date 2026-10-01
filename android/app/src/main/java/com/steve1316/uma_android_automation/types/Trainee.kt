@@ -201,7 +201,7 @@ class Trainee {
     /** Reads the stat floor rejected on the Umamusume Details dialog since the career-end handler cleared this. */
     val detailsFloorRejections: MutableMap<StatName, Int> = mutableMapOf()
 
-    /** Stats whose latest Umamusume Details read was not accepted (unusable or held back), so they still hold an older value. */
+    /** Stats whose latest Umamusume Details read was not accepted, so they still hold an older value. */
     val detailsUnacceptedReads: MutableSet<StatName> = mutableSetOf()
 
     /** The trainee's approximate energy percentage (0-100). */
@@ -943,13 +943,7 @@ class Trainee {
         fans = observedFans
     }
 
-    /**
-     * Reads the preferred distance override and the stat targets for every race distance from settings.
-     *
-     * Runs at construction and again when a rotation resync swaps in another trainee's settings snapshot mid-career:
-     * both values are preset-owned, so a stale copy would train the career toward the previous trainee's distance and
-     * targets.
-     */
+    /** Also re-run when a rotation resync swaps in another trainee's settings snapshot: a stale copy would train toward the previous trainee's targets. */
     fun setStatTargetsByDistances() {
         val targets = mutableMapOf<TrackDistance, Stats>()
         for (trackDistance in TrackDistance.entries) {
@@ -965,13 +959,7 @@ class Trainee {
         applyTrainingSettings(SettingsHelper.getStringSetting("training", "preferredDistanceOverride"), targets)
     }
 
-    /**
-     * Replaces the preset-owned training settings. Everything observed from the screen (name, stats, aptitudes,
-     * fans) is left untouched.
-     *
-     * @param distanceOverride The preferred distance override ("Auto" or empty falls back to the best aptitude).
-     * @param targets Stat targets for each race distance.
-     */
+    /** Leaves everything observed from the screen untouched. [distanceOverride] "Auto" or empty falls back to the best aptitude. */
     internal fun applyTrainingSettings(distanceOverride: String, targets: Map<TrackDistance, Stats>) {
         preferredDistanceOverride = distanceOverride
         statTargetsByDistance.clear()

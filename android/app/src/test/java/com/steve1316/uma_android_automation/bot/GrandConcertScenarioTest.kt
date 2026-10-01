@@ -498,12 +498,6 @@ class GrandConcertScenarioTest {
             )
         }
 
-        /**
-         * A performance can hold a menu button in the skip disc (a black-rendered Grand finale on
-         * 2026-09-30), where a tap on the disc only toggles the menu. The escort must skip through
-         * the open menu's identified Skip entry, bounded, verify the skip, and close the Song
-         * Acquired notice that follows.
-         */
         @Test
         fun `the concert escort skips a menu-button performance through the menu's Skip`() {
             val campaign = source("bot/campaigns/GrandConcert.kt")

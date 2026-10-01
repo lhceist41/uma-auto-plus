@@ -21,13 +21,9 @@ package com.steve1316.uma_android_automation.utils
  * runtime wraps Bitmaps in [SparkPixelSampler]s, the tests wrap generated patterns.
  */
 object TraineeGridScroll {
-    /** The tile band the measurement samples, as height fractions: below the preview pane, above
-     * the fixed Filters/Name/Asc bar (the same band the scan's two tap rows live in). The grid
-     * keeps scrolling under that bar, and the bar starts at about 0.759 of the height (y 1457 of
-     * 1920): a band that reaches it compares a strip that never moves and no longer matches at
-     * the true offset (live frames 2026-10-01: all five swipes rejected at a 0.80 bottom, all
-     * five measured at 0.73-0.76). The shorter band also caps what can be measured: a swipe
-     * over ~336px leaves too little overlap and returns null. */
+    /** Height fractions below the preview pane and above the fixed Filters/Name/Asc bar (starts at 0.759, y 1457 of 1920).
+     * The grid scrolls under that bar, so a band reaching it compares a strip that never moves. The short band
+     * also caps measurement: a swipe over ~336px leaves too little overlap and returns null. */
     const val BAND_TOP_FRACTION = 0.54f
     const val BAND_BOTTOM_FRACTION = 0.75f
 

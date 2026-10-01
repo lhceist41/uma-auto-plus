@@ -51,12 +51,8 @@ export const normalizeScenarioKey = (raw: string | null | undefined): string => 
 export const isGrandConcert = (raw: string | null | undefined): boolean => normalizeScenarioKey(raw) === GRAND_CONCERT_KEY
 
 /**
- * Scenario-level capability gate.
- *
- * Every capability is on for every scenario, Grand Concert included: run queues, trainee
- * rotation and automatic TP restore all work there. Grand Concert is still labelled experimental,
- * and a concert screen the bot cannot drive stops the run (and the queue) with the career
- * preserved for the player to finish.
+ * Every capability is on for every scenario, Grand Concert included (still labelled experimental). A concert
+ * screen the bot cannot drive stops the run and the queue with the career preserved.
  */
 export interface ScenarioCapabilities {
     /** Multi-run queues require unattended completion. */

@@ -255,7 +255,6 @@ abstract class Campaign(game: Game) : Task(game) {
      * Learn screen through the existing entry machinery; the second verdict is terminal. */
     private var careerEndSpendRetryUsed: Boolean = false
 
-    /** Ledger keys of the stats the final Details reads left unaccepted; `[CAREER_END]` reports them as lastKnown. */
     private var careerEndLastKnownStats: List<String> = emptyList()
 
     /** Fallback nonce, used only when this Campaign is running outside a real career task (the
@@ -302,9 +301,7 @@ abstract class Campaign(game: Game) : Task(game) {
      * pure config reads whose per-tick caches reset to empty harmlessly.
      */
     private fun reloadTraineeConfig() {
-        // The Trainee object and this Campaign outlive the swap and cache preset-owned settings too:
-        // the distance override and stat targets (read by Training every turn), the summer rest rule,
-        // the mood floor, the skill-spend objective and the skill check threshold.
+        // The Trainee and this Campaign outlive the swap, so re-read every preset-owned setting they cache.
         trainee.setStatTargetsByDistances()
         mustRestBeforeSummer = readMustRestBeforeSummer()
         moodFloor = readMoodFloor()
@@ -571,7 +568,7 @@ abstract class Campaign(game: Game) : Task(game) {
     protected var moodFloor: Mood = readMoodFloor()
         private set
 
-    /** Reads the mood floor setting as a [Mood]. Falls back to GOOD on unrecognized strings. */
+    /** Unrecognized strings fall back to GOOD. */
     private fun readMoodFloor(): Mood =
         when (SettingsHelper.getStringSetting("training", "moodFloor", "Good").lowercase()) {
             "normal" -> Mood.NORMAL
@@ -751,7 +748,6 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Max [Game.restartGame] attempts per stuck episode before the run stops as game-unrecoverable. */
     private val maxGameRestartAttempts: Int = 3
 
-    /** Restarts this run spent on a game that stopped responding on a known screen ([stopForStuckInput]). */
     private var unresponsiveGameReopens: Int = 0
 
     /**
@@ -808,13 +804,8 @@ abstract class Campaign(game: Game) : Task(game) {
     private fun readSkillSpendObjective(): SkillSpendObjective =
         SkillSpendObjective.fromPersisted(SettingsHelper.getStringSetting("skills", "skillSpendObjective", "rank"))
 
-    /** The resolved skill-spend threshold policy for this career: manual passthrough of
-     * `skills.skillPointCheck`, or the account-tier table when adaptive mode is opted in.
-     * Resolved at construction, and again when a rotation resync swaps in another trainee's
-     * settings mid-career, and logged so every career states which policy governed it. Deliberately NOT part of the outcome-config
-     * fingerprint: resolving inside that snapshot would rotate every existing arm and flag
-     * phantom [CONFIG_DRIFT] against rotation snapshots, so the skill_spend records carry the
-     * resolved threshold/tier/reason instead. */
+    /** Deliberately NOT part of the outcome-config fingerprint: resolving there would rotate every arm and flag phantom [CONFIG_DRIFT],
+     * so the skill_spend records carry the resolved threshold/tier/reason instead. */
     internal var resolvedSkillThreshold: ResolvedSkillThreshold = resolveAndLogSkillThreshold()
         private set
 
@@ -1120,13 +1111,8 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
-     * Live check of the stuck-game restart on a healthy game. Start it with the game in front, for
-     * example mid-career: it makes the call the unknown-screen ladder makes on its second attempt
-     * ([Game.reopenGame] with attempt 2), so on Android 12-13 the game is sent Home, asked to close,
-     * launched into a fresh task and checked for its title screen. First it runs the own-input probe
-     * ([Game.ownInputReachesScreen]), whose one tap lands on a small window of this app, never on the
-     * game. It closes the game once and taps nothing in it; the career stays server-saved and resumes
-     * through Continue Career on the next normal start. Tagged [RESTART-TEST].
+     * Live check of the stuck-game restart on a healthy game: the own-input probe, then the restart the unknown-screen ladder's
+     * second attempt makes ([Game.reopenGame], attempt 2). Taps nothing in the game; the career resumes via Continue Career. Tagged [RESTART-TEST].
      */
     open fun startGameRestartTest() {
         MessageLog.i(TAG, "\n[TEST] [RESTART-TEST] Checking the bot's own taps, then restarting the game the way a stuck episode's second attempt does. Nothing in the game is tapped.")
@@ -1829,11 +1815,10 @@ abstract class Campaign(game: Game) : Task(game) {
      *
      * @param dialog The Try Again dialog.
      * @param args Additional arguments from dialog handling.
-     * @param lostGoalRace True when the game opened this dialog after a lost goal race, which may use the career's whole retry budget.
+     * @param lostGoalRace True after a lost goal race, which may use the career's whole retry budget.
      * @return True if the retry was initiated (button clicked), false to close the dialog without retrying.
      */
     open fun shouldRetryRace(dialog: DialogInterface, args: Map<String, Any>, lostGoalRace: Boolean): Boolean {
-        // The Alarm Clock purchase was already declined this race; another retry would only reopen it.
         if (racing.bAlarmClockPolicySkippedThisRace) return false
         val raceLimit = Racing.raceRetryLimit(lostGoalRace, racing.retriesThisRace, racing.raceRetries, racing.maxRetriesPerRace)
         if (Racing.retryAllowed(lostGoalRace, racing.retriesThisRace, racing.raceRetries, racing.maxRetriesPerRace)) {
@@ -2606,7 +2591,6 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     fun getLastRaceGrade(): com.steve1316.uma_android_automation.types.RaceGrade? = racing.lastRaceGrade
 
-    /** Whether the current Alarm Clock purchase is for retrying a lost goal race, for the "GoalRaces" policy in [DialogHandler]. */
     fun isRetryingLostGoalRace(): Boolean = racing.bRetryingLostGoalRace
 
     /**
@@ -4603,7 +4587,6 @@ abstract class Campaign(game: Game) : Task(game) {
                             game.wait(1.0)
                             val opened = buttonLocation != null && ButtonDetails.click(game.imageUtils)
                             if (opened) {
-                                // The second read's floor rejections replace the first's.
                                 trainee.detailsFloorRejections.clear()
                                 game.wait(1.0)
                             }
@@ -4928,9 +4911,8 @@ abstract class Campaign(game: Game) : Task(game) {
             return false
         }
 
-        // A dialog over the career screen dims every control above and leaves its own Skip pill
-        // readable, so none of them vetoes: the Grand Concert "Bonuses Updated" popup was advanced
-        // as a cutscene until a blind tap landed on its Confirm. A cutscene shows no dialog banner.
+        // A dialog dims every control above it but leaves its own Skip pill readable, so none vetoes: a Grand Concert popup was once
+        // advanced as a cutscene. A cutscene shows no dialog banner.
         if (DialogUtils.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             return false
         }
@@ -5023,12 +5005,9 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
-     * Ends a ladder whose taps changed nothing on a screen the bot knows. The own-input probe runs
-     * first: when the bot's taps still reach the screen, the game has stopped responding (a frozen
-     * event cutscene took input for 56 taps on 2026-09-29 and let none through), so the game is
-     * restarted ([Game.reopenGame]'s closing attempt) and the ladders start over. Where it cannot be
-     * closed (Android 14+) it is brought to the front once instead ([unresponsiveReopensAfter]). When the taps are
-     * dead, or the run's tries are spent, the run stops with the truthful key.
+     * Ends a ladder whose taps changed nothing on a known screen. If the own-input probe shows the bot's taps still land, the game has
+     * stopped responding: it is restarted ([Game.reopenGame]) or, on Android 14+, brought to the front once ([unresponsiveReopensAfter]).
+     * Otherwise, or when the run's tries are spent, the run stops with the truthful key.
      */
     private fun stopForStuckInput(episode: RebindEpisode, message: String) {
         val ownInput = game.ownInputReachesScreen()
@@ -5152,16 +5131,10 @@ abstract class Campaign(game: Game) : Task(game) {
             unknownScreenRebinds.record(game.forceRebindAccessibilityService())
         }
 
-        // Last resort before the stop: reopen the game. The gesture rebinds above cover MuMu's
-        // dead-dispatch mode; this covers a GAME-side soft-lock (an un-driveable screen that a rebind
-        // cannot fix - e.g. the game wedged on a first-time race) or a game that has actually gone
-        // away (a crash/kill leaving a foreign app on top). Gated to a career actually in progress
-        // (careerScreenObservedThisTask) so a bot parked at the lobby never relaunches, and bounded to
-        // [maxGameRestartAttempts] per episode. The first attempt brings the game to the front; later
-        // ones close and restart it where Android allows ([Game.reopenGame]). Each attempt gets a fresh
-        // unknown-screen budget (the counter resets below), so a cold boot has a minute+ to land before
-        // the next attempt. The career is server-saved and resumes via the lobby re-entry path
-        // (Continue Career) once a game screen is back. The reopen acts before anything is logged.
+        // Last resort: reopen the game, for a GAME-side soft-lock a rebind cannot fix or a game that has gone away. Gated to a career in
+        // progress (careerScreenObservedThisTask) so a bot parked at the lobby never relaunches, bounded by [maxGameRestartAttempts].
+        // Each attempt resets the unknown-screen budget so a cold boot has time to land; the career resumes via Continue Career.
+        // The reopen acts before anything is logged.
         if (shouldRelaunchGame(count, gameRestartThreshold, gameRestartAttemptsThisEpisode, maxGameRestartAttempts, careerScreenObservedThisTask)) {
             unknownScreenRebinds.closeLast()
             gameRestartAttemptsThisEpisode++
@@ -5172,12 +5145,8 @@ abstract class Campaign(game: Game) : Task(game) {
                     "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - reopening the game " +
                         "(attempt $gameRestartAttemptsThisEpisode/$maxGameRestartAttempts): ${reopenOutcomeWords(reopen)}.",
                 )
-                // Give the reopen a fresh window: the next ticks land on the game's title/lobby,
-                // which the lobby re-entry branch above resumes into the interrupted career. The
-                // re-entry budget resets too - the reopened game is a fresh lobby, not the one any
-                // earlier failed re-entries were fighting. If the game did NOT actually come back, the
-                // counter simply climbs to the threshold again and the next attempt fires (up to the
-                // cap), because a recognized game screen never returns to reset it to 0.
+                // Fresh window for the reopened game: the lobby re-entry branch resumes the career. If the game did not come back,
+                // the counter climbs to the threshold again and the next attempt fires.
                 consecutiveUnknownScreenCount = 0
                 lobbyReentryAttempts = 0
                 return

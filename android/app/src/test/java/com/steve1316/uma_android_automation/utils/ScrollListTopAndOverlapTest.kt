@@ -9,12 +9,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
-/**
- * The scroll-to-top skip and the frame-overlap proof behind [ScrollList.process].
- *
- * Scrollbar geometry is the Trackblazer shop's as read on a 1080x1920 device: a 690 px track and
- * a 168 px thumb, 1 px below the track top when the shop has just opened.
- */
+/** Scrollbar geometry is the Trackblazer shop's on 1080x1920: a 690 px track and a 168 px thumb, 1 px below the track top when just opened. */
 @DisplayName("ScrollList top proof and frame overlap")
 class ScrollListTopAndOverlapTest {
     private val track = BoundingBox(x = 8, y = 8, w = 10, h = 690)

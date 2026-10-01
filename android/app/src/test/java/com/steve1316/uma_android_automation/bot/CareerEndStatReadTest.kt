@@ -8,12 +8,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * The career-end stat read that feeds `[CAREER_END]` never passes an older value off as a fresh read:
- * a stat the final Details read did not accept is read once more after a settle, and if it is still
- * not accepted the ledger names it as lastKnown. A good read stays unmarked. The read sequence and the
- * marker are pure; the Trainee tracking and the Campaign wiring are pinned by source guards.
- */
+/** The career-end stat read never passes an older value off as fresh: stats still not accepted after a second read are named lastKnown in `[CAREER_END]`. */
 @DisplayName("Career-end stat read")
 class CareerEndStatReadTest {
     /** Plays [readCareerEndStats] over scripted reads; returns (result, reads, reopens with their argument). */

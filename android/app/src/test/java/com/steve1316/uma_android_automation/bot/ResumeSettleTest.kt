@@ -12,12 +12,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * A run start that finds a career on a turn-committing confirmation or an in-career list cancels or
- * backs out of it, never confirms, and leaves every other screen to the campaign. The decision and the
- * bounded loop are played against fake screens; the Grand Concert facts come from the real captures'
- * pixel probes, and the wiring in Game.start is pinned by source guards.
- */
+/** A run start that finds a career on a turn-committing confirmation or an in-career list cancels or backs out of it, never confirms. */
 @DisplayName("Settling a career found on a sub-screen at run start")
 class ResumeSettleTest {
     private fun step(screen: ResumeScreen) = resumeSettleStep(screen)?.action
@@ -81,7 +76,6 @@ class ResumeSettleTest {
         }
     }
 
-    /** Plays [settleResumedCareer] over scripted screens; a press that lands moves to the next one. */
     private fun settle(screens: MutableList<ResumeScreen?>, pressLands: Boolean = true): Pair<Int, List<ResumeSettleAction>> {
         val pressed = mutableListOf<ResumeSettleAction>()
         val presses =
@@ -163,7 +157,6 @@ class ResumeSettleTest {
             return SparkPixelSampler { x, y -> png.getRGB(x, y) }
         }
 
-        /** The settle's facts for a capture: the pixel probes run on it; the title and buttons are the ones it shows. */
         private fun facts(resource: String, cancel: Boolean, back: Boolean = false, title: String? = null, learn: Boolean = false): ResumeScreen {
             val s = sampler(resource)
             return ResumeScreen(
@@ -178,8 +171,7 @@ class ResumeSettleTest {
 
         private fun gc(name: String) = "/fixtures/grandconcert/$name.png"
 
-        // Titles as the captures show them ("Schedule" matches the known title "Schedule Race"); Cancel,
-        // Back and Learn as the templates score on them (1.0 where present).
+        // Titles as the captures show them ("Schedule" matches the known title "Schedule Race").
         @Test
         fun `the Learn and Schedule confirmations are cancelled`() {
             assertEquals(ResumeSettleAction.CANCEL, step(facts(gc("learn_confirm_technique"), cancel = true, title = "Confirmation", learn = true)))
@@ -220,7 +212,6 @@ class ResumeSettleTest {
             val skill = facts("/fixtures/skilllist/skill_list_confirmation_top.png", cancel = true, title = "Confirmation")
             assertTrue(!skill.grandConcertDialog)
             assertNull(step(skill), "the lesson rule does not fire")
-            // It is still cancelled at a run start, by the Learn confirmation rule.
             assertEquals(ResumeSettleAction.CANCEL, step(skill.copy(learn = true)))
         }
 

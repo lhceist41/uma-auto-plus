@@ -655,9 +655,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * Gains read from a gold row, which the contextual OCR-failure corrections must leave alone: a
-         * stat past 1200 gains little, so its main gain can sit at or below its side effects. A gold row
-         * that read 0 was not read and stays correctable.
+         * Gains read from a gold row, which the contextual OCR-failure corrections must leave alone: past 1200 a stat's main gain can sit at or
+         * below its side effects. A gold row that read 0 was not read and stays correctable.
          */
         fun trustedGoldGains(statGains: Map<StatName, Int>, goldStats: Set<StatName>): Set<StatName> = goldStats.filter { (statGains[it] ?: 0) > 0 }.toSet()
 
@@ -1077,29 +1076,15 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
-         * Share of the best option's score a hinted training must reach to be preferred. Measured on
-         * logged careers: an unconditional hint preference gave up double-rainbow Speed turns for
-         * low-value hinted Guts or Stamina turns, while hinted options within this share of the best
-         * cost little stat value for the hint they carry.
+         * Share of the best option's score a hinted training must reach to be preferred. Measured on logged careers: an unconditional hint
+         * preference gave up double-rainbow Speed turns for low-value hinted Guts or Stamina turns.
          */
         const val HINT_PRIORITY_MIN_SCORE_SHARE = 0.75
 
         /**
-         * Select the winning training from a set of scored options, applying skill-hint priority.
-         *
-         * When [enablePrioritizeSkillHints] is true, the highest-scoring hinted option wins if its score
-         * is at least [HINT_PRIORITY_MIN_SCORE_SHARE] of the best option's score; otherwise the
-         * highest-scoring option overall wins. When the best score is not positive there is no
-         * meaningful share, and a hinted option is preferred.
-         *
-         * This is the single, mode-agnostic place skill-hint priority is applied (issue #372), so the
-         * same rule holds in the Friendship, Spirit Gauge and Year 2+ scoring modes. The caller must
-         * pass only gate-passing trainings (failure-rate, energy, and blacklist already filtered into
-         * trainingMap), so preferring a hint here never bypasses those gates.
-         *
-         * @param trainingScores Map of gate-passing [TrainingOption]s to their computed mode score.
-         * @param enablePrioritizeSkillHints Whether skill-hint prioritization is enabled.
-         * @return The selected [TrainingOption], or null if [trainingScores] is empty.
+         * Applies skill-hint priority to scored options: with [enablePrioritizeSkillHints], the best hinted option wins if its score reaches
+         * [HINT_PRIORITY_MIN_SCORE_SHARE] of the best overall (or the best score is not positive). This is the one mode-agnostic place the rule
+         * applies (issue #372). Callers pass only gate-passing trainings, so a hint never bypasses the failure-rate, energy or blacklist gates.
          */
         fun selectBestTrainingWithHintPriority(trainingScores: Map<TrainingOption, Double>, enablePrioritizeSkillHints: Boolean): TrainingOption? {
             val best = trainingScores.maxByOrNull { it.value } ?: return null
@@ -1798,16 +1783,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
             }
 
-            // Skill-hint prioritization is handled entirely by the gated per-stat path below — there is
-            // deliberately NO early tap-and-return here. The old early block scanned the bottom half for any
-            // hint and immediately tapped the first one, which bypassed the failure-rate, energy, and
-            // blacklist gates every other training respects (it could train a hinted stat at up to 100%
-            // failure, on a blacklisted stat, or with no energy). Instead: the per-stat loop detects hints
-            // for each non-blacklisted training (Thread 4 -> result.numSkillHints), processAnalysisResults()
-            // drops any training over the effective failure threshold before it reaches trainingMap, and
-            // selectBestTrainingWithHintPriority() prefers a surviving hinted training in
-            // recommendTraining(). executeTraining() then taps the winner the same way it taps any
-            // recommendation, so hints stay preferred while obeying every gate.
+            // No early tap-and-return for hints: it bypassed the failure-rate, energy and blacklist gates every other training respects.
+            // Hints are detected per stat below, processAnalysisResults() drops trainings over the failure threshold, and
+            // selectBestTrainingWithHintPriority() then prefers a surviving hinted one.
 
             // Now analyze each stat.
             for (statName in StatName.entries) {
@@ -1840,10 +1818,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
                 // Get bitmaps and locations before starting threads to make them safe for parallel processing.
                 val sourceBitmap = game.imageUtils.getSourceBitmap()
-                // [GC_TELEMETRY] Dev-only, read-only: persist this facility's analysis frame (its "+N" gains are
-                // visible here) so the gain reads can be measured offline in every scenario. Debug-gated, taps
-                // nothing, does not touch scoring; uses the frame already captured above, so no extra screenshot
-                // is taken.
+                // [GC_TELEMETRY] Dev-only, debug-gated: persist this facility's analysis frame so the "+N" gain reads can be measured offline.
+                // Taps nothing, does not touch scoring, and reuses the frame captured above.
                 GrandConcertTelemetry.captureTrainingFacility(game, statName, sourceBitmap)
                 val skillPointsLocation = LabelStatTableHeaderSkillPoints.find(game.imageUtils).first
                 val failureChanceLocation = LabelTrainingFailureChance.find(game.imageUtils).first
@@ -2485,9 +2461,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
             }
         }
 
-        // A training below the stat's cap always raises its own stat, so a main gain of 0 with side effects
-        // showing means the digits were not read. Estimate it above the side effects so the facility is not
-        // scored as giving nothing, and say so: the estimate is a guess, not a reading.
+        // Below the stat's cap a training always raises its own stat, so a main gain of 0 with side effects showing means the digits were not
+        // read. Estimate it above the side effects and say so: the estimate is a guess, not a reading.
         if (mainStatGain == 0 && maxSideEffectGain > 0 && currentStat < effectiveStatCap) {
             var newMainGain = mainStatGain
             while (newMainGain <= maxSideEffectGain) {
@@ -2661,11 +2636,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
             skippedScores = skippedTrainingMap.values.associateWith { calculateRawTrainingScore(trainingConfig, it) }
         }
 
-        // Skill-hint priority is applied here, after mode scoring, so the same rule holds in EVERY mode
-        // (the Friendship and Unity Cup scorers above don't read hints; the Year-2+ scorer only adds a
-        // small bounded hint bonus via calculateMiscScore). trainingScores already contains only gate-passing trainings (failure
-        // rate, energy, and blacklist were applied when trainingMap was built), so a hinted winner here
-        // never bypasses those gates. See issue #372.
+        // Skill-hint priority is applied after mode scoring so it holds in every mode (the Friendship and Unity Cup scorers don't read hints;
+        // Year-2+ adds only a small bonus via calculateMiscScore). trainingScores holds only gate-passing trainings. See issue #372.
         val best: TrainingOption? = selectBestTrainingWithHintPriority(trainingScores, enablePrioritizeSkillHints)
 
         // Build and log training analysis results and selection reasoning.

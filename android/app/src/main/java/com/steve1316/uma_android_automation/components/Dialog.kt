@@ -121,11 +121,9 @@ object DialogUtils {
     }
 
     /**
-     * The title of a dialog whose title bar OCR cannot read, named from pixels instead. The Grand
-     * Concert "Bonuses Updated!" popup has yellow script on a green band that the OCR path cannot
-     * name. Only a fallback: the popup's green band and green right-hand button are the layout of
-     * every ordinary centred dialog (Warning, Auto-Select, Restore TP), so the yellow script itself
-     * must also be there, and [getTitle] asks this only after the OCR read found no title.
+     * Names the Grand Concert "Bonuses Updated!" popup, whose yellow script on a green band OCR cannot read.
+     * The green band and button match every ordinary centred dialog (Warning, Auto-Select, Restore TP),
+     * so the yellow script must also be present.
      */
     fun titleFromPixels(bitmap: Bitmap): String? {
         if (bitmap.width != 1080 || bitmap.height != 1920) return null
@@ -135,10 +133,9 @@ object DialogUtils {
     fun titleFromPixels(sampler: SparkPixelSampler): String? =
         if (grandConcertBonusesUpdatedPresent(sampler) && bonusesUpdatedScriptShare(sampler) >= BONUSES_SCRIPT_MIN_SHARE) DialogBonusesUpdated.title else null
 
-    /** The title read by OCR wins; the pixel read answers only when it found none. */
     internal fun titleOrPixelFallback(readTitle: String?, sampler: SparkPixelSampler): String? = readTitle ?: titleFromPixels(sampler)
 
-    /** Share of the "Bonuses Updated!" script band (sampled every 4 pixels) that is the title's yellow-green. ~0.13 on the popup, 0.0 on ordinary dialog headers. */
+    /** Share of the title band that is yellow-green: ~0.13 on the popup, 0.0 on ordinary dialog headers. */
     private fun bonusesUpdatedScriptShare(sampler: SparkPixelSampler): Double {
         var hits = 0
         var total = 0

@@ -142,19 +142,13 @@ object TraineeNameMatcher {
         return (" " + normalize(banner) + " ").contains(" $n ")
     }
 
-    /**
-     * The entry of [excludeOutfits] that [banner] shows, when the banner's name is [target]'s own
-     * character; null otherwise. Returns the list's own title, never the OCR text, so it is safe to
-     * name in player-facing words. The name check keeps a different character who happens to share
-     * an outfit title from counting as the target's other outfit.
-     */
+    /** Returns the list's own title, never the OCR text, so it is safe to show players. The name check keeps another character sharing an outfit title from counting. */
     fun excludedOutfitOf(target: String, banner: String, excludeOutfits: List<String>, threshold: Double): String? =
         excludeOutfits.firstOrNull { hasOutfit(banner, it) }?.takeIf { score(target, banner) >= threshold }
 
-    /** The OCR'd [banner] for a log line: a bracket opened at its end and cut off by the crop is dropped. */
+    /** Drops a bracket opened at the banner's end and cut off by the crop. */
     fun bannerForLog(banner: String): String = banner.trim().replace(Regex("""\s*[(\[]$"""), "")
 
-    /** True when the selection [banner] is [target]: a name match at [threshold] that is not one of its [excludeOutfits]. */
     fun isTargetBanner(target: String, banner: String, excludeOutfits: List<String>, threshold: Double): Boolean =
         banner.isNotBlank() && excludeOutfits.none { hasOutfit(banner, it) } && score(target, banner) >= threshold
 }

@@ -13,15 +13,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * Goal race identity, retry text and the failed-goal outcome.
- *
- * Fixture: a Mihono Bourbon URA career trained on turn 55 (Senior April, first half) and the game then opened
- * turn 56's goal race. The race list OCR read "Kyoto Turf 3200m (Long) Right / Outer", but the bot looked it up
- * with the stored turn 55 and logged "Lord Derby Challenge Trophy" (G3). It lost twice: the log read
- * "Retrying the race. Retries remaining: 2", then "No retries remaining but Try Again dialog detected" with
- * one retry still in the budget, and the career was ledgered outcome=COMPLETED.
- */
+/** Goal race identity, retry text and the failed-goal outcome, from a Bourbon URA career whose goal race was looked up at the previous turn's date. */
 @DisplayName("Goal race identity and outcome")
 class GoalRaceIdentityTest {
     private fun repoFile(relative: String): File {
@@ -76,8 +68,6 @@ class GoalRaceIdentityTest {
 
         @Test
         fun `Biwa's turn 44 course is Kikuka Sho, a G1, not turn 43's Kyoto Daishoten G2`() {
-            // A Biwa Hayahide Grand Concert career read "Kyoto Turf 3000m (Long) Right / Outer" at the stale turn 43 and
-            // logged "Kyoto Daishoten" (G2); her goal on turn 44 is Kikuka Sho (G1).
             val course = { race: JSONObject ->
                 race.getString("raceTrack") == "Kyoto" && race.getString("terrain") == "Turf" && race.getInt("distanceMeters") == 3000 &&
                     race.getString("direction") == "Right" && race.getString("course") == "Outer"
@@ -87,7 +77,6 @@ class GoalRaceIdentityTest {
             assertEquals("G1", turn44.single().getString("grade"))
             assertTrue(racesOnTurn(43).none(course))
             assertTrue(racesOnTurn(43).any { it.getString("name") == "Kyoto Daishoten" && it.getString("grade") == "G2" })
-            // With G1Only, the goal read on its own turn buys the retry; the stale G2 read did not.
             assertTrue(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G1, lostGoalRace = false))
             assertFalse(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G2, lostGoalRace = false))
         }
@@ -105,8 +94,7 @@ class GoalRaceIdentityTest {
 
         @Test
         fun `finale days keep the Main screen date, and a failed race list read says which turn is used`() {
-            // A finale day reaches the Main screen first (it logs "Finale Semi-Final (Turn 74)"); the race list does not
-            // name the round, and a read there defaults to turn 73.
+            // A finale day reaches the Main screen first; the race list does not name the round, and a read there defaults to turn 73.
             assertTrue(GameDate(74).apply { updateDay(74) }.bIsFinaleSeason)
             assertFalse(GameDate(56).apply { updateDay(56) }.bIsFinaleSeason)
             val mandatory = body(source("$botDir/Racing.kt"), "private fun handleMandatoryRace(): Boolean {", "private fun selectMaidenRace(")
@@ -119,7 +107,6 @@ class GoalRaceIdentityTest {
 
         @Test
         fun `the Alarm Clock rule decides on the goal race's grade`() {
-            // The G1 goal read on its own turn lets G1Only buy; the stale turn's G3 did not.
             assertTrue(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G1, lostGoalRace = false))
             assertFalse(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G3, lostGoalRace = false))
             assertFalse(Racing.alarmClockPurchaseAllowed("Never", RaceGrade.G1, lostGoalRace = false))
@@ -137,7 +124,6 @@ class GoalRaceIdentityTest {
     inner class RetryText {
         @Test
         fun `a retry names what it spends and what is left`() {
-            // A retry of a race held to the per-race cap of 1, with the career budget of 3 partly used.
             assertEquals(
                 "[RACE] Retrying the failed race with an Alarm Clock (if none is held, alarmClockPolicy=Never buys none): retry 1 of 1 for this race, 1 left in this career's retry budget.",
                 Racing.raceRetryText(freeRetryShown = false, retryNumber = 1, raceLimit = 1, budgetLeft = 1, policy = "Never", grade = RaceGrade.G1, lostGoalRace = false),
@@ -154,7 +140,6 @@ class GoalRaceIdentityTest {
 
         @Test
         fun `a closed Try Again dialog names the rule that stopped the retry`() {
-            // A race at its per-race limit with budget still left names the limit, not an empty budget.
             val perRace = Racing.raceRetryDeclinedText(alarmClockDeclined = false, retriesThisRace = 1, raceLimit = 1, budgetLeft = 1, policy = "Never")
             assertEquals("[RACE] Not retrying the failed race: this race already used its 1 retry. Closing the Try Again dialog.", perRace)
             assertEquals(
@@ -188,14 +173,11 @@ class GoalRaceIdentityTest {
 
         @Test
         fun `a goal met below 1st does not force-end, because the bot no longer opens a Try Again dialog itself`() {
-            // A goal met at 2nd-5th used to be followed by the bot's own results-screen retry tap, whose confirmation dialog
-            // the per-race cap then closed (the Trackblazer G1 sequence: try_again_alt tapped, then the Try Again dialog).
-            // With no retry tap left, every Try Again dialog is the game's, shown after a failed goal.
+            // The bot no longer taps a results-screen retry itself, so every Try Again dialog is the game's, shown after a failed goal.
             val racing = source("$botDir/Racing.kt")
             assertFalse(racing.contains("ButtonTryAgainAlt"), "no results-screen retry tap")
             assertFalse(racing.contains("bRetryDialogOpenedByBot"))
             assertFalse(source("android/app/src/main/java/com/steve1316/uma_android_automation/components/Button.kt").contains("ButtonTryAgainAlt"))
-            // Tenno Sho (Spring) lost twice: the game opened the dialog after each loss.
             assertTrue(Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = false))
         }
 

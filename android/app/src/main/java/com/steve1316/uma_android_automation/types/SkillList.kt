@@ -69,17 +69,12 @@ private const val MAX_SKILL_SCROLLS = 10
 /**
  * The result of reading the Umamusume Details "Skills" tab.
  *
- * @property skillNames The canonical database names of the trainee's currently-owned skills, without the trainee's own unique.
+ * @property skillNames Canonical names of the owned skills, without the trainee's own unique.
  * @property uniqueLevel The unique skill's level read from the first cell, or 0 when unread.
- * @property uniqueName The name read in the unique skill's cell, or null when unread.
  */
 data class DetailsSkillsResult(val skillNames: List<String>, val uniqueLevel: Int, val uniqueName: String? = null)
 
-/**
- * The owned skills without the trainee's own unique. The unique scores through its level bonus; its name
- * matches the database row of the unique's inherited version, so counting it as an owned skill too scored
- * it twice (the estimate ran high by exactly that row's value against the game's rating).
- */
+/** The unique scores through its level bonus, and its name matches its inherited version's row, so counting it as owned too scores it twice. */
 internal fun ownedSkillsWithoutUnique(names: Collection<String>, uniqueName: String?): List<String> = names.filter { it != uniqueName }
 
 /**

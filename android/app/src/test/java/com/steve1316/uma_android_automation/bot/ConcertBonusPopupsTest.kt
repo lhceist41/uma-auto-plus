@@ -16,11 +16,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * The Grand Concert bonus popups, replayed on the live frames that stalled a run (see
- * src/test/resources/fixtures/concertbonuses/PROVENANCE.md): "Bonuses Updated!" was read as an event
- * cutscene and advanced with blind taps onto "Active Concert Bonuses", which no dialog matched.
- */
+/** Live frames of the Grand Concert bonus popups (src/test/resources/fixtures/concertbonuses/PROVENANCE.md). */
 @DisplayName("Grand Concert bonus popups")
 class ConcertBonusPopupsTest {
     private fun sampler(path: String): SparkPixelSampler {
@@ -48,7 +44,6 @@ class ConcertBonusPopupsTest {
 
         val updated = requireNotNull(DialogObjects.map["bonuses_updated"])
         assertEquals("Bonuses Updated", updated.title)
-        // Confirm opens the Active Concert Bonuses panel and gains nothing.
         assertEquals(listOf(ButtonClose), updated.buttons)
         assertNull(updated.okButton)
     }
@@ -62,8 +57,7 @@ class ConcertBonusPopupsTest {
 
     @Test
     fun `an OCR title is never replaced by the pixel read`() {
-        // The popup's layout (green band, green right-hand button) is the ordinary dialog's: these frames
-        // clear the escort probe's thresholds, so only the order protects their own names and handlers.
+        // These frames clear the escort probe's thresholds, so only the order protects their own names.
         val ordinary =
             mapOf(
                 "concertbonuses/warning_live" to "consecutive_race_warning",
@@ -74,7 +68,6 @@ class ConcertBonusPopupsTest {
             val dialog = requireNotNull(DialogObjects.map[dialogName])
             assertEquals(dialog.title, DialogUtils.titleOrPixelFallback(dialog.title, sampler(name)), name)
         }
-        // Even the real popup keeps a title OCR did read.
         assertEquals("Active Concert Bonuses", DialogUtils.titleOrPixelFallback("Active Concert Bonuses", sampler("concertbonuses/bonuses_updated_live")))
     }
 
@@ -87,7 +80,6 @@ class ConcertBonusPopupsTest {
 
     @Test
     fun `no other live frame is named from pixels`() {
-        // The panel has a title-bar gradient of its own and is named from OCR; an event with choices is no dialog.
         for (name in listOf("concertbonuses/active_bonuses_live", "concertbonuses/event_choices_live", "grandconcert/active_bonuses_panel", "grandconcert/career_main_turn1")) {
             assertNull(DialogUtils.titleFromPixels(sampler(name)), name)
         }

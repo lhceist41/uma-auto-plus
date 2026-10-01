@@ -10,14 +10,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * A stop the bot requests itself (it sets StartModule.queueStopReason) keeps the queue's resume record
- * and is recorded as STOPPED_BY_BOT; a user Stop clears the record and stays MANUALLY_STOPPED.
- *
- * Motivating case: a mid-career Data Update stopped the queue, the record was cleared, and the next
- * Start began run 1 of a fresh queue on the career still in the game's slot. The resync onto that
- * career was then refused across scenarios and the queue stopped a second time.
- */
+/** A mid-career Data Update stop cleared the record, and the next Start began run 1 of a fresh queue on the career still in the slot. */
 @DisplayName("Bot stops keep the resume record and are logged as bot stops")
 class BotStopResumeRecordTest {
     private val dataUpdateReason = "The game asked to download additional data, and the Data Update prompt's OK button was not found."
@@ -27,7 +20,6 @@ class BotStopResumeRecordTest {
     inner class ResumeRecord {
         private val complete = TaskResultCode.TASK_RESULT_COMPLETE
 
-        /** The run loop's flag after playing the first runs of a [totalRuns] queue with these results, in order. */
         private fun lastCareerFinished(totalRuns: Int, vararg results: TaskResultCode): Boolean =
             results.withIndex().any { (i, code) -> StartModule.finishesLastCareer(i + 1, totalRuns, code) }
 
@@ -61,7 +53,6 @@ class BotStopResumeRecordTest {
 
         @Test
         fun `a bot stop after the last run finished clears it even when an earlier run errored`() {
-            // 4 of 5 careers COMPLETE: run 3 errored and the queue played on (Stop Queue on Error off).
             val finished = lastCareerFinished(5, complete, complete, TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, complete, complete)
             assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished))
         }

@@ -66,21 +66,16 @@ internal fun shortSha1(text: String): String {
     return digest.joinToString("") { "%02x".format(it) }.take(10)
 }
 
-/**
- * The career-end stat read that feeds the ledger. [read] runs one Umamusume Details read and returns
- * the stats it did not accept. When any remain, [reopen] settles and opens the dialog once more for a
- * second read. Returns the stats still not accepted: their ledger values are last-known, not fresh.
- */
+/** [reopen] opens the Details dialog once more only when [read] left stats unaccepted; stats still unaccepted are reported last-known, not fresh. */
 internal fun readCareerEndStats(read: () -> Set<StatName>, reopen: (Set<StatName>) -> Boolean): Set<StatName> {
     val first = read()
     if (first.isEmpty() || !reopen(first)) return first
     return read()
 }
 
-/** The `[CAREER_END]` keys of the five stats, in ledger order. */
 internal val CAREER_END_STAT_KEYS: Map<StatName, String> =
     mapOf(StatName.SPEED to "spd", StatName.STAMINA to "sta", StatName.POWER to "pwr", StatName.GUTS to "grt", StatName.WIT to "wit")
 
-/** Ledger keys of the stats reported at a last-known value. A stat reported as unread (-1) is not last-known. */
+/** A stat reported as unread (-1) is not last-known. */
 internal fun lastKnownLedgerKeys(notAccepted: Set<StatName>, reportedUnread: Set<StatName>): List<String> =
     StatName.entries.filter { it in notAccepted && it !in reportedUnread }.map { CAREER_END_STAT_KEYS.getValue(it) }

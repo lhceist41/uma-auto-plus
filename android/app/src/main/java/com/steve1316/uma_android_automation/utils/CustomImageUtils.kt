@@ -253,7 +253,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @property statGains Mapping of stat names to their detected integer gain values.
      * @property rowValuesMap Mapping of stat names to individual row values (for multi-row scenarios).
      * @property correctedStats List of stats that required value correction during detection.
-     * @property goldStats Stats whose gains were drawn in gold (the training takes them past 1200), read by [StatGainDigits].
+     * @property goldStats Stats whose gains were drawn in gold (the training takes them past 1200).
      */
     data class StatGainResult(
         val statGains: Map<StatName, Int>,
@@ -1783,9 +1783,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                             return@Thread
                         }
 
-                        // Once the training would take this stat past 1200 the game draws its gains in gold behind a
-                        // double chevron, which the templates above cannot read. Read each row again from the stat's
-                        // actual column (169 px pitch) and let a gold read replace the template read.
+                        // Gold gains past 1200 are unreadable by the templates above: re-read each row from the stat's actual 169 px column.
                         val bitmap = sourceBitmap!!
                         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
                         val columnLeft =
@@ -1805,14 +1803,12 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                 }
                             }
 
-                        // Analyze results and construct the final integer value for this region, summing the rows.
                         val rowValues =
                             rowDebugInfo.mapIndexed { index, rowInfo ->
                                 val logLabel = if (rows.size > 1) "for ${rowInfo.config.rowName}" else "for stat $statName"
                                 StatGainDigits.resolveRowValue(constructIntegerFromMatches(rowInfo.matches, logLabel), pixelRows[index])
                             }
                         if (rows.size > 1) {
-                            // Store row values for sequential logging after threads complete.
                             rowValuesMap[statName] = rowValues
                         }
                         val finalValue = rowValues.sum()
