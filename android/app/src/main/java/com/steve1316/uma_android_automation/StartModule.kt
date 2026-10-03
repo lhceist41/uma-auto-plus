@@ -677,6 +677,54 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             }
         }
 
+        /** `category.key` of every snapshot row whose live value differs or is missing. `debug` rows never ride a snapshot. */
+        internal fun rotationSlotDrift(slotRows: List<Triple<String, String, String>>, live: Map<String, String>): List<String> =
+            slotRows.filter { (category, key, value) -> category != "debug" && live["$category.$key"] != value }.map { "${it.first}.${it.second}" }.sorted()
+
+        /**
+         * Re-applies slot [index] when the live settings drifted from it since the switch. The app saves its whole in-memory config when it
+         * leaves the foreground, which can land between the switch and the run start, and the scenario is fixed once the run's Game is built.
+         */
+        fun reapplyRotationSlotIfDrifted(context: Context, index: Int, run: Int) {
+            try {
+                val prefix = "rot${index}_"
+                val slotRows = mutableListOf<Triple<String, String, String>>()
+                val live = mutableMapOf<String, String>()
+                SettingsDatabase.get(context).rawQuery(
+                    "SELECT substr(s.category, ?), s.key, s.value, l.value FROM settings s " +
+                        "LEFT JOIN settings l ON l.category = substr(s.category, ?) AND l.key = s.key WHERE s.category GLOB ?",
+                    arrayOf((prefix.length + 1).toString(), (prefix.length + 1).toString(), "$prefix*"),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val category = cursor.getString(0)
+                        val key = cursor.getString(1)
+                        slotRows.add(Triple(category, key, cursor.getString(2) ?: ""))
+                        if (!cursor.isNull(3)) live["$category.$key"] = cursor.getString(3)
+                    }
+                }
+                if (slotRows.isEmpty()) {
+                    MessageLog.e(TAG, "[ROTATION] Run $run start: no snapshot rows for rotation slot #${index + 1}, so its settings could not be re-checked.")
+                    return
+                }
+                val drift = rotationSlotDrift(slotRows, live)
+                if (drift.isEmpty()) {
+                    MessageLog.i(TAG, "[CONFIG_DRIFT] Run $run start: live settings match rotation slot #${index + 1}'s snapshot.")
+                    return
+                }
+                val shown = drift.take(8).joinToString(", ") + if (drift.size > 8) " and ${drift.size - 8} more" else ""
+                MessageLog.w(
+                    TAG,
+                    "[CONFIG_DRIFT] Run $run start: ${drift.size} live setting(s) differ from rotation slot #${index + 1}'s snapshot ($shown). " +
+                        "Re-applying the snapshot before the run.",
+                )
+                if (!applyRotationSnapshot(context, index)) {
+                    MessageLog.e(TAG, "[ROTATION] Run $run start: re-applying rotation slot #${index + 1} failed; the career-start check still compares the scenario.")
+                }
+            } catch (e: Exception) {
+                MessageLog.e(TAG, "[ROTATION] Run $run start: could not re-check rotation slot #${index + 1}: ${e.message}")
+            }
+        }
+
         /**
          * Records the target trainee's in-game name so the launch navigator's Trainee Select
          * handler knows who to pick — and to verify against (match-or-stop).
@@ -1556,6 +1604,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         return userReuse
     }
 
+    /** Re-applies the live rotation slot before a run builds its Game. A mid-career resync made its slot the live one; the cursor's slot applies otherwise. */
+    private fun reapplyLiveRotationSlot(run: Int) {
+        val liveSlot = if (rotationResyncPrevIndex >= 0) rotationResyncPrevIndex else rotationPrevIndex
+        if (liveSlot >= 0) reapplyRotationSlotIfDrifted(context, liveSlot, run)
+    }
+
     /**
      * Runs one CareerLaunchNavigator.navigate() call under the navigation deadline.
      *
@@ -2302,6 +2356,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     val runStartedAt = System.currentTimeMillis()
                     val careerEndSeqBeforeRun = lastCareerEndSeq
 
+                    if (enableRunQueue && rotation.enabled) reapplyLiveRotationSlot(i)
+
                     // Run the game. An errored run whose career is still in the slot is played once
                     // more as this same run: the saved phase stays CAREER, the rotation snapshot is
                     // unchanged, and Game.start() re-enters the career without treating it as
@@ -2335,6 +2391,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             nowMs = System.currentTimeMillis(),
                         )
                         sendQueueProgressEvent(i, totalRuns, "retrying")
+                        if (enableRunQueue && rotation.enabled) reapplyLiveRotationSlot(i)
                         nextRunCareerInFlight = true
                         result = runSingleGame()
                     }

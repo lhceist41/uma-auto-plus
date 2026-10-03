@@ -358,6 +358,12 @@ internal val REPORT_REASON_KEYS =
         "NAVIGATION_TIMEOUT" to KeyText("getting to the next career took too long.", "Check that the game is responding"),
         "NAVIGATION_UNRESPONSIVE" to KeyText("getting to the next career stopped responding.", "Check that the game is responding"),
         "TRAINEE_MISMATCH" to KeyText("the trainee in the career was not the one the rotation expected.", "Check the rotation list, return the game to its home screen"),
+        "SCENARIO_MISMATCH" to
+            KeyText(
+                "the run had loaded settings for a different scenario than its rotation trainee. The career is kept, and Start continues it with that " +
+                    "trainee's settings. If it stops again, check the trainee's scenario under Rotate Trainees in Run Queue Settings.",
+                null,
+            ),
         "CONNECTION_LOST" to KeyText("the game lost its connection to its server and did not reconnect in time.", "Check the device's internet connection and clear the error in the game"),
         "DOWNLOAD_FAILED" to KeyText("the game could not finish downloading its data.", "Check the device's internet connection and let the game finish its download"),
         "DATA_DOWNLOAD_PROMPT" to

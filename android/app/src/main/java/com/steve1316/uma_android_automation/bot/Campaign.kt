@@ -155,6 +155,10 @@ data class RaceFallbackOutcome(
     val turnAdvanced: Boolean,
 )
 
+/** The Campaign subclass is fixed when Game is built, so a slot whose scenario differs from the running one cannot be repaired mid-career. */
+internal fun rotationSlotScenarioMismatch(slotScenario: String, runningScenario: String): Boolean =
+    slotScenario.isNotEmpty() && GrandConcertScenario.normalizeScenarioKey(slotScenario) != runningScenario
+
 // Position of the "Group Event Progress X/Y" text relative to the right edge of the matched "Group Event Progress" pill ([LabelEventProgress]), for OCR. Tune if the "GroupEventProgress" debug crop misses the digits.
 private const val GROUP_PROGRESS_GAP_X = 15
 private const val GROUP_PROGRESS_WIDTH = 120
@@ -287,6 +291,9 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** The explicit OK line is the observable proof a career runs the intended preset; silence proves nothing in a rotated-away log. */
     private fun warnOnTraineeConfigDrift(slotIndex: Int, context: String) {
+        // Compared on its own: the fingerprint does not cover the scenario, and presets often match across scenarios.
+        val slotScenario = if (slotIndex >= 0) SettingsHelper.getStringSetting("rot${slotIndex}_general", "scenario", "") else ""
+        if (rotationSlotScenarioMismatch(slotScenario, game.scenario)) stopOnSlotScenarioMismatch(slotIndex, slotScenario)
         val slotFp = rotationSlotFingerprint(slotIndex) ?: return
         val liveFp = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, buildOutcomeConfigSnapshot())
         if (liveFp == slotFp) {
@@ -298,6 +305,18 @@ abstract class Campaign(game: Game) : Task(game) {
                     "this career may be running another preset's settings.",
             )
         }
+    }
+
+    /** Stops before any further tap: playing on would run the career under another scenario's campaign logic. */
+    private fun stopOnSlotScenarioMismatch(slotIndex: Int, slotScenario: String): Nothing {
+        val reason =
+            "Stopped on a scenario mismatch: rotation slot #${slotIndex + 1} plays $slotScenario, but this run loaded ${game.scenario} settings. " +
+                "The career is kept in the game."
+        MessageLog.e(TAG, "[CONFIG_DRIFT] $reason")
+        StartModule.queueStopKey = "SCENARIO_MISMATCH"
+        StartModule.queueStopReason = reason
+        StartModule.queueStopRequested = true
+        throw InterruptedException(reason)
     }
 
     /** Required instance of the GameDate class. */

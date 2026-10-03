@@ -517,6 +517,21 @@
             }
         },
         {
+            "name": "bot stop: scenario mismatch",
+            "report": {
+                "kind": "STOPPED_BY_BOT",
+                "queueEnabled": true,
+                "totalRuns": 15,
+                "completedRuns": 2,
+                "reasonKey": "SCENARIO_MISMATCH"
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The bot stopped the queue with 2 of 15 runs done: the run had loaded settings for a different scenario than its rotation trainee. The career is kept, and Start continues it with that trainee's settings. If it stops again, check the trainee's scenario under Rotate Trainees in Run Queue Settings.",
+                "nextAction": "Press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "bot stop: navigation unresponsive",
             "report": {
                 "kind": "STOPPED_BY_BOT",

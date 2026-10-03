@@ -109,7 +109,7 @@ class BotStopResumeRecordTest {
                 "android/app/src/main/java/com/steve1316/uma_android_automation/bot/Campaign.kt",
                 "android/app/src/main/java/com/steve1316/uma_android_automation/bot/DialogHandler.kt",
             ).sumOf { path -> Regex("queueStopReason =\\s*\"|queueStopReason = reason|queueStopReason =\\n").findAll(source(path)).count() }
-            assertEquals(3, sites, "navigation deadline, trainee mismatch, data prompt")
+            assertEquals(4, sites, "navigation deadline, trainee mismatch, scenario mismatch, data prompt")
             for (userStop in listOf("fun stop() {", "fun stopQueue() {", "internal fun stopForLostCapture() {")) {
                 val at = startModule.indexOf(userStop)
                 assertTrue(at >= 0, userStop)
