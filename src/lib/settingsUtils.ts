@@ -147,3 +147,46 @@ export const applyMigrations = (settings: any): { settings: any; anyMigrated: bo
 
     return { settings: migratedSettings, anyMigrated }
 }
+
+/** Name an entry with its scenario; `detailed` adds the preset and excluded outfits for entries that differ only there. */
+const formatListItem = (item: any, detailed: boolean): string => {
+    if (item == null) return ""
+    if (typeof item !== "object") return String(item)
+    if (!("inGameName" in item || "name" in item || "scenario" in item)) return JSON.stringify(item)
+    const name = item.inGameName ?? item.name
+    const scenario = typeof item.scenario === "string" ? item.scenario : ""
+    const hasName = typeof name === "string" && name !== ""
+    const label = hasName ? name : scenario ? `(empty ${scenario} entry)` : "(empty entry)"
+    const extra: string[] = hasName && scenario ? [scenario] : []
+    if (detailed) {
+        if (typeof item.presetKey === "string" && item.presetKey !== "") extra.push(`preset ${item.presetKey}`)
+        if (Array.isArray(item.excludeOutfits) && item.excludeOutfits.length > 0) extra.push(`excluding ${item.excludeOutfits.join(", ")}`)
+    }
+    return extra.length > 0 ? `${label} (${extra.join(", ")})` : label
+}
+
+const formatText = (value: any, detailed: boolean): string => {
+    if (value == null) return "null"
+    if (typeof value === "boolean") return value ? "Enabled" : "Disabled"
+    if (Array.isArray(value)) return value.length === 0 ? "[]" : value.map((item) => formatListItem(item, detailed)).join(", ")
+    if (typeof value === "object") return JSON.stringify(value)
+    return String(value)
+}
+
+/** Format a setting value as human-readable text for the import preview. */
+export const formatValue = (value: any): string => formatText(value, false)
+
+/** Format the old and new value of a changed setting; a real change never reads as the same text on both sides. */
+export const formatChange = (oldValue: any, newValue: any): { oldText: string; newText: string } => {
+    let oldText = formatText(oldValue, false)
+    let newText = formatText(newValue, false)
+    if (oldText === newText) {
+        oldText = formatText(oldValue, true)
+        newText = formatText(newValue, true)
+    }
+    if (oldText === newText) {
+        oldText = JSON.stringify(oldValue) ?? "null"
+        newText = JSON.stringify(newValue) ?? "null"
+    }
+    return { oldText, newText }
+}

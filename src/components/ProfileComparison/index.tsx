@@ -4,6 +4,7 @@ import { useTheme } from "../../context/ThemeContext"
 import CustomButton from "../CustomButton"
 import WarningContainer from "../WarningContainer"
 import { SettingsCategory } from "../../hooks/useProfileManager"
+import { formatChange } from "../../lib/settingsUtils"
 
 interface ProfileComparisonProps {
     /** A record of settings keys with their current and profile values for comparison. */
@@ -22,21 +23,6 @@ interface ProfileComparisonProps {
 // Note that this is not exhaustive and if the Profile feature is ever expanded, this will need to be updated.
 const CATEGORY_NAMES: Partial<Record<SettingsCategory, string>> = {
     training: "Training Settings:",
-}
-
-/**
- * Formats a value for display in the comparison.
- * @param value The value to format.
- * @returns The formatted value.
- */
-const formatValue = (value: any): string => {
-    if (Array.isArray(value)) {
-        return value.join(", ") || "[]"
-    }
-    if (typeof value === "object" && value !== null) {
-        return JSON.stringify(value)
-    }
-    return String(value)
 }
 
 /**
@@ -127,17 +113,20 @@ const ProfileComparison: React.FC<ProfileComparisonProps> = ({ comparison, onCon
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>{sectionTitle}</Text>
                 {/* Display each changed setting */}
-                {Object.entries(comparison).map(([key, { current, profile }]) => (
-                    <View key={key} style={styles.changeItem}>
-                        <Text style={styles.changeKey}>{key}:</Text>
-                        <View style={styles.changeRow}>
-                            <Text style={[styles.changeValue, { color: colors.destructive }]}>Current: {formatValue(current)}</Text>
+                {Object.entries(comparison).map(([key, { current, profile }]) => {
+                    const { oldText, newText } = formatChange(current, profile)
+                    return (
+                        <View key={key} style={styles.changeItem}>
+                            <Text style={styles.changeKey}>{key}:</Text>
+                            <View style={styles.changeRow}>
+                                <Text style={[styles.changeValue, { color: colors.destructive }]}>Current: {oldText}</Text>
+                            </View>
+                            <View style={styles.changeRow}>
+                                <Text style={[styles.changeValue, { color: colors.primary }]}>→ Profile: {newText}</Text>
+                            </View>
                         </View>
-                        <View style={styles.changeRow}>
-                            <Text style={[styles.changeValue, { color: colors.primary }]}>→ Profile: {formatValue(profile)}</Text>
-                        </View>
-                    </View>
-                ))}
+                    )
+                })}
             </View>
 
             <View style={styles.buttonRow}>

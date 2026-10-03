@@ -7,15 +7,7 @@ import { useNavigation } from "@react-navigation/native"
 import { useSettings } from "../context/SettingsContext"
 import { BotStateContext, Settings, defaultSettings } from "../context/BotStateContext"
 import { logErrorWithTimestamp } from "../lib/logger"
-
-/** Format a value as a human-readable string for the import preview dialog. */
-const formatValue = (value: any): string => {
-    if (value == null) return "null"
-    if (typeof value === "boolean") return value ? "Enabled" : "Disabled"
-    if (Array.isArray(value)) return value.length === 0 ? "[]" : value.join(", ")
-    if (typeof value === "object") return JSON.stringify(value)
-    return String(value)
-}
+import { formatChange } from "../lib/settingsUtils"
 
 /** Deep equality (recurses objects/arrays) so we detect real value changes, not reference identity. */
 const deepEqual = (a: any, b: any): boolean => {
@@ -137,11 +129,10 @@ export const useSettingsFileManager = () => {
             const { settings: importedSettings, profileCount } = await loadFromJSONFile(fileUri)
             const changes = compareSettings(bsc.settings, importedSettings)
 
-            const formattedChanges = changes.map((change) => ({
-                ...change,
-                formattedOldValue: formatValue(change.oldValue),
-                formattedNewValue: formatValue(change.newValue),
-            }))
+            const formattedChanges = changes.map((change) => {
+                const { oldText, newText } = formatChange(change.oldValue, change.newValue)
+                return { ...change, formattedOldValue: oldText, formattedNewValue: newText }
+            })
 
             ;(navigation as any).navigate("ImportSettingsPreview", {
                 changes: formattedChanges,

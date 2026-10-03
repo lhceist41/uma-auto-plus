@@ -1,4 +1,6 @@
-import { deepMerge, convertSettingsToBatch, applyMigrations } from "../../lib/settingsUtils"
+import * as fs from "fs"
+import * as path from "path"
+import { deepMerge, convertSettingsToBatch, applyMigrations, formatValue, formatChange } from "../../lib/settingsUtils"
 
 // ===========================================================================
 // deepMerge
@@ -215,5 +217,101 @@ describe("applyMigrations", () => {
         const { settings: migrated, anyMigrated } = applyMigrations(settings)
         expect(migrated.scenarioOverrides).toEqual({ trackblazerEnergyThreshold: 40 })
         expect(anyMigrated).toBe(false)
+    })
+})
+
+// ===========================================================================
+// formatValue / formatChange (import and profile preview text)
+// ===========================================================================
+
+describe("import preview text", () => {
+    const entry = (inGameName: string, scenario = "Trackblazer", extra: Record<string, unknown> = {}) => ({ inGameName, presetKey: "k", scenario, ...extra })
+
+    it("shows a trainee rotation as names with scenario, never [object Object]", () => {
+        const text = formatValue([entry("[Wedding] Mayano Top Gun"), entry("Bourbon", "URA Finale")])
+        expect(text).toBe("[Wedding] Mayano Top Gun (Trackblazer), Bourbon (URA Finale)")
+        expect(text).not.toContain("[object Object]")
+    })
+
+    it("does not shorten long lists", () => {
+        const text = formatValue(Array.from({ length: 10 }, (_, i) => entry(`T${i}`)))
+        expect(text).toBe(Array.from({ length: 10 }, (_, i) => `T${i} (Trackblazer)`).join(", "))
+    })
+
+    it("a 7-item list changed only in the 7th shows different old and new text", () => {
+        const { oldText, newText } = formatChange([29, 35, 43, 47, 52, 55, 58], [29, 35, 43, 47, 52, 55, 60])
+        expect(oldText).toBe("29, 35, 43, 47, 52, 55, 58")
+        expect(newText).toBe("29, 35, 43, 47, 52, 55, 60")
+    })
+
+    it("a 10-item list changed only in the 8th shows different text", () => {
+        const base = Array.from({ length: 10 }, (_, i) => `item${i}`)
+        const changed = base.map((v, i) => (i === 7 ? "other" : v))
+        const { oldText, newText } = formatChange(base, changed)
+        expect(oldText).not.toBe(newText)
+    })
+
+    it("a rotation entry changed only in scenario shows different text", () => {
+        const { oldText, newText } = formatChange([entry("[Wedding] Mayano Top Gun", "URA Finale")], [entry("[Wedding] Mayano Top Gun", "Trackblazer")])
+        expect(oldText).toBe("[Wedding] Mayano Top Gun (URA Finale)")
+        expect(newText).toBe("[Wedding] Mayano Top Gun (Trackblazer)")
+    })
+
+    it("a rotation entry changed only in preset shows different text naming the preset", () => {
+        const { oldText, newText } = formatChange([entry("Bourbon", "Trackblazer", { presetKey: "preset_a" })], [entry("Bourbon", "Trackblazer", { presetKey: "preset_b" })])
+        expect(oldText).toBe("Bourbon (Trackblazer, preset preset_a)")
+        expect(newText).toBe("Bourbon (Trackblazer, preset preset_b)")
+    })
+
+    it("a rotation entry changed only in excluded outfits shows different text", () => {
+        const { oldText, newText } = formatChange([entry("Bourbon", "Trackblazer", { excludeOutfits: [] })], [entry("Bourbon", "Trackblazer", { excludeOutfits: ["Summer"] })])
+        expect(oldText).not.toBe(newText)
+        expect(newText).toContain("excluding Summer")
+    })
+
+    it("keeps the short form when it already differs", () => {
+        const { oldText, newText } = formatChange([entry("A")], [entry("B")])
+        expect(oldText).toBe("A (Trackblazer)")
+        expect(newText).toBe("B (Trackblazer)")
+    })
+
+    it("an entry with an empty name shows neutral text, not field names", () => {
+        const text = formatValue([
+            { inGameName: "", presetKey: "", scenario: "URA Finale" },
+            { inGameName: "", presetKey: "", scenario: "" },
+        ])
+        expect(text).toBe("(empty URA Finale entry), (empty entry)")
+        expect(text).not.toContain("inGameName")
+    })
+
+    it("null and undefined list entries render empty, as the plain join did", () => {
+        expect(formatValue([1, null, undefined, 2])).toBe("1, , , 2")
+    })
+
+    it("falls back to JSON for list objects without a name, and for changes text cannot tell apart", () => {
+        expect(formatValue([{ a: 1 }])).toBe('{"a":1}')
+        const { oldText, newText } = formatChange([1], ["1"])
+        expect(oldText).not.toBe(newText)
+    })
+
+    it("renders plain values as before", () => {
+        expect(formatValue(null)).toBe("null")
+        expect(formatValue(true)).toBe("Enabled")
+        expect(formatValue(false)).toBe("Disabled")
+        expect(formatValue(10)).toBe("10")
+        expect(formatValue("fast")).toBe("fast")
+        expect(formatValue([])).toBe("[]")
+        expect(formatValue(["a", "b"])).toBe("a, b")
+        expect(formatValue({ x: 1 })).toBe('{"x":1}')
+    })
+
+    it("the profile comparison uses the shared formatter, so a rotation never shows [object Object]", () => {
+        const source = fs.readFileSync(path.join(__dirname, "../../components/ProfileComparison/index.tsx"), "utf8")
+        expect(source).toContain('import { formatChange } from "../../lib/settingsUtils"')
+        expect(source).toContain("formatChange(current, profile)")
+        expect(source).not.toMatch(/const formatValue|\.join\(/)
+        const { oldText, newText } = formatChange([entry("A")], [entry("A"), entry("B")])
+        expect(`${oldText}|${newText}`).not.toContain("[object Object]")
+        expect(oldText).not.toBe(newText)
     })
 })
