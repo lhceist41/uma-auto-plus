@@ -388,10 +388,17 @@ class Trackblazer(game: Game) : Campaign(game) {
                 if (result.dialog.ok(game.imageUtils)) {
                     game.wait(game.dialogWaitDelay)
 
-                    // Clear the shop check flag and counter as the shop is already being handled.
-                    bShouldCheckShop = false
-                    shopCheckCounter = 0
-                    bInitialShopCheckPerformed = true
+                    // ButtonTrainingItems also matches Main's quick-access button, so ButtonHomeFullStats (Main only) rules that out.
+                    val enteredShop = ButtonTrainingItems.check(game.imageUtils, tries = 5) && !ButtonHomeFullStats.check(game.imageUtils)
+                    val flags = shopFlagsAfterDialogTap(enteredShop, shopCheckCounter, bInitialShopCheckPerformed)
+                    bShouldCheckShop = flags.first
+                    shopCheckCounter = flags.second
+                    bInitialShopCheckPerformed = flags.third
+
+                    if (!enteredShop) {
+                        MessageLog.w(TAG, "[TRACKBLAZER] The Shop did not open after tapping the Shop dialog button. The shop check stays pending for the main screen.")
+                        return DialogHandlerResult.Handled(result.dialog)
+                    }
 
                     game.wait(0.5)
                     buyItems()
@@ -2474,3 +2481,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         return pickedEnergyItems.contains(currentGain)
     }
 }
+
+/** Shop check state after tapping the Shop dialog button: (shouldCheckShop, shopCheckCounter, initialShopCheckPerformed). A tap that never opened the shop keeps the check pending. */
+internal fun shopFlagsAfterDialogTap(enteredShop: Boolean, shopCheckCounter: Int, initialShopCheckPerformed: Boolean): Triple<Boolean, Int, Boolean> =
+    if (enteredShop) Triple(false, 0, true) else Triple(true, shopCheckCounter, initialShopCheckPerformed)
