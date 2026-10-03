@@ -474,24 +474,25 @@ button {
   position: absolute;
   top: 104px;
   transform: translateX(-50%);
-  display: flex; align-items: baseline; gap: 8px;
-  white-space: nowrap;
+  display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px;
+  width: max-content; max-width: 100%;
 }
 .rc-course-goal-name { font-size: 13px; font-weight: 600; color: var(--rc-ready-text); }
-.rc-course-goal-turn { font-size: 12px; color: var(--rc-text-dim); }
+.rc-course-goal-turn { font-size: 12px; color: var(--rc-text-dim); white-space: nowrap; }
 .rc-course-finale-label {
   position: absolute;
   right: 0; top: 104px;
-  display: flex; align-items: baseline; gap: 8px;
-  white-space: nowrap;
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; column-gap: 8px;
+  width: max-content; max-width: 100%;
 }
-.rc-course-finale-turns { font-size: 12px; color: var(--rc-text-dim); }
+.rc-course-finale-turns { font-size: 12px; color: var(--rc-text-dim); white-space: nowrap; }
 .rc-course-finale-text {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
   font-size: 15px;
   letter-spacing: 2px;
   color: var(--rc-ready-text);
+  white-space: nowrap;
 }
 .rc-course-empty {
   height: 128px;
@@ -890,10 +891,42 @@ button {
 @media (max-width: 1279px) {
   .rc-shell { padding: 0 20px 32px; }
   .rc-toprail, .rc-topline { margin: 0 -20px; }
+  .rc-header { height: auto; min-height: 76px; padding: 12px 0; gap: 10px 24px; }
   .rc-main-grid, .rc-cardgrid, .rc-session-section { grid-template-columns: 1fr; gap: 28px; }
   .rc-session-section { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rc-session-col:nth-child(2n+1) { border-left: 0; padding-left: 0; }
   .rc-now-word { font-size: 72px; }
   .rc-state-headline { font-size: 40px; }
   .rc-details-finals-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- phone width: year labels and run rows must fit 320px ---------- */
+
+@media (max-width: 520px) {
+  .rc-course-year-label { margin-left: 4px; font-size: 12px; letter-spacing: 1px; }
+  .rc-course-finale-text { font-size: 14px; letter-spacing: 1px; }
+  .rc-card-columns { display: none; }
+  .rc-info-strip { grid-template-columns: auto minmax(0, 1fr); }
+  .rc-info-cell { padding: 14px 16px; min-width: 0; }
+  .rc-info-cell:nth-child(3) { grid-column: 1 / -1; padding-left: 0; border-left: 0; border-top: 1px solid var(--rc-line); }
+  .rc-info-value { overflow-wrap: anywhere; }
+  .rc-run-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto 16px;
+    grid-template-areas: "gate trainee trainee chevron" "gate result score chevron" "gate fans fans chevron";
+    gap: 2px 10px;
+    min-height: 0;
+    padding: 10px 12px;
+  }
+  .rc-run-gate { grid-area: gate; }
+  .rc-run-trainee-col { grid-area: trainee; }
+  .rc-run-result { grid-area: result; font-size: 17px; }
+  .rc-run-score { grid-area: score; font-size: 17px; }
+  .rc-run-fans { grid-area: fans; font-size: 17px; text-align: left; }
+  .rc-run-chevron { grid-area: chevron; }
+  .rc-run-score:empty, .rc-run-fans:empty { display: none; }
+  .rc-run-score::before, .rc-run-fans::before {
+    content: 'SCORE'; margin-right: 5px;
+    font-size: 11px; font-weight: 600; letter-spacing: 1px; color: var(--rc-text-dim);
+  }
+  .rc-run-fans::before { content: 'FANS'; }
 }

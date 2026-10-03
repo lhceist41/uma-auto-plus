@@ -435,6 +435,7 @@
     }
 
     clearChildren(els.courseTrack);
+    els.courseTrack.style.height = '';
     var goal = career.goal;
     var goalDueTurn = goal && Number.isFinite(goal.dueTurn) ? goal.dueTurn : null;
     var course = L.buildCourse(career.course, date && date.turn, goalDueTurn);
@@ -503,6 +504,7 @@
     if (course.goal && career.goal) {
       var goalLabel = el('div', 'rc-course-goal-label');
       goalLabel.style.left = course.goal;
+      goalLabel.setAttribute('data-at', course.goal);
       // The goal name is only known once the bot has OCR'd it that turn; do
       // not print "not available" here, just show the turn on its own.
       if (career.goal.name != null) {
@@ -517,6 +519,33 @@
       finaleLabel.appendChild(el('span', 'rc-course-finale-text', course.finale.label));
       els.courseTrack.appendChild(finaleLabel);
     }
+    placeCourseLabels();
+  }
+
+  // Whether goal and finale labels collide depends on goal turn, text width and track width, which CSS cannot see.
+  function placeCourseLabels() {
+    var track = els.courseTrack;
+    var goal = track.querySelector('.rc-course-goal-label');
+    var finale = track.querySelector('.rc-course-finale-label');
+    var width = track.clientWidth;
+    if (!width || (!goal && !finale)) return;
+    var rowTop = 104;
+    var goalLeft = 0;
+    var bottom = rowTop;
+    if (goal) {
+      var goalWidth = goal.offsetWidth;
+      goalLeft = Math.max(0, Math.min(width - goalWidth, parseFloat(goal.getAttribute('data-at')) / 100 * width - goalWidth / 2));
+      goal.style.left = goalLeft + 'px';
+      goal.style.transform = 'none';
+      bottom = rowTop + goal.offsetHeight;
+    }
+    if (finale) {
+      var below = goal && goalLeft + goal.offsetWidth + 12 > width - finale.offsetWidth;
+      var finaleTop = below ? bottom + 6 : rowTop;
+      finale.style.top = finaleTop + 'px';
+      bottom = Math.max(bottom, finaleTop + finale.offsetHeight);
+    }
+    track.style.height = Math.max(128, bottom + 4) + 'px';
   }
 
   // ---------------- today's card / run details ----------------
@@ -893,6 +922,10 @@
       state.stopConfirming = false;
       renderStopAfterCareer();
     });
+
+    // The page scrollbar appearing after the first render also changes the track width.
+    if (window.ResizeObserver) new ResizeObserver(function () { requestAnimationFrame(placeCourseLabels); }).observe(els.courseTrack);
+    if (document.fonts) document.fonts.addEventListener('loadingdone', placeCourseLabels);
 
     fillAccessInstructions();
     showAccess();
