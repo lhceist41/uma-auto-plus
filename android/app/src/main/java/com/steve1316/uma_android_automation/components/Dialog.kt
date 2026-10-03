@@ -1022,6 +1022,9 @@ object DialogFollowTrainer : DialogInterface {
             ButtonCancel,
             ButtonFollow,
         )
+
+    /** Cancel, or Close on the variant shown when that trainer is at maximum followers, which has no other button. Never Follow: following changes the account. */
+    val dismissButtons: List<ButtonInterface> = listOf(ButtonCancel, ButtonClose)
 }
 
 /** Career */

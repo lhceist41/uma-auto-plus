@@ -13,6 +13,7 @@ import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRaceRecommendationsCenterStage
 import com.steve1316.uma_android_automation.components.ButtonRetry
 import com.steve1316.uma_android_automation.components.Checkbox
+import com.steve1316.uma_android_automation.components.DialogFollowTrainer
 import com.steve1316.uma_android_automation.components.DialogInterface
 import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.IconHorseshoe
@@ -273,9 +274,9 @@ open class DialogHandler(val game: Game) {
             }
 
             "follow_trainer" -> {
-                // Shown after a run when Auto-Fill borrowed a card from a new trainer, at no predictable time. Cancel
-                // (close() clicks the first button) so the run continues to a known screen.
-                dialog.close(game.imageUtils)
+                // Shown after a run when Auto-Fill borrowed a card from a new trainer, at no predictable time. Dismiss it
+                // so the run continues to a known screen.
+                DialogFollowTrainer.dismissButtons.firstOrNull { it.click(game.imageUtils) }
             }
 
             "give_up" -> {

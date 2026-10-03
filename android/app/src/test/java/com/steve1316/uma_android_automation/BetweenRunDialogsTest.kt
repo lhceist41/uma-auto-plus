@@ -5,6 +5,8 @@ import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonCloseWide
+import com.steve1316.uma_android_automation.components.ButtonFollow
+import com.steve1316.uma_android_automation.components.ButtonInterface
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRetry
 import com.steve1316.uma_android_automation.components.ButtonTitleScreen
@@ -130,8 +132,19 @@ class BetweenRunDialogsTest {
             assertEquals(listOf(ButtonCloseWide, ButtonClose), BetweenRunDialogStep.CloseNotices.taps)
             assertEquals(BetweenRunDialogStep.ConfirmDateChanged, plan(BetweenRunDialog.DATE_CHANGED))
             assertEquals(listOf(ButtonOk), BetweenRunDialogStep.ConfirmDateChanged.taps)
-            assertEquals(BetweenRunDialogStep.CancelFollowTrainer, plan(BetweenRunDialog.FOLLOW_TRAINER))
-            assertEquals(listOf(ButtonCancel), BetweenRunDialogStep.CancelFollowTrainer.taps)
+            assertEquals(BetweenRunDialogStep.DismissFollowTrainer, plan(BetweenRunDialog.FOLLOW_TRAINER))
+            assertEquals(listOf(ButtonCancel, ButtonClose), BetweenRunDialogStep.DismissFollowTrainer.taps)
+        }
+
+        @Test
+        fun `Follow Trainer taps Cancel when offered, Close on the maximum-followers variant, and never Follow`() {
+            // The handler taps the first of the step's buttons that is on screen (step.taps.none { it.click(iu) }).
+            fun tapped(onScreen: Set<ButtonInterface>) = plan(BetweenRunDialog.FOLLOW_TRAINER).taps.firstOrNull { it in onScreen }
+            assertEquals(ButtonCancel, tapped(setOf(ButtonCancel, ButtonFollow)))
+            assertEquals(ButtonClose, tapped(setOf(ButtonClose)))
+            assertNull(tapped(setOf(ButtonFollow)))
+            assertNull(tapped(emptySet()))
+            for (dialog in closing + failing + BetweenRunDialog.DATA_DOWNLOAD) assertFalse(ButtonFollow in plan(dialog).taps, "$dialog")
         }
 
         @Test

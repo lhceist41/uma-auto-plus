@@ -67,8 +67,11 @@ internal sealed class BetweenRunDialogStep(val taps: List<ButtonInterface>) {
     /** OK only, never Cancel: the game downloads its data (no spend), waited out by [BetweenRunRecovery.acceptedDataDownload]. */
     data object AcceptDataDownload : BetweenRunDialogStep(listOf(ButtonOk))
 
-    /** Cancel, as `DialogFollowTrainer.close` does. */
-    data object CancelFollowTrainer : BetweenRunDialogStep(listOf(ButtonCancel))
+    /**
+     * Cancel, as `DialogFollowTrainer.close` does, or Close on the variant shown when that trainer is at
+     * maximum followers, which has no other button. Never Follow: following changes the account.
+     */
+    data object DismissFollowTrainer : BetweenRunDialogStep(listOf(ButtonCancel, ButtonClose))
 
     /** Title Screen on a Session Error, only with no career in flight ([BetweenRunRecovery.mayTapTitleScreen]). */
     data object ReturnToTitle : BetweenRunDialogStep(listOf(ButtonTitleScreen))
@@ -104,7 +107,7 @@ internal fun planBetweenRunDialog(
     when (dialog) {
         BetweenRunDialog.NOTICES -> BetweenRunDialogStep.CloseNotices
         BetweenRunDialog.DATE_CHANGED -> BetweenRunDialogStep.ConfirmDateChanged
-        BetweenRunDialog.FOLLOW_TRAINER -> BetweenRunDialogStep.CancelFollowTrainer
+        BetweenRunDialog.FOLLOW_TRAINER -> BetweenRunDialogStep.DismissFollowTrainer
         BetweenRunDialog.CONNECTION_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "CONNECTION_LOST")
         BetweenRunDialog.DOWNLOAD_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "DOWNLOAD_FAILED")
         BetweenRunDialog.DATA_DOWNLOAD ->
