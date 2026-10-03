@@ -1,14 +1,23 @@
-<p align="center">
-  <img src="docs/assets/uma-auto-plus-banner.png" alt="UMA Auto+: Press Start. Walk away." width="960">
-</p>
-
 # UMA Auto+
 
 [![Latest release](https://img.shields.io/github/v/release/lhceist41/uma-auto-plus?label=latest%20release&color=blue)](https://github.com/lhceist41/uma-auto-plus/releases/latest)
 [![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-informational)](CHANGELOG.md)
 [![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/JNhCDs4MSF)
 
+<p align="center">
+  <img src="docs/assets/uma-auto-plus-readme-loop.gif" alt="One Unity Cup career played by the bot, sped up: the turn counter and stats climb to the game's own S rating, followed by a screen from each of the four scenarios." width="800">
+</p>
+
 A hands-off distribution of [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation) for Umamusume: Pretty Derby. Pick a trainee, press Start, walk away: the bot plays whole careers, and can queue several in a row without you.
+
+- Plays whole careers in all four scenarios: URA Finale, Unity Cup, Trackblazer, Grand Concert (experimental).
+- Queues 2 to 20 careers and can rotate trainees between runs.
+- Built-in trainee presets with a build for every scenario; applying one sets its scenario too.
+- Keeps going overnight: restarts a wedged game and rides out the daily reset and lost connections.
+- Optional live dashboard to watch the queue from your PC's browser.
+- Free and open source under the GPL v3.
+
+**Get started:** download the [latest release](https://github.com/lhceist41/uma-auto-plus/releases/latest), then follow the [setup steps](#instructions). Use at your own risk: read the [disclaimer](#disclaimer).
 
 Questions, help and career results: join the [UMA Auto+ Discord](https://discord.gg/JNhCDs4MSF).
 
