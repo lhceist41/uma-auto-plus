@@ -11,12 +11,10 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.ConnectionOutageBudget
 import com.steve1316.uma_android_automation.bot.navigatorStuckKey
-import com.steve1316.uma_android_automation.bot.A11Y_GRANT_MISSING
-import com.steve1316.uma_android_automation.bot.A11Y_INPUT_DEAD
 import com.steve1316.uma_android_automation.bot.GAME_NOT_RESPONDING
 import com.steve1316.uma_android_automation.bot.GameReopen
 import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
-import com.steve1316.uma_android_automation.bot.stuckInputKey
+import com.steve1316.uma_android_automation.bot.stuckKeyAfterProbe
 import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
@@ -677,6 +675,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private var stuckScreenRebindIssued = false
     private var tapScreenRebindIssued = false
     private var titleScreenRebindIssued = false
+    private var dialogTappedOnThisScreen = false
 
     // --- Cold-start Trainee Select liveness (2026-08-10) ---
     // True while THIS launch still owes a roster verification: rotation is on, or a single-run target
@@ -902,6 +901,7 @@ class CareerLaunchNavigator(private val context: Context) {
         stuckScreenRebindIssued = false
         tapScreenRebindIssued = false
         titleScreenRebindIssued = false
+        dialogTappedOnThisScreen = false
         trainingSelectionBackPressed = false
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
@@ -1153,7 +1153,8 @@ class CareerLaunchNavigator(private val context: Context) {
                         stuckScreenRebindIssued = rebindAccessibility()
                     }
                     if (stuckInStateCount >= MAX_STUCK_ITERATIONS) {
-                        val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, stuckScreenRebindIssued))
+                        val dialogButtonsMissing = detectedState == LaunchScreenState.DIALOG_HANDLED && !dialogTappedOnThisScreen
+                        val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, stuckScreenRebindIssued, dialogButtonsMissing))
                         restartUnresponsiveGame(stuckKey)?.let { return it }
                         val screenshotPath = captureFailureScreenshot("stuck_in_${detectedState.name}")
                         return NavigationResult(
@@ -1169,6 +1170,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     }
                 } else {
                     stuckInStateCount = 0
+                    dialogTappedOnThisScreen = false
                 }
                 // TAP_TO_CONTINUE legitimately repeats across many cutscene frames under one state
                 // label, so it is exempt from stuckInStateCount above. Track it on its own higher cap
@@ -1452,8 +1454,7 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /** Taps that still reach the screen mean the game stopped responding, not that the bot's input died. */
-    private fun probedStuckKey(key: String): String =
-        if (key == A11Y_INPUT_DEAD || key == A11Y_GRANT_MISSING) stuckInputKey(key, tempGame?.ownInputReachesScreen() ?: OwnInputProbeResult.INCONCLUSIVE) ?: key else key
+    private fun probedStuckKey(key: String): String = stuckKeyAfterProbe(key) { tempGame?.ownInputReachesScreen() ?: OwnInputProbeResult.INCONCLUSIVE }
 
     /** The stop after the one relaunch did not bring back a screen the navigator knows. */
     private fun gameUnrecoverable(lastState: LaunchScreenState, reason: String): NavigationResult =
@@ -2110,7 +2111,9 @@ class CareerLaunchNavigator(private val context: Context) {
         } else if (step !is BetweenRunDialogStep.AcceptDataDownload) {
             MessageLog.i(TAG, "[NAV] ${dialog.title} dialog between runs; dismissing it.")
         }
-        if (step.taps.none { it.click(iu) }) {
+        val tapped = step.taps.any { it.click(iu) }
+        if (tapped) dialogTappedOnThisScreen = true
+        if (!tapped) {
             if (step is BetweenRunDialogStep.AcceptDataDownload) betweenRunRecovery.missedDataDownloadOk()
             MessageLog.w(TAG, "[NAV] ${dialog.title} shows none of its buttons; re-detecting.")
         } else if (step is BetweenRunDialogStep.ReturnToTitle) {

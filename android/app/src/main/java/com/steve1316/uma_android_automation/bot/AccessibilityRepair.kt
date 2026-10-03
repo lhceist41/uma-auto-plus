@@ -17,6 +17,9 @@ internal const val GAME_NOT_RESPONDING = "GAME_NOT_RESPONDING"
 /** As [A11Y_INPUT_DEAD], but the own-input probe could not tell the taps from the game. */
 internal const val TAPS_HAD_NO_EFFECT = "TAPS_HAD_NO_EFFECT"
 
+/** A dialog showed none of the buttons the bot taps, so nothing was tapped and neither input nor the game is in question. */
+internal const val DIALOG_NOT_CLOSED = "DIALOG_NOT_CLOSED"
+
 /** A tap that reached the probe window proves the bot's input works, so the game is not responding. An inconclusive probe proves neither side, so dead input is not claimed. */
 internal fun stuckInputKey(rebindKey: String?, probe: OwnInputProbeResult): String? =
     when (probe) {
@@ -24,6 +27,10 @@ internal fun stuckInputKey(rebindKey: String?, probe: OwnInputProbeResult): Stri
         OwnInputProbeResult.LOST -> rebindKey
         OwnInputProbeResult.INCONCLUSIVE -> if (rebindKey == A11Y_INPUT_DEAD) TAPS_HAD_NO_EFFECT else rebindKey
     }
+
+/** Only an input-repair key asks [probe] whether the bot's own taps still reach the screen. */
+internal fun stuckKeyAfterProbe(key: String, probe: () -> OwnInputProbeResult): String =
+    if (key == A11Y_INPUT_DEAD || key == A11Y_GRANT_MISSING) stuckInputKey(key, probe()) ?: key else key
 
 /** A game that freezes again after this many restarts halts with [GAME_NOT_RESPONDING] instead of restarting forever. */
 internal const val MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN = 2
@@ -43,9 +50,10 @@ internal fun accessibilityStopKey(rebindsIssued: Int, rebindsRefused: Int): Stri
         else -> null
     }
 
-/** A repair refused during this navigation explains any stuck failure; an unrecognized screen stays a screen the bot could not get past. */
-internal fun navigatorStuckKey(repairRefused: Boolean, rebindIssuedOnThisScreen: Boolean): String =
+/** A repair refused during this navigation explains any stuck failure but a dialog whose buttons were never found; an unrecognized screen stays a screen the bot could not get past. */
+internal fun navigatorStuckKey(repairRefused: Boolean, rebindIssuedOnThisScreen: Boolean, dialogButtonsMissing: Boolean = false): String =
     when {
+        dialogButtonsMissing -> DIALOG_NOT_CLOSED
         repairRefused -> A11Y_GRANT_MISSING
         rebindIssuedOnThisScreen -> A11Y_INPUT_DEAD
         else -> "STUCK_ON_SCREEN"

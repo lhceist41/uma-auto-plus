@@ -93,7 +93,7 @@ class DataDownloadTest {
             )
             val handler = block(navigator, "private fun handleBetweenRunDialog()", "\n    }\n")
             assertTrue(handler.contains("betweenRunRecovery.dataDownloadOkMisses,\n"), "the plan sees the misses")
-            assertTrue(handler.contains("if (step.taps.none { it.click(iu) }) {\n            if (step is BetweenRunDialogStep.AcceptDataDownload) betweenRunRecovery.missedDataDownloadOk()"))
+            assertTrue(handler.contains("if (!tapped) {\n            if (step is BetweenRunDialogStep.AcceptDataDownload) betweenRunRecovery.missedDataDownloadOk()"))
         }
 
         @Test

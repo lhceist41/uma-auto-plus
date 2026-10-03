@@ -6,6 +6,7 @@ import com.steve1316.uma_android_automation.SessionTally
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.classifySessionEnd
 import com.steve1316.uma_android_automation.queueReportText
+import com.steve1316.uma_android_automation.utils.OwnInputProbeResult
 import org.json.JSONObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -121,6 +122,44 @@ class AccessibilityRepairTest {
             assertEquals(A11Y_GRANT_MISSING, navigatorStuckKey(repairRefused = true, rebindIssuedOnThisScreen = false))
             assertEquals(A11Y_INPUT_DEAD, navigatorStuckKey(repairRefused = false, rebindIssuedOnThisScreen = true))
             assertEquals("STUCK_ON_SCREEN", navigatorStuckKey(repairRefused = false, rebindIssuedOnThisScreen = false))
+        }
+
+        private fun betweenRunsHalt(key: String) =
+            queueReportText(
+                JSONObject().put("kind", "NAVIGATION_FAILED_BETWEEN_RUNS").put("reasonKey", key).put("totalRuns", 10).put("runReached", 9).put("resumable", true),
+            )
+
+        @Test
+        fun `a dialog that showed none of its buttons halts on that dialog even when the probe proves taps arrive`() {
+            // Seen live: the Follow Trainer "maximum followers" variant has only Close; a rebind was issued at 7 repeats.
+            for (refused in listOf(false, true)) {
+                val dialogKey = navigatorStuckKey(repairRefused = refused, rebindIssuedOnThisScreen = true, dialogButtonsMissing = true)
+                val key = stuckKeyAfterProbe(dialogKey) { error("no probe for a dialog nothing was tapped on") }
+                assertEquals(DIALOG_NOT_CLOSED, key)
+                val text = betweenRunsHalt(key)
+                assertEquals("The queue stopped after run 9 of 10: it was stuck on a game dialog that showed none of the buttons it knows how to press.", text.reason)
+                assertTrue(text.nextAction!!.startsWith("Close the dialog in the game, then press Start"), text.nextAction)
+                assertFalse(text.body.contains("stopped responding") || text.body.contains("Close the game fully"), text.body)
+            }
+        }
+
+        @Test
+        fun `a screen whose taps reached it but changed nothing still halts as a game that stopped responding`() {
+            val key = stuckKeyAfterProbe(navigatorStuckKey(repairRefused = false, rebindIssuedOnThisScreen = true, dialogButtonsMissing = false)) { OwnInputProbeResult.ARRIVED }
+            assertEquals(GAME_NOT_RESPONDING, key)
+            assertTrue(betweenRunsHalt(key).reason.contains("the game stopped responding to taps while the bot's own taps still reached the screen"))
+            assertEquals(TAPS_HAD_NO_EFFECT, stuckKeyAfterProbe(A11Y_INPUT_DEAD) { OwnInputProbeResult.INCONCLUSIVE })
+            assertEquals("STUCK_ON_SCREEN", stuckKeyAfterProbe("STUCK_ON_SCREEN") { error("no probe without a rebind") })
+        }
+
+        @Test
+        fun `the navigator calls it a dialog only while no dialog tap landed on the stuck screen`() {
+            val nav = navigator
+            assertTrue(nav.contains("val dialogButtonsMissing = detectedState == LaunchScreenState.DIALOG_HANDLED && !dialogTappedOnThisScreen\n"))
+            assertTrue(nav.contains("probedStuckKey(navigatorStuckKey(navRepairRefused, stuckScreenRebindIssued, dialogButtonsMissing))"))
+            assertTrue(nav.contains("val tapped = step.taps.any { it.click(iu) }\n        if (tapped) dialogTappedOnThisScreen = true\n"))
+            assertTrue(nav.contains("stuckInStateCount = 0\n                    dialogTappedOnThisScreen = false\n"), "a new screen starts untapped")
+            assertTrue(nav.contains("private fun probedStuckKey(key: String): String = stuckKeyAfterProbe(key) {"))
         }
     }
 
@@ -323,7 +362,7 @@ class AccessibilityRepairTest {
 
         @Test
         fun `the navigator gives its stuck failures the repair reason and keeps gestureUtils a getter`() {
-            assertEquals(3, Regex("navigatorStuckKey\\(navRepairRefused, (stuck|tap|title)ScreenRebindIssued\\)").findAll(navigator).count())
+            assertEquals(3, Regex("navigatorStuckKey\\(navRepairRefused, (stuck|tap|title)ScreenRebindIssued(, dialogButtonsMissing)?\\)").findAll(navigator).count())
             assertEquals(4, Regex("navigatorStuckKey\\(navRepairRefused, rebindIssuedOnThisScreen = false\\)").findAll(navigator).count())
             assertTrue(navigator.contains("stuckScreenRebindIssued = rebindAccessibility()"))
             assertTrue(navigator.contains("tapScreenRebindIssued = rebindAccessibility()"))

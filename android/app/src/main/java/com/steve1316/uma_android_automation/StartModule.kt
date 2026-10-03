@@ -2054,6 +2054,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // True when the resume re-enters a career that was in flight: the cold start below then
                 // has a career in the slot, so the navigator may not treat it as a career-free Start.
                 var resumeReEntersCareer = false
+                var resumedQueue = false
 
                 val startFromRun: Int =
                     run {
@@ -2095,6 +2096,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             "resuming",
                             message = "Auto-resuming: starting at run $next of $totalRuns (previous run was interrupted)",
                         )
+                        resumedQueue = true
                         next
                     }
 
@@ -2106,6 +2108,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // app start, dated by the heartbeat or Android's exit record.
                 ledger.startFromRun = startFromRun
                 ledger.completedRuns = completedRuns
+                if (resumedQueue) ledger.earlier = runCatching { earlierQueueFor(QueueLedger.lastReport(context)?.let { JSONObject(it) }, totalRuns, startFromRun) }.getOrNull()
                 QueueLedger.beginSession(context, ledger.sessionId, ledger.openJson())
                 ledgerHeartbeat = startLedgerHeartbeat(ledger.sessionId)
 
@@ -2533,6 +2536,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             MessageLog.i(TAG, "[QUEUE] Career-end flow finished; the game is parked on the home screen.")
                         } else {
                             logNavigationFailure(finalizeResult)
+                            if (finalizeResult.lastDetectedState != "STOPPED") ledger.finalizeStopKey = finalizeResult.reasonKey
                             MessageLog.w(TAG, "[QUEUE] Career-end finalize did not reach the home screen; the game stays where it stopped.")
                         }
                     }
@@ -2778,7 +2782,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // actually completed.
                                 sendQueueProgressEvent(completedRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
                                 MessageLog.i(TAG, "\n[QUEUE] ========================================")
-                                MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
+                                val notHome = if (ledger.finalizeStopKey != null) " The bot stopped before the game was back on its home screen." else ""
+                                MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.$notHome")
                                 MessageLog.i(TAG, "[QUEUE] ========================================\n")
                             }
                         }

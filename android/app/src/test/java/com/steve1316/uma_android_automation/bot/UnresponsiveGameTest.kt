@@ -225,7 +225,7 @@ class UnresponsiveGameTest {
 
         @Test
         fun `the navigator probes its three stuck failures and restarts before it gives up`() {
-            for (flag in listOf("stuckScreenRebindIssued", "tapScreenRebindIssued", "titleScreenRebindIssued")) {
+            for (flag in listOf("stuckScreenRebindIssued, dialogButtonsMissing", "tapScreenRebindIssued", "titleScreenRebindIssued")) {
                 val line = "val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, $flag))\n                        restartUnresponsiveGame(stuckKey)?.let { return it }"
                 assertEquals(1, Regex(Regex.escape(line)).findAll(navigator).count(), flag)
             }

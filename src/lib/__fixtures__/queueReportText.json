@@ -1261,6 +1261,113 @@
             }
         },
         {
+            "name": "between runs: DIALOG_NOT_CLOSED",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 10,
+                "runReached": 9,
+                "resumable": true,
+                "reasonKey": "DIALOG_NOT_CLOSED"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 9 of 10: it was stuck on a game dialog that showed none of the buttons it knows how to press.",
+                "nextAction": "Close the dialog in the game, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "completed: resumed after a stop, with the earlier runs",
+            "report": {
+                "kind": "COMPLETED",
+                "queueEnabled": true,
+                "totalRuns": 10,
+                "startFromRun": 10,
+                "completedRuns": 10,
+                "runs": [
+                    {
+                        "run": 10,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    }
+                ],
+                "earlier": {
+                    "runs": [
+                        {
+                            "run": 8,
+                            "resultCode": "TASK_RESULT_COMPLETE"
+                        },
+                        {
+                            "run": 9,
+                            "resultCode": "TASK_RESULT_TIMED_OUT"
+                        }
+                    ],
+                    "recoveries": {
+                        "accessibilityRebinds": 11
+                    },
+                    "tpRestores": [
+                        {
+                            "rung": "Carats",
+                            "context": "launch"
+                        }
+                    ],
+                    "stops": [
+                        {
+                            "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                            "run": 9,
+                            "reasonKey": "DIALOG_NOT_CLOSED"
+                        }
+                    ]
+                }
+            },
+            "text": {
+                "title": "Queue finished",
+                "reason": "All 10 runs are done. It was resumed after it stopped at run 9. 1 run ended with an error.",
+                "nextAction": null
+            }
+        },
+        {
+            "name": "completed: the finalize stopped before Home",
+            "report": {
+                "kind": "COMPLETED",
+                "queueEnabled": true,
+                "totalRuns": 1,
+                "completedRuns": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    }
+                ],
+                "finalizeStopKey": "DIALOG_NOT_CLOSED"
+            },
+            "text": {
+                "title": "Queue finished",
+                "reason": "The run is done. The bot then stopped before the game was back on its home screen: it was stuck on a game dialog that showed none of the buttons it knows how to press.",
+                "nextAction": "Close the dialog in the game."
+            }
+        },
+        {
+            "name": "single run: the finalize stopped before Home",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "queueEnabled": false,
+                "totalRuns": 1,
+                "completedRuns": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    }
+                ],
+                "finalizeStopKey": "GAME_NOT_RESPONDING"
+            },
+            "text": {
+                "title": "Career finished",
+                "reason": "The career finished. The bot then stopped before the game was back on its home screen: the game stopped responding to taps while the bot's own taps still reached the screen, and UMA Auto+ could not get it going again. Close the game fully (swipe it away in Recent apps) and open it again.",
+                "nextAction": null
+            }
+        },
+        {
             "name": "between runs: TRAINEE_NOT_FOUND",
             "report": {
                 "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",

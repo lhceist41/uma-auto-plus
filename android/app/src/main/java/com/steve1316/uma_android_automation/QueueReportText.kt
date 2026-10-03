@@ -73,13 +73,13 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.NOTHING_TO_RESUME -> ReportText("Nothing to resume", "The saved queue had already reached its last run, so there was nothing left to resume.", null)
         SessionEnd.COMPLETED -> {
             val summary = if (done >= total) (if (total == 1) "The run is done." else "All $total runs are done.") else "$done of ${runs(total)} are done."
-            ReportText(if (done >= total) "Queue finished" else "Queue ended", summary + runNotes(r), null)
+            withFinalizeStop(ReportText(if (done >= total) "Queue finished" else "Queue ended", summary + runNotes(r), null), r)
         }
         SessionEnd.SINGLE_RUN_ENDED ->
             when {
                 key == ONLY_OTHER_OUTFIT -> singleRunOutfitText(r)
-                lastForceEnded -> ReportText("Career ended early", "The game ended the career early: a goal was missed.", null)
-                else -> singleRunText(lastCode)
+                lastForceEnded -> withFinalizeStop(ReportText("Career ended early", "The game ended the career early: a goal was missed.", null), r)
+                else -> withFinalizeStop(singleRunText(lastCode), r)
             }
         SessionEnd.STOPPED_BY_USER -> ReportText("Queue stopped", "You stopped the queue with $done of ${runs(total)} done." + runNotes(r), null)
         SessionEnd.STOPPED_BY_BOT -> {
@@ -242,18 +242,40 @@ private fun runs(n: Int) = if (n == 1) "1 run" else "$n runs"
 
 /**
  * Done counts only finished careers, so every count of done runs is followed by how many runs ended
- * with an error instead. The report's runs are this session's only, which a resumed queue has to say.
+ * with an error instead. The report's runs are this session's only; a resumed queue whose earlier
+ * runs the report does not carry has to say so.
  */
 private fun errorSentence(r: JSONObject): String {
-    val errors = r.optJSONArray("runs")?.let { runs -> (0 until runs.length()).count { runs.optJSONObject(it)?.optString("resultCode") in RUN_ERROR_CODES } } ?: 0
+    val earlier = r.optJSONObject("earlier")
+    val played = listOfNotNull(earlier?.optJSONArray("runs"), r.optJSONArray("runs"))
+    val errors = played.sumOf { runs -> (0 until runs.length()).count { runs.optJSONObject(it)?.optString("resultCode") in RUN_ERROR_CODES } }
     return when {
         errors == 0 -> ""
-        r.optInt("startFromRun") > 1 -> " ${runs(errors)} since the queue resumed ended with an error."
+        r.optInt("startFromRun") > 1 && earlier == null -> " ${runs(errors)} since the queue resumed ended with an error."
         else -> " ${runs(errors)} ended with an error."
     }
 }
 
-private fun runNotes(r: JSONObject): String = errorSentence(r) + skipSentences(r)
+private fun runNotes(r: JSONObject): String = resumedSentence(r) + errorSentence(r) + skipSentences(r)
+
+/** The stops a resumed queue came back from ([earlierQueueFor]), by the run each was at when known. */
+private fun resumedSentence(r: JSONObject): String {
+    val stops = r.optJSONObject("earlier")?.optJSONArray("stops") ?: return ""
+    val at = (0 until stops.length()).map { stops.optJSONObject(it)?.optInt("run") ?: 0 }
+    return when {
+        at.isEmpty() -> ""
+        at.any { it <= 0 } -> if (at.size == 1) " It was resumed after it stopped once." else " It was resumed after it stopped ${at.size} times."
+        at.size == 1 -> " It was resumed after it stopped at run ${at[0]}."
+        else -> " It was resumed after it stopped at runs ${at.dropLast(1).joinToString(", ")} and ${at.last()}."
+    }
+}
+
+/** The careers finished, but the career-end steps after the last one stopped before the game's home screen. */
+private fun withFinalizeStop(text: ReportText, r: JSONObject): ReportText {
+    if (!r.has("finalizeStopKey")) return text
+    val why = keyText(r.optString("finalizeStopKey"), JSONObject())
+    return ReportText(text.title, "${text.reason} The bot then stopped before the game was back on its home screen: ${why.reason}", why.fix?.let { "$it." } ?: text.nextAction)
+}
 
 /** Only a rotation skips, so the fix names the rotation. */
 private fun skipSentences(r: JSONObject): String {
@@ -326,6 +348,7 @@ internal val REPORT_REASON_KEYS =
             ),
         "CAPTURE_OR_ACCESSIBILITY" to KeyText("the bot lost screen capture or its accessibility service.", "Check that both are on"),
         "STUCK_ON_SCREEN" to STUCK_TEXT,
+        "DIALOG_NOT_CLOSED" to KeyText("it was stuck on a game dialog that showed none of the buttons it knows how to press.", "Close the dialog in the game"),
         "TRAINEE_NOT_FOUND" to KeyText("the next trainee in the rotation was not found on the trainee list.", "Check the rotation list, or pick the trainee by hand"),
         ONLY_OTHER_OUTFIT to
             KeyText(

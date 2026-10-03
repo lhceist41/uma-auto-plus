@@ -89,13 +89,28 @@ function runLines(runs: unknown): string[] {
     })
 }
 
-/** "N of M runs done" (finished careers only), then how many runs of this session ended with an error. */
+/** A resumed queue's earlier entries of `field`, when the report carries them, then this session's own. */
+function wholeQueue(report: Record<string, unknown>, field: "runs" | "tpRestores"): unknown[] {
+    const own = Array.isArray(report[field]) ? (report[field] as unknown[]) : []
+    const earlier = isRecord(report.earlier) && Array.isArray(report.earlier[field]) ? (report.earlier[field] as unknown[]) : []
+    return [...earlier, ...own]
+}
+
+/** This session's recoveries plus a resumed queue's earlier ones. */
+function wholeQueueRecoveries(report: Record<string, unknown>): unknown {
+    const earlier = isRecord(report.earlier) ? report.earlier.recoveries : undefined
+    if (!isRecord(earlier)) return report.recoveries
+    const own = isRecord(report.recoveries) ? report.recoveries : {}
+    return Object.fromEntries([...new Set([...Object.keys(earlier), ...Object.keys(own)])].map((key) => [key, count(earlier[key]) + count(own[key])]))
+}
+
+/** "N of M runs done" (finished careers only), then how many runs ended with an error: this session's only when a resumed report lacks the earlier ones. */
 function progressLine(report: Record<string, unknown>): string | null {
     const total = count(report.totalRuns)
     if (report.queueEnabled !== true || total === 0 || typeof report.completedRuns !== "number" || !Number.isInteger(report.completedRuns) || report.completedRuns < 0) return null
-    const runs = Array.isArray(report.runs) ? report.runs.filter(isRecord) : []
+    const runs = wholeQueue(report, "runs").filter(isRecord)
     const errors = runs.filter((run) => typeof run.resultCode === "string" && RUN_ERROR_CODES.has(run.resultCode)).length
-    const note = errors === 0 ? "" : count(report.startFromRun) > 1 ? `; ${errors} since the queue resumed ended with an error` : `; ${errors} ended with an error`
+    const note = errors === 0 ? "" : count(report.startFromRun) > 1 && !isRecord(report.earlier) ? `; ${errors} since the queue resumed ended with an error` : `; ${errors} ended with an error`
     return `${report.completedRuns} of ${plural(total, "run", "runs")} done${note}`
 }
 
@@ -138,7 +153,7 @@ export function parseLastSession(payload: unknown): LastSessionView | null {
     if (typeof report.sessionId !== "string" || report.sessionId.length === 0) return null
     const text = isRecord(parsed.text) ? parsed.text : {}
     const words = typeof text.title === "string" && typeof text.reason === "string"
-    const tp = tpRestores(report.tpRestores)
+    const tp = tpRestores(wholeQueue(report, "tpRestores"))
     return {
         sessionId: report.sessionId,
         dismissed: report.dismissed === true,
@@ -151,8 +166,8 @@ export function parseLastSession(payload: unknown): LastSessionView | null {
         reason: words ? (text.reason as string) : GENERIC_REASON,
         nextAction: words && typeof text.nextAction === "string" ? text.nextAction : null,
         progress: progressLine(report),
-        runs: runLines(report.runs),
-        recoveries: recoveriesLine(report.recoveries),
+        runs: runLines(wholeQueue(report, "runs")),
+        recoveries: recoveriesLine(wholeQueueRecoveries(report)),
         tpRestores: tp.line,
         caratsUsed: tp.carats,
     }

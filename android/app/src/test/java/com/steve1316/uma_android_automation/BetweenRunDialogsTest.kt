@@ -389,7 +389,7 @@ class BetweenRunDialogsTest {
         fun `the handler presses only the step's taps and stops on a failure`() {
             val handler = body(navigator, "private fun handleBetweenRunDialog(")
             assertEquals(listOf("it.click(iu)"), Regex("[\\w.]+\\.click\\([^)]*\\)").findAll(handler).map { it.value }.toList())
-            assertTrue(handler.contains("step.taps.none { it.click(iu) }"))
+            assertTrue(handler.contains("val tapped = step.taps.any { it.click(iu) }"))
             assertTrue(handler.contains("reasonKey = step.reasonKey"))
             val taps = handler.indexOf("step.taps")
             assertTrue(handler.indexOf("if (step is BetweenRunDialogStep.Fail)") in 0 until taps)
@@ -401,7 +401,7 @@ class BetweenRunDialogsTest {
             val landed =
                 "} else if (step is BetweenRunDialogStep.ReturnToTitle) {\n            betweenRunRecovery.tappedTitleScreen()\n" +
                     "            waitSafe(3.0)\n            return TransitionResult.StartLaunchOver\n        }"
-            assertTrue(handler.indexOf(landed) > handler.indexOf("if (step.taps.none { it.click(iu) }) {"))
+            assertTrue(handler.indexOf(landed) > handler.indexOf("if (!tapped) {"))
             assertEquals(1, Regex("TransitionResult\\.StartLaunchOver").findAll(handler).count())
             assertEquals(1, Regex("tappedTitleScreen\\(").findAll(navigator).count())
         }

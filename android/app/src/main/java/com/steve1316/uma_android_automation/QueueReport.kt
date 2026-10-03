@@ -352,6 +352,10 @@ internal data class QueueReport(
     val reasonOutfit: String? = null,
     /** Written only when true: the fix is in the rotation. */
     val reasonRotation: Boolean = false,
+    /** A resumed queue's earlier sessions ([earlierQueueFor]); written only for a resumed queue. */
+    val earlier: JSONObject? = null,
+    /** The reason key of a career-end finalize that stopped before Home after the last career finished; written only then. */
+    val finalizeStopKey: String? = null,
 ) {
     fun toJson(): JSONObject =
         JSONObject()
@@ -379,6 +383,8 @@ internal data class QueueReport(
             .apply { reasonTrainee?.let { put("reasonTrainee", it) } }
             .apply { reasonOutfit?.let { put("reasonOutfit", it) } }
             .apply { if (reasonRotation) put("reasonRotation", true) }
+            .apply { earlier?.let { put("earlier", it) } }
+            .apply { finalizeStopKey?.let { put("finalizeStopKey", it) } }
 
     /** The history line appended to the ledger file. */
     fun ledgerLine(): String = toJson().toString()
@@ -444,6 +450,12 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
     /** Whether the last run ended by posting an ExceptionEvent (splits an error from an overlay Stop). */
     @Volatile var errorPosted = false
 
+    /** What a resumed queue played before this session ([earlierQueueFor]), or null. */
+    @Volatile var earlier: JSONObject? = null
+
+    /** Set when the last career's finalize stopped before Home: the navigation's reason key. */
+    @Volatile var finalizeStopKey: String? = null
+
     private val runs = mutableListOf<RunRecord>()
 
     @Synchronized
@@ -503,6 +515,7 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
             .put("runs", runsJson())
             .put("recoveries", SessionTally.recoveriesJson())
             .put("tpRestores", SessionTally.tpRestoresJson())
+            .apply { earlier?.let { put("earlier", it) } }
 
     @Synchronized
     fun facts(stopRequested: Boolean, stopByBot: Boolean, serviceRunning: Boolean, queueStateActive: Boolean): SessionEndFacts =
@@ -550,7 +563,36 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
             reasonTrainee = reasonTrainee.takeIf { verdict.end in ENDINGS_WITH_REASON_KEY && reasonKey.isNotEmpty() && it.isNotEmpty() },
             reasonOutfit = reasonOutfit.takeIf { verdict.end in ENDINGS_WITH_REASON_KEY && reasonKey.isNotEmpty() && it.isNotEmpty() },
             reasonRotation = reasonRotation && verdict.end in ENDINGS_WITH_REASON_KEY && reasonKey.isNotEmpty() && reasonTrainee.isNotEmpty() && reasonOutfit.isNotEmpty(),
+            earlier = earlier,
+            finalizeStopKey = finalizeStopKey.takeIf { verdict.end == SessionEnd.COMPLETED || verdict.end == SessionEnd.SINGLE_RUN_ENDED },
         )
+}
+
+/**
+ * A resumed queue's runs before [startFromRun], recoveries, TP restores and stops, from the report that left it resumable; kept
+ * apart from the session's own fields so no ledger line counts one twice. Null when [lastReport] is not this queue's.
+ */
+internal fun earlierQueueFor(lastReport: JSONObject?, totalRuns: Int, startFromRun: Int): JSONObject? {
+    val r = lastReport ?: return null
+    val kind = SessionEnd.entries.firstOrNull { it.name == r.optString("kind") } ?: return null
+    if (!r.optBoolean("resumable") || !r.optBoolean("queueEnabled") || r.optInt("totalRuns") != totalRuns || kind in NOT_A_RUN_ENDINGS) return null
+    val before = r.optJSONObject("earlier") ?: JSONObject()
+    val runs = JSONArray()
+    for (played in listOf(before.optJSONArray("runs"), r.optJSONArray("runs"))) {
+        for (i in 0 until (played?.length() ?: 0)) played?.optJSONObject(i)?.takeIf { it.optInt("run") in 1 until startFromRun }?.let { runs.put(it) }
+    }
+    val recoveries = JSONObject()
+    for (counts in listOf(before.optJSONObject("recoveries"), r.optJSONObject("recoveries"))) {
+        counts?.keys()?.forEach { key -> recoveries.put(key, recoveries.optInt(key) + counts.optInt(key)) }
+    }
+    val restores = JSONArray()
+    for (spent in listOf(before.optJSONArray("tpRestores"), r.optJSONArray("tpRestores"))) {
+        for (i in 0 until (spent?.length() ?: 0)) spent?.optJSONObject(i)?.let { restores.put(it) }
+    }
+    val stops = JSONArray()
+    before.optJSONArray("stops")?.let { for (i in 0 until it.length()) it.optJSONObject(i)?.let { stop -> stops.put(stop) } }
+    stops.put(JSONObject().put("kind", kind.name).put("run", r.optInt("runReached")).put("reasonKey", r.optString("reasonKey")))
+    return JSONObject().put("runs", runs).put("recoveries", recoveries).put("tpRestores", restores).put("stops", stops)
 }
 
 private val ENDINGS_WITH_REASON_KEY = setOf(SessionEnd.LAUNCH_FAILED_BEFORE_RUN, SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS, SessionEnd.SINGLE_RUN_ENDED, SessionEnd.STOPPED_BY_BOT)
@@ -685,6 +727,7 @@ internal fun processEndedReport(open: JSONObject, exit: ExitRecord?, lastSeenAt:
         recoveries = open.optJSONObject("recoveries") ?: JSONObject(),
         tpRestores = open.optJSONArray("tpRestores") ?: JSONArray(),
         exitInfo = exitInfoJson(exit, watchdog),
+        earlier = open.optJSONObject("earlier"),
     )
 }
 

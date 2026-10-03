@@ -216,6 +216,50 @@ describe("parseLastSession: TP restores", () => {
     })
 })
 
+describe("parseLastSession: a resumed queue", () => {
+    const carats = { rung: "Carats", context: "launch" }
+    // A live queue: runs 1-9, 11 recoveries and 4 Carat restores before the halt; run 10 and 1 recovery after the resume.
+    const earlier = {
+        runs: Array.from({ length: 9 }, (_, i) => run(i + 1, "TASK_RESULT_COMPLETE", { traineeName: "Biwa Hayahide" })),
+        recoveries: { accessibilityRebinds: 11 },
+        tpRestores: [carats, carats, carats, carats],
+        stops: [{ kind: "NAVIGATION_FAILED_BETWEEN_RUNS", run: 9, reasonKey: "DIALOG_NOT_CLOSED" }],
+    }
+    const resumed = {
+        queueEnabled: true,
+        totalRuns: 10,
+        completedRuns: 10,
+        startFromRun: 10,
+        runs: [run(10, "TASK_RESULT_COMPLETE", { traineeName: "Mihono Bourbon" })],
+        recoveries: { accessibilityRebinds: 1 },
+    }
+
+    it("lists every run, recovery and restore of the queue, not only those after the resume", () => {
+        const v = view({ ...resumed, earlier })
+        expect(v.runs).toHaveLength(10)
+        expect(v.runs[0]).toBe("Run 1: Biwa Hayahide, Completed")
+        expect(v.runs[9]).toBe("Run 10: Mihono Bourbon, Completed")
+        expect(v.recoveries).toBe("Recovered 12 times: 12 accessibility repairs.")
+        expect(v).toMatchObject({ tpRestores: "TP restored 4 times: 0 with items, 4 with Carats.", caratsUsed: 4 })
+        expect(v.progress).toBe("10 of 10 runs done")
+    })
+
+    it("counts errors over the whole queue once it carries the earlier runs", () => {
+        const failed = { ...earlier, runs: [...earlier.runs.slice(0, 8), run(9, "TASK_RESULT_TIMED_OUT")] }
+        expect(view({ ...resumed, completedRuns: 9, earlier: failed }).progress).toBe("9 of 10 runs done; 1 ended with an error")
+        expect(view({ ...resumed, completedRuns: 9, runs: [run(10, "TASK_RESULT_TIMED_OUT")] }).progress).toBe("9 of 10 runs done; 1 since the queue resumed ended with an error")
+    })
+
+    it("shows only the session's own facts without an earlier record, or with one it cannot read", () => {
+        for (const bad of [undefined, null, "x", [1], { runs: "x", recoveries: [1], tpRestores: 3 }]) {
+            const v = view({ ...resumed, earlier: bad })
+            expect(v.runs).toEqual(["Run 10: Mihono Bourbon, Completed"])
+            expect(v.recoveries).toBe("Recovered 1 time: 1 accessibility repair.")
+            expect(v.tpRestores).toBeNull()
+        }
+    })
+})
+
 describe("parseLastSession: nothing raw reaches the card", () => {
     it("never echoes an unknown code, key or rung", () => {
         const v = view(
