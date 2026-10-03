@@ -879,4 +879,41 @@ class CareerFinalizeGateTest {
             assertEquals("Super Creek|Unity Cup|123", record.getString("careerToken"))
         }
     }
+
+    @Nested
+    @DisplayName("a buy landing on exactly 0 skill points")
+    inner class ZeroLandingBuy {
+        @Test
+        fun `a 0 balance after a zero-landing buy does not block Finish`() {
+            // 973 points, earlier buys down to 234, then a gold skill priced 234 with its prerequisite spends the rest.
+            val spBefore = 234
+            val remaining: Int = verifiedBalanceAfterBuyTap(spBefore, 234, parseSkillListPointsText(""), skillUpStillVisible = false) ?: spBefore
+            val bought = remaining < spBefore
+            val proposed = listOf(ProposedSkill("Earlier buys", 739), ProposedSkill("On the Attack", 108), ProposedSkill("Unstoppable", 126))
+            val confirmed = if (bought) setOf("Earlier buys", "On the Attack", "Unstoppable") else setOf("Earlier buys")
+            val exhaustion =
+                classifyRemainingCandidates(
+                    listOf(
+                        RemainingCandidate("Unstoppable", 234, bought, false, false, false, false, true),
+                        RemainingCandidate("Calm in a Crowd", 102, false, false, false, false, false, true),
+                        RemainingCandidate("Ignited Spirit SPD", 120, false, false, false, false, false, true),
+                    ),
+                    remainingSp = remaining,
+                    skipDoubleCircleUpgrades = false,
+                )
+            val ev =
+                evidence(
+                    sp = remaining,
+                    confirmation = !SkillSpendTelemetry.confirmationIsIncomplete(proposed, confirmed, 973, remaining),
+                    eligible = exhaustion.eligibleCount,
+                    affordable = exhaustion.affordableCount,
+                    cheapestAffordableName = exhaustion.cheapestAffordableName,
+                    cheapestAffordable = exhaustion.cheapestAffordablePrice,
+                    cheapestEligible = exhaustion.cheapestEligiblePrice,
+                )
+            val result = eval(detailsSp = null, ev = ev, retryUsed = true)
+            assertEquals(FinalizeDecision.FINISH, result.decision, result.reason)
+            assertEquals(0, remaining)
+        }
+    }
 }

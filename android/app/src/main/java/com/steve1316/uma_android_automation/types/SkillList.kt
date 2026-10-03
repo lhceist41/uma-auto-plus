@@ -8,6 +8,9 @@ import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.parseSkillListPointsText
+import com.steve1316.uma_android_automation.bot.sanitizeOcrExcerpt
+import com.steve1316.uma_android_automation.bot.verifiedBalanceAfterBuyTap
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.types.RunningStyle
@@ -336,7 +339,8 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      * Detects the current skill points from the Skill List screen.
      *
      * @param bitmap Optional [Bitmap] used for detection. If null, a new screenshot is taken.
-     * @return The detected skill points as an Integer, or null if detection fails.
+     * @return The detected skill points as an Integer, or null if detection fails. Never the previous value: an
+     *   unreadable read can mean the balance just reached 0.
      */
     fun detectSkillPoints(bitmap: Bitmap? = null): Int? {
         val srcBitmap: Bitmap = bitmap ?: game.imageUtils.getSourceBitmap()
@@ -407,13 +411,13 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         }
 
         val skillPointsString: String = extractText(skillPointsBitmap)
-        // Clean up the string to keep only digits and parse to Int.
-        val tmpSkillPoints: Int? = skillPointsString.replace("[^0-9]".toRegex(), "").toIntOrNull()
-
-        if (tmpSkillPoints != null) {
-            skillPoints = tmpSkillPoints
+        val read: Int? = parseSkillListPointsText(skillPointsString)
+        if (read == null) {
+            MessageLog.w(TAG, "[SKILLS] detectSkillPoints:: refused a Skill Points read with no digits (raw OCR: \"${sanitizeOcrExcerpt(skillPointsString)}\").")
+            return null
         }
-        return skillPoints
+        skillPoints = read
+        return read
     }
 
     /**
@@ -1160,20 +1164,23 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // the real button and the tap registers nothing. Re-find the (+) on the full screen within
         // this row's narrow Y band - where the button is unclipped - and tap its true center.
         val tapTarget: Point = relocateSkillUpButton(skillUpButtonLocation)
+        // A buy landing on exactly 0 leaves no readable digit, so the row's (+) vanishing is the fallback signal.
+        val zeroLandingCheckable: Boolean = entry.screenPrice == spBefore && isSkillUpButtonAt(tapTarget)
 
         val maxAttempts = 3
         var spAfter: Int? = null
-        var spDropped = false
+        var verifiedBalance: Int? = null
         for (attempt in 1..maxAttempts) {
             entry.buy(tapTarget)
             game.wait(0.5, skipWaitingForLoading = true)
             spAfter = detectSkillPoints()
-            spDropped = spAfter != null && spAfter < spBefore
-            if (spDropped) break
+            val skillUpStillVisible: Boolean = !zeroLandingCheckable || spAfter != null || isSkillUpButtonAt(tapTarget)
+            verifiedBalance = verifiedBalanceAfterBuyTap(spBefore, entry.screenPrice, spAfter, skillUpStillVisible)
+            if (verifiedBalance != null) break
             game.wait(0.3, skipWaitingForLoading = true)
         }
 
-        if (!spDropped) {
+        if (verifiedBalance == null) {
             skillPoints = spBefore // miss -> budget unchanged
             deadTapSkills.add(name)
             MessageLog.e(
@@ -1184,19 +1191,14 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             return null
         }
 
-        // Verified (SP dropped). Reconcile the budget with the screen: the parsed price can drift
-        // from the actual charge as discount tiers shift with accumulated purchases, which once made
-        // the committed tracker refuse an affordable skill (tracker at 42, screen at 55). The drop
-        // was just verified, so accept the screen read when the drop is plausible for this purchase,
-        // otherwise keep the conservative committed value.
-        val spDrop: Int? = spAfter?.let { spBefore - it }
-        skillPoints =
-            if (spAfter != null && spDrop != null && spDrop >= 1 && spDrop <= entry.screenPrice * 2) {
-                spAfter
-            } else {
-                spBefore - entry.screenPrice
-            }
+        // Verified. Reconcile the budget with the screen: the parsed price can drift from the actual
+        // charge as discount tiers shift with accumulated purchases, which once made the committed
+        // tracker refuse an affordable skill (tracker at 42, screen at 55).
+        skillPoints = verifiedBalance
         entry.markObtained()
+        if (spAfter == null) {
+            MessageLog.i(TAG, "[SKILLS] buySkill:: \"$name\" spent the whole balance: Skill Points unreadable and its (+) is gone or disabled, so counted as bought with 0 left.")
+        }
 
         if (spAfter != null && (spBefore - spAfter) != entry.screenPrice) {
             MessageLog.d(
@@ -1240,6 +1242,15 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             )
         }
         return nearest
+    }
+
+    /**
+     * True while an enabled (+) sits within a tight band around [point]; a wider band could catch a neighbouring row's button.
+     * A greyed (+) still matches the template, and after a buy that spends the whole balance the row's (+) may stay greyed rather than vanish.
+     */
+    private fun isSkillUpButtonAt(point: Point): Boolean {
+        val region: IntArray = intArrayOf((point.x - 60).toInt().coerceAtLeast(0), (point.y - 30).toInt().coerceAtLeast(0), 120, 60)
+        return ButtonSkillUp.findAll(game.imageUtils, region = region, ignoreDisabled = true).isNotEmpty()
     }
 
     /**

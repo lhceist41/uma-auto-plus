@@ -13,6 +13,21 @@ fun parseSkillPointsText(raw: String): Int {
     return runs[0].toIntOrNull() ?: SKILL_POINTS_UNREADABLE
 }
 
+/** Skill List balance, or null when the crop holds no digit: a lone "0" reads as nothing or as the letter O. */
+fun parseSkillListPointsText(raw: String): Int? = raw.replace(Regex("[^0-9]"), "").toIntOrNull()
+
+/**
+ * Balance after one Skill Up tap, or null when the tap did not register. A drop larger than twice the price keeps the
+ * committed value (discount tiers make the parsed price drift from the charge). A buy that spends the whole balance
+ * leaves an unreadable read, so it counts only when the row's (+) is also gone.
+ */
+fun verifiedBalanceAfterBuyTap(spBefore: Int, screenPrice: Int, spAfterRead: Int?, skillUpStillVisible: Boolean): Int? =
+    when {
+        spAfterRead != null && spAfterRead < spBefore -> if (spBefore - spAfterRead <= screenPrice * 2) spAfterRead else spBefore - screenPrice
+        spAfterRead == null && screenPrice > 0 && screenPrice == spBefore && !skillUpStillVisible -> 0
+        else -> null
+    }
+
 enum class SkillPointConfirmation {
     CONFIRMED,
 

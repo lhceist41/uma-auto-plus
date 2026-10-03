@@ -1,12 +1,63 @@
 package com.steve1316.uma_android_automation.bot
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import java.io.File
 
 @DisplayName("Skill Point reading")
 class SkillPointReadingTest {
+    @Nested
+    @DisplayName("verifiedBalanceAfterBuyTap()")
+    inner class BuyTapTests {
+        @Test
+        fun `a buy spending the whole balance counts once its (+) is gone`() {
+            assertEquals(0, verifiedBalanceAfterBuyTap(spBefore = 234, screenPrice = 234, spAfterRead = null, skillUpStillVisible = false))
+        }
+
+        @Test
+        fun `an unreadable read with the (+) still showing is a miss`() {
+            assertNull(verifiedBalanceAfterBuyTap(spBefore = 234, screenPrice = 234, spAfterRead = null, skillUpStillVisible = true))
+        }
+
+        @Test
+        fun `an unchanged balance is a miss even with the (+) gone`() {
+            assertNull(verifiedBalanceAfterBuyTap(spBefore = 234, screenPrice = 126, spAfterRead = 234, skillUpStillVisible = true))
+            assertNull(verifiedBalanceAfterBuyTap(spBefore = 234, screenPrice = 234, spAfterRead = 234, skillUpStillVisible = false))
+        }
+
+        @Test
+        fun `a readable drop is verified with the screen balance`() {
+            assertEquals(2, verifiedBalanceAfterBuyTap(spBefore = 262, screenPrice = 260, spAfterRead = 2, skillUpStillVisible = true))
+            assertEquals(2, verifiedBalanceAfterBuyTap(spBefore = 262, screenPrice = 260, spAfterRead = 2, skillUpStillVisible = false))
+        }
+
+        @Test
+        fun `an implausibly large drop keeps the committed balance`() {
+            assertEquals(140, verifiedBalanceAfterBuyTap(spBefore = 240, screenPrice = 100, spAfterRead = 10, skillUpStillVisible = true))
+        }
+
+        @Test
+        fun `an unreadable read is never a buy when the price does not use up the balance`() {
+            assertNull(verifiedBalanceAfterBuyTap(spBefore = 234, screenPrice = 126, spAfterRead = null, skillUpStillVisible = false))
+            assertNull(verifiedBalanceAfterBuyTap(spBefore = 0, screenPrice = 0, spAfterRead = null, skillUpStillVisible = false))
+        }
+
+        @Test
+        fun `an unreadable Skill List read is never reported as the previous balance`() {
+            for (raw in listOf("", " ", "O", "o", "Skill Points")) {
+                assertNull(parseSkillListPointsText(raw), "\"$raw\" must not parse")
+                assertNotEquals(234, verifiedBalanceAfterBuyTap(234, 234, parseSkillListPointsText(raw), skillUpStillVisible = false), "\"$raw\" must not keep 234")
+            }
+            assertEquals(2, parseSkillListPointsText("2"))
+            assertEquals(973, parseSkillListPointsText("973"))
+        }
+    }
+
     @Nested
     @DisplayName("parseSkillPointsText()")
     inner class ParseTests {
@@ -203,6 +254,23 @@ class SkillPointReadingTest {
                     alreadyHandledPreFinals = true,
                 )
             assertEquals(SkillCheckAction.NONE, off.action)
+        }
+    }
+
+    @Nested
+    @DisplayName("isSkillUpButtonAt()")
+    inner class SkillUpButtonGuardTests {
+        // The luminance check needs a real Bitmap, so the wiring is pinned by source: a greyed (+) must not count as present.
+        @Test
+        fun `only an enabled (+) counts as still on the row`() {
+            var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+            val rel = "android/app/src/main/java/com/steve1316/uma_android_automation/types/SkillList.kt"
+            while (dir != null && !File(dir, rel).isFile) dir = dir.parentFile
+            val src = File(dir ?: throw AssertionError("$rel not found"), rel).readText()
+            val start = src.indexOf("private fun isSkillUpButtonAt(")
+            assertTrue(start >= 0)
+            val body = src.substring(start, src.indexOf("\n    }", start))
+            assertTrue(body.contains("ButtonSkillUp.findAll(") && body.contains("ignoreDisabled = true"))
         }
     }
 }
