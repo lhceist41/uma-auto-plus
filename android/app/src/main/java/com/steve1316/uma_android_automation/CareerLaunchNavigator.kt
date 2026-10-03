@@ -14,6 +14,7 @@ import com.steve1316.uma_android_automation.bot.navigatorStuckKey
 import com.steve1316.uma_android_automation.bot.GAME_NOT_RESPONDING
 import com.steve1316.uma_android_automation.bot.GameReopen
 import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
+import com.steve1316.uma_android_automation.bot.stuckCountAfter
 import com.steve1316.uma_android_automation.bot.stuckKeyAfterProbe
 import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
@@ -677,6 +678,10 @@ class CareerLaunchNavigator(private val context: Context) {
     private var titleScreenRebindIssued = false
     private var dialogTappedOnThisScreen = false
 
+    // The branch handlePostRunResults took on its last two runs on this screen, for stuckCountAfter.
+    private var postRunLabelBefore: String? = null
+    private var lastPostRunLabel: String? = null
+
     // --- Cold-start Trainee Select liveness (2026-08-10) ---
     // True while THIS launch still owes a roster verification: rotation is on, or a single-run target
     // is armed, and a career is actually being launched (not a finalize-to-home pass). It gates the
@@ -902,6 +907,8 @@ class CareerLaunchNavigator(private val context: Context) {
         tapScreenRebindIssued = false
         titleScreenRebindIssued = false
         dialogTappedOnThisScreen = false
+        postRunLabelBefore = null
+        lastPostRunLabel = null
         trainingSelectionBackPressed = false
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
@@ -1143,7 +1150,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     !titleLoggingIn &&
                     !isConnectionRideOut(detectedState, pendingBetweenRunDialog)
                 ) {
-                    stuckInStateCount++
+                    stuckInStateCount = stuckCountAfter(stuckInStateCount, postRunLabelBefore, lastPostRunLabel)
                     // Dead gesture dispatch wedges a KNOWN state exactly like this: the same
                     // detection every tick while every click silently no-ops (dispatchGesture
                     // still returns true). Rebind once mid-episode - a real transition resets
@@ -1171,6 +1178,8 @@ class CareerLaunchNavigator(private val context: Context) {
                 } else {
                     stuckInStateCount = 0
                     dialogTappedOnThisScreen = false
+                    postRunLabelBefore = null
+                    lastPostRunLabel = null
                 }
                 // TAP_TO_CONTINUE legitimately repeats across many cutscene frames under one state
                 // label, so it is exempt from stuckInStateCount above. Track it on its own higher cap
@@ -4426,6 +4435,8 @@ class CareerLaunchNavigator(private val context: Context) {
         // tap - advancing the game's sticky trainee before it is verified. Re-probe the roster on a
         // settled frame first (see rosterLivenessExpectation); a null result means the expectation is
         // not active and normal post-run handling proceeds.
+        postRunLabelBefore = lastPostRunLabel
+        lastPostRunLabel = null
         rosterLivenessExpectation()?.let { return it }
 
         val bitmap = iu.getSourceBitmap()
@@ -4435,6 +4446,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // some other screen, and the tap is a dismissal only - it collects nothing and spends
         // nothing, the rewards are already granted by the time this dialog appears.
         if (isRewardsCollectedDialog(bitmap)) {
+            lastPostRunLabel = "rewards_collected"
             MessageLog.i(TAG, "[NAV] Rewards Collected dialog detected; closing it by geometry (its Close does not template-match).")
             CoordinateTap.tap(
                 gestureUtils,
@@ -4456,6 +4468,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // body tap that also advances any genuinely button-less variant. Gated on the same positive
         // structural read so it can never fire on another screen.
         if (isEventPointsRewardsScreen(bitmap)) {
+            lastPostRunLabel = "event_rewards"
             if (ButtonNext.click(iu, sourceBitmap = bitmap)) {
                 MessageLog.i(TAG, "[NAV] Event rewards summary detected; clicked Next to advance.")
             } else {
@@ -4478,6 +4491,7 @@ class CareerLaunchNavigator(private val context: Context) {
         if (ButtonSkillListFullStats.check(iu, sourceBitmap = bitmap)) {
             MessageLog.w(TAG, "[NAV] SkillList screen detected during POST_RUN_RESULTS. Backing out via ButtonBack to escape Confirm-loop.")
             if (ButtonBack.click(iu, sourceBitmap = bitmap)) {
+                lastPostRunLabel = "skill_list_back"
                 waitSafe(1.5)
                 return TransitionResult.Continue
             }
@@ -4528,6 +4542,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // Close position. Without this the queue dies one screen short of the next launch
             // (observed 2026-07-08 on a Palmer -> next-run hand-off).
             if (isUmamusumeDetailsScreen(bitmap)) {
+                lastPostRunLabel = "details_card"
                 if (!ButtonCloseWide.click(iu, sourceBitmap = bitmap)) {
                     CoordinateTap.tap(gestureUtils, bitmap.width * 0.5, bitmap.height * 0.86, "umamusume_details_close")
                 }
@@ -4541,6 +4556,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 recommendedAction = "Check if the post-run screen has an unexpected button layout.",
             )
         }
+        lastPostRunLabel = clickedButton
         MessageLog.i(TAG, "[NAV] Post-run results screen: clicked '$clickedButton' to advance.")
         return TransitionResult.Continue
     }

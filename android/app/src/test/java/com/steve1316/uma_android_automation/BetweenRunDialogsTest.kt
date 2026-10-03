@@ -483,7 +483,7 @@ class BetweenRunDialogsTest {
             val progress = "} else if (detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&$exemption"
             assertTrue(loop.contains(stuck))
             assertTrue(loop.contains(progress))
-            assertTrue(loop.indexOf(stuck) < loop.indexOf("stuckInStateCount++"))
+            assertTrue(loop.indexOf(stuck) < loop.indexOf("stuckInStateCount = stuckCountAfter("))
             assertTrue(loop.indexOf(progress) < loop.indexOf("iterationsWithoutProgress++"))
         }
     }

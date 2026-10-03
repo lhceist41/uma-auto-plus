@@ -97,6 +97,10 @@ internal class RebindEpisode(private val onNoChange: () -> Unit = {}) {
     fun stopKey(): String? = accessibilityStopKey(issued, refused)
 }
 
+/** One more same-state detection; post-career pages share one state, so the last two differing handler branches mean the page changed. */
+internal fun stuckCountAfter(count: Int, labelBefore: String?, lastLabel: String?): Int =
+    if (labelBefore != null && lastLabel != null && labelBefore != lastLabel) 1 else count + 1
+
 internal fun shouldTryStrongToggle(episode: RebindEpisode, usedThisRun: Boolean): Boolean = !usedThisRun && episode.withoutChange >= 2
 
 /** The run is not replayed (it cannot help without the grant or with dead taps) and the saved queue is kept, so a Start after the fix continues it. The first key wins. */

@@ -252,6 +252,78 @@ class AccessibilityRepairTest {
     }
 
     @Nested
+    @DisplayName("post-career pages and the stuck count")
+    inner class PostRunPages {
+        private val rebindAt = 7
+        private val failAt = 15
+
+        /**
+         * The navigator's same-state count over consecutive detections of one state (UNKNOWN frames between
+         * them count nothing): the first detection is a state change at 0, each repeat goes through
+         * stuckCountAfter with the labels the handler left, then the handler records its own label.
+         */
+        private fun counts(labels: List<String?>): List<Int> {
+            var count = 0
+            var before: String? = null
+            var last: String? = null
+            return labels.mapIndexed { i, label ->
+                count = if (i == 0) 0 else stuckCountAfter(count, before, last)
+                before = last
+                last = label
+                count
+            }
+        }
+
+        @Test
+        fun `a live career end with the event tally pages stays under the rebind`() {
+            // Close, three Next pages, the event tally, Next, then the page where the rebind used to fire.
+            val live = listOf("Close", "Next", "Next", "Next", "event_rewards", "event_rewards", "Next", "event_rewards")
+            assertEquals(listOf(0, 1, 1, 2, 3, 1, 2, 1), counts(live))
+            assertTrue(counts(live).max() < rebindAt)
+        }
+
+        @Test
+        fun `an event career with a Rewards Collected popup stays under the rebind`() {
+            val live = listOf("Close", "Next", "Next", "Next", "event_rewards", "rewards_collected", "event_rewards", "Next", "event_rewards", "Close", "Close")
+            assertTrue(counts(live).max() < rebindAt, "${counts(live)}")
+        }
+
+        @Test
+        fun `one branch repeating on one screen still rebinds at 7 and fails at 15`() {
+            for (label in listOf("Next", "OK", "event_rewards", "rewards_collected", null)) {
+                val c = counts(List(failAt + 1) { label })
+                assertEquals(rebindAt, c[rebindAt], "the 7th repeat rebinds: $label")
+                assertEquals(failAt, c[failAt], "the 15th repeat fails: $label")
+            }
+        }
+
+        @Test
+        fun `a state without branch labels keeps plain same-state counting`() {
+            assertEquals((0..20).toList(), counts(List(21) { null }))
+            assertEquals(5, stuckCountAfter(4, null, null))
+            assertEquals(5, stuckCountAfter(4, "Next", null))
+            assertEquals(5, stuckCountAfter(4, null, "Next"))
+            assertEquals(1, stuckCountAfter(4, "Next", "Close"))
+        }
+
+        @Test
+        fun `the navigator feeds the post-run labels into its one stuck count`() {
+            assertTrue(navigator.contains("stuckInStateCount = stuckCountAfter(stuckInStateCount, postRunLabelBefore, lastPostRunLabel)\n"))
+            assertFalse(navigator.contains("stuckInStateCount++"))
+            assertTrue(navigator.contains("private const val STUCK_STATE_REBIND_AT = 7\n"))
+            assertTrue(navigator.contains("private const val MAX_STUCK_ITERATIONS = 15\n"))
+            val newState = listOf("stuckInStateCount = 0", "dialogTappedOnThisScreen = false", "postRunLabelBefore = null", "lastPostRunLabel = null")
+            assertTrue(navigator.contains(newState.joinToString("") { "$it\n                    " }.trimEnd(' ')), "a new state starts unlabelled")
+            val handler = body(navigator, "    private fun handlePostRunResults(")
+            assertTrue(handler.indexOf("postRunLabelBefore = lastPostRunLabel\n        lastPostRunLabel = null\n") in 0 until handler.indexOf("rosterLivenessExpectation()"), "every run shifts once")
+            for (label in listOf("\"rewards_collected\"", "\"event_rewards\"", "\"skill_list_back\"", "\"details_card\"", "clickedButton")) {
+                assertEquals(1, Regex(Regex.escape("lastPostRunLabel = $label\n")).findAll(handler).count(), label)
+            }
+            assertEquals(3, Regex("lastPostRunLabel = null\n").findAll(navigator).count(), "navigate(), a state change and each handler run")
+        }
+    }
+
+    @Nested
     @DisplayName("ledger counters")
     inner class Counters {
         @Test
