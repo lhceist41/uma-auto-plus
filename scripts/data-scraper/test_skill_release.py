@@ -186,6 +186,83 @@ class SkillCostRetentionTest(unittest.TestCase):
         )
 
 
+class SkillChainOrderTest(unittest.TestCase):
+    """White/gold chains link white -> gold whatever the ids, while triads keep their id order."""
+
+    @staticmethod
+    def links(result, name):
+        entry = result.data[name]
+        return entry["upgrade"], entry["downgrade"]
+
+    def test_inverted_pair_links_white_to_gold(self):
+        """A gold with the higher id is still the upgrade of its white."""
+        result = run_scraper(
+            [
+                make_skill(910001, "Pair White", cost=160, rarity=1, versions=[910002]),
+                make_skill(910002, "Pair Gold", cost=272, rarity=2, iconid=10012, versions=[910001]),
+            ]
+        )
+        self.assertEqual((910002, None), self.links(result, "Pair White"))
+        self.assertEqual((None, 910001), self.links(result, "Pair Gold"))
+
+    def test_pair_already_in_order_is_unchanged(self):
+        result = run_scraper(
+            [
+                make_skill(910011, "Early Gold", cost=272, rarity=2, iconid=10012, versions=[910012]),
+                make_skill(910012, "Early White", cost=160, rarity=1, versions=[910011]),
+            ]
+        )
+        self.assertEqual((910011, None), self.links(result, "Early White"))
+        self.assertEqual((None, 910012), self.links(result, "Early Gold"))
+
+    def test_triad_with_gold_at_the_highest_id_keeps_id_order(self):
+        result = run_scraper(
+            [
+                make_skill(910022, "Triad Circle", cost=100, rarity=1, versions=[910021, 910023]),
+                make_skill(910021, "Triad Double", cost=110, rarity=1, versions=[910022, 910023]),
+                make_skill(910023, "Triad Gold", cost=150, rarity=2, iconid=10012, versions=[910021, 910022]),
+            ]
+        )
+        self.assertEqual((None, 910022), self.links(result, "Triad Double"))
+        self.assertEqual((910021, 910023), self.links(result, "Triad Circle"))
+        self.assertEqual((910022, None), self.links(result, "Triad Gold"))
+
+    def test_triad_with_gold_at_the_lowest_id_keeps_id_order(self):
+        """The Maestro of the Mud shape: the gold already has the lowest id."""
+        result = run_scraper(
+            [
+                make_skill(910030, "Mud Gold", cost=130, rarity=2, iconid=10012, versions=[910031, 910032, 910033]),
+                make_skill(910031, "Mud Double", cost=110, rarity=1, versions=[910030, 910032, 910033]),
+                make_skill(910032, "Mud Circle", cost=90, rarity=1, versions=[910030, 910031, 910033]),
+                make_skill(910033, "Mud Cross", cost=50, rarity=1, iconid=10014, versions=[910030, 910031, 910032]),
+            ]
+        )
+        self.assertEqual((None, 910031), self.links(result, "Mud Gold"))
+        self.assertEqual((910030, 910032), self.links(result, "Mud Double"))
+        self.assertEqual((910031, 910033), self.links(result, "Mud Circle"))
+        self.assertEqual((910032, None), self.links(result, "Mud Cross"))
+
+    def test_cross_circle_gold_chain_is_unchanged(self):
+        """Corner Adept style: a negative and one white under a gold is a plain chain, not a triad."""
+        result = run_scraper(
+            [
+                make_skill(910040, "Adept Gold", cost=170, rarity=2, iconid=10012, versions=[910041, 910042]),
+                make_skill(910041, "Adept Circle", cost=90, rarity=1, versions=[910040, 910042]),
+                make_skill(910042, "Adept Cross", cost=50, rarity=1, iconid=10014, versions=[910040, 910041]),
+            ]
+        )
+        self.assertEqual((None, 910041), self.links(result, "Adept Gold"))
+        self.assertEqual((910040, 910042), self.links(result, "Adept Circle"))
+        self.assertEqual((910041, None), self.links(result, "Adept Cross"))
+
+    def test_chain_order_is_deterministic(self):
+        skills = [
+            make_skill(910051, "Stable White", cost=160, rarity=1, versions=[910052]),
+            make_skill(910052, "Stable Gold", cost=272, rarity=2, iconid=10012, versions=[910051]),
+        ]
+        self.assertEqual(run_scraper(list(skills)).data, run_scraper(list(reversed(skills))).data)
+
+
 class ExistsOnGlobalTest(unittest.TestCase):
     def test_accepts_both_field_spellings_and_defaults_to_released(self):
         self.assertTrue(main.exists_on_global({}))

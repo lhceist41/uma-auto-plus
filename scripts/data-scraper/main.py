@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 from datetime import date
 from typing import List, Dict, Any, Optional, Tuple, Union
-import bisect
 import requests
 from bs4 import BeautifulSoup
 
@@ -165,6 +164,32 @@ def write_skill_icon_index(icons_dir):
     lines += ["}", "", "export default icons"]
     # Force LF; the checked-in index.ts is LF and this file has no .gitattributes to normalize it.
     (icons_dir / "index.ts").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
+def order_skill_versions(skill_id: int, versions: List[int], rarity_by_id: Dict[int, int], iconid_by_id: Dict[int, int]) -> List[int]:
+    """Orders one skill's version chain from its highest tier down, the order the bot links upgrade/downgrade in.
+
+    Plain chains sort by GameTora rarity (gold first), then id. Id alone is wrong for a white/gold pair whose gold has
+    the higher id: the bot would treat the gold as the lower version. A "triad" (a gold over two or more non-negative
+    whites, i.e. ○ and ◎) stays id-ordered: a single upgrade link cannot express a gold that has its own standalone price.
+
+    Args:
+        skill_id (int): The skill's own id.
+        versions (List[int]): The other ids in the chain, as listed by GameTora.
+        rarity_by_id (Dict[int, int]): GameTora rarity per skill id; a missing id counts as 1 (white).
+        iconid_by_id (Dict[int, int]): GameTora icon id per skill id; an icon id ending in 4 marks a negative skill.
+
+    Returns:
+        Every id in the chain, including `skill_id`, highest tier first.
+    """
+    chain = sorted(set(versions) | {skill_id})
+    for gold in chain:
+        if rarity_by_id.get(gold, 1) != 2:
+            continue
+        whites = [i for i in chain if i != gold and rarity_by_id.get(i, 1) == 1 and iconid_by_id.get(i, 0) % 10 != 4]
+        if len(whites) >= 2:
+            return chain
+    return sorted(chain, key=lambda i: (-rarity_by_id.get(i, 1), i))
 
 
 def exists_on_global(entry: Dict[str, Any]) -> bool:
@@ -496,6 +521,8 @@ class SkillScraper(BaseScraper):
         try:
             skill_data = fetch_gametora_manifest_data("skills")
 
+            rarity_by_id = {s["id"]: s.get("rarity", 1) for s in skill_data if "id" in s}
+            iconid_by_id = {s["id"]: s.get("iconid", 0) for s in skill_data if "id" in s}
             skill_id_to_name = {}
             versions_by_name = {}
             global_by_name = {}
@@ -590,7 +617,7 @@ class SkillScraper(BaseScraper):
                         skill_id_to_name.pop(kept["id"], None)
 
                     skill_id_to_name[skill["id"]] = skill_name_en
-                    versions_by_name[skill_name_en] = sorted(skill.get("versions", []))
+                    versions_by_name[skill_name_en] = skill.get("versions", [])
                     global_by_name[skill_name_en] = bIsOnGlobal
 
                     self.data[skill_name_en] = tmp
@@ -607,26 +634,12 @@ class SkillScraper(BaseScraper):
                 if not versions:
                     continue
 
-                index = bisect.bisect_left(versions, skill["id"])
-                if index == 0:
-                    # This is the highest level of this skill.
-                    downgrade_version = versions[0]
-                    if downgrade_version in skill_id_to_name:
-                        self.data[skill_name]["downgrade"] = downgrade_version
-                elif index == len(versions):
-                    # This is the lowest level of this skill.
-                    upgrade_version = versions[-1]
-                    if upgrade_version in skill_id_to_name:
-                        self.data[skill_name]["upgrade"] = upgrade_version
-                else:
-                    # Skill has both an upgraded and downgraded variant.
-                    upgrade_version = versions[index - 1]
-                    if upgrade_version in skill_id_to_name:
-                        self.data[skill_name]["upgrade"] = upgrade_version
-
-                    downgrade_version = versions[index]
-                    if downgrade_version in skill_id_to_name:
-                        self.data[skill_name]["downgrade"] = downgrade_version
+                chain = order_skill_versions(skill["id"], versions, rarity_by_id, iconid_by_id)
+                index = chain.index(skill["id"])
+                if index > 0 and chain[index - 1] in skill_id_to_name:
+                    self.data[skill_name]["upgrade"] = chain[index - 1]
+                if index < len(chain) - 1 and chain[index + 1] in skill_id_to_name:
+                    self.data[skill_name]["downgrade"] = chain[index + 1]
 
             self.save_data()
 
