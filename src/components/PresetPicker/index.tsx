@@ -5,6 +5,7 @@ import { Text } from "../ui/text"
 import { useTheme } from "../../context/ThemeContext"
 import { characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { presetCharacter, presetOutfit, presetValidation } from "../../data/presetMeta"
+import { presetOutfitLabel } from "../../lib/rotationSnapshots"
 import { useFavoritePresets } from "../../lib/uiPrefs"
 
 /** Career scenarios in display order, with the short labels used on the scenario chips. */
@@ -26,6 +27,8 @@ interface PickerRow {
     presetName: string
     character: string
     outfit: string
+    /** The outfit as shown to the player: bracketed title, or "<variant> build". */
+    outfitLabel: string
     /** Scenarios a preset exists for, in SCENARIOS order. */
     scenarios: string[]
 }
@@ -97,6 +100,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }
                 presetName,
                 character: presetCharacter(presetName),
                 outfit: presetOutfit(presetName),
+                outfitLabel: presetOutfitLabel(presetName),
                 scenarios: SCENARIOS.filter((s) => scenarios.has(s.name)).map((s) => s.name),
             }))
             .sort((a, b) => a.character.localeCompare(b.character) || a.outfit.localeCompare(b.outfit))
@@ -104,7 +108,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }
 
     const sections = useMemo(() => {
         const q = query.trim().toLowerCase()
-        const matches = q.length === 0 ? allRows : allRows.filter((r) => r.character.toLowerCase().includes(q) || r.outfit.toLowerCase().includes(q))
+        const matches = q.length === 0 ? allRows : allRows.filter((r) => [r.character, r.outfit, r.outfitLabel].some((text) => text.toLowerCase().includes(q)))
         // Per-preset favorites: only the starred outfit's row pins, never the whole character.
         const favoriteRows = matches.filter((r) => favorites.includes(r.presetName))
         const result: { title: string; data: PickerRow[] }[] = []
@@ -221,7 +225,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }
                     </View>
                     <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>{item.character}</Text>
-                        {item.outfit.length > 0 && <Text style={{ fontSize: 12, color: colors.foreground, opacity: 0.6 }}>{item.outfit}</Text>}
+                        {item.outfitLabel.length > 0 && <Text style={{ fontSize: 12, color: colors.foreground, opacity: 0.6 }}>{item.outfitLabel}</Text>}
                     </View>
                     <View style={{ flexDirection: "row", alignItems: "center" }}>
                         {SCENARIOS.map((scenario) => {

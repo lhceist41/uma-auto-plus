@@ -263,6 +263,11 @@ describe("import preview text", () => {
         expect(newText).toBe("Bourbon (Trackblazer, preset preset_b)")
     })
 
+    it("names a real preset by character and outfit, not by its raw key", () => {
+        const { newText } = formatChange([entry("Biwa", "Trackblazer", { presetKey: "Biwa Hayahide" })], [entry("Biwa", "Trackblazer", { presetKey: "Biwa Hayahide (Rouge Caroler)" })])
+        expect(newText).toBe("Biwa (Trackblazer, preset Biwa Hayahide · [Rouge Caroler])")
+    })
+
     it("a rotation entry changed only in excluded outfits shows different text", () => {
         const { oldText, newText } = formatChange([entry("Bourbon", "Trackblazer", { excludeOutfits: [] })], [entry("Bourbon", "Trackblazer", { excludeOutfits: ["Summer"] })])
         expect(oldText).not.toBe(newText)

@@ -11,7 +11,7 @@ import CustomTitle from "../../components/CustomTitle"
 import PageHeader from "../../components/PageHeader"
 import WarningContainer from "../../components/WarningContainer"
 import { avoidAdvisoryFor } from "../../data/characterPresets"
-import { baseCharacter, deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
+import { baseCharacter, deriveInGameName, deriveExcludeOutfits, presetLine } from "../../lib/rotationSnapshots"
 import { SearchPageProvider } from "../../context/SearchPageContext"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 
@@ -319,7 +319,7 @@ const RunQueueSettings = () => {
                                                         }}
                                                     >
                                                         <Text style={{ flex: 1, fontSize: 13, color: colors.foreground, opacity: entry.presetKey ? 1 : 0.6 }}>
-                                                            {entry.presetKey ? `${entry.presetKey} — ${entry.scenario}` : "Pick a preset..."}
+                                                            {entry.presetKey ? presetLine(entry.presetKey, entry.scenario) : "Pick a preset..."}
                                                         </Text>
                                                         <ChevronRight size={16} color={colors.foreground} opacity={0.5} />
                                                     </TouchableOpacity>

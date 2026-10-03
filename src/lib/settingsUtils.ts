@@ -1,4 +1,5 @@
 import { logWithTimestamp } from "./logger"
+import { presetLine } from "./presetNames"
 
 /**
  * Deep merges two objects, preserving nested structure.
@@ -159,7 +160,7 @@ const formatListItem = (item: any, detailed: boolean): string => {
     const label = hasName ? name : scenario ? `(empty ${scenario} entry)` : "(empty entry)"
     const extra: string[] = hasName && scenario ? [scenario] : []
     if (detailed) {
-        if (typeof item.presetKey === "string" && item.presetKey !== "") extra.push(`preset ${item.presetKey}`)
+        if (typeof item.presetKey === "string" && item.presetKey !== "") extra.push(`preset ${presetLine(item.presetKey, "")}`)
         if (Array.isArray(item.excludeOutfits) && item.excludeOutfits.length > 0) extra.push(`excluding ${item.excludeOutfits.join(", ")}`)
     }
     return extra.length > 0 ? `${label} (${extra.join(", ")})` : label

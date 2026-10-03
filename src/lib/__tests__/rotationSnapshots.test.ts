@@ -1,4 +1,4 @@
-import { buildRotationSnapshotRows, baseCharacter, deriveInGameName, deriveExcludeOutfits, presetTraineeName } from "../rotationSnapshots"
+import { buildRotationSnapshotRows, baseCharacter, deriveInGameName, deriveExcludeOutfits, presetLine, presetOutfitLabel, presetSubtitle, presetTraineeName } from "../rotationSnapshots"
 import { characterPresets } from "../../data/characterPresets"
 
 // ===========================================================================
@@ -288,5 +288,49 @@ describe("Grass Wonder outfit disambiguation (Saintly Jade Cleric)", () => {
         expect(rows.find((r) => r.category === "rot0_general" && r.key === "appliedPresetTrainee")?.value).toBe("Grass Wonder")
         expect(rows.find((r) => r.category === "rot0_general" && r.key === "appliedPresetTraineeExcludes")?.value).toBe("Saintly Jade Cleric")
         expect(rows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")?.value).toBe("rank")
+    })
+})
+
+describe("outfit text shown to the player", () => {
+    it("brackets an alternate outfit the way the game titles the card", () => {
+        expect(presetOutfitLabel("Biwa Hayahide (Rouge Caroler)")).toBe("[Rouge Caroler]")
+    })
+
+    it("brackets a base outfit title that reads like code", () => {
+        expect(presetOutfitLabel("Mihono Bourbon")).toBe("[MB-19890425]")
+        expect(presetOutfitLabel("Biwa Hayahide")).toBe("[pf. Winning Equation...]")
+    })
+
+    it("shows a farm build as a build, never as an outfit", () => {
+        expect(presetOutfitLabel("Daiwa Scarlet (Legacy Farm)")).toBe("Legacy Farm build")
+        expect(presetOutfitLabel("Super Creek (Blue Farm)")).toBe("Blue Farm build")
+    })
+
+    it("shows nothing for a preset with no known outfit", () => {
+        expect(presetOutfitLabel("Nobody At All")).toBe("")
+    })
+
+    it("never brackets a variant suffix that is not an outfit", () => {
+        const variants = characterPresets.filter((p) => p.traineeName !== undefined || /\(Legacy Farm\)$/.test(p.name))
+        expect(variants.length).toBeGreaterThan(0)
+        for (const p of variants) expect(presetOutfitLabel(p.name)).toMatch(/ build$/)
+    })
+
+    it("builds the Home and rotation subtitle with dots and no raw preset key", () => {
+        expect(presetSubtitle("Biwa Hayahide (Rouge Caroler)", "URA Finale")).toBe("[Rouge Caroler] · URA Finale")
+        expect(presetSubtitle("Super Creek (Blue Farm)", "Unity Cup")).toBe("Blue Farm build · Unity Cup")
+        expect(presetSubtitle("Nobody At All", "URA Finale")).toBe("URA Finale")
+        for (const p of characterPresets) {
+            const text = presetSubtitle(p.name, p.scenario)
+            expect(text).not.toContain("(")
+            expect(text).not.toContain("\u2014")
+        }
+    })
+
+    it("names a preset in warnings and the rotation row as character, outfit and scenario", () => {
+        expect(presetLine("Biwa Hayahide (Rouge Caroler)", "URA Finale")).toBe("Biwa Hayahide · [Rouge Caroler] · URA Finale")
+        expect(presetLine("Super Creek (Blue Farm)", "Unity Cup")).toBe("Super Creek · Blue Farm build · Unity Cup")
+        expect(presetLine("Nobody At All", "URA Finale")).toBe("Nobody At All · URA Finale")
+        for (const p of characterPresets) expect(presetLine(p.name, p.scenario)).not.toMatch(/[()\u2014]/)
     })
 })

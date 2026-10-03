@@ -23,8 +23,8 @@ import WhatsNewDialog from "../../components/WhatsNewDialog"
 import { useWhatsNew } from "../../hooks/useWhatsNew"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { bumpSettingsRevision, createSingleFlight } from "../../lib/launchConfig"
-import { presetCharacter, presetOutfit } from "../../data/presetMeta"
-import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
+import { presetCharacter } from "../../data/presetMeta"
+import { deriveInGameName, deriveExcludeOutfits, presetLine, presetSubtitle } from "../../lib/rotationSnapshots"
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
 import { keepPersonalSettings } from "../../lib/personalSettings"
@@ -644,12 +644,12 @@ const Home = () => {
             bsc.settings.runQueue.traineeRotation.forEach((entry, i) => {
                 if (!entry.presetKey) return
                 const avoid = avoidAdvisoryFor(entry.presetKey, entry.scenario)
-                if (avoid) out.push({ label: `#${i + 1} ${entry.presetKey} — ${entry.scenario}`, reason: avoid.reason })
+                if (avoid) out.push({ label: `#${i + 1} ${presetLine(entry.presetKey, entry.scenario)}`, reason: avoid.reason })
             })
             return out
         }
         if (presetAdvisory?.kind === "avoid") {
-            return [{ label: `${appliedPreset?.name ?? "This trainee"} — ${bsc.settings.general.scenario}`, reason: presetAdvisory.reason }]
+            return [{ label: appliedPreset ? presetLine(appliedPreset.name, bsc.settings.general.scenario) : `This trainee · ${bsc.settings.general.scenario}`, reason: presetAdvisory.reason }]
         }
         return []
     }
@@ -1097,10 +1097,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                                 <>
                                     <Text style={{ fontSize: 11, color: colors.foreground, opacity: 0.55 }}>Trainee Preset</Text>
                                     <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>{presetCharacter(appliedPreset.name)}</Text>
-                                    <Text style={{ fontSize: 12, color: colors.foreground, opacity: 0.6 }}>
-                                        {presetOutfit(appliedPreset.name)}
-                                        {appliedPreset.scenario ? ` — ${appliedPreset.scenario}` : ""}
-                                    </Text>
+                                    <Text style={{ fontSize: 12, color: colors.foreground, opacity: 0.6 }}>{presetSubtitle(appliedPreset.name, appliedPreset.scenario)}</Text>
                                 </>
                             ) : (
                                 <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7 }}>Select Trainee Preset...</Text>

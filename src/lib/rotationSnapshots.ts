@@ -1,9 +1,12 @@
 import { Settings } from "../context/BotStateContext"
 import { characterPresets } from "../data/characterPresets"
+import { parsePresetName, presetTraineeName } from "./presetNames"
 import { presetObjectiveOf } from "./adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "./moodFloorPolicy"
 import { keepPersonalSettings } from "./personalSettings"
 import { convertSettingsToBatch } from "./settingsUtils"
+
+export { parsePresetName, presetLine, presetOutfitLabel, presetSubtitle, presetTraineeName } from "./presetNames"
 
 /**
  * One trainee in a rotation cycle. Mirrors `Settings["runQueue"]["traineeRotation"]`.
@@ -23,38 +26,9 @@ export interface RotationEntry {
     excludeOutfits?: string[]
 }
 
-/**
- * Preset names read "Character" or "Character (Suffix)". Usually the suffix is an OUTFIT
- * ("El Condor Pasa (Kukulkan Warrior)"), which the Trainee Select banner renders as
- * "[Kukulkan Warrior] El Condor Pasa". Build variants like "(Legacy Farm)" are NOT outfits -
- * they are alternate presets of the base character, and no "[Legacy Farm]" banner exists
- * in-game. Deriving one as an OCR target makes the navigator scan the entire roster, find
- * nothing above the match threshold, and stop the queue. Keep this set in sync with any
- * future non-outfit suffix presets.
- */
-const NON_OUTFIT_SUFFIXES = new Set(["Legacy Farm"])
-
-/** Splits a preset name into base character name and outfit (absent for plain/variant names). */
-export function parsePresetName(presetName: string): { base: string; outfit?: string } {
-    const m = presetName.match(/^(.*?)\s*\(([^)]*)\)\s*$/)
-    if (!m) return { base: presetName.trim() }
-    const suffix = m[2].trim()
-    return NON_OUTFIT_SUFFIXES.has(suffix) ? { base: m[1].trim() } : { base: m[1].trim(), outfit: suffix }
-}
-
 /** Base character name, for "did the picked character actually change?" comparisons. */
 export function baseCharacter(presetName: string): string {
     return parsePresetName(presetName).base
-}
-
-/**
- * The canonical in-game trainee identity for a preset display name: the preset's explicit
- * `traineeName` when set, otherwise the display name unchanged. Decouples a variant/farming display
- * name (e.g. "Super Creek (Blue Farm)") from the trainee it actually selects ("Super Creek"). General
- * - driven by the preset's own declaration, never by a hard-coded suffix.
- */
-export function presetTraineeName(presetName: string): string {
-    return characterPresets.find((p) => p.name === presetName)?.traineeName ?? presetName
 }
 
 /**

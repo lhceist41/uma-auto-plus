@@ -53,8 +53,7 @@ export interface ScenarioAdvisory {
 // (UmaTools dataset, https://github.com/daftuyda/UmaTools/blob/main/assets/uma_data.json),
 // the scenario's race-distance distribution, and the per-trainee event-override coverage in
 // this file. "Avoid" means the aptitudes lock the trainee out of races the scenario expects;
-// "recommended" means the bot's preset for that scenario has both meta-aligned aptitudes
-// AND high event-override coverage (≥14 character events).
+// "recommended" means the outfit's own aptitudes suit the scenario; each outfit is graded separately.
 export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?: ScenarioAdvisory[] }> = {
     "Agnes Tachyon": {
         // Tachyon's URA + UC presets only cover 6 character events — light coverage,
@@ -460,7 +459,7 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         recommended: ["URA Finale", "Unity Cup", "Trackblazer"],
     },
     "Gold Ship (RUN! RUIN! LAUNCHER!)": {
-        // Grid and growth identical to the base card (Power+20%/Wit+10%); verbatim clone.
+        // Same grid as the base card; growth is Power+20%/Wit+10% where the base is Stamina+20%/Power+10%.
         // Research-graded (2026-07-06).
         recommended: ["URA Finale", "Unity Cup", "Trackblazer"],
     },

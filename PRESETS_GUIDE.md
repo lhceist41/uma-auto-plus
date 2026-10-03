@@ -52,17 +52,22 @@ That is deliberate, so a setting a previous trainee needed can never leak onto t
 
 ## Choosing a preset
 
-The picker gives you four signals per row.
+The picker gives you five signals per row.
 
 **Search.** Type any part of a trainee or outfit name.
+
+**Outfit text.** Each row shows the outfit the way the game titles the card, in brackets, such as
+[Rouge Caroler]. Some original outfits have code-like titles, such as [MB-19890425]; that is the
+real in-game title. A farm variant reads "Legacy Farm build" because the game has no such outfit.
 
 **Favorites.** Star a row and it pins to the top. Favorites are per outfit, so starring one card
 does not star the character's other cards.
 
 **Scenario chips.** Each row shows a chip per scenario the trainee has a preset for, colored by fit:
 
-- Green: a good pick. The trainee's aptitudes suit the scenario and her preset has thorough
-  event coverage.
+- Green: a good pick. The trainee's aptitudes suit the scenario. An alternate outfit shows the
+  chip only when its own aptitudes and growth bonuses were rated; it does not inherit the
+  original outfit's chips automatically.
 - Yellow: a mismatch, with the reason spelled out. The preset exists and will run, but the
   aptitudes lock her out of races the scenario expects.
 - Neutral: supported, no strong opinion either way.
