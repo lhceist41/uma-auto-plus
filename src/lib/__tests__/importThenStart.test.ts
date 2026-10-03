@@ -3,7 +3,7 @@ import path from "path"
 import { transformSync } from "@babel/core"
 import { defaultSettings } from "../../context/BotStateContext"
 import { identityFromRows, launchConfigIdentity, verifyLaunchConfigPersisted } from "../launchConfig"
-import { applyMigrations, convertSettingsToBatch, deepMerge, withBundledData } from "../settingsUtils"
+import { applyMigrations, convertSettingsToBatch, deepMerge, rememberPersistedRows, withBundledData } from "../settingsUtils"
 import { performSettingsImport } from "../settingsImport"
 import { acknowledgeDiagnosticRequest, checkDiagnosticLaunch, diagnosticLaunch, diagnosticRequest, markDiagnosticClearedByImport, requestDiagnostic, startRefusal } from "../diagnosticLaunch"
 
@@ -79,6 +79,8 @@ function device() {
         applyMigrations,
         convertSettingsToBatch,
         withBundledData,
+        rememberPersistedRows,
+        persistedRef: { current: {} },
         performSettingsImport,
         diagnosticRequest,
         markDiagnosticClearedByImport,

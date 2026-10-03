@@ -74,6 +74,21 @@ export const convertSettingsToBatch = (settings: Record<string, any>) => {
     return batch
 }
 
+/** The last value written to or read from each settings row, keyed `category.key` and held as JSON. */
+export type PersistedSettingsRows = Record<string, string | undefined>
+
+/** Records rows that are now on disk. */
+export const rememberPersistedRows = (persisted: PersistedSettingsRows, rows: { category: string; key: string; value: any }[]) => {
+    for (const row of rows) persisted[`${row.category}.${row.key}`] = JSON.stringify(row.value)
+}
+
+/** The rows of `settings` whose value differs from the last persisted value. */
+export const changedSettingsRows = (settings: Record<string, any>, persisted: PersistedSettingsRows) =>
+    convertSettingsToBatch(settings).filter((row) => {
+        const id = `${row.category}.${row.key}`
+        return !(id in persisted) || persisted[id] !== JSON.stringify(row.value)
+    })
+
 /**
  * Applies all registered migrations to the Settings object.
  * @param settings - The Settings object to apply migrations to.

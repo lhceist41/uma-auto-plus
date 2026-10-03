@@ -3,7 +3,7 @@ import path from "path"
 import { transformSync } from "@babel/core"
 import { acknowledgeDiagnosticRequest, checkDiagnosticLaunch, consumeDiagnosticRequest, diagnosticLaunch, diagnosticRequest, requestDiagnostic, startRefusal } from "../diagnosticLaunch"
 import { identityFromRows, launchConfigIdentity, verifyLaunchConfigPersisted } from "../launchConfig"
-import { convertSettingsToBatch } from "../settingsUtils"
+import { convertSettingsToBatch, rememberPersistedRows } from "../settingsUtils"
 import { buildRotationSnapshotRows, RotationEntry } from "../rotationSnapshots"
 import { characterPresets } from "../../data/characterPresets"
 
@@ -101,7 +101,7 @@ test.each(["none", "write rejection", "read failure", "background writer"])("act
     let rows: Record<string, unknown> = {}
     const manager = callback("src/hooks/useSettingsManager.tsx", "flushAndVerifyLaunchConfig", {
         useCallback: (fn: unknown) => fn, startTiming: () => jest.fn(), settingsRef: { current: h.bsc.settings },
-        launchConfigIdentity, verifyLaunchConfigPersisted, identityFromRows, convertSettingsToBatch,
+        launchConfigIdentity, verifyLaunchConfigPersisted, identityFromRows, convertSettingsToBatch, persistedRef: { current: {} }, rememberPersistedRows,
         autoSaveTimerRef: { current: null }, LAUNCH_FLUSH_TIMEOUT_MS: 1000, setTimeout, clearTimeout,
         databaseManager: {
             initialize: async () => {},
@@ -299,7 +299,7 @@ function persistenceBarrier(h: ReturnType<typeof harness>, afterRead = () => {},
     let rows: Record<string, unknown> = {}
     return callback("src/hooks/useSettingsManager.tsx", "flushAndVerifyLaunchConfig", {
         useCallback: (fn: unknown) => fn, startTiming: () => jest.fn(), settingsRef: { get current() { return h.bsc.settings } },
-        launchConfigIdentity, verifyLaunchConfigPersisted, identityFromRows, convertSettingsToBatch,
+        launchConfigIdentity, verifyLaunchConfigPersisted, identityFromRows, convertSettingsToBatch, persistedRef: { current: {} }, rememberPersistedRows,
         autoSaveTimerRef: { current: null }, LAUNCH_FLUSH_TIMEOUT_MS: 1000, setTimeout, clearTimeout,
         databaseManager: {
             initialize: async () => {},

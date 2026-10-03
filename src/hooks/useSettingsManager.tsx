@@ -8,7 +8,7 @@ import { defaultSettings, Settings, BotStateContext } from "../context/BotStateC
 import { databaseManager } from "../lib/database"
 import { startTiming } from "../lib/performanceLogger"
 import { logWithTimestamp, logErrorWithTimestamp } from "../lib/logger"
-import { deepMerge, convertSettingsToBatch, applyMigrations, withBundledData } from "../lib/settingsUtils"
+import { deepMerge, convertSettingsToBatch, applyMigrations, withBundledData, changedSettingsRows, rememberPersistedRows, PersistedSettingsRows } from "../lib/settingsUtils"
 import { buildRotationSnapshotRows, BuildRotationResult } from "../lib/rotationSnapshots"
 import { LaunchBarrierResult, launchConfigIdentity, identityFromRows, verifyLaunchConfigPersisted } from "../lib/launchConfig"
 import { performSettingsImport, ImportSettingsResult, ImportedProfile } from "../lib/settingsImport"
@@ -45,6 +45,10 @@ export const useSettingsManager = () => {
     // Debounce timer for auto-saving settings.
     const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+    // Settings rows as last loaded or written. During a queue the bot copies each trainee slot into the
+    // live rows while memory keeps the Home settings, so routine saves write only the rows changed since.
+    const persistedRef = useRef<PersistedSettingsRows>({})
+
     // Keep the ref in sync with the latest settings.
     useEffect(() => {
         settingsRef.current = bsc.settings
@@ -62,6 +66,13 @@ export const useSettingsManager = () => {
         }
     }, [isSQLiteInitialized, migrationCompleted])
 
+    const saveChangedSettings = useCallback(async (settings: Settings) => {
+        const rows = changedSettingsRows(settings, persistedRef.current)
+        if (rows.length === 0) return
+        await databaseManager.saveSettingsBatch(rows)
+        rememberPersistedRows(persistedRef.current, rows)
+    }, [])
+
     // Auto-save settings to SQLite whenever they change, with debouncing.
     // Skips saving during initial load to avoid re-writing defaults back on startup.
     useEffect(() => {
@@ -78,7 +89,7 @@ export const useSettingsManager = () => {
         autoSaveTimerRef.current = setTimeout(async () => {
             try {
                 logWithTimestamp("[SettingsManager] Auto-saving settings to database...")
-                await databaseManager.saveSettingsBatch(convertSettingsToBatch(settingsRef.current))
+                await saveChangedSettings(settingsRef.current)
                 logWithTimestamp("[SettingsManager] Auto-save completed.")
             } catch (error) {
                 logErrorWithTimestamp(`[SettingsManager] Auto-save failed: ${error}`)
@@ -90,7 +101,7 @@ export const useSettingsManager = () => {
                 clearTimeout(autoSaveTimerRef.current)
             }
         }
-    }, [bsc.settings, isSQLiteInitialized])
+    }, [bsc.settings, isSQLiteInitialized, saveChangedSettings])
 
     /**
      * Save settings to `SQLite` database.
@@ -105,7 +116,7 @@ export const useSettingsManager = () => {
         try {
             // Read from the ref to always get the latest settings.
             const localSettings: Settings = newSettings ? newSettings : settingsRef.current
-            await databaseManager.saveSettingsBatch(convertSettingsToBatch(localSettings))
+            await saveChangedSettings(localSettings)
             endTiming({ status: "success", hasNewSettings: !!newSettings })
         } catch (error) {
             logErrorWithTimestamp(`Error saving settings: ${error}`)
@@ -137,7 +148,7 @@ export const useSettingsManager = () => {
             const localSettings: Settings = newSettings ? newSettings : settingsRef.current
             // Ensure the DB is open before writing. initialize() is idempotent and awaits any in-flight init.
             await databaseManager.initialize()
-            await databaseManager.saveSettingsBatch(convertSettingsToBatch(localSettings))
+            await saveChangedSettings(localSettings)
             endTiming({ status: "success", hasNewSettings: !!newSettings, immediate: true })
         } catch (error) {
             logErrorWithTimestamp(`Error saving settings immediately: ${error}`)
@@ -173,7 +184,9 @@ export const useSettingsManager = () => {
                 // in-flight open; the batch awaits its own transaction commit.
                 flush: async () => {
                     await databaseManager.initialize()
-                    await databaseManager.saveSettingsBatch(convertSettingsToBatch(target))
+                    const rows = convertSettingsToBatch(target)
+                    await databaseManager.saveSettingsBatch(rows)
+                    rememberPersistedRows(persistedRef.current, rows)
                     // The intended content is now durably persisted; a still-pending debounced
                     // auto-save would only rewrite the same rows AFTER verification (or, worse,
                     // rewrite different rows if state changed). Cancel it so no settings write
@@ -228,6 +241,9 @@ export const useSettingsManager = () => {
                 console.warn(sqliteError)
             }
 
+            const persisted: PersistedSettingsRows = {}
+            rememberPersistedRows(persisted, convertSettingsToBatch(newSettings))
+
             // Apply all migrations to the settings.
             const { settings: migratedSettings, anyMigrated } = applyMigrations(newSettings)
             newSettings = migratedSettings
@@ -235,13 +251,16 @@ export const useSettingsManager = () => {
             // If any migration occurred, save the migrated settings back to the database.
             if (anyMigrated) {
                 try {
-                    await databaseManager.saveSettingsBatch(convertSettingsToBatch(newSettings))
+                    const rows = convertSettingsToBatch(newSettings)
+                    await databaseManager.saveSettingsBatch(rows)
+                    rememberPersistedRows(persisted, rows)
                     logWithTimestamp("[SettingsManager] Saved migrated settings to database.")
                 } catch (migrationSaveError) {
                     logErrorWithTimestamp("[SettingsManager] Error saving migrated settings:", migrationSaveError)
                 }
             }
 
+            persistedRef.current = persisted
             bsc.setSettings(newSettings)
             // Mark that the initial load has completed so auto-save can begin.
             hasLoadedRef.current = true
@@ -347,7 +366,9 @@ export const useSettingsManager = () => {
                     // An import is never a selection: clear and revoke before the save, but report the import only once it is saved.
                     revokeSupersededDiagnostic(requestDiagnostic(null))
                     const clearedRevision = diagnosticRequest().revision
-                    await databaseManager.saveSettingsBatch(convertSettingsToBatch(settings))
+                    const rows = convertSettingsToBatch(settings)
+                    await databaseManager.saveSettingsBatch(rows)
+                    rememberPersistedRows(persistedRef.current, rows)
                     markDiagnosticClearedByImport(clearedRevision)
                 },
                 applySettings: (settings) => {
@@ -548,7 +569,9 @@ export const useSettingsManager = () => {
 
             // Save default settings to SQLite database.
             revokeSupersededDiagnostic(requestDiagnostic(null))
-            await databaseManager.saveSettingsBatch(convertSettingsToBatch(defaultSettingsCopy))
+            const rows = convertSettingsToBatch(defaultSettingsCopy)
+            await databaseManager.saveSettingsBatch(rows)
+            rememberPersistedRows(persistedRef.current, rows)
 
             // Update the current settings in context.
             bsc.setSettings(defaultSettingsCopy)
