@@ -1836,11 +1836,17 @@ class CareerLaunchNavigator(private val context: Context) {
         val skipState = readSkipPill(bitmap)
         skipStateLog.record(skipState)
         if (skipState.pillVisible) {
-            if (isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone)) {
+            val previousCareerScreensAhead = (previousCareerCompleteMode || finalizeToHomeMode) && !launchFlowEntered
+            if (isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone, previousCareerScreensAhead)) {
                 return LaunchScreenState.QUICK_MODE_PROMPT
             }
-            val reason = if (resumeInProgressCareerMode || careerInFlightMode) "career resume in progress" else "skip already maxed"
-            MessageLog.i(TAG, "[NAV] Skip pill with $reason -> TAP_TO_CONTINUE (in-career tap-to-continue screen).")
+            val reason =
+                when {
+                    resumeInProgressCareerMode || careerInFlightMode -> "a career resume is in progress"
+                    previousCareerScreensAhead -> "the previous career's screens come before Home"
+                    else -> "this launch already handled its Quick Mode screen"
+                }
+            MessageLog.i(TAG, "[NAV] Skip pill -> TAP_TO_CONTINUE, not the launch Quick Mode screen: $reason.")
             return LaunchScreenState.TAP_TO_CONTINUE
         }
 
@@ -3292,6 +3298,9 @@ class CareerLaunchNavigator(private val context: Context) {
         }
     }
 
+    /** Null when the asset is missing: keep-dialog names then fall back to the fold-only comparison. */
+    private val sparkNameCatalog by lazy { com.steve1316.uma_android_automation.utils.VeteranFactorDomain.loadFromAssets(context) }
+
     private fun handleSparksKeepConfirmationInner(abandoned: java.util.concurrent.atomic.AtomicBoolean): TransitionResult {
         val transition = "SPARKS_KEEP_CONFIRMATION -> POST_RUN_RESULTS"
         val transaction = SparkRerollGate.transaction
@@ -3389,6 +3398,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         evidence,
                         retries,
                         maxStarRetries,
+                        resolveName = { name, kind -> sparkNameCatalog?.resolve(name, kind)?.canonicalName },
                     )
                 when (verdict) {
                     is SparkKeepVerdict.Confirm -> break

@@ -5,9 +5,10 @@ import com.steve1316.uma_android_automation.types.StatName
 /**
  * Career-outcome label for the `[CAREER_END]` ledger, from the task result code and whether the bot confirmed a force-end.
  * - `INCOMPLETE`: a user stop or bot failure; never a force-end, so branch on the result code first.
- * - `FORCE_END`: observed at its source (today only a lost mandatory race the game will not let us retry past).
- * - `COMPLETED`: reached the career-end screen with no confirmed force-end; a true win or an unflagged early force-end,
- *   which `turn` separates.
+ * - `FORCE_END`: observed at its source: a lost mandatory race the game will not let us retry past, or the career-end
+ *   screen reached before the Finale season ([endedBeforeFinale]).
+ * - `COMPLETED`: reached the career-end screen with no confirmed force-end; a true win, or a career whose last turn
+ *   was never read.
  */
 internal fun classifyCareerOutcome(resultCode: TaskResultCode, careerForceEnded: Boolean): String =
     when {
@@ -15,6 +16,13 @@ internal fun classifyCareerOutcome(resultCode: TaskResultCode, careerForceEnded:
         careerForceEnded -> "FORCE_END"
         else -> "COMPLETED"
     }
+
+/**
+ * Every scenario's full arc runs through the Finale season (turns 73-75); the game ends a career before it only on a
+ * missed goal. The turn must be one read off the screen: an unread turn proves nothing.
+ */
+internal fun endedBeforeFinale(resultCode: TaskResultCode, lastObservedTurn: Int?): Boolean =
+    resultCode == TaskResultCode.TASK_RESULT_COMPLETE && lastObservedTurn != null && lastObservedTurn <= 72
 
 /**
  * Splits the `COMPLETED` ambiguity: `finaleWins >= finaleRaces > 0` is `WIN`, `finaleWins < finaleRaces` is

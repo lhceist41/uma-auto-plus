@@ -197,6 +197,10 @@ class InCareerSkipFix {
  * was called to resume a career that is already running: it starts false on every call, so the
  * first in-career cutscene pill read as the launch prompt and received the launch handler's two
  * blind pill taps, cycling an already-maxed pill back down toward Off.
+ *
+ * A between-run or finalize call also starts on the previous career's own pill screens, before Home
+ * ([previousCareerScreensAhead]); taking one of those for the prompt spends the latch, and the new
+ * career's real prompt is then body-tapped through with Skip Off.
  */
-fun isLaunchQuickModePrompt(resumingInProgressCareer: Boolean, skipToggleAlreadyDone: Boolean): Boolean =
-    !resumingInProgressCareer && !skipToggleAlreadyDone
+fun isLaunchQuickModePrompt(resumingInProgressCareer: Boolean, skipToggleAlreadyDone: Boolean, previousCareerScreensAhead: Boolean): Boolean =
+    !resumingInProgressCareer && !skipToggleAlreadyDone && !previousCareerScreensAhead

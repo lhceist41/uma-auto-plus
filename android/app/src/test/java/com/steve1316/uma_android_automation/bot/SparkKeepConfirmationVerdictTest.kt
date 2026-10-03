@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.utils.VeteranFactorDomain
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -197,6 +198,64 @@ class SparkKeepConfirmationVerdictTest {
         fun `containment needs a distinctive length so short fragments cannot alias`() {
             assertFalse(SparkTextNorm.namesCompatible("Up", "Ramp Up"))
             assertFalse(SparkTextNorm.namesCompatible("Wit", "Wits"))
+        }
+    }
+
+    @Nested
+    @DisplayName("catalog name snap (shipped spark-name catalog)")
+    inner class CatalogSnap {
+        private val catalog =
+            VeteranFactorDomain.parse(File(kotlinRoot(), "../../../../assets/${VeteranFactorDomain.ASSET_NAME}").readText())
+                ?: error("the shipped spark-name catalog should parse")
+        private val resolve: (String, SparkRowKind) -> String? = { name, kind -> catalog.resolve(name, kind).canonicalName }
+
+        /** The live Trackblazer set: the SPARKS screen read the unique's "☆" as "*", the keep dialog as "t". */
+        private val liveOriginal =
+            listOf(
+                fact("Power", 1, SparkRowKind.STAT),
+                fact("Medium", 2, SparkRowKind.APTITUDE),
+                fact("Flashy*Landing", 2, SparkRowKind.UNIQUE),
+                fact("Straightaway Recovery", 3, SparkRowKind.WHITE),
+                fact("Medium Corners O", 2, SparkRowKind.WHITE),
+            )
+        private val liveEvidence = liveOriginal.map { SparkStarEvidence(it.stars, 0) }
+
+        private fun verdict(original: List<SparkRowFact>, dialog: List<SparkRowFact>, resolveName: (String, SparkRowKind) -> String? = resolve) =
+            keepDialogVerdict(original, dialog, original.map { SparkStarEvidence(it.stars, 0) }, 0, 2, resolveName)
+
+        @Test
+        fun `the live glyph-noise pair confirms through the catalog and blocked without it`() {
+            val dialog = withName(liveOriginal, 2, "Flashyt Landing")
+            assertEquals(SparkKeepVerdict.Confirm, keepDialogVerdict(liveOriginal, dialog, liveEvidence, 0, 2, resolve))
+            assertTrue(keepDialogVerdict(liveOriginal, dialog, liveEvidence, 0, 2) is SparkKeepVerdict.Block)
+        }
+
+        @Test
+        fun `other glyph noise on the same name confirms`() {
+            for (noisy in listOf("Flashy+Landing", "Flashy|Landing", "FlashyLanding", "Flashyy Landing", "Flasy Landing")) {
+                assertEquals(SparkKeepVerdict.Confirm, verdict(liveOriginal, withName(liveOriginal, 2, noisy)), noisy)
+            }
+        }
+
+        @Test
+        fun `the live Roman numeral pair confirms`() {
+            val original = listOf(fact("Queen Elizabeth I| Cup", 1, SparkRowKind.WHITE))
+            assertEquals(SparkKeepVerdict.Confirm, verdict(original, listOf(fact("Queen Elizabeth II Cup", 1, SparkRowKind.WHITE))))
+        }
+
+        @Test
+        fun `real names one or two letters apart still block`() {
+            val pairs = listOf("Risk-Taker" to "Risk-Maker", "Burning Spirit SPD" to "Burning Spirit STA", "Wisdom of the Sea" to "Wisdom of the Sun", "Tokai Stakes" to "Toki Stakes")
+            for ((a, b) in pairs) {
+                val result = verdict(listOf(fact(a, 1, SparkRowKind.WHITE)), listOf(fact(b, 1, SparkRowKind.WHITE)))
+                assertTrue(result is SparkKeepVerdict.Block, "$a vs $b: got $result")
+            }
+        }
+
+        @Test
+        fun `a read the catalog cannot place still blocks`() {
+            val dialog = withName(liveOriginal, 2, "Qzxv Wkpl")
+            assertTrue(verdict(liveOriginal, dialog) is SparkKeepVerdict.Block)
         }
     }
 

@@ -34,19 +34,42 @@ class QuickModePromptRoutingTest {
     inner class RoutingDecision {
         @Test
         fun `a launch call whose Quick Mode prompt is still owed routes to the launch handler`() {
-            assertTrue(isLaunchQuickModePrompt(resumingInProgressCareer = false, skipToggleAlreadyDone = false))
+            assertTrue(isLaunchQuickModePrompt(resumingInProgressCareer = false, skipToggleAlreadyDone = false, previousCareerScreensAhead = false))
         }
 
         @Test
         fun `a launch call that already maxed skip routes to tap-to-continue`() {
-            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = false, skipToggleAlreadyDone = true))
+            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = false, skipToggleAlreadyDone = true, previousCareerScreensAhead = false))
         }
 
         @Test
         fun `a career resume never routes to the launch handler, whatever the latch says`() {
             // The regression: a fresh navigate() during a running career starts with the latch false.
-            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = true, skipToggleAlreadyDone = false))
-            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = true, skipToggleAlreadyDone = true))
+            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = true, skipToggleAlreadyDone = false, previousCareerScreensAhead = false))
+            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = true, skipToggleAlreadyDone = true, previousCareerScreensAhead = false))
+        }
+
+        @Test
+        fun `the previous career's pill screens never route to the launch handler`() {
+            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = false, skipToggleAlreadyDone = false, previousCareerScreensAhead = true))
+        }
+
+        /** The live queue's second launch: a pill on the previous career's end screens, then Home, then the new career's prompt. */
+        @Test
+        fun `a second launch in the same queue still reaches its own Quick Mode prompt`() {
+            var skipToggleAlreadyDone = false
+            var launchFlowEntered = false
+            val routed = mutableListOf<String>()
+            for (screen in listOf("previous career pill", "Home", "new career prompt pill", "new career cutscene pill")) {
+                if (screen == "Home") {
+                    launchFlowEntered = true
+                    continue
+                }
+                val prompt = isLaunchQuickModePrompt(false, skipToggleAlreadyDone, previousCareerScreensAhead = !launchFlowEntered)
+                if (prompt) skipToggleAlreadyDone = true
+                routed += if (prompt) "QUICK_MODE_PROMPT" else "TAP_TO_CONTINUE"
+            }
+            assertEquals(listOf("TAP_TO_CONTINUE", "QUICK_MODE_PROMPT", "TAP_TO_CONTINUE"), routed)
         }
     }
 
@@ -63,10 +86,16 @@ class QuickModePromptRoutingTest {
                 "a second emission point would bypass the guard",
             )
             val emit = nav.indexOf("return LaunchScreenState.QUICK_MODE_PROMPT")
-            val guard = nav.lastIndexOf("isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone)", emit)
+            val guard = nav.lastIndexOf("isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone, previousCareerScreensAhead)", emit)
             assertTrue(guard in (emit - 200) until emit, "the emission is guarded by the routing decision")
             val pillVisible = nav.lastIndexOf("if (skipState.pillVisible) {", emit)
-            assertTrue(pillVisible in (emit - 400) until guard, "a frame with no pill never reaches the decision")
+            assertTrue(pillVisible in (emit - 600) until guard, "a frame with no pill never reaches the decision")
+        }
+
+        @Test
+        fun `only a between-run or finalize call before Home holds the prompt back`() {
+            assertTrue(nav.contains("val previousCareerScreensAhead = (previousCareerCompleteMode || finalizeToHomeMode) && !launchFlowEntered"))
+            assertTrue(nav.contains("launchFlowEntered = false"), "reset per navigate() call")
         }
 
         @Test

@@ -112,4 +112,30 @@ class CareerOutcomeTest {
         // A force-end that somehow also observed finale races must never be relabeled a WIN.
         assertEquals("FORCE_END", classifyCareerQuality("FORCE_END", finaleRaces = 3, finaleWins = 3))
     }
+
+    private fun ledgerOutcome(code: TaskResultCode, lastObservedTurn: Int?) = classifyCareerOutcome(code, endedBeforeFinale(code, lastObservedTurn))
+
+    @Test
+    @DisplayName("A career the game ended on a lost goal before the Finale is FORCE_END, with no Try Again seen")
+    fun `career end before the finale is force_end`() {
+        // URA and Unity Cup both ended at turn 56 after the last Alarm Clock retry of a lost goal race.
+        assertEquals("FORCE_END", ledgerOutcome(TaskResultCode.TASK_RESULT_COMPLETE, 56))
+        assertEquals("FORCE_END", ledgerOutcome(TaskResultCode.TASK_RESULT_COMPLETE, 24))
+        assertEquals("FORCE_END", ledgerOutcome(TaskResultCode.TASK_RESULT_COMPLETE, 72))
+    }
+
+    @Test
+    @DisplayName("A career that reached the Finale season stays COMPLETED")
+    fun `career end in the finale stays completed`() {
+        for (turn in 73..75) assertEquals("COMPLETED", ledgerOutcome(TaskResultCode.TASK_RESULT_COMPLETE, turn))
+        assertEquals("WIN", classifyCareerQuality(ledgerOutcome(TaskResultCode.TASK_RESULT_COMPLETE, 75), finaleRaces = 3, finaleWins = 3))
+    }
+
+    @Test
+    @DisplayName("An unread end turn or a stopped run is never a force-end")
+    fun `unread turn or non-complete is never force_end`() {
+        assertEquals("COMPLETED", ledgerOutcome(TaskResultCode.TASK_RESULT_COMPLETE, null))
+        assertEquals("INCOMPLETE", ledgerOutcome(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, 56))
+        assertEquals(false, endedBeforeFinale(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, 56))
+    }
 }

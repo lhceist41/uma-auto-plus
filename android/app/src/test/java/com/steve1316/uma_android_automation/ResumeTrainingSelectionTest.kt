@@ -63,8 +63,8 @@ class ResumeTrainingSelectionTest {
     inner class QuickMode {
         @Test
         fun `a career in flight never reads a Skip pill as the prompt, and a fresh launch still does`() {
-            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = true, skipToggleAlreadyDone = false))
-            assertTrue(isLaunchQuickModePrompt(resumingInProgressCareer = false, skipToggleAlreadyDone = false))
+            assertFalse(isLaunchQuickModePrompt(resumingInProgressCareer = true, skipToggleAlreadyDone = false, previousCareerScreensAhead = false))
+            assertTrue(isLaunchQuickModePrompt(resumingInProgressCareer = false, skipToggleAlreadyDone = false, previousCareerScreensAhead = false))
         }
     }
 
@@ -124,7 +124,7 @@ class ResumeTrainingSelectionTest {
             assertTrue(navigator.contains("careerInFlightMode = careerInFlight\n"))
             assertEquals(6, count(navigator, "careerInFlightMode"), "declaration, its mention in the navigate() KDoc, assignment, the pill decision and its log reason, and the event-choices handoff only")
             assertTrue(body(navigator, "private fun handleTapToContinue(").contains("careerInFlightMode || careerResumed) && IconTrainingEventHorseshoe.check("))
-            assertTrue(navigator.contains("isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone)"))
+            assertTrue(navigator.contains("isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone, previousCareerScreensAhead)"))
             // A launch that starts over from the title screen keeps it.
             assertTrue(body(navigator, "private fun startLaunchOver(").contains("resumeInProgressCareer, coldStartOnHome, careerInFlight)"))
         }

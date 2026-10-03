@@ -554,6 +554,10 @@ sealed class SparkKeepVerdict {
  * blocks outright. Star mismatches are retried on fresh frames (a single frame can misread 3* as 2*) and block only if
  * they reproduce with unambiguous slot evidence; with ambiguous slots they confirm corroboratively. The side-selected
  * Original-vs-Rerolled confirmation does NOT use this rule: there a star misread can select the wrong side.
+ *
+ * Two name reads that fold apart still agree when [resolveName] snaps both onto the same catalog name for the row's kind
+ * (a "☆" read as "*" on one frame and "t" on the next); a read the catalog cannot place, or two different catalog names,
+ * still block.
  */
 fun keepDialogVerdict(
     original: List<SparkRowFact>,
@@ -561,6 +565,7 @@ fun keepDialogVerdict(
     evidence: List<SparkStarEvidence>?,
     retriesUsed: Int,
     maxRetries: Int,
+    resolveName: (String, SparkRowKind) -> String? = { _, _ -> null },
 ): SparkKeepVerdict {
     if (dialog.size != original.size) {
         return SparkKeepVerdict.Block(
@@ -574,7 +579,7 @@ fun keepDialogVerdict(
                     "(${original[i].kind.wire}); not confirming",
             )
         }
-        if (!SparkTextNorm.namesCompatible(original[i].name, dialog[i].name)) {
+        if (!SparkTextNorm.namesCompatible(original[i].name, dialog[i].name) && !sameCatalogName(original[i], dialog[i], resolveName)) {
             return SparkKeepVerdict.Block(
                 "keep-dialog row ${i + 1} (\"${dialog[i].name}\") contradicts the original set read on the SPARKS screen " +
                     "(\"${original[i].name}\"); not confirming",
@@ -591,6 +596,11 @@ fun keepDialogVerdict(
         "keep-dialog row ${i + 1} (${dialog[i].kind.wire}/${dialog[i].stars}*) contradicts the original set read on the SPARKS screen " +
             "(${original[i].kind.wire}/${original[i].stars}*) with unambiguous star evidence on every retry; not confirming",
     )
+}
+
+private fun sameCatalogName(a: SparkRowFact, b: SparkRowFact, resolveName: (String, SparkRowKind) -> String?): Boolean {
+    val canonical = resolveName(a.name, a.kind) ?: return false
+    return canonical == resolveName(b.name, b.kind)
 }
 
 sealed class SparkPagerResolution {

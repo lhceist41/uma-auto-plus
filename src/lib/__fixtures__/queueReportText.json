@@ -257,6 +257,25 @@
             }
         },
         {
+            "name": "single run: the game ended the career on a missed goal",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "totalRuns": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_COMPLETE",
+                        "outcome": "FORCE_END"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Career ended early",
+                "reason": "The game ended the career early: a goal was missed.",
+                "nextAction": null
+            }
+        },
+        {
             "name": "single run: stopped",
             "report": {
                 "kind": "SINGLE_RUN_ENDED",

@@ -42,7 +42,7 @@ internal fun lastReportPayload(raw: String?): String? {
         .toString()
 }
 
-private val SUCCESS_TITLES = setOf("Queue finished", "Career finished", "Diagnostic ended", "Nothing to resume")
+private val SUCCESS_TITLES = setOf("Queue finished", "Career finished", "Career ended early", "Diagnostic ended", "Nothing to resume")
 
 private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
     val total = r.optInt("totalRuns")
@@ -52,6 +52,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
     val lastRun = r.optJSONArray("runs")?.let { runs -> runs.optJSONObject(runs.length() - 1) }
     val lastCode = lastRun?.optString("resultCode")
     val lastRetried = lastRun?.optBoolean("retried") == true
+    val lastForceEnded = lastCode == "TASK_RESULT_COMPLETE" && lastRun?.optString("outcome") == "FORCE_END"
     val key = r.optString("reasonKey")
     return when (end) {
         SessionEnd.REFUSED_NO_APP_START ->
@@ -74,7 +75,12 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
             val summary = if (done >= total) (if (total == 1) "The run is done." else "All $total runs are done.") else "$done of ${runs(total)} are done."
             ReportText(if (done >= total) "Queue finished" else "Queue ended", summary + runNotes(r), null)
         }
-        SessionEnd.SINGLE_RUN_ENDED -> if (key == ONLY_OTHER_OUTFIT) singleRunOutfitText(r) else singleRunText(lastCode)
+        SessionEnd.SINGLE_RUN_ENDED ->
+            when {
+                key == ONLY_OTHER_OUTFIT -> singleRunOutfitText(r)
+                lastForceEnded -> ReportText("Career ended early", "The game ended the career early: a goal was missed.", null)
+                else -> singleRunText(lastCode)
+            }
         SessionEnd.STOPPED_BY_USER -> ReportText("Queue stopped", "You stopped the queue with $done of ${runs(total)} done." + runNotes(r), null)
         SessionEnd.STOPPED_BY_BOT -> {
             val why = keyText(key, r)

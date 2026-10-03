@@ -181,8 +181,8 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Stops the End-screen and Learn-screen handlers from running the careerComplete plan twice. */
     private var bCareerEndSkillsHandled: Boolean = false
 
-    /** Set on a lost mandatory race the game will not let us retry. Other force-ends (fan / Result-Pts checkpoint misses) are not observable at their
-     * trigger and stay outcome=COMPLETED; only `turn` distinguishes them from a win. */
+    /** Set on a lost mandatory race the game will not let us retry, or at the career end when it came before the Finale season ([endedBeforeFinale]):
+     * a goal race lost again after the last retry shows no Try Again, and fan / Result-Pts checkpoint misses are not observable at their trigger. */
     private var careerForceEnded: Boolean = false
 
     private var forceEndReason: String? = null
@@ -3566,6 +3566,7 @@ abstract class Campaign(game: Game) : Task(game) {
         val careerEndFp = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot)
         StartModule.lastCareerEndScenario = scenarioToken
         StartModule.lastCareerEndFp = careerEndFp
+        if (endedBeforeFinale(result.code, if (date.dayObserved) date.day else null)) markCareerForceEnded("ENDED_BEFORE_FINALE")
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
         StartModule.lastCareerEndOutcome = outcome
         StartModule.lastCareerEndTurn = if (date.dayObserved) date.day else null
