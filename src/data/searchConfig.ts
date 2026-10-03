@@ -848,7 +848,7 @@ const searchConfig: SearchOption[] = [
         id: "settings-enable-remote-log-viewer",
         title: "Enable Remote Log Viewer",
         description:
-            "Starts a dashboard and log viewer on this device when the bot runs, to watch your queue from your PC. It can be opened only on this device, or on a computer connected to it over ADB: run the adb forward command shown on this page, then open the localhost address in your browser.",
+            "Starts a dashboard and log viewer on this device when the bot runs, to watch your queue from your PC. It can be opened only on this device, or on a computer connected to it over ADB. On Windows with MuMu, download the Open Dashboard zip from the latest release and double-click open-dashboard.cmd; otherwise run the adb forward command shown on this page, then open the localhost address in your browser.",
         page: "DebugSettings",
     },
     {

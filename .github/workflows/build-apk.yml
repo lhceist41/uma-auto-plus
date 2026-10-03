@@ -138,6 +138,8 @@ jobs:
                 echo ""
                 echo "Can be installed alongside the upstream steve1316 app without conflicts."
                 echo ""
+                echo '**Watch your queue from a Windows PC with MuMu:** download `UMA-Auto-Plus-Open-Dashboard.zip`, extract it and double-click `open-dashboard.cmd`.'
+                echo ""
                 echo "See the [full changelog](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md) for the complete history."
               } > "$NOTES_FILE"
             fi
@@ -159,6 +161,29 @@ jobs:
           fi
           echo "notes_path=$NOTES_FILE" >> $GITHUB_OUTPUT
 
+      # Players have no repository checkout, so the dashboard helper ships as one zip. The scripts are
+      # converted to CRLF because cmd.exe and Notepad expect it and the repository stores them as LF.
+      - name: Package dashboard helper
+        run: |
+          mkdir dashboard-helper
+          cp tools/open-dashboard.cmd tools/open-dashboard.ps1 dashboard-helper/
+          cat > dashboard-helper/README.txt <<'EOF'
+          UMA Auto+ dashboard helper for Windows with MuMu Player
+
+          1. Right-click the zip, choose Extract All, and open the folder it makes. Do not run the files from inside the zip.
+          2. In UMA Auto+, open Settings, then Debug Settings, turn on Enable Remote Log Viewer and press Start.
+          3. Double-click open-dashboard.cmd. Windows may warn that it is a downloaded script: choose Run (or More info, then Run anyway).
+          4. Your browser opens the dashboard. Enter the access code shown under Remote Log Viewer in UMA Auto+.
+
+          The helper only links MuMu to your PC so the page can load. Nothing is installed or changed.
+          If MuMu's ADB port is not 16384 or your Server Port is not 9000, open a Command Prompt in this folder and run, for example:
+          .\open-dashboard.cmd -Endpoint 127.0.0.1:7555 -Port 9100
+          Add -DryRun to see what it would do without running anything.
+          EOF
+          sed -i 's/\r$//; s/$/\r/' dashboard-helper/*
+          cd dashboard-helper
+          python3 -m zipfile -c ../UMA-Auto-Plus-Open-Dashboard.zip open-dashboard.cmd open-dashboard.ps1 README.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -168,6 +193,7 @@ jobs:
             ${{ steps.find_apks.outputs.apk_arm64 }}
             ${{ steps.find_apks.outputs.apk_arm32 }}
             ${{ steps.find_apks.outputs.apk_x86 }}
+            UMA-Auto-Plus-Open-Dashboard.zip
           draft: false
           prerelease: false
         env:

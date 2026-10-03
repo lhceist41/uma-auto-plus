@@ -377,7 +377,7 @@ const DebugSettings = () => {
                                     })
                                 }}
                                 label="Enable Remote Log Viewer"
-                                description="Starts a dashboard and log viewer on this device when the bot runs. To open it on a computer, use the adb forward command below, then the localhost address. The dashboard only shows what the bot is doing."
+                                description="Starts a dashboard and log viewer on this device when the bot runs. To open it on a computer, follow the steps that appear below once it is on. The dashboard only shows what the bot is doing."
                             />
 
                             <View style={bsc.settings.debug.enableRemoteLogViewer ? {} : { display: "none" }}>
@@ -412,12 +412,35 @@ const DebugSettings = () => {
                                     <View>
                                         <Text style={styles.infoDescription}>
                                             📡 The Remote Log Viewer is bound to the device&apos;s loopback interface, so it is not exposed on the network, and it asks for the access code below. Reach
-                                            it from your computer over adb:
+                                            it from your computer over adb.
                                         </Text>
-                                        <Text style={[styles.infoLabel, { marginTop: 8 }]}>
-                                            adb forward tcp:{bsc.settings.debug.remoteLogViewerPort} tcp:{bsc.settings.debug.remoteLogViewerPort}
+                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>
+                                            On Windows with MuMu, download UMA-Auto-Plus-Open-Dashboard.zip on your PC from the latest release at the address below, extract it and double-click
+                                            open-dashboard.cmd. The dashboard opens in your browser; enter the access code below.
                                         </Text>
-                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>Then open this URL in your computer&apos;s browser:</Text>
+                                        <Text selectable style={[styles.infoLabel, { marginTop: 8 }]}>
+                                            github.com/lhceist41/uma-auto-plus/releases/latest
+                                        </Text>
+                                        {bsc.settings.debug.remoteLogViewerPort !== bsc.defaultSettings.debug.remoteLogViewerPort && (
+                                            <Text style={[styles.infoDescription, { marginTop: 8 }]}>
+                                                The helper uses Server Port {bsc.defaultSettings.debug.remoteLogViewerPort}. For your port, run .\open-dashboard.cmd -Port{" "}
+                                                {bsc.settings.debug.remoteLogViewerPort} in a Command Prompt opened in its folder.
+                                            </Text>
+                                        )}
+                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>
+                                            Or by hand in PowerShell with MuMu&apos;s own adb (the folder name can differ by MuMu version; use the ADB port from MuMu&apos;s settings if it is not
+                                            16384):
+                                        </Text>
+                                        <Text selectable style={[styles.infoLabel, { marginTop: 8 }]}>
+                                            {`& "C:\\Program Files\\Netease\\MuMuPlayerGlobal-12.0\\shell\\adb.exe" connect 127.0.0.1:16384`}
+                                        </Text>
+                                        <Text selectable style={[styles.infoLabel, { marginTop: 8 }]}>
+                                            {`& "C:\\Program Files\\Netease\\MuMuPlayerGlobal-12.0\\shell\\adb.exe" -s 127.0.0.1:16384 forward tcp:${bsc.settings.debug.remoteLogViewerPort} tcp:${bsc.settings.debug.remoteLogViewerPort}`}
+                                        </Text>
+                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>
+                                            On a phone, connect it first, then run adb forward tcp:{bsc.settings.debug.remoteLogViewerPort} tcp:{bsc.settings.debug.remoteLogViewerPort}.
+                                        </Text>
+                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>After the manual steps, open this URL in your computer&apos;s browser:</Text>
                                         <Text
                                             style={[styles.infoLabel, { marginTop: 8, textDecorationLine: "underline" }]}
                                             onPress={() => Linking.openURL(`http://localhost:${bsc.settings.debug.remoteLogViewerPort}`)}
