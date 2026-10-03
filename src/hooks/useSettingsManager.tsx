@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useMemo, useRef, useCallback } from "react"
+import { NativeModules } from "react-native"
 import * as Application from "expo-application"
 import * as FileSystem from "expo-file-system"
 import * as Sharing from "expo-sharing"
@@ -11,12 +12,18 @@ import { deepMerge, convertSettingsToBatch, applyMigrations, withBundledData } f
 import { buildRotationSnapshotRows, BuildRotationResult } from "../lib/rotationSnapshots"
 import { LaunchBarrierResult, launchConfigIdentity, identityFromRows, verifyLaunchConfigPersisted } from "../lib/launchConfig"
 import { performSettingsImport, ImportSettingsResult, ImportedProfile } from "../lib/settingsImport"
+import { diagnosticRequest, markDiagnosticClearedByImport, requestDiagnostic } from "../lib/diagnosticLaunch"
 
 /** Flush-stall ceiling for the Start barrier. Generous enough for a healthy write, short
  * enough that a stalled writer surfaces a retryable failure instead of a frozen Start. */
 const LAUNCH_FLUSH_TIMEOUT_MS = 8000
 
 export { deepMerge, convertSettingsToBatch, applyMigrations }
+
+/** Replaced settings never keep a diagnostic selection; revoke it natively before the superseding save, as the Debug Settings toggle does. */
+function revokeSupersededDiagnostic(launchId: string | null) {
+    if (launchId !== null) NativeModules.StartModule.revokeDiagnosticLaunch(launchId).catch(() => NativeModules.StartModule.stop())
+}
 
 /**
  * Manages settings persistence using `SQLite` database.
@@ -337,7 +344,11 @@ export const useSettingsManager = () => {
                     return { settings: importedSettings, profiles: sanitizedProfiles }
                 },
                 saveSettings: async (settings) => {
+                    // An import is never a selection: clear and revoke before the save, but report the import only once it is saved.
+                    revokeSupersededDiagnostic(requestDiagnostic(null))
+                    const clearedRevision = diagnosticRequest().revision
                     await databaseManager.saveSettingsBatch(convertSettingsToBatch(settings))
+                    markDiagnosticClearedByImport(clearedRevision)
                 },
                 applySettings: (settings) => {
                     bsc.setSettings(settings)
@@ -536,6 +547,7 @@ export const useSettingsManager = () => {
             const defaultSettingsCopy = withBundledData(JSON.parse(JSON.stringify(defaultSettings)), settingsRef.current)
 
             // Save default settings to SQLite database.
+            revokeSupersededDiagnostic(requestDiagnostic(null))
             await databaseManager.saveSettingsBatch(convertSettingsToBatch(defaultSettingsCopy))
 
             // Update the current settings in context.

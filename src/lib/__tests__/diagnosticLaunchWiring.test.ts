@@ -1,7 +1,7 @@
 import fs from "fs"
 import path from "path"
 import { transformSync } from "@babel/core"
-import { acknowledgeDiagnosticRequest, consumeDiagnosticRequest, diagnosticLaunch, diagnosticRequest, requestDiagnostic } from "../diagnosticLaunch"
+import { acknowledgeDiagnosticRequest, checkDiagnosticLaunch, consumeDiagnosticRequest, diagnosticLaunch, diagnosticRequest, requestDiagnostic, startRefusal } from "../diagnosticLaunch"
 import { identityFromRows, launchConfigIdentity, verifyLaunchConfigPersisted } from "../launchConfig"
 import { convertSettingsToBatch } from "../settingsUtils"
 import { buildRotationSnapshotRows, RotationEntry } from "../rotationSnapshots"
@@ -33,17 +33,19 @@ function harness() {
     const StartModule = { getAccessibilityStatus: async () => ({ enabled: true, active: true }), setVerifiedLaunchIdentity: jest.fn(async () => "token"), start, stop: jest.fn(), revokeDiagnosticLaunch: jest.fn(async (_launchId: string) => true) }
     const bindings = {
         bsc, debugTestKeys: [key, other], saveSettingsImmediate: jest.fn(async (_settings: unknown) => {}),
-        requestDiagnostic, diagnosticRequest, diagnosticLaunch, consumeDiagnosticRequest, acknowledgeDiagnosticRequest,
+        requestDiagnostic, diagnosticRequest, diagnosticLaunch, consumeDiagnosticRequest, acknowledgeDiagnosticRequest, checkDiagnosticLaunch, startRefusal,
         StartModule, NativeModules: { StartModule },
+        Alert: { alert: jest.fn((_title: string, _message: string, buttons: { onPress: () => void }[]) => buttons[1].onPress()) },
         setAccessibilityRequirement: jest.fn(), setShowAccessibilityDialog: jest.fn(),
         logErrorWithTimestamp: jest.fn(), logWithTimestamp: jest.fn(), setPresetSaveState: jest.fn(), showSnackbar: jest.fn(),
-        startGate: { mayLaunch: () => true },
+        startGate: { mayLaunch: () => true, begin: () => true, end: () => {} },
         flushAndVerifyLaunchConfig: async () => ({ ok: true, persisted: { revision: 1, hash: "verified" } }),
         prepareTraineeRotation: jest.fn(async () => []),
     }
-    return { key, other, bsc, start, bindings,
+    const launch = callback("src/pages/Home/index.tsx", "runStartSequence", bindings)
+    return { key, other, bsc, start, bindings, launch,
         toggle: callback("src/pages/DebugSettings/index.tsx", "handleDebugTestToggle", bindings),
-        launch: callback("src/pages/Home/index.tsx", "runStartSequence", bindings) }
+        press: callback("src/pages/Home/index.tsx", "proceedToStart", { ...bindings, runStartSequence: launch }) }
 }
 
 test("positive control: ordinary Start reaches the native handoff", async () => {
@@ -384,4 +386,58 @@ test("the settings manager rejects an already invalid intent before clearing sna
     expect(await rotation.prepare(() => false)).toBeNull()
     expect(rotation.clear).not.toHaveBeenCalled()
     expect(rotation.write).not.toHaveBeenCalled()
+})
+
+describe("a refused Start names its reason", () => {
+    test("positive control: a normal Start asks once and reaches the native handoff", async () => {
+        const h = harness()
+        await h.press()
+        expect(h.bindings.Alert.alert).toHaveBeenCalledTimes(1)
+        expect(h.start).toHaveBeenCalledTimes(1)
+        expect(h.bindings.showSnackbar).not.toHaveBeenCalled()
+    })
+
+    test("a used diagnostic selection says it was used", async () => {
+        const h = harness()
+        h.toggle(h.key, true)
+        await h.press()
+        await h.press()
+        expect(h.start).toHaveBeenCalledTimes(1)
+        expect(h.bindings.showSnackbar).toHaveBeenCalledWith("This diagnostic test selection was already used. Select the test again in Debug Settings to run it again, or turn it off there for a normal Start.", "error")
+    })
+
+    test("a diagnostic left on from before the app started is refused before the normal Start question", async () => {
+        const h = harness()
+        h.bsc.settings.debug[h.key] = true
+        await h.press()
+        expect(h.bindings.Alert.alert).not.toHaveBeenCalled()
+        expect(h.start).not.toHaveBeenCalled()
+        expect(h.bindings.showSnackbar).toHaveBeenCalledWith("A diagnostic test is turned on but was not selected since the app started. Select it again in Debug Settings to run it, or turn it off there for a normal Start.", "error")
+    })
+
+    test("settings that no longer match the selected test say so", async () => {
+        const h = harness()
+        h.toggle(h.key, true)
+        h.bsc.settings.debug[h.other] = true
+        await h.press()
+        expect(h.start).not.toHaveBeenCalled()
+        expect(h.bindings.showSnackbar).toHaveBeenCalledWith("The diagnostic tests turned on in Debug Settings no longer match the one you selected. Select the test again there, or turn it off for a normal Start.", "error")
+    })
+
+    test("an unrelated start failure is not reported as a diagnostic problem", async () => {
+        const h = harness()
+        h.toggle(h.key, true)
+        h.bindings.StartModule.setVerifiedLaunchIdentity = jest.fn(async () => { throw new Error("bridge failed") })
+        await h.press()
+        expect(h.start).not.toHaveBeenCalled()
+        expect(h.bindings.showSnackbar.mock.calls).toEqual([["Something went wrong before the bot started, so nothing started. Press Start to try again.", "error"]])
+        expect(h.bindings.logErrorWithTimestamp).toHaveBeenCalledWith("[START] Start failed", expect.any(Error))
+    })
+
+    test("only the diagnostic check's own refusals carry a reason", () => {
+        expect(startRefusal(new Error("Diagnostic settings no longer match the requested test"))).toBeNull()
+        expect(startRefusal(Object.assign(new Error("x"), { refusal: "toString" }))).toBeNull()
+        expect(startRefusal(null)).toBeNull()
+        expect(startRefusal("used")).toBeNull()
+    })
 })

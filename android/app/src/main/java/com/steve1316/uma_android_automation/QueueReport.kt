@@ -701,6 +701,14 @@ internal fun isLaunchGateRefusal(error: Throwable, snapshotReadStarted: Boolean,
     return !insideSnapshotRead && (error is IllegalStateException || error is IllegalArgumentException)
 }
 
+/** The player-readable log line for a [isLaunchGateRefusal] refusal; the raw reason goes to logcat only. */
+internal fun launchRefusalLine(error: Throwable): String =
+    if (error is IllegalStateException) {
+        "[START] Nothing was started: each session needs a fresh Start in UMA Auto+. Press Start there, then tap the overlay button."
+    } else {
+        "[START] Nothing was started: the settings did not pass the launch check. Press Start in UMA Auto+ again; if this repeats, check the selected diagnostic test and scenario."
+    }
+
 /** The running session's heartbeat file under `filesDir`, kept out of settings.db so the periodic write never opens the database. */
 internal const val HEARTBEAT_FILE = "queue_heartbeat"
 

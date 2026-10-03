@@ -5,14 +5,15 @@ import { defaultSettings } from "../../context/BotStateContext"
 import { identityFromRows, launchConfigIdentity, verifyLaunchConfigPersisted } from "../launchConfig"
 import { applyMigrations, convertSettingsToBatch, deepMerge, withBundledData } from "../settingsUtils"
 import { performSettingsImport } from "../settingsImport"
+import { acknowledgeDiagnosticRequest, checkDiagnosticLaunch, diagnosticLaunch, diagnosticRequest, markDiagnosticClearedByImport, requestDiagnostic, startRefusal } from "../diagnosticLaunch"
 
 // Import the real defaults without loading the provider's native styling runtime.
 jest.mock("react-native-css-interop/jsx-runtime", () => jest.requireActual("react/jsx-runtime"))
 
 // Runs the settings manager's real callbacks against an in-memory settings table, so an import or a
 // reset followed by the real Start check behaves as on a device.
-function callback(name: string, bindings: Record<string, unknown>) {
-    const source = fs.readFileSync(path.join(process.cwd(), "src/hooks/useSettingsManager.tsx"), "utf8")
+function callback(name: string, bindings: Record<string, unknown>, file = "src/hooks/useSettingsManager.tsx") {
+    const source = fs.readFileSync(path.join(process.cwd(), file), "utf8")
     const start = source.indexOf(`    const ${name} = `)
     const end = source.indexOf("\n", source.indexOf("\n    }", start) + 1)
     if (start < 0 || end < start) throw new Error(`Missing callback ${name}`)
@@ -68,6 +69,7 @@ function device() {
         setCurrentProfileName: jest.fn(),
     }
     let fileText = ""
+    const revokeSupersededDiagnostic = jest.fn()
     const bindings: Record<string, unknown> = {
         bsc,
         settingsRef,
@@ -78,6 +80,10 @@ function device() {
         convertSettingsToBatch,
         withBundledData,
         performSettingsImport,
+        diagnosticRequest,
+        markDiagnosticClearedByImport,
+        requestDiagnostic,
+        revokeSupersededDiagnostic,
         launchConfigIdentity,
         verifyLaunchConfigPersisted,
         identityFromRows,
@@ -99,6 +105,7 @@ function device() {
         rows,
         bsc,
         databaseManager,
+        revokeSupersededDiagnostic,
         setFile: (text: string) => {
             fileText = text
         },
@@ -172,5 +179,111 @@ describe("Start after importing or resetting settings", () => {
         expect(result.ok).toBe(false)
         expect(result.stage).toBe("verify")
         expect(result.reason).toMatch(/config hash/)
+    })
+})
+
+const ROSTER_TEST = "debugMode_startVeteranRosterScanTest"
+
+/** Presses Home's Start against the device's live settings; the start sequence itself is a stub. */
+async function pressStart(d: ReturnType<typeof device>) {
+    const ui = { runStartSequence: jest.fn(async () => {}), alert: jest.fn((_title: string, _message: string, buttons: { onPress: () => void }[]) => buttons[1].onPress()), showSnackbar: jest.fn() }
+    await callback(
+        "proceedToStart",
+        {
+            bsc: d.bsc, startGate: { begin: () => true, end: () => {} }, Alert: { alert: ui.alert }, runStartSequence: ui.runStartSequence, showSnackbar: ui.showSnackbar,
+            checkDiagnosticLaunch, diagnosticRequest, requestDiagnostic, startRefusal, logWithTimestamp: jest.fn(), logErrorWithTimestamp: jest.fn(),
+        },
+        "src/pages/Home/index.tsx"
+    )()
+    return ui
+}
+
+const IMPORTED = "The imported settings turn on a diagnostic test. Select it again in Debug Settings to run it, or turn it off there for a normal Start."
+const NOT_SELECTED = "A diagnostic test is turned on but was not selected since the app started. Select it again in Debug Settings to run it, or turn it off there for a normal Start."
+
+describe("Diagnostic tests after importing or resetting settings", () => {
+    beforeEach(() => {
+        requestDiagnostic(null)
+    })
+
+    it("positive control: a plain import then Start asks for normal Start and starts", async () => {
+        const d = device()
+        d.setFile(exported(d.bsc.settings, () => {}))
+        await d.importSettings("file")
+        const ui = await pressStart(d)
+        expect(ui.alert).toHaveBeenCalledTimes(1)
+        expect(ui.runStartSequence).toHaveBeenCalledWith(true)
+        expect(ui.showSnackbar).not.toHaveBeenCalled()
+    })
+
+    it("an import that turns on a diagnostic refuses Start with the import reason, before the normal Start question", async () => {
+        const d = device()
+        d.setFile(exported(d.bsc.settings, (s) => (s.debug[ROSTER_TEST] = true)))
+        expect((await d.importSettings("file")).outcome).toBe("success")
+        const ui = await pressStart(d)
+        expect(ui.showSnackbar).toHaveBeenCalledWith(IMPORTED, "error")
+        expect(ui.alert).not.toHaveBeenCalled()
+        expect(ui.runStartSequence).not.toHaveBeenCalled()
+    })
+
+    it("an import never counts as a selection, even of the diagnostic selected before it", async () => {
+        const d = device()
+        requestDiagnostic(ROSTER_TEST)
+        d.bsc.settings.debug[ROSTER_TEST] = true
+        d.setFile(exported(d.bsc.settings, () => {}))
+        await d.importSettings("file")
+        expect(diagnosticRequest().key).toBeNull()
+        expect(() => diagnosticLaunch(d.bsc.settings, true)).toThrow()
+        const ui = await pressStart(d)
+        expect(ui.showSnackbar).toHaveBeenCalledWith(IMPORTED, "error")
+        expect(ui.runStartSequence).not.toHaveBeenCalled()
+    })
+
+    it("an import revokes an acknowledged request before it saves, and asks for normal Start again", async () => {
+        const d = device()
+        diagnosticLaunch(d.bsc.settings, true)
+        acknowledgeDiagnosticRequest(diagnosticRequest().revision, "token")
+        const save = jest.spyOn(d.databaseManager, "saveSettingsBatch")
+        d.setFile(exported(d.bsc.settings, () => {}))
+        await d.importSettings("file")
+        expect(d.revokeSupersededDiagnostic.mock.calls).toEqual([["token"]])
+        expect(d.revokeSupersededDiagnostic.mock.invocationCallOrder[0]).toBeLessThan(save.mock.invocationCallOrder[0])
+        expect(diagnosticRequest()).toMatchObject({ key: null, consumed: false, normalConfirmed: false })
+        expect((await pressStart(d)).alert).toHaveBeenCalledTimes(1)
+    })
+
+    it("an import whose save fails still clears and revokes the selection first, but Start does not blame an import", async () => {
+        const d = device()
+        requestDiagnostic(ROSTER_TEST)
+        acknowledgeDiagnosticRequest(diagnosticRequest().revision, "token")
+        d.bsc.settings.debug[ROSTER_TEST] = true
+        d.setFile(exported(d.bsc.settings, () => {}))
+        const save = jest.spyOn(d.databaseManager, "saveSettingsBatch").mockRejectedValue(new Error("disk full"))
+        expect((await d.importSettings("file")).outcome).not.toBe("success")
+        expect(d.revokeSupersededDiagnostic.mock.calls).toEqual([["token"]])
+        expect(d.revokeSupersededDiagnostic.mock.invocationCallOrder[0]).toBeLessThan(save.mock.invocationCallOrder[0])
+        expect(diagnosticRequest().key).toBeNull()
+        const ui = await pressStart(d)
+        expect(ui.showSnackbar).toHaveBeenCalledWith(NOT_SELECTED, "error")
+        expect(ui.showSnackbar).not.toHaveBeenCalledWith(IMPORTED, "error")
+        expect(ui.runStartSequence).not.toHaveBeenCalled()
+    })
+
+    it("an unreadable file leaves the current selection alone", async () => {
+        const d = device()
+        requestDiagnostic(ROSTER_TEST)
+        d.setFile("not json")
+        expect((await d.importSettings("file")).outcome).toBe("failure")
+        expect(diagnosticRequest().key).toBe(ROSTER_TEST)
+        expect(d.revokeSupersededDiagnostic).not.toHaveBeenCalled()
+    })
+
+    it("Reset Settings clears and revokes a selected diagnostic", async () => {
+        const d = device()
+        requestDiagnostic(ROSTER_TEST)
+        acknowledgeDiagnosticRequest(diagnosticRequest().revision, "token")
+        expect(await d.resetSettings()).toBe(true)
+        expect(d.revokeSupersededDiagnostic.mock.calls).toEqual([["token"]])
+        expect(diagnosticRequest().key).toBeNull()
     })
 })

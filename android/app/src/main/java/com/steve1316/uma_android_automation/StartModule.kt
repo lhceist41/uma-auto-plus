@@ -2785,9 +2785,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     }
                 }
             } catch (e: Throwable) {
-                // Only records how the session ended; the exception propagates unchanged. Only the
-                // gate's own refusal before dispatch returned counts as a refused launch.
-                if (!ledger.dispatchReturned && isLaunchGateRefusal(e, launchSnapshotReadStarted, launchSnapshotReadFinished)) ledger.launchRefused = true else ledger.unexpectedError = true
+                // Only the gate's own refusal before dispatch returned counts as a refused launch. It is expected, so it logs
+                // one readable line; a rethrow would reach EventBus's exception handler, which logs the whole stack trace.
+                if (!ledger.dispatchReturned && isLaunchGateRefusal(e, launchSnapshotReadStarted, launchSnapshotReadFinished)) {
+                    ledger.launchRefused = true
+                    Log.i(TAG, "[START] Launch refused: ${e.message}")
+                    MessageLog.w(TAG, launchRefusalLine(e))
+                    return
+                }
+                ledger.unexpectedError = true
                 throw e
             } finally {
                 // Always release the wake lock and the session latch, even on exception or break paths.

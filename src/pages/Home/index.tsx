@@ -6,7 +6,7 @@ import { useSettings } from "../../context/SettingsContext"
 import { logWithTimestamp, logErrorWithTimestamp } from "../../lib/logger"
 import { sessionStateReducer, initialSessionState, sessionPhase } from "../../lib/sessionState"
 import { Alert, Animated, AppState, DeviceEventEmitter, StyleSheet, TouchableOpacity, View, NativeModules } from "react-native"
-import { acknowledgeDiagnosticRequest, consumeDiagnosticRequest, diagnosticLaunch, diagnosticRequest, requestDiagnostic } from "../../lib/diagnosticLaunch"
+import { acknowledgeDiagnosticRequest, checkDiagnosticLaunch, consumeDiagnosticRequest, diagnosticLaunch, diagnosticRequest, requestDiagnostic, startRefusal } from "../../lib/diagnosticLaunch"
 import { Snackbar } from "react-native-paper"
 import { MessageLogContext } from "../../context/MessageLogContext"
 import { useTheme } from "../../context/ThemeContext"
@@ -662,6 +662,8 @@ const Home = () => {
             return
         }
         try {
+            // Refuse before the normal Start question, so a confirmed Start is never refused afterwards.
+            checkDiagnosticLaunch(bsc.settings, true)
             let normalConfirmed = false
             if (diagnosticRequest().key === null && !diagnosticRequest().normalConfirmed) {
                 normalConfirmed = await new Promise<boolean>((resolve) => {
@@ -676,8 +678,14 @@ const Home = () => {
             }
             await runStartSequence(normalConfirmed)
         } catch (error) {
-            logErrorWithTimestamp("[START] Diagnostic launch rejected", error)
-            showSnackbar("Could not verify the requested launch. Select the diagnostic again, or cancel it in Debug Settings before normal Start.", "error")
+            const refusal = startRefusal(error)
+            if (refusal) {
+                logWithTimestamp(`[START] Start refused: ${refusal.reason}`)
+                showSnackbar(refusal.text, "error")
+            } else {
+                logErrorWithTimestamp("[START] Start failed", error)
+                showSnackbar("Something went wrong before the bot started, so nothing started. Press Start to try again.", "error")
+            }
         } finally {
             startGate.end()
         }

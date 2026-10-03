@@ -535,6 +535,18 @@ class QueueReportTest {
         }
 
         @Test
+        fun `a refusal logs one readable line without the raw reason`() {
+            val overlay = launchRefusalLine(IllegalStateException("Start again from UMA Auto+ with an explicit launch choice"))
+            val settings = launchRefusalLine(IllegalArgumentException("Diagnostic arms do not match the requested handler"))
+            assertTrue(overlay.contains("fresh Start in UMA Auto+"), overlay)
+            assertTrue(settings.contains("did not pass the launch check"), settings)
+            for (line in listOf(overlay, settings)) {
+                assertTrue(line.startsWith("[START] Nothing was started: ") && '\n' !in line, line)
+                assertFalse(line.contains("Exception") || line.contains("explicit launch choice") || line.contains("Diagnostic arms"), line)
+            }
+        }
+
+        @Test
         fun `any other exception type is an error, before or after the read`() {
             for (finished in listOf(false, true)) {
                 assertFalse(isLaunchGateRefusal(RuntimeException("database is locked"), snapshotReadStarted = finished, snapshotReadFinished = finished))

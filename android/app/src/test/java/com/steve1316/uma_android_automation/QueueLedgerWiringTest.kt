@@ -135,19 +135,18 @@ class QueueLedgerWiringTest {
         }
 
         @Test
-        fun `a refused start and an escaped exception are recorded and rethrown`() {
+        fun `a refused start logs one readable line and an escaped exception is recorded and rethrown`() {
             val catchAt = session.indexOf("} catch (e: Throwable) {")
             val finallyAt = session.indexOf("} finally {", catchAt)
             assertTrue(catchAt in 0 until finallyAt, "the session catch must sit right before its finally")
             val body = session.substring(catchAt, finallyAt)
-            assertTrue(
-                body.contains(
-                    "if (!ledger.dispatchReturned && isLaunchGateRefusal(e, launchSnapshotReadStarted, launchSnapshotReadFinished)) " +
-                        "ledger.launchRefused = true else ledger.unexpectedError = true",
-                ),
-                "only the gate's own refusals before dispatch returned are a refused launch",
-            )
-            assertTrue(body.trimEnd().endsWith("throw e"), "the exception must propagate unchanged")
+            val refusalAt = body.indexOf("if (!ledger.dispatchReturned && isLaunchGateRefusal(e, launchSnapshotReadStarted, launchSnapshotReadFinished)) {")
+            assertTrue(refusalAt >= 0, "only the gate's own refusals before dispatch returned are a refused launch")
+            val refusal = body.substring(refusalAt).substringBefore("\n                }\n")
+            val lines = refusal.lines().drop(1).map { it.trim() }
+            assertEquals(listOf("ledger.launchRefused = true", "Log.i(TAG, \"[START] Launch refused: \${e.message}\")", "MessageLog.w(TAG, launchRefusalLine(e))", "return"), lines, "a refusal logs one line and does not rethrow")
+            val rest = body.substring(refusalAt + refusal.length).lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("//") }
+            assertEquals(listOf("}", "ledger.unexpectedError = true", "throw e"), rest, "any other exception is recorded and propagates unchanged")
         }
 
         @Test
