@@ -98,6 +98,9 @@ import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_X_FRACTION
 import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_Y_FRACTION
 import com.steve1316.uma_android_automation.utils.SkipFixOutcome
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.PagedHelpGeometry
+import com.steve1316.uma_android_automation.utils.miscNextBackSwapStreak
+import com.steve1316.uma_android_automation.utils.pagedHelpDialogPresent
 import com.steve1316.uma_android_automation.utils.skipOffPillByColour
 import com.steve1316.uma_android_automation.utils.ProgressEvent
 import com.steve1316.uma_android_automation.utils.ProgressNotification
@@ -236,6 +239,17 @@ abstract class Campaign(game: Game) : Task(game) {
     private val maxConsecutiveMiscBackPresses: Int = 25
 
     private var bMiscBackPressedThisTick: Boolean = false
+
+    /** Each Next undoes a Back, so a Next/Back ping-pong never reaches the Back-press bound. Stop bound, ~80s at the observed tick rate. */
+    private var miscNextBackSwaps: Int = 0
+    private val maxMiscNextBackSwaps: Int = 12
+    private var lastMiscStepWasNext: Boolean? = null
+
+    private var pagedHelpCloseTaps: Int = 0
+    private val maxPagedHelpCloseTaps: Int = 5
+
+    /** A tick without a misc Next, Back or help Close reached some other screen, which ends both streaks. */
+    private var bMiscStepTakenLastTick: Boolean = false
 
     /** Required instance of the Trainee class. */
     val trainee: Trainee = Trainee()
@@ -2715,6 +2729,7 @@ abstract class Campaign(game: Game) : Task(game) {
         } else if (ButtonNext.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
             // Now confirm the completion of a Training Goal popup.
             MessageLog.i(TAG, "[MISC] Popup detected that needs to be dismissed with the \"Next\" button.")
+            recordMiscNextOrBack(nextNow = true)
             game.wait(2.0)
             ButtonNext.click(game.imageUtils)
             game.wait(1.0)
@@ -2757,6 +2772,21 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.i(TAG, "[MISC] Dismissed the Umamusume Class popup via its Close button.")
             game.wait(0.5)
             return true
+        } else if (sourceBitmap.width == 1080 && sourceBitmap.height == 1920 && pagedHelpDialogPresent(SparkPixelSampler { x, y -> sourceBitmap.getPixel(x, y) })) {
+            // Its Back button only turns to the previous page, which the Next branch then turns forward again.
+            bMiscStepTakenLastTick = true
+            pagedHelpCloseTaps++
+            if (pagedHelpCloseTaps > maxPagedHelpCloseTaps) {
+                game.imageUtils.saveBitmap(filename = "misc_paged_help_stuck", fullRes = true)
+                throw InterruptedException(
+                    "Bot tapped Close on a paged help dialog $maxPagedHelpCloseTaps times without it closing. Stopping. " +
+                        "A screenshot was saved to the temp folder as misc_paged_help_stuck.",
+                )
+            }
+            MessageLog.i(TAG, "[MISC] Paged help dialog detected; closing it with its Close button (tap $pagedHelpCloseTaps).")
+            game.tapCoordinate(PagedHelpGeometry.CLOSE_X.toDouble(), PagedHelpGeometry.CLOSE_Y.toDouble(), "paged_help_close")
+            game.wait(1.0)
+            return true
         } else if (ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
             bMiscBackPressedThisTick = true
             consecutiveMiscBackPresses++
@@ -2771,6 +2801,7 @@ abstract class Campaign(game: Game) : Task(game) {
                         "A screenshot was saved to the temp folder as misc_backpress_stuck.",
                 )
             }
+            recordMiscNextOrBack(nextNow = false)
             MessageLog.i(TAG, "[MISC] Navigating back a screen since all the other misc checks have been completed. (consecutive back-presses: $consecutiveMiscBackPresses)")
             // ButtonBack.click does not auto-wait (Components.tap bypasses Game.tap). 0.5s settles the animation; game.wait() still polls waitForLoading().
             game.wait(0.5)
@@ -2786,6 +2817,19 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
         return false
+    }
+
+    private fun recordMiscNextOrBack(nextNow: Boolean) {
+        bMiscStepTakenLastTick = true
+        miscNextBackSwaps = miscNextBackSwapStreak(miscNextBackSwaps, lastMiscStepWasNext, nextNow)
+        lastMiscStepWasNext = nextNow
+        if (miscNextBackSwaps >= maxMiscNextBackSwaps) {
+            game.imageUtils.saveBitmap(filename = "misc_next_back_loop", fullRes = true)
+            throw InterruptedException(
+                "Bot alternated Next and Back $miscNextBackSwaps times without reaching a known screen - each press undid the other. Stopping. " +
+                    "A screenshot was saved to the temp folder as misc_next_back_loop.",
+            )
+        }
     }
 
     /**
@@ -3698,6 +3742,14 @@ abstract class Campaign(game: Game) : Task(game) {
                 requestAccessibilityHalt(A11Y_GRANT_MISSING)
                 throw InterruptedException(reason)
             }
+
+            // Reset here, not at the end of the tick: dialog and main-screen ticks return early.
+            if (!bMiscStepTakenLastTick) {
+                miscNextBackSwaps = 0
+                lastMiscStepWasNext = null
+                pagedHelpCloseTaps = 0
+            }
+            bMiscStepTakenLastTick = false
 
             // We always check for dialogs first.
             if (tryHandleAllDialogs()) {

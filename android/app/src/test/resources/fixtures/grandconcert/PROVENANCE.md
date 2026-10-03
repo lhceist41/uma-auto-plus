@@ -199,6 +199,18 @@ every tap on the disc only opened or closed the menu. Native RGB, 1080x1920.
 | concert_playback_menu_open.png | The same after one tap on the button: a Skip / Rotate pill above the disc, which now holds a close cross |
 | concert_song_acquired.png | After Skip in that menu: the "Song Acquired" notice ("You got a new song!") with Close, over a white screen |
 
+## Tenth capture: the last page of the Lessons help (2026-10-03, MuMu screenshot)
+
+Turn 1 of an unattended career, with the four-page Lessons help open over the career screen. Native
+RGB, 1080x1920. No trainer name or ID is on screen.
+
+| Fixture | Screen |
+|---|---|
+| paged_help_last_page.png | Page 4 of 4: three brown page dots and one green, footer Back / Close / Help, no Next |
+
+It pins `pagedHelpDialogPresent` and the Close tap position. It is the only capture of a paged help
+dialog: the earlier pages (Next in the centre) and other scenarios' help dialogs are not covered.
+
 ## Screens still needed before further automation
 
 1. The lesson list immediately after a successful LEARN (the refresh; we have only after-schedule)
