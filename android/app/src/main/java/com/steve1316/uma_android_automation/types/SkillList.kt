@@ -80,6 +80,30 @@ data class DetailsSkillsResult(val skillNames: List<String>, val uniqueLevel: In
 /** The unique scores through its level bonus, and its name matches its inherited version's row, so counting it as owned too scores it twice. */
 internal fun ownedSkillsWithoutUnique(names: Collection<String>, uniqueName: String?): List<String> = names.filter { it != uniqueName }
 
+/** A row cropped from a frame captured before a verified buy still shows its (+), and the game never un-selects a skill mid-session. */
+internal fun ownedAfterScan(scanObtained: Boolean, name: String, ownedThisSession: Set<String>): Boolean = scanObtained || name in ownedThisSession
+
+/** The bought skill plus every lower version in its chain, which the game completes with it; a gold below a white is inverted data and stays buyable. */
+internal fun namesCoveredByVerifiedBuy(name: String, isGold: (String) -> Boolean, lowerVersionOf: (String) -> String?): Set<String> {
+    val names: MutableSet<String> = linkedSetOf()
+    var current: String? = name
+    while (current != null && names.add(current)) {
+        val lower: String? = lowerVersionOf(current)
+        current = if (lower != null && isGold(lower) && !isGold(current)) null else lower
+    }
+    return names
+}
+
+/** The row's (+) nearest [computed], or null when its band holds none: a tap on the computed point has never registered a buy. */
+internal fun skillUpTapTargetOrSkip(name: String, bandMatches: List<Point>, computed: Point, deadTapSkills: MutableSet<String>, warn: (String) -> Unit): Point? {
+    val nearest: Point? = bandMatches.minByOrNull { kotlin.math.abs(it.y - computed.y) }
+    if (nearest == null) {
+        deadTapSkills.add(name)
+        warn("[WARN] buySkill:: \"$name\" has no (+) on the row within ±50px of y=${computed.y.toInt()}; not tapping. Excluded from re-planning this session.")
+    }
+    return nearest
+}
+
 /**
  * Handles all interactions with the skill list screen and manages the [Trainee]'s skill data.
  *
@@ -108,6 +132,9 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      * this session, and the finalization evidence excludes them under an explicit reason
      * instead of counting them as spendable candidates forever. */
     val deadTapSkills: MutableSet<String> = mutableSetOf()
+
+    /** Names that verified buys this session made owned; never plan-simulation flags. */
+    private val ownedThisSession: MutableSet<String> = mutableSetOf()
 
     /** Why the most recent [parseSkillListEntries] scroll pass ended. The finalization guard
      * needs this to distinguish "no candidates remain" from "the scan never covered the whole
@@ -912,7 +939,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         }
 
         // Update the entry's status and detected price.
-        entry.bIsObtained = bIsObtained
+        entry.bIsObtained = ownedAfterScan(bIsObtained, entry.name, ownedThisSession)
         entry.bIsVirtual = false
         entry.updateScreenPrice(skillPrice)
 
@@ -953,7 +980,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         }
 
         // Update the entry with detected data.
-        entry.bIsObtained = bIsObtained
+        entry.bIsObtained = ownedAfterScan(bIsObtained, entry.name, ownedThisSession)
         entry.bIsVirtual = false
         entry.updateScreenPrice(skillPrice)
 
@@ -1135,7 +1162,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      * @param name The name of the skill to purchase.
      * @param skillUpButtonLocation The screen location where the [ButtonSkillUp] was detected.
      * @return The updated [SkillListEntry] if the purchase was verified, or null if not found,
-     *   unaffordable, or the tap did not register.
+     *   unaffordable, the row has no (+), or the tap did not register.
      */
     fun buySkill(name: String, skillUpButtonLocation: Point): SkillListEntry? {
         val entry: SkillListEntry? = entries[name]
@@ -1163,7 +1190,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // layout, shifting the in-crop template match upward so the computed point lands ~34px above
         // the real button and the tap registers nothing. Re-find the (+) on the full screen within
         // this row's narrow Y band - where the button is unclipped - and tap its true center.
-        val tapTarget: Point = relocateSkillUpButton(skillUpButtonLocation)
+        val tapTarget: Point = relocateSkillUpButton(name, skillUpButtonLocation) ?: return null
         // A buy landing on exactly 0 leaves no readable digit, so the row's (+) vanishing is the fallback signal.
         val zeroLandingCheckable: Boolean = entry.screenPrice == spBefore && isSkillUpButtonAt(tapTarget)
 
@@ -1196,6 +1223,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // tracker refuse an affordable skill (tracker at 42, screen at 55).
         skillPoints = verifiedBalance
         entry.markObtained()
+        ownedThisSession += namesCoveredByVerifiedBuy(name, { entries[it]?.skillData?.bIsGold == true }) { entries[it]?.prev?.name }
         if (spAfter == null) {
             MessageLog.i(TAG, "[SKILLS] buySkill:: \"$name\" spent the whole balance: Skill Points unreadable and its (+) is gone or disabled, so counted as bought with 0 left.")
         }
@@ -1220,21 +1248,18 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      * The per-entry card crop used to derive the tap point can clip the (+) button on the v1.22.0
      * career-end "Learn" layout, shifting the in-crop template match upward so the tap lands above
      * the button. A full-screen template match within a narrow Y band around the computed point
-     * recovers the button's true center (the (+) is unclipped in full context). Falls back to the
-     * computed point if no (+) is found in the band.
+     * recovers the button's true center (the (+) is unclipped in full context).
      *
+     * @param name The skill on this row; recorded as dead-tapped when the band holds no (+).
      * @param computed The tap point computed from the entry crop.
-     * @return The full-screen-detected (+) center nearest [computed], or [computed] if none found.
+     * @return The full-screen-detected (+) center nearest [computed], or null if none found.
      */
-    private fun relocateSkillUpButton(computed: Point): Point {
+    private fun relocateSkillUpButton(name: String, computed: Point): Point? {
         val bandTop: Int = (computed.y - 50).toInt().coerceAtLeast(0)
         val band: IntArray = intArrayOf(0, bandTop, SharedData.displayWidth, 100)
-        val nearest: Point? =
-            ButtonSkillUp.findAll(game.imageUtils, region = band).minByOrNull { kotlin.math.abs(it.y - computed.y) }
-        if (nearest == null) {
-            MessageLog.w(TAG, "[WARN] relocateSkillUpButton:: No (+) found within ±50px of y=${computed.y.toInt()}; using the computed point.")
-            return computed
-        }
+        val nearest: Point =
+            skillUpTapTargetOrSkip(name, ButtonSkillUp.findAll(game.imageUtils, region = band), computed, deadTapSkills) { MessageLog.w(TAG, it) }
+                ?: return null
         if (kotlin.math.abs(nearest.y - computed.y) > 2.0) {
             MessageLog.v(
                 TAG,
@@ -1259,11 +1284,12 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      *
      * @param preserve Skill names whose obtained state is screen-confirmed (Obtained pill detected
      *   during the read pass) and must NOT be reset - clearing them corrupts upgrade-chain pricing
-     *   and ownership reads when re-entering the career-end skill screen.
+     *   and ownership reads when re-entering the career-end skill screen. Names verified-bought this session, with the
+     *   lower versions they completed, are always kept.
      */
     fun sellAllSkills(preserve: Set<String> = emptySet()) {
         for ((name, entry) in getObtainedSkills()) {
-            if (name !in preserve) {
+            if (name !in preserve && name !in ownedThisSession) {
                 entry.sell()
             }
         }
