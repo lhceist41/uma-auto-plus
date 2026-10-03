@@ -1,4 +1,4 @@
-# UMA Auto+
+# UMA Auto+: a training bot for Umamusume: Pretty Derby
 
 [![Latest release](https://img.shields.io/github/v/release/lhceist41/uma-auto-plus?label=latest%20release&color=blue)](https://github.com/lhceist41/uma-auto-plus/releases/latest)
 [![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-informational)](CHANGELOG.md)

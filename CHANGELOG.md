@@ -34,6 +34,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Goal races are read on the right day:** the bot now reads the date on a goal race's race list, so it names that race and its grade instead of the previous turn's, and an Alarm Clock setting such as G1 Only applies to G1 goal races. If the date cannot be read there, the bot uses the last turn it saw, as before.
 - **A career that ends on a lost goal race now shows as ended early** in the queue report, the dashboard and the career log, and the log says what each race retry used.
+- **Opening UMA Auto+ during a queue no longer changes the next careers' settings:** leaving the app used to save all of its settings again, over the trainee settings the queue had loaded for its next run. It now saves only what you changed yourself.
+- **Each queued run starts with its trainee's own settings:** in a queue that rotates trainees, every run now checks that its trainee's saved settings are still in place when it starts and restores them if not. If they still do not match the trainee's scenario, the queue stops before it plays a turn, keeps the career, and tells you to press Start, which continues it with that trainee's settings.
+- **Scenario help pages no longer trap a run:** the bot closes the game's multi-page scenario help with its Close button, and a run that keeps flipping back and forth between two pages now stops on its own instead of looping.
 
 ## [1.6.0] - 2026-09-29
 
