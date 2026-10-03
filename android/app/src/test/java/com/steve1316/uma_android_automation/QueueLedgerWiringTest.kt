@@ -324,6 +324,14 @@ class QueueLedgerWiringTest {
         }
 
         @Test
+        fun `a career ended before the finale is labelled ended early from the observed turn only`() {
+            val ledgerLine = after("override fun careerEndLedgerLine(result: TaskResult): String {", campaign).substringBefore("val record =")
+            val label = ledgerLine.indexOf("if (endedBeforeFinale(result.code, if (date.dayObserved) date.day else null)) markCareerForceEnded(\"ENDED_BEFORE_FINALE\")")
+            assertTrue(label > 0)
+            assertTrue(label < ledgerLine.indexOf("val outcome = classifyCareerOutcome(result.code, careerForceEnded)"), "the label must be set before the outcome is classified")
+        }
+
+        @Test
         fun `the launching phase refreshes the open record too`() {
             val launching = after("saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)")
             val next = launching.lineSequence().drop(1).take(4).joinToString("\n")

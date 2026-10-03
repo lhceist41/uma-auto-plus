@@ -321,6 +321,7 @@ class StatusBoardTest {
         for (other in listOf("Daily Races", "Team Trials", "", null)) {
             assertEquals(null, StatusBoard.courseJson(other), "course for $other")
         }
+        assertEquals("Senior Year" to "Late December", StatusBoard.dateLabels("SENIOR YEAR", "LATE", "DECEMBER", 73, "Daily Races"))
     }
 
     @Test
