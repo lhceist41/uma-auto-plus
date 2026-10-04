@@ -279,6 +279,7 @@ private fun resumedSentence(r: JSONObject): String {
 private fun withFinalizeStop(text: ReportText, r: JSONObject): ReportText {
     if (!r.has("finalizeStopKey")) return text
     val why = keyText(r.optString("finalizeStopKey"), JSONObject())
+    if (r.optString("finalizeStopKey") == CAREER_NOT_FINISHED) return ReportText("Career not finished", "The career was played to its end, but ${why.reason}", "Press Start in UMA Auto+.")
     return ReportText(text.title, "${text.reason} The bot then stopped before the game was back on its home screen: ${why.reason}", why.fix?.let { "$it." } ?: text.nextAction)
 }
 
@@ -374,6 +375,8 @@ internal val REPORT_REASON_KEYS =
                 "the career in the game is from a different scenario than this run's settings. The career is kept.",
                 "Select a preset for that career's scenario on Home, discarding any saved queue there, or finish the career in the game",
             ),
+        CAREER_NOT_FINISHED to
+            KeyText("the game's daily reset or another interruption stopped the career's Finish. The career is kept, and Start finishes it.", null),
         "CONNECTION_LOST" to KeyText("the game lost its connection to its server and did not reconnect in time.", "Check the device's internet connection and clear the error in the game"),
         "DOWNLOAD_FAILED" to KeyText("the game could not finish downloading its data.", "Check the device's internet connection and let the game finish its download"),
         "DATA_DOWNLOAD_PROMPT" to
@@ -419,6 +422,9 @@ private fun keyText(key: String, r: JSONObject): KeyText =
 
 /** Trainee Select found the trainee only in an outfit her plain preset skips. */
 private const val ONLY_OTHER_OUTFIT = "TRAINEE_ONLY_OTHER_OUTFIT"
+
+/** The game was back on Home with the finished career still in progress. */
+private const val CAREER_NOT_FINISHED = "CAREER_NOT_FINISHED"
 
 private fun namedOutfit(key: String, r: JSONObject): Pair<String, String>? {
     if (key != ONLY_OTHER_OUTFIT) return null

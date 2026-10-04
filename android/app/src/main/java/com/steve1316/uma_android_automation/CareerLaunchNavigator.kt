@@ -157,6 +157,20 @@ internal fun borrowRowMatchesPreference(rowText: String, preference: String): Bo
 }
 
 /**
+ * After the bot finished a career, a career still in the game's slot means the game never took the
+ * Finish (the daily reset bounced it). A career this navigation launched itself is not that one.
+ * [careerInSlot] is read only when it can decide.
+ */
+internal fun careerStillInSlotAfterFinish(followsFinishedCareer: Boolean, newCareerLaunched: Boolean, careerInSlot: () -> Boolean): Boolean =
+    followsFinishedCareer && !newCareerLaunched && careerInSlot()
+
+/**
+ * Whether a launch latch starts a new career: only after this navigation saw Home, since the game's own
+ * intro after a relaunch latches it before Home too. A finalize never launches one.
+ */
+internal fun launchesNewCareer(finalizeToHome: Boolean, homeSeen: Boolean): Boolean = !finalizeToHome && homeSeen
+
+/**
  * Result of a navigation attempt between runs.
  *
  * @property success Whether navigation completed successfully.
@@ -600,6 +614,13 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private var previousCareerCompleteMode: Boolean = false
 
+    /** True when this navigation follows a career the bot finished ([finalizeToHomeMode] or
+     * [previousCareerCompleteMode]) in a career scenario. Set per navigate(). */
+    private var followsFinishedCareer: Boolean = false
+
+    /** True once a launch latched after Home in this navigation ([launchesNewCareer]). Reset per navigate(). */
+    private var newCareerLaunched: Boolean = false
+
     /** Single-run trainee expectation (set per navigate() call by Game.kt's auto-navigation from
      * general.appliedPresetTrainee). When non-blank, the Trainee Select gate arms and the handler
      * verifies/hunts THIS name - never queueState.currentTrainee, whose stale leftover from an
@@ -918,6 +939,7 @@ class CareerLaunchNavigator(private val context: Context) {
         legacyAutoSelectAlreadyDone = false
         lineageCaptureAttempted = false
         careerLaunchInitiated = false
+        newCareerLaunched = false
         borrowDuplicateReplacements = 0
         borrowExcludedCharacters.clear()
         lastBorrowPickEntry = null
@@ -964,6 +986,9 @@ class CareerLaunchNavigator(private val context: Context) {
         finalizeGuardActive = SettingsHelper.getStringSetting("skills", "skillSpendMode").trim().lowercase() == "adaptive"
         finalizeToHomeMode = finalizeToHome
         previousCareerCompleteMode = previousCareerComplete
+        val scenario = SettingsHelper.getStringSetting("general", "scenario")
+        // Daily Races and Team Trials finish no career: one in the slot is the player's own.
+        followsFinishedCareer = (finalizeToHome || previousCareerComplete) && scenario != "Daily Races" && scenario != "Team Trials"
         resumeInProgressCareerMode = resumeInProgressCareer
         careerInFlightMode = careerInFlight
         // Resolve the trainee THIS launch must roster-verify. The queue launch paths (StartModule's
@@ -1290,6 +1315,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     RosterLivenessPolicy.mayLatchCareerLaunch(rosterSelectionPending)
                 ) {
                     careerLaunchInitiated = true
+                    if (launchesNewCareer(finalizeToHomeMode, homeSeen = launchFlowEntered)) newCareerLaunched = true
                 }
             } else {
                 if (betweenRunRecovery.downloadingData(SystemClock.elapsedRealtime())) {
@@ -2040,7 +2066,9 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
             LaunchScreenState.HOME_SCREEN ->
-                if (finalizeToHomeMode) {
+                if (careerStillInSlotAfterFinish(followsFinishedCareer, newCareerLaunched) { homeShowsCareerInProgress() }) {
+                    careerNotFinished("HOME_SCREEN -> (the career is still in progress)")
+                } else if (finalizeToHomeMode) {
                     // Final-run finalize: reaching the home lobby means the career-end flow
                     // (summary, results, sparks/reroll, dialogs) is done. Stop here instead of
                     // starting another career.
@@ -2267,6 +2295,9 @@ class CareerLaunchNavigator(private val context: Context) {
      * in-career screens.
      */
     private fun handleContinueCareerDialog(): TransitionResult {
+        if (careerStillInSlotAfterFinish(followsFinishedCareer, newCareerLaunched) { true }) {
+            return careerNotFinished("CONTINUE_CAREER_DIALOG -> (the career is still in progress)")
+        }
         MessageLog.i(TAG, "[NAV] Continue Career dialog detected. Clicking 'Resume'...")
 
         if (ButtonResume.click(iu)) {
@@ -2288,6 +2319,25 @@ class CareerLaunchNavigator(private val context: Context) {
             reason = "CONTINUE_CAREER_DIALOG detected (ButtonResume matched) but click failed.",
             transition = "CONTINUE_CAREER_DIALOG -> ACTIVE_TRAINING_MENU",
             recommendedAction = "Manually click 'Resume' to continue your career.",
+        )
+    }
+
+    /** The CAREER button's in-progress wordmark, on either lobby skin, at its own bar on two captures a second apart. */
+    private fun homeShowsCareerInProgress(): Boolean {
+        fun wordmark(bitmap: Bitmap) = ButtonCareerHomeTextActive.check(iu, sourceBitmap = bitmap) || ButtonCareerHomeTextEvent.check(iu, sourceBitmap = bitmap)
+        if (!wordmark(iu.getSourceBitmap())) return false
+        waitSafe(1.0)
+        return wordmark(iu.getSourceBitmap())
+    }
+
+    /** The career the bot finished is still in the slot: stop without tapping, so Start finishes it under its own run. */
+    private fun careerNotFinished(transition: String): TransitionResult.Failed {
+        MessageLog.e(TAG, "[NAV] [FINALIZE] The finished career is still in progress in the game: its Finish did not go through. Stopping; nothing was tapped.")
+        return TransitionResult.Failed(
+            reason = "The career is still in progress after its Finish.",
+            transition = transition,
+            recommendedAction = "Press Start to finish the career under its own run.",
+            reasonKey = "CAREER_NOT_FINISHED",
         )
     }
 

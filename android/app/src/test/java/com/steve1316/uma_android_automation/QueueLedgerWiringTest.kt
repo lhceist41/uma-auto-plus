@@ -55,8 +55,8 @@ class QueueLedgerWiringTest {
         @Test
         fun `each queueHaltReason assignment records its ending right beside it`() {
             val sites = Regex("queueHaltReason = \"").findAll(session).map { it.range.first }.toList()
-            // Thirteen: the ten halts, a launch whose trainee cannot start with no rotation, and a skip that cannot go on.
-            assertEquals(13, sites.size, "the halt sites")
+            // Fourteen: the eleven halts, a launch whose trainee cannot start with no rotation, and a skip that cannot go on.
+            assertEquals(14, sites.size, "the halt sites")
             val ends =
                 sites.map { site ->
                     val block = session.substring(site, session.indexOf('\n', session.indexOf('\n', site) + 1))
@@ -374,6 +374,7 @@ class QueueLedgerWiringTest {
                     "TRAINEE_NOT_FOUND",
                     "TRAINEE_ONLY_OTHER_OUTFIT",
                     "GAME_UNRECOVERABLE",
+                    "CAREER_NOT_FINISHED",
                 ),
                 keys,
             )

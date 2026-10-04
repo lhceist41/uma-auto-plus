@@ -387,7 +387,7 @@ class AccessibilityRepairTest {
         fun `the run loop halts resumably after gameRecoveryFailed, before Stop Queue on Error`() {
             val start = source("$main/StartModule.kt")
             val unrecoverable = start.indexOf("ledger.haltEnd = SessionEnd.GAME_UNRECOVERABLE")
-            val halt = start.indexOf("ledger.haltEnd = SessionEnd.RUN_HALTED")
+            val halt = start.indexOf("ledger.haltEnd = SessionEnd.RUN_HALTED", start.indexOf("val accessibilityKey = accessibilityHaltKey"))
             val onError = start.indexOf("ledger.haltEnd = SessionEnd.STOP_ON_ERROR")
             assertTrue(unrecoverable in 0 until halt && halt < onError, "$unrecoverable $halt $onError")
             val block = start.substring(start.lastIndexOf("if (accessibilityKey != null) {", halt), start.indexOf("break", halt))

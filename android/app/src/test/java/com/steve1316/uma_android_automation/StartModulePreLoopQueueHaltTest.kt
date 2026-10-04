@@ -38,7 +38,12 @@ class StartModulePreLoopQueueHaltTest {
         val start = Regex("var completedRuns\\b").find(startModule)?.range?.first ?: -1
         val end = startModule.indexOf("for (i in startFromRun..totalRuns) {")
         assertTrue(start in 0 until end, "the pre-loop region must sit between completedRuns and the run loop")
-        startModule.substring(start, end)
+        // The unfinished-career halt is declared here but only ever called from inside the run loop.
+        val helper = startModule.indexOf("fun haltCareerNotFinished(run: Int) {", start)
+        val calls = Regex(Regex.escape("haltCareerNotFinished(i)")).findAll(startModule).map { it.range.first }.toList()
+        assertTrue(helper in start until end && calls.isNotEmpty() && calls.all { it > end }, "the helper runs only inside the loop")
+        val helperEnd = startModule.indexOf("\n                }\n", helper) + 1
+        startModule.substring(start, helper) + startModule.substring(helperEnd, end)
     }
 
     /** The `r == null` arm of the cold-start rotation snapshot lookup. */

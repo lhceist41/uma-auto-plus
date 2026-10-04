@@ -92,7 +92,7 @@ class QueueReportTextTest {
         fun `the fixture covers every ending and every reason key`() {
             val reports = caseList().map { it.getJSONObject("report") }
             assertEquals(SessionEnd.entries.map { it.name }.toSet(), reports.map { it.optString("kind") }.filter { k -> SessionEnd.entries.any { it.name == k } }.toSet())
-            val keyed = reports.filter { it.optString("kind") in setOf("NAVIGATION_FAILED_BETWEEN_RUNS", "LAUNCH_FAILED_BEFORE_RUN", "STOPPED_BY_BOT") }.map { it.optString("reasonKey") }.toSet()
+            val keyed = reports.filter { it.optString("kind") in setOf("NAVIGATION_FAILED_BETWEEN_RUNS", "LAUNCH_FAILED_BEFORE_RUN", "STOPPED_BY_BOT", "RUN_HALTED") }.map { it.optString("reasonKey") }.toSet()
             assertTrue(keyed.containsAll(REPORT_REASON_KEYS.keys), "missing: ${REPORT_REASON_KEYS.keys - keyed}")
             assertTrue(keyed.contains(""), "the empty key")
             assertTrue(keyed.any { it.isNotEmpty() && it !in REPORT_REASON_KEYS }, "an unknown key")

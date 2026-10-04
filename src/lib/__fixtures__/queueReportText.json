@@ -1413,6 +1413,43 @@
             }
         },
         {
+            "name": "halted in a run: the career's Finish did not go through",
+            "report": {
+                "kind": "RUN_HALTED",
+                "queueEnabled": true,
+                "totalRuns": 2,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "CAREER_NOT_FINISHED"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped during run 2 of 2: the game's daily reset or another interruption stopped the career's Finish. The career is kept, and Start finishes it.",
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "single run: the career's Finish did not go through",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "queueEnabled": false,
+                "totalRuns": 1,
+                "completedRuns": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    }
+                ],
+                "finalizeStopKey": "CAREER_NOT_FINISHED"
+            },
+            "text": {
+                "title": "Career not finished",
+                "reason": "The career was played to its end, but the game's daily reset or another interruption stopped the career's Finish. The career is kept, and Start finishes it.",
+                "nextAction": "Press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "between runs: TRAINEE_NOT_FOUND",
             "report": {
                 "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",

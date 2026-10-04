@@ -2238,6 +2238,20 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     queueHaltCareerInFlight = false
                 }
 
+                // The game never took the Finish of [run]'s career, so it is still in the slot: Start re-enters that run under its own slot.
+                fun haltCareerNotFinished(run: Int) {
+                    queueHaltReason = "run $run's career is still in progress after its Finish"
+                    ledger.haltEnd = SessionEnd.RUN_HALTED
+                    ledger.reasonKey = "CAREER_NOT_FINISHED"
+                    queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
+                    queueHaltRun = run
+                    queueHaltCareerInFlight = true
+                    lastCareerFinished = false
+                    completedRuns--
+                    saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_CAREER, completedRuns = completedRuns)
+                    ledger.phase = StartModule.PHASE_CAREER
+                }
+
                 // Rotation cycle parsed above (before the resume block). The cold-start snapshot for
                 // the first launched run is applied just below, before the home-screen probe reads
                 // the scenario, so a rotation that switches scenarios launches the correct campaign.
@@ -2608,6 +2622,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         attachCareerEndSparks(ledger, i, runCareerEndSeq)
                         if (finalizeResult.success) {
                             MessageLog.i(TAG, "[QUEUE] Career-end flow finished; the game is parked on the home screen.")
+                        } else if (enableRunQueue && finalizeResult.reasonKey == "CAREER_NOT_FINISHED") {
+                            logNavigationFailure(finalizeResult)
+                            haltCareerNotFinished(i)
                         } else {
                             logNavigationFailure(finalizeResult)
                             if (finalizeResult.lastDetectedState != "STOPPED") ledger.finalizeStopKey = finalizeResult.reasonKey
@@ -2653,7 +2670,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     logNavigationFailure(navResult)
                                     // The career-end steps did not finish: the between-run navigation
                                     // failure's halt, not a pause. A user Stop during it is a Stop.
-                                    if (navResult.lastDetectedState != "STOPPED") {
+                                    if (navResult.reasonKey == "CAREER_NOT_FINISHED") {
+                                        haltCareerNotFinished(i)
+                                    } else if (navResult.lastDetectedState != "STOPPED") {
                                         sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Between-run navigation failed after run $i.")
                                         queueHaltReason = "career-end navigation failed after run $i: ${navResult.failureReason}"
                                         ledger.haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS
@@ -2722,7 +2741,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // Same as the cold-start path: a user Stop mid-navigation is not a
                                 // navigation failure - no failure event, the post-loop queueComplete
                                 // reports the ending.
-                                if (navResult.lastDetectedState != "STOPPED") {
+                                if (navResult.reasonKey == "CAREER_NOT_FINISHED") {
+                                    haltCareerNotFinished(i)
+                                } else if (navResult.lastDetectedState != "STOPPED") {
                                     // navResult.failureReason can carry a raw caught-exception string
                                     // (CareerLaunchNavigator's "threw <Exception>: ..." reasons) - safe
                                     // only for MessageLog/Discord above, never for the JS-facing event.
