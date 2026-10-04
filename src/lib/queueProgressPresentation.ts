@@ -60,7 +60,7 @@ export function presentQueueProgress(event: QueueProgressEvent): QueueProgressPr
 
     switch (event.status) {
         case "starting":
-            return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Starting...`, isTerminal: false }
+            return { kind: "running", title: `Run ${currentRun}/${totalRuns} - In progress`, isTerminal: false }
         case "resuming":
             return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Resuming...`, detail: event.message, isTerminal: false }
         case "navigating":

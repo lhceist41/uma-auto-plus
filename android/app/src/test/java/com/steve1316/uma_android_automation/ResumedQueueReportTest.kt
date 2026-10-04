@@ -122,6 +122,22 @@ class ResumedQueueReportTest {
     }
 
     @Test
+    fun `a queue stopped more than once at the same run names each run once`() {
+        fun stops(vararg at: Int) = JSONObject().put("stops", JSONArray().also { arr -> at.forEach { arr.put(JSONObject().put("run", it)) } })
+        val report = completed(ledger(null, startFromRun = 2, total = 2, ownRuns = 2..2))
+        assertEquals("All 2 runs are done. It was resumed after it stopped at run 1.", queueReportText(report.put("earlier", stops(1, 1))).reason)
+        assertEquals("All 2 runs are done. It was resumed after it stopped at runs 1 and 2.", queueReportText(report.put("earlier", stops(1, 1, 2))).reason)
+        assertEquals("All 2 runs are done. It was resumed after it stopped at run 2.", queueReportText(report.put("earlier", stops(2, 2))).reason)
+        assertEquals("All 2 runs are done. It was resumed after it stopped 2 times.", queueReportText(report.put("earlier", stops(1, 0))).reason)
+    }
+
+    @Test
+    fun `a one-run queue that is not done says the run is, not are`() {
+        val report = completed(ledger(null, startFromRun = 1, total = 1, ownRuns = 1..1)).put("completedRuns", 0)
+        assertEquals("0 of 1 run is done.", queueReportText(report).reason)
+    }
+
+    @Test
     fun `a finished career whose finalize stopped before Home says the bot stopped and why`() {
         val l = ledger(null, startFromRun = 1, total = 1, ownRuns = 1..1).apply { finalizeStopKey = "DIALOG_NOT_CLOSED" }
         val text = queueReportText(completed(l))

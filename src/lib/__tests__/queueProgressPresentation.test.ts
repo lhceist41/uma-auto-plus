@@ -26,7 +26,7 @@ describe("presentQueueProgress", () => {
 
     it("presents a fresh queue starting", () => {
         const p = presentQueueProgress({ currentRun: 1, totalRuns: 4, status: "starting" })
-        expect(p).toEqual({ kind: "running", title: "Run 1/4 - Starting...", isTerminal: false })
+        expect(p).toEqual({ kind: "running", title: "Run 1/4 - In progress", isTerminal: false })
     })
 
     it("presents a resumed queue starting with the auto-resume reason", () => {
@@ -203,7 +203,7 @@ describe("presentQueueProgress", () => {
 
     it("clamps a negative or non-finite count to zero", () => {
         const p = presentQueueProgress({ currentRun: -3, totalRuns: NaN, status: "starting" })
-        expect(p.title).toBe("Run 0/0 - Starting...")
+        expect(p.title).toBe("Run 0/0 - In progress")
     })
 })
 

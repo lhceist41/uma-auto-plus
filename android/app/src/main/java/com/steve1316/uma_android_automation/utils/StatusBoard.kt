@@ -240,8 +240,8 @@ internal object StatusBoard {
     /** The career-end record stores a scenario with underscores ("Grand_Concert"); the page shows the name. */
     private fun scenarioName(stored: String?): Any = stored?.replace('_', ' ') ?: JSONObject.NULL
 
-    /** A run's display name: the name the game showed, else the stored identifier with its spaces back. */
-    private fun displayName(record: RunRecord): String? = record.traineeName ?: record.trainee?.replace('_', ' ')
+    /** A run's display name: the name the game showed, else the stored identifier with its spaces back; null when the career-end line had no name ("unknown"). */
+    private fun displayName(record: RunRecord): String? = record.traineeName ?: record.trainee?.takeUnless { it == "unknown" }?.replace('_', ' ')
 
     private fun runState(code: String): String =
         when {

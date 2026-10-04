@@ -316,6 +316,34 @@ test('buildRunRow: an unrecognised state fails closed to WAITING, not a guessed 
   assert.equal(row.result, 'WAITING');
 });
 
+test('buildRunRow: a run that has not started says its trainee is named at launch, not "not available"', () => {
+  const next = logic.buildRunRow({ n: 2, state: 'next', trainee: null, scenario: null }, false, '#E8B84B');
+  assert.equal(next.trainee, 'Named when it starts');
+  assert.equal(next.scenario, '');
+  assert.ok(next.aria.includes('Named when it starts'));
+  const stopped = logic.buildRunRow({ n: 3, state: 'stopped', trainee: null, scenario: null }, false, '#E8B84B');
+  assert.equal(stopped.trainee, 'not available');
+  const named = logic.buildRunRow({ n: 2, state: 'next', trainee: 'Vodka', scenario: 'URA Finale' }, false, '#E8B84B');
+  assert.equal(named.trainee, 'Vodka');
+});
+
+test('the run slip and the row name a not-started run the same way, and a one-run queue says "1 run"', () => {
+  const next = { n: 2, state: 'next', trainee: null, scenario: null };
+  assert.equal(logic.pendingTraineeText(next), logic.buildRunRow(next, false, '#E8B84B').trainee);
+  assert.equal(logic.pendingTraineeText({ n: 2, state: 'next', trainee: 'Vodka', scenario: 'URA Finale' }), 'Vodka');
+  assert.equal(logic.pendingTraineeText({ n: 2, state: 'stopped', trainee: null, scenario: null }), 'not available');
+  const armed = (total) => logic.viewModel(statusWith({ statusKey: 'armed', run: { current: 1, total: total }, runs: [] }), connectedNow()).banner.stripe[0].value;
+  assert.equal(armed(1), '1 run');
+  assert.equal(armed(4), '4 runs');
+});
+
+test('an unavailable figure in the run slip is small, so it does not crowd its cell', () => {
+  const app = fs.readFileSync(path.join(ASSETS_DIR, 'dashboard', 'app.js'), 'utf8');
+  assert.ok(app.includes("'rc-details-strip-value rc-details-strip-value-na'"));
+  const css = fs.readFileSync(path.join(ASSETS_DIR, 'dashboard', 'dashboard.css'), 'utf8');
+  assert.match(css, /\.rc-details-strip-value-na \{ font-size: 16px;/);
+});
+
 test('describeFinale says how many finale races were raced, never a count of the scenario\'s three', () => {
   assert.equal(logic.describeFinale({ won: 3, of: 3 }), '3 of 3 raced');
   assert.equal(logic.describeFinale({ won: 0, of: 1 }), '0 of 1 raced');

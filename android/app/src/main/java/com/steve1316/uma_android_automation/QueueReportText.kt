@@ -72,7 +72,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.DIAGNOSTIC_ENDED -> ReportText("Diagnostic ended", "The diagnostic run ended.", null)
         SessionEnd.NOTHING_TO_RESUME -> ReportText("Nothing to resume", "The saved queue had already reached its last run, so there was nothing left to resume.", null)
         SessionEnd.COMPLETED -> {
-            val summary = if (done >= total) (if (total == 1) "The run is done." else "All $total runs are done.") else "$done of ${runs(total)} are done."
+            val summary = if (done >= total) (if (total == 1) "The run is done." else "All $total runs are done.") else "$done of ${runsPhrase(total)} ${if (total == 1) "is" else "are"} done."
             withFinalizeStop(ReportText(if (done >= total) "Queue finished" else "Queue ended", summary + runNotes(r), null), r)
         }
         SessionEnd.SINGLE_RUN_ENDED ->
@@ -84,22 +84,22 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.STOPPED_BY_USER ->
             ReportText(
                 haltTitle(resumable),
-                "You stopped the queue with $done of ${runs(total)} done." + runNotes(r),
+                "You stopped the queue with $done of ${runsPhrase(total)} done." + runNotes(r),
                 if (resumable) pressStart(true).replaceFirstChar { it.uppercase() } + " To start over instead, tap Discard on Home." else null,
             )
         SessionEnd.STOPPED_BY_BOT -> {
             val why = keyText(key, r)
-            ReportText("Queue stopped", "The bot stopped the queue with $done of ${runs(total)} done: ${why.reason}" + runNotes(r), why.next(false))
+            ReportText("Queue stopped", "The bot stopped the queue with $done of ${runsPhrase(total)} done: ${why.reason}" + runNotes(r), why.next(false))
         }
         SessionEnd.SERVICE_ENDED ->
             if (r.optBoolean("errorPosted")) {
                 ReportText(
                     "Stopped by an error",
-                    "The bot stopped after an unexpected error at run $reached, with $done of ${runs(total)} done." + runNotes(r),
+                    "The bot stopped after an unexpected error at run $reached, with $done of ${runsPhrase(total)} done." + runNotes(r),
                     "Press Start in UMA Auto+ to run the queue again.",
                 )
             } else {
-                ReportText("Queue stopped", "The bot was stopped with $done of ${runs(total)} done." + runNotes(r), null)
+                ReportText("Queue stopped", "The bot was stopped with $done of ${runsPhrase(total)} done." + runNotes(r), null)
             }
         SessionEnd.BREAKPOINT -> {
             val detail = r.optString("breakpointDetail").takeUnless { r.isNull("breakpointDetail") || it.isBlank() }
@@ -243,7 +243,7 @@ internal fun postsProgressLine(status: String?): Boolean = status != "armed" && 
 internal fun progressLineDue(text: String, lastText: String?, now: Long, lastPostAt: Long?, minIntervalMs: Long = 30_000L): Boolean =
     text != lastText && (lastPostAt == null || now - lastPostAt >= minIntervalMs)
 
-private fun runs(n: Int) = if (n == 1) "1 run" else "$n runs"
+internal fun runsPhrase(n: Int) = if (n == 1) "1 run" else "$n runs"
 
 /**
  * Done counts only finished careers, so every count of done runs is followed by how many runs ended
@@ -256,8 +256,8 @@ private fun errorSentence(r: JSONObject): String {
     val errors = played.sumOf { runs -> (0 until runs.length()).count { runs.optJSONObject(it)?.optString("resultCode") in RUN_ERROR_CODES } }
     return when {
         errors == 0 -> ""
-        r.optInt("startFromRun") > 1 && earlier == null -> " ${runs(errors)} since the queue resumed ended with an error."
-        else -> " ${runs(errors)} ended with an error."
+        r.optInt("startFromRun") > 1 && earlier == null -> " ${runsPhrase(errors)} since the queue resumed ended with an error."
+        else -> " ${runsPhrase(errors)} ended with an error."
     }
 }
 
@@ -266,7 +266,8 @@ private fun runNotes(r: JSONObject): String = resumedSentence(r) + errorSentence
 /** The stops a resumed queue came back from ([earlierQueueFor]), by the run each was at when known. */
 private fun resumedSentence(r: JSONObject): String {
     val stops = r.optJSONObject("earlier")?.optJSONArray("stops") ?: return ""
-    val at = (0 until stops.length()).map { stops.optJSONObject(it)?.optInt("run") ?: 0 }
+    val every = (0 until stops.length()).map { stops.optJSONObject(it)?.optInt("run") ?: 0 }
+    val at = if (every.all { it > 0 }) every.distinct() else every
     return when {
         at.isEmpty() -> ""
         at.any { it <= 0 } -> if (at.size == 1) " It was resumed after it stopped once." else " It was resumed after it stopped ${at.size} times."

@@ -100,6 +100,13 @@ class QueueReportTextTest {
         }
 
         @Test
+        fun `the queue log never doubles the period of a stop reason and dates a saved queue by its last save`() {
+            val start = source("$main/StartModule.kt")
+            assertEquals(2, Regex("queueStopReason\\?\\.trimEnd\\('\\.'\\)").findAll(start).count(), "both queue lines that end a stop reason with a period")
+            assertEquals(2, Regex("Detected interrupted queue, last saved \\$\\{saved\\.ageMs / 60_000\\}m ago\\.").findAll(start).count(), "both resume lines")
+        }
+
+        @Test
         fun `Trainee Select names the owned outfit before it falls back to not found, on both launch paths`() {
             val nav = source("$main/CareerLaunchNavigator.kt")
             assertEquals(3, Regex("noteExcluded\\((current|preview)\\)").findAll(nav).count(), "fast path, remembered position and the full scan")
@@ -156,7 +163,7 @@ class QueueReportTextTest {
         @Test
         fun `every count of done runs is followed by how many runs ended with an error`() {
             val errorCodes = setOf("TASK_RESULT_UNHANDLED_EXCEPTION", "TASK_RESULT_CONNECTION_ERROR", "TASK_RESULT_TIMED_OUT", "TASK_RESULT_QUEUE_NAVIGATION_FAILED")
-            val count = Regex("\\bruns? (are )?done|The run is done")
+            val count = Regex("\\bruns? (are |is )?done|The run is done")
             var counted = 0
             for (report in sweep()) {
                 val reason = queueReportText(report).reason

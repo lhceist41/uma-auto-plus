@@ -149,7 +149,7 @@
             },
             "text": {
                 "title": "Queue ended",
-                "reason": "0 of 1 run are done. 1 run ended with an error.",
+                "reason": "0 of 1 run is done. 1 run ended with an error.",
                 "nextAction": null
             }
         },

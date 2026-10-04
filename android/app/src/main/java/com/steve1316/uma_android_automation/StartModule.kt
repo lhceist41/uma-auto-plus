@@ -1457,7 +1457,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         if (!DiscordUtils.enableDiscordNotifications) return
         try {
             DiscordUtils.queue.add(
-                "```diff\n- ${MessageLog.getSystemTimeString()} QUEUE HALTED after $completedRuns of $totalRuns runs " +
+                "```diff\n- ${MessageLog.getSystemTimeString()} QUEUE HALTED after $completedRuns of ${runsPhrase(totalRuns)} " +
                     "($unrun not started).\n- Reason: $reason\n- " +
                     (
                         if (careerInFlight) {
@@ -2179,9 +2179,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.w(
                             TAG,
                             if (reEnter) {
-                                "[RESUME] Detected interrupted queue from ${saved.ageMs / 60_000}m ago. Re-entering run $next of $totalRuns; its career was in flight and finishes under the same trainee's preset."
+                                "[RESUME] Detected interrupted queue, last saved ${saved.ageMs / 60_000}m ago. Re-entering run $next of $totalRuns; its career was in flight and finishes under the same trainee's preset."
                             } else {
-                                "[RESUME] Detected interrupted queue from ${saved.ageMs / 60_000}m ago. Resuming at run $next of $totalRuns (run ${saved.currentRun} was interrupted)."
+                                "[RESUME] Detected interrupted queue, last saved ${saved.ageMs / 60_000}m ago. Resuming at run $next of $totalRuns (run ${saved.currentRun} was interrupted)."
                             },
                         )
                         sendQueueProgressEvent(
@@ -2467,7 +2467,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 TaskResult.Success(TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE, "Run was skipped by queue.")
                             }
                             queueStopRequested -> {
-                                MessageLog.i(TAG, "[QUEUE] Run $i stopped: ${queueStopReason ?: "user stop"}.")
+                                MessageLog.i(TAG, "[QUEUE] Run $i stopped: ${queueStopReason?.trimEnd('.') ?: "user stop"}.")
                                 resultForStoppedRun(result, queueStopReason)
                             }
                             unplayable == UnplayableRunStep.SKIP -> {
@@ -2528,7 +2528,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // trainee-mismatch guard, which sets queueStopReason). Either way we exit the
                             // queue; the reason makes the log honest about which one it actually was.
                             if (!queueSkipRequested) {
-                                MessageLog.i(TAG, "[QUEUE] ${queueStopReason ?: "User stopped the bot"}. Exiting queue.")
+                                MessageLog.i(TAG, "[QUEUE] ${queueStopReason?.trimEnd('.') ?: "User stopped the bot"}. Exiting queue.")
                                 stopLeftCareer = runScenario != "Daily Races" && runScenario != "Team Trials"
                                 break
                             }
@@ -2841,10 +2841,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             totalRuns,
                             "queueFailed",
                             resultCode = queueHaltResultCode,
-                            message = queueHaltDetail ?: "Halted after $doneRuns of $totalRuns runs.",
+                            message = queueHaltDetail ?: "Halted after $doneRuns of ${runsPhrase(totalRuns)}.",
                         )
                         MessageLog.e(TAG, "\n[QUEUE] ========================================")
-                        MessageLog.e(TAG, "[QUEUE] Queue HALTED after $doneRuns of $totalRuns runs ($unrun not started).")
+                        MessageLog.e(TAG, "[QUEUE] Queue HALTED after $doneRuns of ${runsPhrase(totalRuns)} ($unrun not started).")
                         MessageLog.e(TAG, "[QUEUE] Reason: $halt")
                         if (queueHaltCareerInFlight) {
                             MessageLog.e(TAG, "[QUEUE] A career is still occupying the game's single slot; no further run can start until it is finished or abandoned in-game.")
@@ -2871,16 +2871,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // developer-authored prose, never exception text, so it is safe to show verbatim.
                                 sendQueueProgressEvent(completedRuns, totalRuns, "queueHalted", message = stopReason)
                                 MessageLog.w(TAG, "\n[QUEUE] ========================================")
-                                MessageLog.w(TAG, "[QUEUE] Queue halted after $completedRuns of $totalRuns runs.")
+                                MessageLog.w(TAG, "[QUEUE] Queue halted after $completedRuns of ${runsPhrase(totalRuns)}.")
                                 MessageLog.w(TAG, "[QUEUE] Reason: $stopReason")
                                 MessageLog.w(TAG, "[QUEUE] ========================================\n")
                             }
                             queueStopRequested -> {
                                 // Only the app's Stop button and stopQueue() set this flag, so the
                                 // user attribution is provable on this branch.
-                                sendQueueProgressEvent(completedRuns, totalRuns, "queueStopped", message = "Stopped by the user after $completedRuns of $totalRuns runs.")
+                                sendQueueProgressEvent(completedRuns, totalRuns, "queueStopped", message = "Stopped by the user after $completedRuns of ${runsPhrase(totalRuns)}.")
                                 MessageLog.i(TAG, "\n[QUEUE] ========================================")
-                                MessageLog.i(TAG, "[QUEUE] Queue stopped by the user after $completedRuns of $totalRuns runs.")
+                                MessageLog.i(TAG, "[QUEUE] Queue stopped by the user after $completedRuns of ${runsPhrase(totalRuns)}.")
                                 MessageLog.i(TAG, "[QUEUE] ========================================\n")
                             }
                             !BotService.isRunning -> {
@@ -2891,9 +2891,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // genuine finish - the library clears isRunning only after this
                                 // subscriber returns, so a normal completion still reads as running
                                 // here.
-                                sendQueueProgressEvent(completedRuns, totalRuns, "queueStopped", message = "Stopped after $completedRuns of $totalRuns runs.")
+                                sendQueueProgressEvent(completedRuns, totalRuns, "queueStopped", message = "Stopped after $completedRuns of ${runsPhrase(totalRuns)}.")
                                 MessageLog.w(TAG, "\n[QUEUE] ========================================")
-                                MessageLog.w(TAG, "[QUEUE] Queue stopped after $completedRuns of $totalRuns runs: the bot service is no longer running.")
+                                MessageLog.w(TAG, "[QUEUE] Queue stopped after $completedRuns of ${runsPhrase(totalRuns)}: the bot service is no longer running.")
                                 MessageLog.w(TAG, "[QUEUE] ========================================\n")
                             }
                             else -> {
@@ -2903,10 +2903,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // run therefore showed "Queue complete: 4/4 runs" over a log
                                 // reading "Completed 0 of 4" (2026-07-28 12:39). Report what
                                 // actually completed.
-                                sendQueueProgressEvent(completedRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
+                                sendQueueProgressEvent(completedRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of ${runsPhrase(totalRuns)}.")
                                 MessageLog.i(TAG, "\n[QUEUE] ========================================")
                                 val notHome = if (ledger.finalizeStopKey != null) " The bot stopped before the game was back on its home screen." else ""
-                                MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.$notHome")
+                                MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of ${runsPhrase(totalRuns)}.$notHome")
                                 MessageLog.i(TAG, "[QUEUE] ========================================\n")
                             }
                         }

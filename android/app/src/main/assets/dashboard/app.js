@@ -711,7 +711,7 @@
     } else {
       setText(els.detailsWhen, L.pendingRunWhen(run));
       var pending = el('div', 'rc-pending-body');
-      pending.appendChild(el('div', 'rc-details-trainee', L.naText(run.trainee)));
+      pending.appendChild(el('div', 'rc-details-trainee', L.pendingTraineeText(run)));
       pending.appendChild(el('div', 'rc-pending-outcome', 'Its result appears here when the career ends.'));
       els.detailsBody.appendChild(pending);
     }
@@ -719,7 +719,7 @@
   function detailsStripCell(label, value) {
     var cell = el('div', 'rc-details-strip-cell');
     cell.appendChild(el('span', 'rc-info-label', label));
-    cell.appendChild(el('span', 'rc-details-strip-value', value));
+    cell.appendChild(el('span', value === 'not available' ? 'rc-details-strip-value rc-details-strip-value-na' : 'rc-details-strip-value', value));
     return cell;
   }
 

@@ -166,6 +166,10 @@ describe("parseLastSession: one line per run", () => {
         ])
     })
 
+    it("leaves the trainee out of a run whose career never named her", () => {
+        expect(view({ runs: [run(2, "TASK_RESULT_MANUALLY_STOPPED", { trainee: "unknown" })] }).runs).toEqual(["Run 2: Stopped"])
+    })
+
     it("names the trainee of a run the queue skipped because she cannot start", () => {
         const runs = [
             run(1, "TASK_RESULT_COMPLETE", { trainee: "Special_Week", traineeName: "Special Week" }),
@@ -407,6 +411,10 @@ describe("Home wiring", () => {
         const memo = home.slice(home.indexOf("const noAutoResumeReason"), home.indexOf("\n    }, [", home.indexOf("const noAutoResumeReason")))
         expect(memo).toContain('const nextRun = interruptedQueue.phase === "career" ? interruptedQueue.currentRun : interruptedQueue.currentRun + 1')
         expect(memo).not.toContain("enableTraineeRotation")
+    })
+
+    it("says \"1 run\" on the queue start button for a one-run queue", () => {
+        expect(home).toContain('return `Start Queue (${runs} ${runs === 1 ? "run" : "runs"})`')
     })
 
     it("gives the interrupted banner the report's reason and its end time", () => {

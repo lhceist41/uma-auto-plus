@@ -459,7 +459,8 @@ const Home = () => {
         // so a multi-run queue would just stall on run 1 with nobody watching. The stored
         // queue settings are left untouched for every other scenario.
         if (bsc.settings.runQueue.enableRunQueue && scenarioCapabilities(scenario).runQueue) {
-            return `Start Queue (${bsc.settings.runQueue.totalRuns} runs)`
+            const runs = bsc.settings.runQueue.totalRuns
+            return `Start Queue (${runs} ${runs === 1 ? "run" : "runs"})`
         }
         return `Start · ${scenario}`
     }, [phase, presetSaveState, bsc.settings.general.scenario, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])

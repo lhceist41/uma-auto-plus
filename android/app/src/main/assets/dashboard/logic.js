@@ -285,10 +285,13 @@
       resultLabel = 'ERROR';
       resultColor = '#FF7A6B';
     }
+    // A run that has not started has no trainee or scenario yet; that is not a missing value.
+    var trainee = pendingTraineeText(run);
+    var notStarted = trainee === PENDING_TRAINEE;
     return {
       n: run.n,
-      trainee: naText(run.trainee),
-      scenario: naText(run.scenario),
+      trainee: trainee,
+      scenario: notStarted ? '' : naText(run.scenario),
       result: resultLabel || 'WAITING',
       resultColor: resultColor,
       score: formatNumber(run.estScore),
@@ -298,8 +301,14 @@
       gateBorder: bracket.border,
       bg: isSelected ? '#131B25' : 'transparent',
       chevron: isSelected ? (accent || ACCENT) : '#3A4656',
-      aria: 'Run ' + run.n + ', ' + naText(run.trainee) + ', ' + (resultLabel || 'waiting').toLowerCase(),
+      aria: 'Run ' + run.n + ', ' + trainee + ', ' + (resultLabel || 'waiting').toLowerCase(),
     };
+  }
+
+  // What a run that has not started shows for its trainee: the row and the details pane say the same.
+  var PENDING_TRAINEE = 'Named when it starts';
+  function pendingTraineeText(run) {
+    return (run.state === 'next' || run.state === 'waiting') && run.trainee == null && run.scenario == null ? PENDING_TRAINEE : naText(run.trainee);
   }
 
   function describeTpRestores(t) {
@@ -409,7 +418,7 @@
       var stripe = null;
       if (status && status.run) {
         stripe = [
-          { label: 'QUEUE', value: naText(status.run.total, status.run.total + ' runs') },
+          { label: 'QUEUE', value: naText(status.run.total, status.run.total + (status.run.total === 1 ? ' run' : ' runs')) },
           { label: 'TRAINEE', value: naText(status.career && status.career.trainee) },
           { label: 'SCENARIO', value: naText(status.career && status.career.scenario) },
         ];
@@ -571,6 +580,7 @@
     describeTpRestores: describeTpRestores,
     describeRecoveries: describeRecoveries,
     describeFinale: describeFinale,
+    pendingTraineeText: pendingTraineeText,
     pendingRunWhen: pendingRunWhen,
     totalTpRestores: totalTpRestores,
     totalRecoveries: totalRecoveries,

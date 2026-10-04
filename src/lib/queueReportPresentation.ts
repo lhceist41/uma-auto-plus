@@ -75,6 +75,7 @@ const CHARACTER_NAMES = Object.keys(charactersData)
 function traineeName(run: Record<string, unknown>): string {
     if (typeof run.traineeName === "string" && run.traineeName.trim().length > 0) return run.traineeName.trim()
     const id = typeof run.trainee === "string" ? run.trainee.trim() : ""
+    if (id === "unknown") return ""
     return CHARACTER_NAMES.find((name) => name.replace(/ /g, "_") === id) ?? id
 }
 
