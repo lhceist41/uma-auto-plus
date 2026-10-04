@@ -228,6 +228,11 @@ abstract class Campaign(game: Game) : Task(game) {
     /** One controlled re-run of the careerComplete plan per career; the second large-balance verdict is terminal. */
     private var careerEndSpendRetryUsed: Boolean = false
 
+    /** A RETRY_SPEND re-entry runs the end block again: it must not overwrite an accepted fan total, nor floor a re-read on a -1 it wrote. */
+    private var careerEndHeldFans: Int? = null
+
+    private var careerEndFansAccepted: Boolean = false
+
     private var careerEndLastKnownStats: List<String> = emptyList()
 
     /** Fallback when running outside a real career task (debug harness, helper instance); throwaway Campaigns must never mint the primary identity. */
@@ -3606,8 +3611,8 @@ abstract class Campaign(game: Game) : Task(game) {
      * state, so building the line triggers no capture.
      *
      * `spd/sta/pwr/grt/wit/fans` come from the post-finale re-read of the Umamusume Details dialog (`ButtonDetails`, confidence lowered to 0.65 so the
-     * match lands). If that re-read fails the fields fall back to the last in-career OCR and understate the finale rewards (~+40 per stat, large fan
-     * injection), so trust `turn`/`result`. A stat the result screen contradicts is logged as -1 and no estRank/estScore is written. */
+     * match lands). If that re-read fails the stats fall back to the last in-career OCR and understate the finale rewards (~+40 per stat), so trust
+     * `turn`/`result`; `fans` is then -1 (unknown). A stat the result screen contradicts is logged as -1 and no estRank/estScore is written. */
     override fun careerEndLedgerLine(result: TaskResult): String {
         val shownName = trainee.name.ifEmpty { SettingsHelper.getStringSetting("misc", "currentProfileName") }
         val resolvedName = shownName.ifEmpty { "unknown" }.replace(" ", "_")
@@ -3863,26 +3868,34 @@ abstract class Campaign(game: Game) : Task(game) {
                 trainee.detailsUnacceptedReads.addAll(StatName.entries)
                 game.wait(1.0)
                 val buttonLocation = ButtonDetails.find(game.imageUtils, tries = 5).first
+                val heldFans = careerEndHeldFans ?: trainee.fans.also { careerEndHeldFans = it }
                 if (buttonLocation != null) {
-                    val fansText =
-                        game.imageUtils.performOCROnRegion(
-                            game.imageUtils.getSourceBitmap(),
-                            game.imageUtils.relX(buttonLocation.x, 280),
-                            game.imageUtils.relY(buttonLocation.y, -735),
-                            game.imageUtils.relWidth(220),
-                            game.imageUtils.relHeight(50),
-                            useThreshold = false,
-                            useGrayscale = true,
-                            scale = 2.0,
-                            ocrEngine = "tesseract",
-                            debugName = "final_fan_count",
-                        )
+                    if (!careerEndFansAccepted) {
+                        val fansText =
+                            game.imageUtils.performOCROnRegion(
+                                game.imageUtils.getSourceBitmap(),
+                                game.imageUtils.relX(buttonLocation.x, 280),
+                                game.imageUtils.relY(buttonLocation.y, -735),
+                                game.imageUtils.relWidth(220),
+                                game.imageUtils.relHeight(50),
+                                useThreshold = false,
+                                useGrayscale = true,
+                                scale = 2.0,
+                                ocrEngine = "tesseract",
+                                debugName = "final_fan_count",
+                            )
 
-                    // toIntOrNull: OCR noise (>10 digits) overflowed Int and threw NumberFormatException, which unwinds past Task.start()'s catch and ends the whole
-                    // run (aborting a stopOnError queue). Keep the last value on a bad read.
-                    val cleanedFans = fansText.replace(Regex("[^0-9]"), "")
-                    cleanedFans.toIntOrNull()?.let { trainee.observeFanCount(it) }
-                        ?: MessageLog.w(TAG, "[WARN] process:: Could not detect final fan count for the end of the Career from OCR: $fansText")
+                        // The pre-finale count misses the finale's fans, so an unusable read is reported as unknown (-1), never kept.
+                        val finalFans = parseCareerEndFans(fansText, heldFans)
+                        if (finalFans != null) {
+                            trainee.observeFanCount(finalFans)
+                            careerEndFansAccepted = true
+                            MessageLog.i(TAG, "[CAREER_END] Final fan count: $finalFans (read \"$fansText\").")
+                        } else {
+                            MessageLog.w(TAG, "[CAREER_END] Unusable final fan count read \"$fansText\" (in-career $heldFans); the ledger reports fans=-1.")
+                            trainee.fans = -1
+                        }
+                    }
 
                     // Now click the button to open the details dialog for aptitude and stat updates.
                     game.gestureUtils.tap(buttonLocation.x, buttonLocation.y, ButtonDetails.template.path)
@@ -3891,6 +3904,7 @@ abstract class Campaign(game: Game) : Task(game) {
                     game.wait(1.0)
                 } else {
                     MessageLog.w(TAG, "[WARN] process:: Could not find ButtonDetails to perform final updates for the end of the Career.")
+                    if (!careerEndFansAccepted) trainee.fans = -1
                 }
 
                 val notAccepted =

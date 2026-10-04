@@ -65,3 +65,20 @@ internal val CAREER_END_STAT_KEYS: Map<StatName, String> =
 /** A stat reported as unread (-1) is not last-known. */
 internal fun lastKnownLedgerKeys(notAccepted: Set<StatName>, reportedUnread: Set<StatName>): List<String> =
     StatName.entries.filter { it in notAccepted && it !in reportedUnread }.map { CAREER_END_STAT_KEYS.getValue(it) }
+
+/** GC careers ended at 1.62x to 2.34x their last in-career count, while one inserted digit gives at least 5.5x. */
+private const val CAREER_END_FAN_FALLBACK_MAX_RATIO = 5L
+
+/**
+ * The result screen groups the fan total in threes ("225,250"), so a read that broke the grouping lost or misread a character ("225,25o" would
+ * strip to 22525). A total below the in-career count [heldFans] cannot be the final one. A space-grouped or plain digit run lost its separator, and
+ * a lost separator can hide an inserted digit ("2251250"), so it counts only between a real [heldFans] (not the default 1 or unknown) and
+ * [CAREER_END_FAN_FALLBACK_MAX_RATIO] times it. Anything else gives null. toIntOrNull: an overlong read must not throw, which would end the run.
+ */
+internal fun parseCareerEndFans(raw: String, heldFans: Int): Int? {
+    val text = raw.trim().removePrefix("+").trim()
+    val value = text.filter { it.isDigit() }.toIntOrNull() ?: return null
+    if (Regex("""\d{1,3}(\s*[,.]\s*\d{3})*""").matches(text)) return value.takeIf { it >= heldFans }
+    if (!Regex("""\d+|\d{1,3}(\s+\d{3})+""").matches(text)) return null
+    return value.takeIf { heldFans > 1 && it >= heldFans && it.toLong() < CAREER_END_FAN_FALLBACK_MAX_RATIO * heldFans }
+}
