@@ -51,7 +51,7 @@ export const normalizeScenarioKey = (raw: string | null | undefined): string => 
 export const isGrandConcert = (raw: string | null | undefined): boolean => normalizeScenarioKey(raw) === GRAND_CONCERT_KEY
 
 /**
- * Every capability is on for every scenario, Grand Concert included (still labelled experimental). A concert
+ * Every capability is on for every scenario, Grand Concert included. A concert
  * screen the bot cannot drive stops the run and the queue with the career preserved.
  */
 export interface ScenarioCapabilities {

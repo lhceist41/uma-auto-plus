@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### What's new and changed
 
+- **Grand Concert is now fully supported:** the experimental label is gone from the scenario picker, and it runs unattended like the other scenarios, including queues, trainee rotation and TP restore.
+
 - **Presets show outfits the way the game titles them:** the trainee picker, the Home preset card and the Run Queue rotation list now write an outfit in brackets, such as [Rouge Caroler] or [MB-19890425], and a farm preset reads "Legacy Farm build" or "Blue Farm build" instead of looking like an outfit. The rotation list shows the trainee's name and outfit instead of the internal preset name.
 
 - **A lost goal race gets more tries:** when a career goal race is lost, the bot now retries it with your free retries and Alarm Clocks for as long as the career's retry budget lasts (3 retries, 5 in Trackblazer) instead of stopping after one, since losing it ends the career. The new Alarm Clock option **Goal races only** buys an Alarm Clock for 10 carats only in that case; the default is still Never. Optional races and goals already passed are still never retried, and the Trackblazer settings for retrying optional races are removed (at their default values they never led to a retry).

@@ -82,7 +82,7 @@ const scenarios = [
     },
     {
         value: GRAND_CONCERT_KEY,
-        label: "Grand Concert (experimental)",
+        label: "Grand Concert",
         disabled: false,
     },
     {

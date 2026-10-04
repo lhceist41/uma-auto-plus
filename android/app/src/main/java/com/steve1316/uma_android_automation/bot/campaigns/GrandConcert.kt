@@ -133,7 +133,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         announcedSupportLevel = true
         MessageLog.w(
             TAG,
-            "[GRAND_CONCERT] Experimental support: training, races, events, skills, the Lesson shop " +
+            "[GRAND_CONCERT] Supported scenario: training, races, events, skills, the Lesson shop " +
                 "(with a verify-before-Learn purchase gate), the concerts, and the career-end sequence through to the " +
                 "home screen are all automated. A Lesson shop screen the bot does not recognize is backed out of and " +
                 "retried later; a concert screen it still does not recognize after a few retries stops the run " +
