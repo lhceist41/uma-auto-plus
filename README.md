@@ -10,7 +10,7 @@
 
 A hands-off distribution of [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation) for Umamusume: Pretty Derby. Pick a trainee, press Start, walk away: the bot plays whole careers, and can queue several in a row without you.
 
-- Plays whole careers in all four scenarios: URA Finale, Unity Cup, Trackblazer, Grand Concert (experimental).
+- Plays whole careers in all four scenarios: URA Finale, Unity Cup, Trackblazer, Grand Concert.
 - Queues 2 to 20 careers and can rotate trainees between runs.
 - Built-in trainee presets with a build for every scenario; applying one sets its scenario too.
 - Keeps going overnight: restarts a wedged game and rides out the daily reset and lost connections.
