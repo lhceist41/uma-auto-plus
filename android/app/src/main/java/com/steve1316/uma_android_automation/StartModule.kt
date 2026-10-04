@@ -198,6 +198,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var accessibilityHaltKey: String? = null
 
+        /** Set when the player's Stop ended a launch navigation, whose saved run has not started; the record is kept for Start. Reset every session. */
+        @Volatile
+        var launchStoppedByPlayer: Boolean = false
+
         /**
          * Wall-clock budget for one between-run navigation. Normal navigation (career summary
          * through deck setup to the training menu, cinematic included) takes 2-5 minutes; a
@@ -490,10 +494,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
         /**
          * A stop keeps the resume record so Start re-enters the saved run: a bot stop always, a player's stop only when it ended a run whose
-         * career is still in the slot ([stopLeftCareer]). Both clear it after the last career, which it would replay.
+         * career is still in the slot ([stopLeftCareer]) or a launch navigation, whose saved run has not started ([launchStopped]). All
+         * clear it after the last career, which it would replay.
          */
-        fun keepsResumeRecordAfterStop(queueStopRequested: Boolean, botStopReason: String?, lastCareerFinished: Boolean, stopLeftCareer: Boolean): Boolean =
-            queueStopRequested && !lastCareerFinished && (botStopReason != null || stopLeftCareer)
+        fun keepsResumeRecordAfterStop(queueStopRequested: Boolean, botStopReason: String?, lastCareerFinished: Boolean, stopLeftCareer: Boolean, launchStopped: Boolean = false): Boolean =
+            queueStopRequested && !lastCareerFinished && (botStopReason != null || stopLeftCareer || launchStopped)
+
+        /** A failed launch navigation ended by the player's Stop: the app's (the stop flag) or the overlay's ([isOverlayStop]), never a bot stop. */
+        fun navigationStoppedByPlayer(stopRequested: Boolean, botRunning: Boolean, botStopReason: String?, runPostedException: Boolean): Boolean =
+            botStopReason == null && (stopRequested || isOverlayStop(botRunning, botStopReason, runPostedException))
 
         /** A Stop landing inside launch navigation comes back as an error; report the player's own Stop as MANUALLY_STOPPED. */
         fun resultForStoppedRun(result: TaskResult, botStopReason: String?): TaskResult =
@@ -1686,7 +1695,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         deadlineThread.start()
 
         return try {
-            navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome, careerInFlight = careerInFlight)
+            noteStopByPlayer(navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome, careerInFlight = careerInFlight))
                 .copy(careerResumed = navigator.careerResumed)
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
@@ -1705,7 +1714,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             //    on this path as "deadline expired" cried emulator-death on every manual Stop.
             //  - neither: an unexpected interrupt BEFORE the deadline. Not a wedge - report it plainly
             //    instead of inventing a 10-minute timeout that did not occur.
-            when {
+            // The overlay Stop interrupts before it marks the service stopped.
+            if (!deadlineFired.get()) awaitStopEvidence()
+            val result = when {
                 deadlineFired.get() ->
                     NavigationResult(
                         success = false,
@@ -1716,15 +1727,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         recommendedAction = "Check the emulator - the capture pipeline or accessibility service likely died mid-navigation. Restart the queue once the game is stable.",
                         reasonKey = "NAVIGATION_TIMEOUT",
                     )
-                queueStopRequested || !BotService.isRunning ->
-                    NavigationResult(
-                        success = false,
-                        lastDetectedState = "STOPPED",
-                        failureReason = "Between-run navigation cancelled by user stop.",
-                        failedTransition = "career launch navigation",
-                        isRecoverable = true,
-                        recommendedAction = "No action needed - the bot was stopped by the user.",
-                    )
+                queueStopRequested || !BotService.isRunning -> stoppedNavigation()
                 else ->
                     NavigationResult(
                         success = false,
@@ -1734,11 +1737,34 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         isRecoverable = true,
                         recommendedAction = "If this was not a manual Stop, check the logs around the interrupt; the navigation did not actually time out.",
                     )
-            }.copy(careerResumed = navigator.careerResumed)
+            }
+            noteStopByPlayer(result).copy(careerResumed = navigator.careerResumed)
         } finally {
             navDone.set(true)
             deadlineThread.interrupt()
         }
+    }
+
+    private fun stoppedNavigation() =
+        NavigationResult(
+            success = false,
+            lastDetectedState = "STOPPED",
+            failureReason = "Between-run navigation cancelled by user stop.",
+            failedTransition = "career launch navigation",
+            isRecoverable = true,
+            recommendedAction = "No action needed - the bot was stopped by the user.",
+        )
+
+    /**
+     * A failed navigation the player's Stop ended reads as that stop ([navigationStoppedByPlayer]), so the queue ends as the
+     * player's stop and keeps its saved run, never as a screen it could not pass. Anything else is returned unchanged, and so
+     * is an unfinished career the game reported: its halt keeps the record and re-enters that career.
+     */
+    private fun noteStopByPlayer(result: NavigationResult): NavigationResult {
+        if (result.success || result.reasonKey == "CAREER_NOT_FINISHED" || !navigationStoppedByPlayer(queueStopRequested, BotService.isRunning, queueStopReason, lastRunPostedException)) return result
+        queueStopRequested = true
+        launchStoppedByPlayer = true
+        return if (result.lastDetectedState == "STOPPED") result else stoppedNavigation()
     }
 
     /** Logs a failed [NavigationResult] with its full diagnostics. */
@@ -2001,6 +2027,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 stopAfterCareerRequested = false
                 gameRecoveryFailed = false
                 accessibilityHaltKey = null
+                launchStoppedByPlayer = false
                 SessionTally.reset()
                 ProgressTracker.beginWindow()
                 StatusBoard.reset(ledger.startedAt)
@@ -2837,7 +2864,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     } else {
                         // Clear persisted queue state since queue finished normally.
                         val stopReason = queueStopReason
-                        if (!keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer)) clearQueueState(context)
+                        if (!keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer, launchStoppedByPlayer)) clearQueueState(context)
                         when {
                             queueStopRequested && stopReason != null -> {
                                 // A controlled internal stop rather than a user Stop or failure. stopReason is always

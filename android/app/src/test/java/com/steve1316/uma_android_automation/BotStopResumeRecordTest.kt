@@ -152,7 +152,7 @@ class BotStopResumeRecordTest {
                 branch.contains("stopLeftCareer = runScenario != \"Daily Races\" && runScenario != \"Team Trials\"\n                                break"),
                 "the stopped run's own branch, misc runs excluded",
             )
-            assertTrue(startModule.contains("keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer)"))
+            assertTrue(startModule.contains("keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer, launchStoppedByPlayer)"))
         }
 
         @Test

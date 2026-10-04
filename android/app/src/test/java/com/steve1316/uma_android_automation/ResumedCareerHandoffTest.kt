@@ -100,8 +100,9 @@ class ResumedCareerHandoffTest {
             assertEquals(1, Regex("""navigator\.navigate\(""").findAll(wrapper).count())
             assertEquals(2, Regex("""\.copy\(careerResumed = navigator\.careerResumed\)""").findAll(wrapper).count(), "the normal return and the interrupted results")
             val interrupted = wrapper.substring(wrapper.indexOf("} catch (e: InterruptedException) {"), wrapper.indexOf("} finally {"))
-            assertTrue(interrupted.contains("            }.copy(careerResumed = navigator.careerResumed)\n"), "the copy wraps every branch of the interrupt result")
-            assertEquals(3, Regex("NavigationResult\\(").findAll(interrupted).count())
+            assertTrue(interrupted.contains("            val result = when {\n"), "every branch of the interrupt result is one value")
+            assertTrue(interrupted.trimEnd().endsWith("\n            noteStopByPlayer(result).copy(careerResumed = navigator.careerResumed)"), "the returned interrupt result carries the resume")
+            assertEquals(3, Regex("NavigationResult\\(|stoppedNavigation\\(\\)").findAll(interrupted).count())
         }
     }
 
