@@ -159,6 +159,16 @@ data class RaceFallbackOutcome(
     val turnAdvanced: Boolean,
 )
 
+/** Runs [action]; when it stops the run, runs [close] once and passes the stop on. */
+internal inline fun closingOnStop(close: () -> Unit, action: () -> Unit) {
+    try {
+        action()
+    } catch (e: InterruptedException) {
+        close()
+        throw e
+    }
+}
+
 /** A trainee name without its leading "[Outfit]" title. */
 internal fun deOutfitTraineeName(name: String): String {
     val stripped = name.replace(Regex("^\\s*\\[[^\\]]*\\]\\s*"), "").trim()
@@ -1398,7 +1408,8 @@ abstract class Campaign(game: Game) : Task(game) {
 
                 // Rotation backstop: the only trainee check on the resume path (no Trainee Select). Runs once per career regardless of deck validation.
                 if (!bRotationTraineeVerified) {
-                    verifyRotationTrainee()
+                    // A stop here must not leave the dialog up: the next Start cannot see the career-end screen behind it.
+                    closingOnStop({ result.dialog.close(game.imageUtils) }) { verifyRotationTrainee() }
                     bRotationTraineeVerified = true
                 }
 
