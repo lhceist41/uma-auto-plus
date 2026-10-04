@@ -499,6 +499,54 @@ class QueueReportTest {
         }
 
         @Test
+        fun `a halt's own key reaches the card in its own words, and a halt without one keeps the generic text`() {
+            val unfinished = ledger(queueEnabled = true).apply { haltEnd = SessionEnd.RUN_HALTED; reasonKey = "CAREER_NOT_FINISHED"; haltRun = 1; haltCareerInFlight = true }
+            val report = unfinished.report(classifySessionEnd(unfinished.facts(false, false, true, true)), 5L)
+            assertEquals(SessionEnd.RUN_HALTED, report.kind)
+            assertEquals("CAREER_NOT_FINISHED", report.reasonKey)
+            assertEquals(
+                "The queue stopped during run 1 of 3: the game's daily reset or another interruption stopped the career's Finish. The career is kept, and Start finishes it.",
+                queueReportText(report.toJson()).reason,
+            )
+
+            val fixture = "src/lib/__fixtures__/queueReportText.json"
+            var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+            while (dir != null && !File(dir, fixture).isFile) dir = dir.parentFile
+            val cases = JSONObject(File(dir ?: fail(fixture), fixture).readText()).getJSONArray("cases")
+            val resumableHalts = (0 until cases.length()).map { cases.getJSONObject(it) }.filter { it.getJSONObject("report").let { r -> r.optString("kind") == "RUN_HALTED" && r.optBoolean("resumable") } }
+            for (key in listOf("A11Y_GRANT_MISSING", "A11Y_INPUT_DEAD", "TAPS_HAD_NO_EFFECT", "GAME_NOT_RESPONDING")) {
+                val case = resumableHalts.first { it.getJSONObject("report").optString("reasonKey") == key }
+                val stored = case.getJSONObject("report")
+                val halted =
+                    ledger(queueEnabled = true).apply {
+                        totalRuns = stored.getInt("totalRuns")
+                        haltEnd = SessionEnd.RUN_HALTED
+                        reasonKey = key
+                        haltRun = stored.getInt("runReached")
+                        haltCareerInFlight = true
+                    }
+                val haltedReport = halted.report(classifySessionEnd(halted.facts(false, false, true, true)), 5L)
+                assertEquals(key, haltedReport.reasonKey)
+                val text = queueReportText(haltedReport.toJson())
+                val expected = case.getJSONObject("text")
+                assertEquals(expected.getString("title"), text.title, key)
+                assertEquals(expected.getString("reason"), text.reason, key)
+                assertEquals(expected.getString("nextAction"), text.nextAction, key)
+            }
+
+            val bare = ledger(queueEnabled = true).apply { haltEnd = SessionEnd.RUN_HALTED; haltRun = 2 }
+            val bareReport = bare.report(classifySessionEnd(bare.facts(false, false, true, true)), 5L)
+            assertEquals("", bareReport.reasonKey)
+            assertEquals("The queue stopped during run 2 of 3: it reached a screen it could not get past.", queueReportText(bareReport.toJson()).reason)
+
+            val single = ledger(queueEnabled = false).apply { finalizeStopKey = "CAREER_NOT_FINISHED" }
+            single.addRun(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", "Special_Week", "URA_Finale", "WIN", 78))
+            val singleText = queueReportText(single.report(classifySessionEnd(single.facts(false, false, true, false)), 2_100L).toJson())
+            assertEquals("Career not finished", singleText.title)
+            assertTrue(singleText.reason.startsWith("The career was played to its end, but the game's daily reset"), singleText.reason)
+        }
+
+        @Test
         fun `a dead session's report is built from the same snapshot the session kept open`() {
             val l =
                 ledger(queueEnabled = true).apply {

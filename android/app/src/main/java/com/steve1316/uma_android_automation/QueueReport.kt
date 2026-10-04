@@ -595,7 +595,7 @@ internal fun earlierQueueFor(lastReport: JSONObject?, totalRuns: Int, startFromR
     return JSONObject().put("runs", runs).put("recoveries", recoveries).put("tpRestores", restores).put("stops", stops)
 }
 
-private val ENDINGS_WITH_REASON_KEY = setOf(SessionEnd.LAUNCH_FAILED_BEFORE_RUN, SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS, SessionEnd.SINGLE_RUN_ENDED, SessionEnd.STOPPED_BY_BOT)
+private val ENDINGS_WITH_REASON_KEY = setOf(SessionEnd.LAUNCH_FAILED_BEFORE_RUN, SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS, SessionEnd.SINGLE_RUN_ENDED, SessionEnd.STOPPED_BY_BOT, SessionEnd.RUN_HALTED)
 
 internal fun runRecordJson(r: RunRecord): JSONObject =
     JSONObject()
