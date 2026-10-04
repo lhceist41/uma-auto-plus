@@ -83,6 +83,17 @@ internal fun ownedSkillsWithoutUnique(names: Collection<String>, uniqueName: Str
 /** A row cropped from a frame captured before a verified buy still shows its (+), and the game never un-selects a skill mid-session. */
 internal fun ownedAfterScan(scanObtained: Boolean, name: String, ownedThisSession: Set<String>): Boolean = scanObtained || name in ownedThisSession
 
+/**
+ * Once an in-place ○ is owned its row offers the ◎ upgrade, but the title still reads as ○ and the tap charges the ◎ price. The row
+ * is the ◎ when the ○ is already owned or the read price is above any ○ price yet within the ◎ cost.
+ */
+internal fun inPlaceUpgradeRowName(row: SkillData, upgrade: SkillData?, price: Int, rowObtained: Boolean, owned: Set<String>): String {
+    if (rowObtained || upgrade == null || !row.bIsInPlace || !upgrade.bIsInPlace) return row.name
+    if (!row.name.endsWith(" ○") || !upgrade.name.endsWith(" ◎")) return row.name
+    val priceOnlyFitsUpgrade: Boolean = price > row.cost && price <= upgrade.cost
+    return if (row.name in owned || priceOnlyFitsUpgrade) upgrade.name else row.name
+}
+
 /** The bought skill plus every lower version in its chain, which the game completes with it; a gold below a white is inverted data and stays buyable. */
 internal fun namesCoveredByVerifiedBuy(name: String, isGold: (String) -> Boolean, lowerVersionOf: (String) -> String?): Set<String> {
     val names: MutableSet<String> = linkedSetOf()
@@ -135,6 +146,9 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
     /** Names that verified buys this session made owned; never plan-simulation flags. */
     private val ownedThisSession: MutableSet<String> = mutableSetOf()
+
+    /** In-place ○ names already logged by [resolveInPlaceUpgradeRow] this session. */
+    private val upgradeRowsLogged: MutableSet<String> = mutableSetOf()
 
     /** Why the most recent [parseSkillListEntries] scroll pass ended. The finalization guard
      * needs this to distinguish "no candidates remain" from "the scan never covered the whole
@@ -921,29 +935,58 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         }
 
         // Validate results.
-        if (skillName == null) {
-            MessageLog.e(TAG, "[ERROR] analyzeSkillListEntry:: Failed to parse skillName.")
-            return null
-        }
+        val parsedName: String =
+            skillName ?: run {
+                MessageLog.e(TAG, "[ERROR] analyzeSkillListEntry:: Failed to parse skillName.")
+                return null
+            }
 
-        if (skillPrice == null) {
-            MessageLog.e(TAG, "[ERROR] analyzeSkillListEntry:: Failed to detect skillPrice.")
-            return null
-        }
+        val parsedPrice: Int =
+            skillPrice ?: run {
+                MessageLog.e(TAG, "[ERROR] analyzeSkillListEntry:: Failed to detect skillPrice.")
+                return null
+            }
 
         // Lookup the resulting entry in our mapping.
-        val entry: SkillListEntry? = entries[skillName]
+        val rowName: String = resolveInPlaceUpgradeRow(parsedName, parsedPrice, bIsObtained)
+        val entry: SkillListEntry? = entries[rowName]
         if (entry == null) {
-            MessageLog.e(TAG, "[ERROR] analyzeSkillListEntry:: Failed to find \"$skillName\" in entries mapping.")
+            MessageLog.e(TAG, "[ERROR] analyzeSkillListEntry:: Failed to find \"$rowName\" in entries mapping.")
             return null
         }
 
         // Update the entry's status and detected price.
         entry.bIsObtained = ownedAfterScan(bIsObtained, entry.name, ownedThisSession)
         entry.bIsVirtual = false
-        entry.updateScreenPrice(skillPrice)
+        entry.updateScreenPrice(parsedPrice)
 
         return entry
+    }
+
+    /**
+     * Applies [inPlaceUpgradeRowName] to a parsed row. On resolution the ○ is obtained and, like any in-place level its upgrade
+     * replaced on screen, virtual, so the planner never offers it again even after a plan reset sells it.
+     */
+    private fun resolveInPlaceUpgradeRow(name: String, price: Int, rowObtained: Boolean): String {
+        val row: SkillListEntry = entries[name] ?: return name
+        val owned: Set<String> = campaign.trainee.ownedSkillNames + ownedThisSession
+        val upgrade: SkillListEntry? = row.next
+        if (upgrade == null) {
+            // An unreleased upgrade ends the chain by design, so only a row that looks like its upgrade is worth a line.
+            val looksUpgraded: Boolean = name in owned || price > row.skillData.cost
+            if (!rowObtained && row.bIsInPlace && row.skillData.upgrade != null && looksUpgraded && upgradeRowsLogged.add(name)) {
+                MessageLog.w(TAG, "[SKILLS] \"$name\" is owned or priced above its cost, but its upgrade id ${row.skillData.upgrade} is missing from the skill data; reading its row as \"$name\".")
+            }
+            return name
+        }
+        val resolved: String = inPlaceUpgradeRowName(row.skillData, upgrade.skillData, price, rowObtained, owned)
+        if (resolved == name) return name
+        row.bIsObtained = true
+        row.bIsVirtual = true
+        if (upgradeRowsLogged.add(name)) {
+            MessageLog.i(TAG, "[SKILLS] \"$name\" is owned or its row price $price is above its cost ${row.skillData.cost}: reading the row as its upgrade \"$resolved\".")
+        }
+        return resolved
     }
 
     /**
@@ -973,9 +1016,10 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             return null
         }
 
-        val entry: SkillListEntry? = entries[skillName]
+        val rowName: String? = skillName?.let { resolveInPlaceUpgradeRow(it, skillPrice, bIsObtained) }
+        val entry: SkillListEntry? = entries[rowName]
         if (entry == null) {
-            MessageLog.e(TAG, "[ERROR] analyzeSkillListEntryThreadSafe:: Failed to find \"$skillName\" in entries mapping.")
+            MessageLog.e(TAG, "[ERROR] analyzeSkillListEntryThreadSafe:: Failed to find \"$rowName\" in entries mapping.")
             return null
         }
 
