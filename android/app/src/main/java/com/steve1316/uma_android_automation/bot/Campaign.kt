@@ -159,6 +159,14 @@ data class RaceFallbackOutcome(
 internal fun rotationSlotScenarioMismatch(slotScenario: String, runningScenario: String): Boolean =
     slotScenario.isNotEmpty() && GrandConcertScenario.normalizeScenarioKey(slotScenario) != runningScenario
 
+/** The slot a career-start check compares: the run's live slot when it holds [target], else the first [target] slot in [runningScenario] (one
+ * trainee may hold slots in several scenarios), else her first slot; -1 when she holds none. */
+internal fun rotationSlotForCheck(names: List<String>, slotScenario: (Int) -> String, target: String, liveSlot: Int, runningScenario: String): Int {
+    if (names.getOrNull(liveSlot) == target) return liveSlot
+    val slots = names.indices.filter { names[it] == target }
+    return slots.firstOrNull { !rotationSlotScenarioMismatch(slotScenario(it), runningScenario) } ?: slots.firstOrNull() ?: -1
+}
+
 // Position of the "Group Event Progress X/Y" text relative to the right edge of the matched "Group Event Progress" pill ([LabelEventProgress]), for OCR. Tune if the "GroupEventProgress" debug crop misses the digits.
 private const val GROUP_PROGRESS_GAP_X = 15
 private const val GROUP_PROGRESS_WIDTH = 120
@@ -293,6 +301,15 @@ abstract class Campaign(game: Game) : Task(game) {
         val slotScenario = SettingsHelper.getStringSetting("rot${index}_general", "scenario").ifEmpty { return null }
         return outcomeConfigFingerprint(BuildConfig.VERSION_NAME, buildOutcomeConfigSnapshot("rot${index}_", slotScenario))
     }
+
+    private fun rotationCheckSlot(target: String, liveSlot: Int): Int =
+        rotationSlotForCheck(
+            StartModule.loadRotationConfig().inGameNames,
+            { SettingsHelper.getStringSetting("rot${it}_general", "scenario", "") },
+            target,
+            liveSlot,
+            game.scenario,
+        )
 
     /** The explicit OK line is the observable proof a career runs the intended preset; silence proves nothing in a rotated-away log. */
     private fun warnOnTraineeConfigDrift(slotIndex: Int, context: String) {
@@ -1697,7 +1714,7 @@ abstract class Campaign(game: Game) : Task(game) {
         if (targetScore >= rotationVerifyMatchThreshold) {
             MessageLog.i(TAG, "[ROTATION] Trainee verify OK: career '$inCareer' matches the loaded preset for '$target' (score=${"%.2f".format(targetScore)}).")
             // Identity and config can diverge (a resume that re-applied the wrong slot); the fingerprint comparison catches what the name check cannot.
-            warnOnTraineeConfigDrift(StartModule.loadRotationConfig().inGameNames.indexOf(target), "career-start check")
+            warnOnTraineeConfigDrift(rotationCheckSlot(target, StartModule.liveRotationSlot()), "career-start check")
             return
         }
 
@@ -1736,7 +1753,7 @@ abstract class Campaign(game: Game) : Task(game) {
                         "mustRestBeforeSummer=$mustRestBeforeSummer moodFloor=$moodFloor skillPointCheck=$skillPointsRequired " +
                         "objective=${skillSpendObjective.token()}",
                 )
-                warnOnTraineeConfigDrift(bestIndex, "post-resync verification")
+                warnOnTraineeConfigDrift(rotationCheckSlot(matched, bestIndex), "post-resync verification")
                 return
             }
             if (duplicateSlots > 1) {

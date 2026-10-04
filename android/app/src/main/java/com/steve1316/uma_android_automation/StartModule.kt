@@ -841,6 +841,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         private var queueCurrentRun: Int = 1
 
         /**
+         * Rotation slot index of the previously launched run this session, or -1 before the first run.
+         * Drives switch-boundary detection in [applyRotationForRun]; reset at the top of onStartEvent so
+         * the first launched run of every session always (re)loads its trainee snapshot.
+         */
+        @Volatile
+        private var rotationPrevIndex: Int = -1
+
+        /** The rotation slot whose snapshot the in-flight run loaded (a mid-career resync's, else the queue's), or -1 when no queue rotation applied one. */
+        fun liveRotationSlot(): Int = if (rotationResyncPrevIndex >= 0) rotationResyncPrevIndex else rotationPrevIndex
+
+        /**
          * Mid-career rotation resync, called by the Campaign trainee-mismatch guard when the career
          * on screen confidently belongs to rotation entry [index] instead of the entry the queue
          * loaded. This is the signature of an externally interrupted queue (game update, kill
@@ -894,13 +905,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
     private val context: Context = reactContext.applicationContext
     private var messageId = 1
-
-    /**
-     * Rotation slot index of the previously launched run this session, or -1 before the first run.
-     * Drives switch-boundary detection in [applyRotationForRun]; reset at the top of onStartEvent so
-     * the first launched run of every session always (re)loads its trainee snapshot.
-     */
-    private var rotationPrevIndex: Int = -1
 
     /** Bounded hand-off between MessageLog's lock-held EventBus post and the bridge worker. */
     private val jsEventQueue = java.util.concurrent.ArrayBlockingQueue<JSEvent>(512)
@@ -1606,7 +1610,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
     /** Re-applies the live rotation slot before a run builds its Game. A mid-career resync made its slot the live one; the cursor's slot applies otherwise. */
     private fun reapplyLiveRotationSlot(run: Int) {
-        val liveSlot = if (rotationResyncPrevIndex >= 0) rotationResyncPrevIndex else rotationPrevIndex
+        val liveSlot = liveRotationSlot()
         if (liveSlot >= 0) reapplyRotationSlotIfDrifted(context, liveSlot, run)
     }
 
