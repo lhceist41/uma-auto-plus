@@ -304,6 +304,16 @@ class StatusBoardTest {
     }
 
     @Test
+    fun `finished rows show the scenario name with spaces, never the stored underscore form`() {
+        for ((stored, shown) in listOf("URA_Finale" to "URA Finale", "Unity_Cup" to "Unity Cup", "Trackblazer" to "Trackblazer", "Grand_Concert" to "Grand Concert")) {
+            StatusBoard.reset(900L)
+            StatusBoard.runRecorded(record(1, "TASK_RESULT_COMPLETE", "El_Condor_Pasa").copy(scenario = stored))
+            StatusBoard.queueProgress(1, 1, "completed", "{}", 1_000L)
+            assertEquals(shown, status().getJSONArray("runs").getJSONObject(0).getString("scenario"), stored)
+        }
+    }
+
+    @Test
     fun `Trackblazer's course ends in the Twinkle Star Climax`() {
         assertEquals("Twinkle Star Climax", finaleSegment("Trackblazer").getString("label"))
         assertEquals(listOf(null to "Climax Race 1", null to "Climax Race 2", null to "Climax Race 3"), finaleDates("Trackblazer"))

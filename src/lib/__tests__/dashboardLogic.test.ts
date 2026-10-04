@@ -176,6 +176,14 @@ test('course geometry: positions match the design sample at turn 2, goal turn 12
   assert.equal(c.finale.to, 75);
 });
 
+test('a running run says it is running, never "not started"; a queued one still says not started', () => {
+  for (const scenario of ['URA Finale', 'Unity Cup', 'Trackblazer', 'Grand Concert']) {
+    assert.equal(logic.pendingRunWhen({ n: 2, scenario, state: 'running' }), 'running now', scenario);
+    assert.equal(logic.pendingRunWhen({ n: 3, scenario, state: 'next' }), 'not started', scenario);
+  }
+  assert.match(logic.pendingRunWhen({ n: 2, state: 'running', startedAt: 1_700_000_000_000 }), /^started /);
+});
+
 test('course geometry: a Trackblazer course draws its own finale label on the same 75-turn track', () => {
   const trackblazer = {
     finalTurn: 75,

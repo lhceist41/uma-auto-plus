@@ -319,6 +319,13 @@
     return parts.length ? parts.join(' · ') : 'none yet';
   }
 
+  // The details header for a run that has no result yet: the live run has no
+  // start time, but it is running, not "not started".
+  function pendingRunWhen(run) {
+    if (run.startedAt != null) return 'started ' + formatClock(run.startedAt);
+    return run.state === 'running' ? 'running now' : 'not started';
+  }
+
   // finale.of counts the finale races the bot ran, not the scenario's three,
   // so a career that ended early reads "0 of 1 raced", never "0 of 3".
   function describeFinale(f) {
@@ -564,6 +571,7 @@
     describeTpRestores: describeTpRestores,
     describeRecoveries: describeRecoveries,
     describeFinale: describeFinale,
+    pendingRunWhen: pendingRunWhen,
     totalTpRestores: totalTpRestores,
     totalRecoveries: totalRecoveries,
     viewModel: viewModel,

@@ -709,7 +709,7 @@
       failed.appendChild(el('div', 'rc-pending-outcome', (run.words && run.words.reason) || 'not available'));
       els.detailsBody.appendChild(failed);
     } else {
-      setText(els.detailsWhen, run.startedAt != null ? ('started ' + L.formatClock(run.startedAt)) : 'not started');
+      setText(els.detailsWhen, L.pendingRunWhen(run));
       var pending = el('div', 'rc-pending-body');
       pending.appendChild(el('div', 'rc-details-trainee', L.naText(run.trainee)));
       pending.appendChild(el('div', 'rc-pending-outcome', 'Its result appears here when the career ends.'));

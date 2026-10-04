@@ -237,6 +237,9 @@ internal object StatusBoard {
         return JSONObject().put("finalTurn", 75).put("segments", segments)
     }
 
+    /** The career-end record stores a scenario with underscores ("Grand_Concert"); the page shows the name. */
+    private fun scenarioName(stored: String?): Any = stored?.replace('_', ' ') ?: JSONObject.NULL
+
     /** A run's display name: the name the game showed, else the stored identifier with its spaces back. */
     private fun displayName(record: RunRecord): String? = record.traineeName ?: record.trainee?.replace('_', ' ')
 
@@ -259,7 +262,7 @@ internal object StatusBoard {
                 JSONObject()
                     .put("n", r.run)
                     .put("trainee", displayName(r) ?: JSONObject.NULL)
-                    .put("scenario", r.scenario ?: JSONObject.NULL)
+                    .put("scenario", scenarioName(r.scenario))
                     .put("state", runState(r.resultCode))
                     .put("outcome", r.outcome ?: JSONObject.NULL)
                     .put("rank", result?.rank ?: JSONObject.NULL)
