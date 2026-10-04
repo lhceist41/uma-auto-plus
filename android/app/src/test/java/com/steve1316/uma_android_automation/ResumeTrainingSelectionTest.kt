@@ -114,7 +114,7 @@ class ResumeTrainingSelectionTest {
         @Test
         fun `a failed back-out still keeps the navigator off the pill`() {
             assertTrue(game.contains("careerInFlight = careerInFlight || onTrainingSelection,"))
-            assertTrue(game.contains("val careerInFlight: Boolean = false) {"), "every other Game keeps the launch routing")
+            assertTrue(game.contains("val careerInFlight: Boolean = false, careerLaunched: Boolean = false) {"), "every other Game keeps the launch routing")
         }
 
         @Test
@@ -158,7 +158,7 @@ class ResumeTrainingSelectionTest {
             assertEquals(1, count(startModule, "var result = runSingleGame()"))
             val run = body(startModule, "private fun runSingleGame(")
             assertTrue(run.contains("val careerInFlight = nextRunCareerInFlight.also { nextRunCareerInFlight = false }"), "consumed by one run only")
-            assertTrue(run.contains("val entryPoint = Game(context, selection, careerInFlight)"))
+            assertTrue(run.contains("val entryPoint = Game(context, selection, careerInFlight, careerLaunched)"))
             assertEquals(5, count(startModule, "nextRunCareerInFlight"), "declaration, the two marks and the consume (read and clear)")
         }
 

@@ -57,9 +57,13 @@ The title screen is recognised only at 1080×1920. Neither recovery has been see
 
 After a game patch the game can ask to download additional data. The bot taps **OK** (never Cancel) and waits, tapping nothing, for up to about 10 minutes for the download to finish, between runs and during a career. This has not been seen on a real patch yet. If the game instead forces a **Data Update** in the middle of a career (its only button is **Title Screen**), the bot stops safely without tapping anything. Tap **Title Screen**, let the game reload and any download finish, then press Start again. If the queue stops asking you to answer the game's data prompt, do the same: tap **OK** or **Title Screen**, let any download finish and press Start again. The stopped queue is not continued: Start begins a new queue from run 1 and first picks up the career in progress. If your rotation mixes scenarios, select that career's trainee and scenario before you press Start.
 
-### 8. The queue paused after a career
+### 8. The queue paused after a career, or you pressed Stop
 
 If you used **Stop after this career** (on Home or on the dashboard), the bot finished that career and paused the queue on purpose: Home says "Queue paused after run 2/4" and the notification says you paused it. Press **Start** within 24 hours, with Run Queue on and the same number of runs, to continue with the next run. An in-app update is refused while a paused queue is saved; resume or discard it on Home first.
+
+If you press **Stop** while a career is playing, the queue keeps your place for 24 hours. **Start**, with Run Queue on and the same number of runs, finishes that career with its own trainee's settings and then goes on with the queue. To start over instead, tap **Discard** on Home. A Stop between careers ends the queue.
+
+Before a career it did not start itself plays its first turn, the bot checks the career screen. If the screen shows a different scenario than the run's settings, it stops and keeps the career: select a preset for that career's scenario, or finish the career in the game.
 
 ### 9. The bot misses a button near the game's left edge
 

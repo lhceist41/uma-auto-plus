@@ -488,9 +488,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             return ResumePlan(if (phase == PHASE_CAREER) currentRun else currentRun + 1, prior)
         }
 
-        /** A bot stop keeps the resume record so Start resumes the saved run; a user stop clears it, and so does a bot stop after the last career (it would replay a finished run). */
-        fun keepsResumeRecordAfterStop(queueStopRequested: Boolean, botStopReason: String?, lastCareerFinished: Boolean): Boolean =
-            queueStopRequested && botStopReason != null && !lastCareerFinished
+        /**
+         * A stop keeps the resume record so Start re-enters the saved run: a bot stop always, a player's stop only when it ended a run whose
+         * career is still in the slot ([stopLeftCareer]). Both clear it after the last career, which it would replay.
+         */
+        fun keepsResumeRecordAfterStop(queueStopRequested: Boolean, botStopReason: String?, lastCareerFinished: Boolean, stopLeftCareer: Boolean): Boolean =
+            queueStopRequested && !lastCareerFinished && (botStopReason != null || stopLeftCareer)
 
         /** A Stop landing inside launch navigation comes back as an error; report the player's own Stop as MANUALLY_STOPPED. */
         fun resultForStoppedRun(result: TaskResult, botStopReason: String?): TaskResult =
@@ -1476,6 +1479,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     @Volatile
     private var nextRunCareerInFlight = false
 
+    /** Set when the navigation before the next run started its career itself; the next [runSingleGame] consumes it. */
+    @Volatile
+    private var nextRunCareerLaunched = false
+
     /**
      * Runs a single Game instance on a background thread and returns its TaskResult.
      *
@@ -1485,11 +1492,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         var taskResult: TaskResult? = null
         lastRunPostedException = false
         val careerInFlight = nextRunCareerInFlight.also { nextRunCareerInFlight = false }
+        val careerLaunched = nextRunCareerLaunched.also { nextRunCareerLaunched = false }
 
         val botThread =
             Thread {
                 try {
-                    val entryPoint = Game(context, selection, careerInFlight)
+                    val entryPoint = Game(context, selection, careerInFlight, careerLaunched)
                     taskResult = entryPoint.start()
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
@@ -2038,6 +2046,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 rotationCursorOffset = 0
                 rotationResyncPrevIndex = -1
                 queueCurrentRun = 1
+                nextRunCareerLaunched = false
                 setRotationSwitchPending(context, false)
 
                 // Reset the log stream mute to ensure logs for the new run are broadcasted.
@@ -2201,6 +2210,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // looking for the wrong thing.
                 var queueHaltCareerInFlight = false
                 var lastCareerFinished = false
+                // True when a stop ended a run mid-career: that career is still in the slot, so the saved run is kept for Start to re-enter.
+                var stopLeftCareer = false
                 // The run after which the player's stop after this career paused the queue, or null.
                 var stoppedAfterCareerRun: Int? = null
                 // True once a career is actually confirmed to exist: the cold-start probe below
@@ -2290,6 +2301,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             coldStartConfirmedCareer = true
                             // Resume re-entered a career already in the slot, so the first run carries it on.
                             if (navResult.careerResumed) resumeReEntersCareer = true
+                            nextRunCareerLaunched = navResult.careerLaunched
                         }
                     } else if (coldStartNavigator != null) {
                         // Not confirmed on Home: assume a career already exists, as the unconditional
@@ -2476,6 +2488,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // queue; the reason makes the log honest about which one it actually was.
                             if (!queueSkipRequested) {
                                 MessageLog.i(TAG, "[QUEUE] ${queueStopReason ?: "User stopped the bot"}. Exiting queue.")
+                                stopLeftCareer = runScenario != "Daily Races" && runScenario != "Team Trials"
                                 break
                             }
                         }
@@ -2700,6 +2713,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished, careerInFlight = !careerFinished)
                             attachCareerEndSparks(ledger, i, runCareerEndSeq)
                             if (navResult.careerResumed) previousRunLeftCareer = true
+                            nextRunCareerLaunched = navResult.success && navResult.careerLaunched
 
                             if (skipsTrainee(navResult, rotation) && CareerLaunchNavigator(context).backOutToHome()) {
                                 MessageLog.w(TAG, "[QUEUE] Run ${i + 1} cannot start its trainee (${navResult.reasonKey}): ${navResult.failureReason} Back on the home screen; the run's own launch records the skip.")
@@ -2802,7 +2816,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     } else {
                         // Clear persisted queue state since queue finished normally.
                         val stopReason = queueStopReason
-                        if (!keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished)) clearQueueState(context)
+                        if (!keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer)) clearQueueState(context)
                         when {
                             queueStopRequested && stopReason != null -> {
                                 // A controlled internal stop rather than a user Stop or failure. stopReason is always

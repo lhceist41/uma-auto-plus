@@ -51,8 +51,8 @@ enum class SessionEnd(val clearsQueueState: Boolean = false) {
     /** The career launch from the home screen failed before the first run. */
     LAUNCH_FAILED_BEFORE_RUN,
 
-    /** The player stopped the queue. */
-    STOPPED_BY_USER(clearsQueueState = true),
+    /** The player stopped the queue. A stop in the middle of a career keeps the resume record; any other clears it. */
+    STOPPED_BY_USER,
 
     /** The bot stopped the queue itself (trainee mismatch, or a navigation that stopped responding). */
     STOPPED_BY_BOT(clearsQueueState = true),

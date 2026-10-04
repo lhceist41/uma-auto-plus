@@ -470,6 +470,21 @@
             }
         },
         {
+            "name": "stopped by the player in the middle of a career",
+            "report": {
+                "kind": "STOPPED_BY_USER",
+                "queueEnabled": true,
+                "totalRuns": 2,
+                "completedRuns": 1,
+                "resumable": true
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "You stopped the queue with 1 of 2 runs done.",
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue. To start over instead, tap Discard on Home."
+            }
+        },
+        {
             "name": "stopped after a career: resumable",
             "report": {
                 "kind": "STOPPED_AFTER_CAREER",
@@ -529,6 +544,21 @@
                 "title": "Queue stopped",
                 "reason": "The bot stopped the queue with 2 of 15 runs done: the run had loaded settings for a different scenario than its rotation trainee. The career is kept, and Start continues it with that trainee's settings. If it stops again, check the trainee's scenario under Rotate Trainees in Run Queue Settings.",
                 "nextAction": "Press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "bot stop: resumed career from another scenario",
+            "report": {
+                "kind": "STOPPED_BY_BOT",
+                "queueEnabled": true,
+                "totalRuns": 3,
+                "completedRuns": 1,
+                "reasonKey": "CAREER_SCENARIO_MISMATCH"
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The bot stopped the queue with 1 of 3 runs done: the career in the game is from a different scenario than this run's settings. The career is kept.",
+                "nextAction": "Select a preset for that career's scenario on Home, discarding any saved queue there, or finish the career in the game, then press Start in UMA Auto+."
             }
         },
         {

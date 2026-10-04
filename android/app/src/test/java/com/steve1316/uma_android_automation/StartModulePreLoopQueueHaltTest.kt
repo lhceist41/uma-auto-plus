@@ -226,7 +226,7 @@ class StartModulePreLoopQueueHaltTest {
             assertTrue(
                 Regex(
                     "\\} else \\{(\\s*//[^\\n]*\\n)+\\s*val stopReason = queueStopReason\\n\\s*" +
-                        "if \\(!keepsResumeRecordAfterStop\\(queueStopRequested, stopReason, lastCareerFinished\\)\\) clearQueueState\\(context\\)",
+                        "if \\(!keepsResumeRecordAfterStop\\(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer\\)\\) clearQueueState\\(context\\)",
                 ).find(startModule, pause!!.range.last) != null,
                 "clearQueueState must be the else arm after the halt and the pause, unreachable once either is set, and skipped for a bot stop",
             )

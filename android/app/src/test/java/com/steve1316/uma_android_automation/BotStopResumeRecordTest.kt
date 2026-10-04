@@ -25,43 +25,65 @@ class BotStopResumeRecordTest {
 
         @Test
         fun `a bot stop keeps the record`() {
-            assertTrue(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = false))
+            assertTrue(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = false, stopLeftCareer = false))
         }
 
         @Test
-        fun `a user stop clears it`() {
-            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = null, lastCareerFinished = false))
+        fun `a player's stop between careers clears it`() {
+            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = null, lastCareerFinished = false, stopLeftCareer = false))
+        }
+
+        @Test
+        fun `a player's stop in the middle of a career keeps it`() {
+            assertTrue(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = null, lastCareerFinished = false, stopLeftCareer = true))
+        }
+
+        @Test
+        fun `a player's stop keeps it only when a stop was requested`() {
+            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = false, botStopReason = null, lastCareerFinished = false, stopLeftCareer = true))
+        }
+
+        @Test
+        fun `nothing is kept once the last career finished`() {
+            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = null, lastCareerFinished = true, stopLeftCareer = true))
+        }
+
+        @Test
+        fun `a bot stop keeps it whether or not its run left a career`() {
+            for (left in listOf(true, false)) {
+                assertTrue(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = false, stopLeftCareer = left))
+            }
         }
 
         @Test
         fun `a queue that ran out without a stop clears it`() {
-            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = false, botStopReason = null, lastCareerFinished = false))
+            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = false, botStopReason = null, lastCareerFinished = false, stopLeftCareer = false))
         }
 
         @Test
         fun `a bot stop after the last run finished clears it`() {
             val finished = lastCareerFinished(5, complete, complete, complete, complete, complete)
-            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished))
+            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished, stopLeftCareer = false))
         }
 
         @Test
         fun `a bot stop before the last run finished keeps it`() {
             val finished = lastCareerFinished(5, complete, complete, complete, complete)
             assertFalse(finished, "run 4 of 5 is not the last run")
-            assertTrue(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished))
+            assertTrue(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished, stopLeftCareer = false))
         }
 
         @Test
         fun `a bot stop after the last run finished clears it even when an earlier run errored`() {
             val finished = lastCareerFinished(5, complete, complete, TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, complete, complete)
-            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished))
+            assertFalse(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished, stopLeftCareer = false))
         }
 
         @Test
         fun `a last run whose career is still in the slot keeps it`() {
             for (unfinished in listOf(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE)) {
                 val finished = lastCareerFinished(5, complete, complete, complete, complete, unfinished)
-                assertTrue(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished), unfinished.name)
+                assertTrue(StartModule.keepsResumeRecordAfterStop(queueStopRequested = true, botStopReason = dataUpdateReason, lastCareerFinished = finished, stopLeftCareer = false), unfinished.name)
             }
         }
     }
@@ -109,7 +131,7 @@ class BotStopResumeRecordTest {
                 "android/app/src/main/java/com/steve1316/uma_android_automation/bot/Campaign.kt",
                 "android/app/src/main/java/com/steve1316/uma_android_automation/bot/DialogHandler.kt",
             ).sumOf { path -> Regex("queueStopReason =\\s*\"|queueStopReason = reason|queueStopReason =\\n").findAll(source(path)).count() }
-            assertEquals(4, sites, "navigation deadline, trainee mismatch, scenario mismatch, data prompt")
+            assertEquals(5, sites, "navigation deadline, trainee mismatch, scenario mismatch, resumed career's scenario, data prompt")
             for (userStop in listOf("fun stop() {", "fun stopQueue() {", "internal fun stopForLostCapture() {")) {
                 val at = startModule.indexOf(userStop)
                 assertTrue(at >= 0, userStop)
@@ -119,6 +141,18 @@ class BotStopResumeRecordTest {
                 val body = startModule.substring(at, end)
                 assertFalse(body.contains("queueStopReason"), "$userStop must not set a stop reason")
             }
+        }
+
+        @Test
+        fun `only a stop that ends a career run marks its career as left in the slot`() {
+            assertEquals(1, Regex("stopLeftCareer = runScenario").findAll(startModule).count(), "set in one place")
+            assertFalse(Regex("stopLeftCareer = true").containsMatchIn(startModule))
+            val branch = startModule.substring(startModule.indexOf("TaskResultCode.TASK_RESULT_MANUALLY_STOPPED -> {"), startModule.indexOf("TaskResultCode.TASK_RESULT_COMPLETE -> {"))
+            assertTrue(
+                branch.contains("stopLeftCareer = runScenario != \"Daily Races\" && runScenario != \"Team Trials\"\n                                break"),
+                "the stopped run's own branch, misc runs excluded",
+            )
+            assertTrue(startModule.contains("keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer)"))
         }
 
         @Test

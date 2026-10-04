@@ -34,6 +34,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- **Stop no longer throws away your queue in the middle of a career:** Start within 24 hours finishes the career you stopped with its own trainee's settings and continues the queue. Tap Discard on Home to start over instead.
+- **A career from another scenario is no longer played with the wrong settings:** before the first turn of a career it did not start itself, the bot checks the career screen, and if it shows a different scenario than the run's settings, it stops and keeps the career.
 - **Goal races are read on the right day:** the bot now reads the date on a goal race's race list, so it names that race and its grade instead of the previous turn's, and an Alarm Clock setting such as G1 Only applies to G1 goal races. If the date cannot be read there, the bot uses the last turn it saw, as before.
 - **A career that ends on a lost goal race now shows as ended early** in the queue report, the dashboard and the career log, and the log says what each race retry used.
 - **Opening UMA Auto+ during a queue no longer changes the next careers' settings:** leaving the app used to save all of its settings again, over the trainee settings the queue had loaded for its next run. It now saves only what you changed yourself.

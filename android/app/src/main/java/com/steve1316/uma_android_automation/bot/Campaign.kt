@@ -49,7 +49,10 @@ import com.steve1316.uma_android_automation.components.ButtonRaceStrategyPace
 import com.steve1316.uma_android_automation.components.ButtonRecreation
 import com.steve1316.uma_android_automation.components.ButtonRest
 import com.steve1316.uma_android_automation.components.ButtonRestAndRecreation
+import com.steve1316.uma_android_automation.components.ButtonInterface
+import com.steve1316.uma_android_automation.components.ButtonRacesGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonShop
+import com.steve1316.uma_android_automation.components.ButtonShopTrackblazer
 import com.steve1316.uma_android_automation.components.ButtonSkills
 import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.ButtonSkipOff
@@ -166,6 +169,22 @@ internal fun rotationSlotForCheck(names: List<String>, slotScenario: (Int) -> St
     val slots = names.indices.filter { names[it] == target }
     return slots.firstOrNull { !rotationSlotScenarioMismatch(slotScenario(it), runningScenario) } ?: slots.firstOrNull() ?: -1
 }
+
+/**
+ * The other scenario a career screen proves it plays, from the scenario buttons two fresh captures show: one scenario seen on both, and
+ * [configured]'s own button on neither. Null means play on; a missed template must never stop a career.
+ */
+internal fun foreignCareerScenario(configured: String, first: Set<String>, second: Set<String>): String? {
+    if (configured in first || configured in second) return null
+    return (first intersect second).singleOrNull()
+}
+
+// The stock Races button on every other scenario's career screen scores about 0.70 against the Grand Concert one, so a lowered template
+// confidence setting would read every URA Finale career as Grand Concert.
+private const val SCENARIO_BUTTON_MIN_CONFIDENCE = 0.8
+
+/** The match bar for the scenario buttons: the player's template confidence, never below [SCENARIO_BUTTON_MIN_CONFIDENCE]. */
+internal fun scenarioButtonConfidence(playerConfidence: Double): Double = maxOf(playerConfidence, SCENARIO_BUTTON_MIN_CONFIDENCE)
 
 // Position of the "Group Event Progress X/Y" text relative to the right edge of the matched "Group Event Progress" pill ([LabelEventProgress]), for OCR. Tune if the "GroupEventProgress" debug crop misses the digits.
 private const val GROUP_PROGRESS_GAP_X = 15
@@ -327,6 +346,43 @@ abstract class Campaign(game: Game) : Task(game) {
                     "this career may be running another preset's settings.",
             )
         }
+    }
+
+    /** Buttons only one scenario's career screen shows. URA Finale has none, so a URA career is never proven by what is missing. */
+    private val scenarioButtons: Map<String, ButtonInterface> =
+        mapOf(
+            GrandConcertScenario.KEY to ButtonRacesGrandConcert,
+            "Trackblazer" to ButtonShopTrackblazer,
+            "Unity Cup" to ButtonUnityCupRace,
+        )
+
+    private fun scenariosOnScreen(): Set<String> {
+        val bitmap = game.imageUtils.getSourceBitmap()
+        val confidence = scenarioButtonConfidence(game.imageUtils.confidence)
+        return scenarioButtons.filterValues { it.check(game.imageUtils, sourceBitmap = bitmap, confidence = confidence) }.keys
+    }
+
+    /** A career this run did not start can belong to another scenario, and the campaign is fixed when Game is built: stop before its first turn. */
+    private fun checkReEnteredCareerScenario() {
+        val first = scenariosOnScreen()
+        val second =
+            if (first.isEmpty() || game.scenario in first) {
+                emptySet()
+            } else {
+                game.wait(1.0, skipWaitingForLoading = true)
+                scenariosOnScreen()
+            }
+        val foreign = foreignCareerScenario(game.scenario, first, second)
+        if (foreign == null) {
+            MessageLog.i(TAG, "[CONFIG_DRIFT] Career screen of a career this run did not start shows ${first.ifEmpty { setOf("no scenario button") }.joinToString()}; playing it as ${game.scenario}.")
+            return
+        }
+        val reason = "Stopped on a scenario mismatch: the career in the game is a $foreign career, but this run loaded ${game.scenario} settings. The career is kept in the game."
+        MessageLog.e(TAG, "[CONFIG_DRIFT] $reason")
+        StartModule.queueStopKey = "CAREER_SCENARIO_MISMATCH"
+        StartModule.queueStopReason = reason
+        StartModule.queueStopRequested = true
+        throw InterruptedException(reason)
     }
 
     /** Stops before any further tap: playing on would run the career under another scenario's campaign logic. */
@@ -541,6 +597,9 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** Independent of [bDeckValidationChecked]: the verify runs regardless of the deck-validation setting. */
     private var bRotationTraineeVerified: Boolean = false
+
+    /** Once per run, at the first career screen. */
+    private var bCareerScenarioChecked: Boolean = false
 
     /** Jaro-Winkler floor for the rotation trainee verify; slightly lenient versus the navigator's 0.86 select threshold because a STOP halts the
      * whole unattended queue. */
@@ -2886,6 +2945,11 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun handleMainScreen(): Boolean {
         if (!checkMainScreen()) {
             return false
+        }
+
+        if (!bCareerScenarioChecked) {
+            bCareerScenarioChecked = true
+            if (!game.careerLaunched) checkReEnteredCareerScenario()
         }
 
         // Scenario-specific pre-update hook.

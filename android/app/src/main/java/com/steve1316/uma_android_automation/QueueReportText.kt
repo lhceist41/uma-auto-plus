@@ -81,7 +81,12 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
                 lastForceEnded -> withFinalizeStop(ReportText("Career ended early", "The game ended the career early: a goal was missed.", null), r)
                 else -> withFinalizeStop(singleRunText(lastCode), r)
             }
-        SessionEnd.STOPPED_BY_USER -> ReportText("Queue stopped", "You stopped the queue with $done of ${runs(total)} done." + runNotes(r), null)
+        SessionEnd.STOPPED_BY_USER ->
+            ReportText(
+                haltTitle(resumable),
+                "You stopped the queue with $done of ${runs(total)} done." + runNotes(r),
+                if (resumable) pressStart(true).replaceFirstChar { it.uppercase() } + " To start over instead, tap Discard on Home." else null,
+            )
         SessionEnd.STOPPED_BY_BOT -> {
             val why = keyText(key, r)
             ReportText("Queue stopped", "The bot stopped the queue with $done of ${runs(total)} done: ${why.reason}" + runNotes(r), why.next(false))
@@ -363,6 +368,11 @@ internal val REPORT_REASON_KEYS =
                 "the run had loaded settings for a different scenario than its rotation trainee. The career is kept, and Start continues it with that " +
                     "trainee's settings. If it stops again, check the trainee's scenario under Rotate Trainees in Run Queue Settings.",
                 null,
+            ),
+        "CAREER_SCENARIO_MISMATCH" to
+            KeyText(
+                "the career in the game is from a different scenario than this run's settings. The career is kept.",
+                "Select a preset for that career's scenario on Home, discarding any saved queue there, or finish the career in the game",
             ),
         "CONNECTION_LOST" to KeyText("the game lost its connection to its server and did not reconnect in time.", "Check the device's internet connection and clear the error in the game"),
         "DOWNLOAD_FAILED" to KeyText("the game could not finish downloading its data.", "Check the device's internet connection and let the game finish its download"),

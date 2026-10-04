@@ -72,8 +72,13 @@ import kotlin.intArrayOf
  * @property careerInFlight True when this run re-enters a career already in the game's slot (the
  *   queue's resumed in-flight career, or a run played again after an error), so its start never
  *   reads a Skip pill as the launch Quick Mode prompt.
+ * @property careerLaunched True when the navigation before this run started its career.
  */
-class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Selection? = null, val careerInFlight: Boolean = false) {
+class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Selection? = null, val careerInFlight: Boolean = false, careerLaunched: Boolean = false) {
+    /** False when this run plays a career it did not start (a resume, a retry, or a Start on a career in progress); its scenario is checked at its first career screen. */
+    var careerLaunched: Boolean = careerLaunched
+        private set
+
     /** The current Android notification message to display. */
     var notificationMessage: String = ""
 
@@ -1014,6 +1019,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                         reasonOutfit = navResult.reasonOutfit,
                     )
                 }
+                if (navResult.careerLaunched) careerLaunched = true
                 MessageLog.i(TAG, "[INFO] Auto-navigation complete. Bot is now on the training menu.")
                 wait(2.0)
             }

@@ -62,7 +62,7 @@ class StopAfterCareerTest {
             assertEquals(SessionEnd.SERVICE_ENDED, classifySessionEnd(paused.copy(serviceRunning = false)).end)
             assertEquals(SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS, classifySessionEnd(paused.copy(haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS)).end)
             assertEquals(SessionEnd.SINGLE_RUN_ENDED, classifySessionEnd(paused.copy(queueEnabled = false)).end)
-            assertFalse(classifySessionEnd(paused.copy(stopRequested = true)).resumable, "a Stop clears the record as always")
+            assertFalse(classifySessionEnd(paused.copy(stopRequested = true, queueStateActive = false)).resumable, "a Stop after the finished career cleared the record")
         }
 
         @Test

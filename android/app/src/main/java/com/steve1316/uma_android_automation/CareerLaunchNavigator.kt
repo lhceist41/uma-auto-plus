@@ -184,6 +184,8 @@ data class NavigationResult(
     val reasonRotation: Boolean = false,
     /** True when the navigation clicked Resume on Continue Career: a career occupies the game's slot. */
     val careerResumed: Boolean = false,
+    /** True when the navigation started a new career itself rather than resuming one. */
+    val careerLaunched: Boolean = false,
 )
 
 /**
@@ -1396,7 +1398,7 @@ class CareerLaunchNavigator(private val context: Context) {
 
             when (transitionResult) {
                 is TransitionResult.Success -> {
-                    return NavigationResult(success = true, lastDetectedState = currentState.name)
+                    return NavigationResult(success = true, lastDetectedState = currentState.name, careerLaunched = careerLaunchInitiated)
                 }
                 is TransitionResult.Continue -> {
                     waitSafe(1.5)

@@ -135,11 +135,16 @@ class QueueReportTest {
         fun `every ending whose path clears the record is never resumable`() {
             val clearing = SessionEnd.entries.filter { it.clearsQueueState }.toSet()
             assertEquals(
-                setOf(SessionEnd.NOTHING_TO_RESUME, SessionEnd.STOPPED_BY_USER, SessionEnd.STOPPED_BY_BOT, SessionEnd.SERVICE_ENDED, SessionEnd.COMPLETED),
+                setOf(SessionEnd.NOTHING_TO_RESUME, SessionEnd.STOPPED_BY_BOT, SessionEnd.SERVICE_ENDED, SessionEnd.COMPLETED),
                 clearing,
             )
-            assertFalse(classifySessionEnd(queue.copy(stopRequested = true, queueStateActive = true)).resumable)
             assertFalse(classifySessionEnd(queue.copy(serviceRunning = false, queueStateActive = true)).resumable)
+        }
+
+        @Test
+        fun `a player's stop is resumable exactly when it kept the record`() {
+            assertTrue(classifySessionEnd(queue.copy(stopRequested = true, queueStateActive = true)).resumable, "stopped in the middle of a career")
+            assertFalse(classifySessionEnd(queue.copy(stopRequested = true, queueStateActive = false)).resumable, "stopped between careers")
         }
 
         @Test
