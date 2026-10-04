@@ -29,7 +29,7 @@ class CoordinateTapMigrationTest {
     fun `helper dispatch passes null imageName`() {
         // CoordinateTap.tap (raw path) and Game.tapCoordinate (waiting path) both tap imageName=null.
         assertTrue(
-            helper.contains(Regex("""service\.tap\(jx\.toDouble\(\), jy\.toDouble\(\), null""")),
+            helper.contains(Regex("""live\.tap\(jx\.toDouble\(\), jy\.toDouble\(\), null""")),
             "CoordinateTap.tap must dispatch with a null imageName",
         )
         assertTrue(

@@ -9,6 +9,7 @@ import com.steve1316.uma_android_automation.bot.EnteredRace
 import com.steve1316.uma_android_automation.bot.EnteredRacePath
 import com.steve1316.uma_android_automation.bot.EnteredRaceResolution
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.OwnUiForeground
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextRaceEnd
 import com.steve1316.uma_android_automation.components.ButtonSelectOpponent
@@ -114,6 +115,7 @@ class UnityCup(game: Game) : Campaign(game) {
                     MessageLog.i(TAG, "\n[UNITY_CUP] Detected tutorial for Unity Cup. Closing it now...")
                     val trainingOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
                     if (trainingOptionLocations.size >= 2) {
+                        OwnUiForeground.waitForGame()
                         game.gestureUtils.tap(trainingOptionLocations[1].x, trainingOptionLocations[1].y, IconTrainingEventHorseshoe.template.path)
                         true
                     } else {
@@ -256,6 +258,7 @@ class UnityCup(game: Game) : Campaign(game) {
 
                     selectedOpponentIndex = selectedOpponentIndex.coerceIn(0, opponents.lastIndex)
                     val opponent = opponents[selectedOpponentIndex]
+                    OwnUiForeground.waitForGame()
                     game.gestureUtils.tap(opponent.x, opponent.y, LabelUnityCupOpponentSelectionLaurel.template.path)
                     // Tiny delay to allow the opponent selection click to register fully.
                     game.wait(0.1, skipWaitingForLoading = true)

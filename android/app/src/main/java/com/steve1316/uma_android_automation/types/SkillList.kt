@@ -8,6 +8,7 @@ import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.OwnUiForeground
 import com.steve1316.uma_android_automation.bot.parseSkillListPointsText
 import com.steve1316.uma_android_automation.bot.sanitizeOcrExcerpt
 import com.steve1316.uma_android_automation.bot.verifiedBalanceAfterBuyTap
@@ -821,6 +822,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
     /** Swipes up within the skills panel to reveal the next page of skills (for trainees with 10+ skills). */
     private fun scrollSkillsPanel() {
         val cx = (SharedData.displayWidth / 2).toFloat()
+        OwnUiForeground.waitForGame()
         // A short, slow swipe (~1.7 rows) reduces fling and heavily overlaps the previous page, so every skill passes through the visible area at several sub-row offsets across
         // passes - on at least one of which a two-line name is aligned enough to read fully rather than clipped.
         game.gestureUtils.swipe(cx, (SharedData.displayHeight * 0.66).toFloat(), cx, (SharedData.displayHeight * 0.56).toFloat(), 700L)

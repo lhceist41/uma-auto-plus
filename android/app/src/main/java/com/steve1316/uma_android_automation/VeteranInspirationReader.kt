@@ -8,6 +8,7 @@ import com.steve1316.uma_android_automation.bot.InspirationColumn
 import com.steve1316.uma_android_automation.bot.InspirationDiagnostics
 import com.steve1316.uma_android_automation.bot.InspirationFactor
 import com.steve1316.uma_android_automation.bot.InspirationReadTermination
+import com.steve1316.uma_android_automation.bot.OwnUiForeground
 import com.steve1316.uma_android_automation.bot.SparkRowKind
 import com.steve1316.uma_android_automation.bot.VeteranInspirationObservation
 import com.steve1316.uma_android_automation.bot.assembleVeteranInspiration
@@ -204,8 +205,10 @@ class VeteranInspirationReader(private val game: Game, private val factorDomain:
         val lowY = INSPIRATION_SWIPE_LOW_Y.toFloat()
         val highY = lowY + distance
         if (down) {
+            OwnUiForeground.waitForGame()
             game.gestureUtils.swipe(gutterX, lowY, gutterX, highY, duration = SWIPE_DURATION_MS)
         } else {
+            OwnUiForeground.waitForGame()
             game.gestureUtils.swipe(gutterX, highY, gutterX, lowY, duration = SWIPE_DURATION_MS)
         }
         game.wait(SETTLE_SECONDS)

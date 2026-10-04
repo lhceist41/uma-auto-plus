@@ -517,6 +517,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
      * @param ignoreWaiting Flag to ignore checking if the game is busy loading.
      */
     fun tap(x: Double, y: Double, imageName: String? = null, taps: Int = 1, ignoreWaiting: Boolean = false) {
+        OwnUiForeground.waitForGame()
         checkCurrentRun()
         // Perform the tap.
         gestureUtils.tap(x, y, imageName, taps = taps)

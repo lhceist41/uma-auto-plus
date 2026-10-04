@@ -10,6 +10,7 @@ import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.ConnectionOutageBudget
+import com.steve1316.uma_android_automation.bot.OwnUiForeground
 import com.steve1316.uma_android_automation.bot.navigatorStuckKey
 import com.steve1316.uma_android_automation.bot.GAME_NOT_RESPONDING
 import com.steve1316.uma_android_automation.bot.GameReopen
@@ -2870,6 +2871,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 "action=${plan.action.name.lowercase()} start=(${plan.startX.toInt()}, ${plan.startY.toInt()}) " +
                 "end=(${plan.endX.toInt()}, ${plan.endY.toInt()})",
         )
+        OwnUiForeground.waitForGame()
         gestureUtils.swipe(plan.startX, plan.startY, plan.endX, plan.endY, duration = plan.durationMs)
         waitSafe(1.5) // animation settle only; the fresh captures below are the proof
         var lastHeading = "unreadable"
@@ -3883,6 +3885,7 @@ class CareerLaunchNavigator(private val context: Context) {
             }
             previousRows = frame.rows
             scrolls++
+            OwnUiForeground.waitForGame()
             gestureUtils.swipe(SPARK_LIST_SCROLL_X, 1100f, SPARK_LIST_SCROLL_X, 1100f - geometry.rowPitch * 4f, duration = 900L)
             waitSafe(1.0)
         }
@@ -3920,6 +3923,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * acting anyway. */
     private fun restoreSparkListTop(geometry: SparkListGeometry, expectedFirst: SparkRowFact?, scrollsUsed: Int) {
         repeat(scrollsUsed + 1) {
+            OwnUiForeground.waitForGame()
             gestureUtils.swipe(SPARK_LIST_SCROLL_X, 700f, SPARK_LIST_SCROLL_X, 700f + geometry.rowPitch * 4f, duration = 900L)
             waitSafe(0.8)
         }
@@ -6920,8 +6924,10 @@ class CareerLaunchNavigator(private val context: Context) {
         val top = mid - half
         val bottom = mid + half
         if (pageDown) {
+            OwnUiForeground.waitForGame()
             gestureUtils.swipe(x, bottom, x, top, duration = 850L)
         } else {
+            OwnUiForeground.waitForGame()
             gestureUtils.swipe(x, top, x, bottom, duration = 850L)
         }
     }
@@ -7356,12 +7362,14 @@ class CareerLaunchNavigator(private val context: Context) {
         when (attempt) {
             0 -> {
                 val from = bitmap.height * 0.72f
+                OwnUiForeground.waitForGame()
                 gestureUtils.swipe(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
             }
             1 -> {
                 // Start lower with the same delta: a higher start point can clip the dialog header and
                 // swallow the drag; beginning near the bottom gives the whole gesture room on the list body.
                 val from = bitmap.height * 0.82f
+                OwnUiForeground.waitForGame()
                 gestureUtils.swipe(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
             }
             else -> {
@@ -7369,6 +7377,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 // short drags cannot. Bounded by the frame so it never drags off-screen.
                 val from = bitmap.height * 0.85f
                 val delta = (BORROW_PAGE_SWIPE_PX * 1.4f).coerceAtMost(bitmap.height * 0.55f)
+                OwnUiForeground.waitForGame()
                 gestureUtils.swipe(x, from, x, from - delta, duration = 1300L)
             }
         }
@@ -9027,6 +9036,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 observed.add(ocrLineageAncestorBlock(bitmap, nowHave[i]))
             }
             if (accumulator.complete || accumulator.stalledRounds >= 2 || scrolls >= maxScrolls) break
+            OwnUiForeground.waitForGame()
             gestureUtils.swipe(scrollX, scrollFromY, scrollX, scrollToY, duration = 900L)
             scrolls++
             waitSafe(0.9)

@@ -268,7 +268,7 @@ class ProgressTrackerTest {
             assertTrue(nav.contains("if (detectedState != currentState) ProgressTracker.noteProgress(ProgressEvent.SCREEN_CHANGE)\n                currentState = detectedState"))
             assertTrue(source("$main/bot/Game.kt").contains("gestureUtils.tap(x, y, imageName, taps = taps)\n        ProgressTracker.noteAction()"))
             assertTrue(source("$main/components/Components.kt").contains("MyAccessibilityService.getInstance().tap(x, y, imageName, taps = taps)\n        ProgressTracker.noteAction()"))
-            assertTrue(source("$main/bot/CoordinateTap.kt").contains("service.tap(jx.toDouble(), jy.toDouble(), null, taps = taps)\n        ProgressTracker.noteAction()"))
+            assertTrue(source("$main/bot/CoordinateTap.kt").contains("live.tap(jx.toDouble(), jy.toDouble(), null, taps = taps)\n        ProgressTracker.noteAction()"))
         }
 
         @Test

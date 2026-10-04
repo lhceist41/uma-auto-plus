@@ -35,8 +35,10 @@ object CoordinateTap {
 
     /** Raw coordinate tap without the post-tap loading wait; use [Game.tapCoordinate] when that wait is needed. */
     fun tap(service: MyAccessibilityService, x: Double, y: Double, label: String, taps: Int = 1): Pair<Int, Int> {
+        // A hold can outlast an accessibility rebind, which would leave the passed service dead.
+        val live = if (OwnUiForeground.waitForGame()) MyAccessibilityService.getInstance() else service
         val (jx, jy) = resolve(x, y, label)
-        service.tap(jx.toDouble(), jy.toDouble(), null, taps = taps)
+        live.tap(jx.toDouble(), jy.toDouble(), null, taps = taps)
         ProgressTracker.noteAction()
         return Pair(jx, jy)
     }

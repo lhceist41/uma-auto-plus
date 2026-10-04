@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation
 import android.graphics.Bitmap
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.OwnUiForeground
 import com.steve1316.uma_android_automation.bot.ProtectionPopulation
 import com.steve1316.uma_android_automation.bot.ProtectionScanOutcome
 import com.steve1316.uma_android_automation.bot.RosterListState
@@ -427,6 +428,7 @@ class VeteranProtectionScanner(private val game: Game) {
 
     private fun scrollFilterListToTop() {
         repeat(FILTER_SCROLL_TO_BOTTOM_SWIPES) {
+            OwnUiForeground.waitForGame()
             game.gestureUtils.swipe(
                 FILTER_SCROLL_GUTTER_X.toFloat(),
                 FILTER_SCROLL_SWIPE_TO_Y.toFloat(),
@@ -440,6 +442,7 @@ class VeteranProtectionScanner(private val game: Game) {
     }
 
     private fun scrollFilterListDown() {
+        OwnUiForeground.waitForGame()
         game.gestureUtils.swipe(
             FILTER_SCROLL_GUTTER_X.toFloat(), FILTER_SCROLL_SWIPE_FROM_Y.toFloat(),
             FILTER_SCROLL_GUTTER_X.toFloat(), FILTER_SCROLL_SWIPE_TO_Y.toFloat(),

@@ -5,6 +5,7 @@ import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.OwnUiForeground
 import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.IconScrollListBottomRight
 import com.steve1316.uma_android_automation.components.IconScrollListTopLeft
@@ -700,6 +701,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
 
         if (bboxThumb == null) {
             MessageLog.d(TAG, "[DEBUG] scrollToTop:: No scrollbar thumb detected. Falling back to lazy scrolling.")
+            OwnUiForeground.waitForGame()
             game.gestureUtils.swipe(
                 (bboxList.x + (bboxList.w / 2)).toFloat(),
                 (bboxList.y + (bboxList.h / 2)).toFloat(),
@@ -710,6 +712,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
             )
             stopScrolling()
         } else {
+            OwnUiForeground.waitForGame()
             game.gestureUtils.swipe(
                 (bboxThumb.x + (bboxThumb.w.toFloat() / 2.0)).toFloat(),
                 (bboxThumb.y + (bboxThumb.h.toFloat() / 2.0)).toFloat(),
@@ -742,6 +745,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
             }
             stopScrolling()
         } else {
+            OwnUiForeground.waitForGame()
             game.gestureUtils.swipe(
                 (bboxThumb.x + (bboxThumb.w.toFloat() / 2.0)).toFloat(),
                 (bboxThumb.y + (bboxThumb.h.toFloat() / 2.0)).toFloat(),
@@ -785,6 +789,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
 
         val targetY: Int = bboxBar.y + (bboxBar.h.toDouble() * (percent.toDouble() / 100.0)).toInt()
 
+        OwnUiForeground.waitForGame()
         game.gestureUtils.swipe(
             (bboxThumb.x + (bboxThumb.w.toFloat() / 2.0)).toFloat(),
             (bboxThumb.y + (bboxThumb.h.toFloat() / 2.0)).toFloat(),
@@ -817,6 +822,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         val y0: Int = ((startLoc?.y ?: (bboxList.y + (bboxList.h / 2)))).toInt()
         // Add some extra height since scrolling isn't accurate.
         val y1: Int = (bboxList.y - entryHeight).toInt().coerceAtLeast(0)
+        OwnUiForeground.waitForGame()
         game.gestureUtils.swipe(x0.toFloat(), y0.toFloat(), x0.toFloat(), y1.toFloat(), duration = durationMs)
         stopScrolling()
     }
@@ -839,6 +845,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         val y0: Int = ((startLoc?.y ?: (bboxList.y + (bboxList.h / 2)))).toInt()
         // Add some extra height since scrolling isn't accurate.
         val y1: Int = (bboxList.y + bboxList.h + (entryHeight * 1.5)).toInt().coerceAtLeast(0)
+        OwnUiForeground.waitForGame()
         game.gestureUtils.swipe(x0.toFloat(), y0.toFloat(), x0.toFloat(), y1.toFloat(), duration = durationMs)
         stopScrolling()
     }

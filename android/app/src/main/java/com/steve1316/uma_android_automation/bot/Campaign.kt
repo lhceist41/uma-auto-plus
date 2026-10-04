@@ -2505,6 +2505,7 @@ abstract class Campaign(game: Game) : Task(game) {
             val pressDuration = pressDurations[attempt - 1]
             MessageLog.i(TAG, "[CRANE_GAME] Attempt $attempt: Long pressing for ${pressDuration}s...")
 
+            OwnUiForeground.waitForGame()
             // Perform long press on the button.
             game.gestureUtils.tap(buttonPoint.x, buttonPoint.y, imageName, longPress = true, pressDuration = pressDuration)
 
@@ -3897,6 +3898,7 @@ abstract class Campaign(game: Game) : Task(game) {
                         }
                     }
 
+                    OwnUiForeground.waitForGame()
                     // Now click the button to open the details dialog for aptitude and stat updates.
                     game.gestureUtils.tap(buttonLocation.x, buttonLocation.y, ButtonDetails.template.path)
                     game.wait(1.0)

@@ -943,6 +943,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 if (agendaText == effectiveAgendaName) {
                     MessageLog.i(TAG, "[RACE] ✓ Found $effectiveAgendaName. Tapping the Load List button...")
 
+                    OwnUiForeground.waitForGame()
                     // Clicking this button triggers connection to server.
                     // Or it could result in three other states:
                     // 1. The overwrite dialog appears.
@@ -1026,6 +1027,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     val swipeX = closeButtonLocation.x.toFloat()
                     val swipeY = closeButtonLocation.y.toFloat()
                     MessageLog.i(TAG, "[RACE] Swiping up to reveal more agendas (attempt ${swipeCount + 1}/$maxSwipes)...")
+                    OwnUiForeground.waitForGame()
                     game.gestureUtils.swipe(swipeX, swipeY - 300f, swipeX, swipeY - 400f)
                     game.wait(0.5)
                 } else {
@@ -1034,6 +1036,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         val swipeX = loadListButtonLocations[0].x.toFloat()
                         val swipeY = loadListButtonLocations[0].y.toFloat()
                         MessageLog.i(TAG, "[RACE] Swiping up using Load List button reference (attempt ${swipeCount + 1}/$maxSwipes)...")
+                        OwnUiForeground.waitForGame()
                         game.gestureUtils.swipe(swipeX, swipeY - 300f, swipeX, swipeY - 400f)
                         game.wait(0.5)
                     }
@@ -1129,8 +1132,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val endY = (confirmButtonLocation.y - 400).toFloat()
 
         if (scrollDown) {
+            OwnUiForeground.waitForGame()
             game.gestureUtils.swipe(startX, startY, startX, endY)
         } else {
+            OwnUiForeground.waitForGame()
             game.gestureUtils.swipe(startX, endY, startX, startY)
         }
         game.wait(2.0)
@@ -3151,6 +3156,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 h = bboxScrollBar.h,
             )
 
+        OwnUiForeground.waitForGame()
         // Scroll to top of list.
         game.gestureUtils.swipe(
             (bboxRaceList.x + (bboxRaceList.w / 2)).toFloat(),
@@ -3257,6 +3263,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 }
             }
 
+            OwnUiForeground.waitForGame()
             // Longer swipe duration prevents overscrolling. Swipe up ~one entry (each is ~200px tall
             // with a 30px gap). Shorter durations overscroll; longer durations scroll less than the
             // pixel amount specified, so we use 500px to counter that.

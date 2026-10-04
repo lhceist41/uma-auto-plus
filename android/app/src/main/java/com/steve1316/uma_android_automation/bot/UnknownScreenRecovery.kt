@@ -1,5 +1,10 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.automation_library.utils.BotService
+import com.steve1316.automation_library.utils.MessageLog
+import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.StartModule
+
 /**
  * Pure decisions for the unknown-screen ladder's game-relaunch rung. A relaunch once killed a live game
  * (CLEAR_TASK from a background service, cold start dropped) and the queue ran on onto the dead game, so
@@ -27,6 +32,38 @@ internal fun stopIsGameUnrecoverable(attemptsUsed: Int): Boolean = attemptsUsed 
 internal object OwnUiForeground {
     @Volatile
     var resumed: Boolean = false
+
+    private val TAG: String = "[${MainActivity.loggerTag}]OwnUiForeground"
+
+    // Covers the game window taking input focus back after our activity pauses.
+    private const val GAME_REFOCUS_MS = 1_000L
+
+    /** Called before every bot tap and swipe: holds it while our screen is in front so it lands on the game. True when it held. */
+    fun waitForGame(): Boolean {
+        if (!resumed) return false
+        MessageLog.i(TAG, "[MISC] UMA Auto+ is in front of the game; waiting for the game before tapping.")
+        waitWhileOwnUi(
+            ownUiInFront = { resumed },
+            stopRequested = { !BotService.isRunning || StartModule.queueStopRequested || StartModule.queueSkipRequested },
+            step = {
+                Game.heartbeat()
+                Thread.sleep(100L)
+            },
+        )
+        Thread.sleep(GAME_REFOCUS_MS)
+        return true
+    }
+}
+
+/** Runs [step] while [ownUiInFront], throwing [InterruptedException] once [stopRequested]; true when it waited. */
+internal fun waitWhileOwnUi(ownUiInFront: () -> Boolean, stopRequested: () -> Boolean, step: () -> Unit): Boolean {
+    var waited = false
+    while (ownUiInFront()) {
+        if (stopRequested()) throw InterruptedException("Stopped while UMA Auto+ was in front of the game.")
+        step()
+        waited = true
+    }
+    return waited
 }
 
 /** Waits via [wait] instead of blind input while [ownUiInFront]; true when it waited, so the caller neither taps nor counts the tick. */
