@@ -114,6 +114,7 @@ import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
+import com.steve1316.uma_android_automation.utils.VeteranIdentityNames
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_scoring.RankAptitudes
 import com.steve1316.uma_scoring.SkillScoreInput
@@ -157,6 +158,24 @@ data class RaceFallbackOutcome(
     val shouldStopForMandatoryRace: Boolean,
     val turnAdvanced: Boolean,
 )
+
+/** A trainee name without its leading "[Outfit]" title. */
+internal fun deOutfitTraineeName(name: String): String {
+    val stripped = name.replace(Regex("^\\s*\\[[^\\]]*\\]\\s*"), "").trim()
+    return stripped.ifEmpty { name.trim() }
+}
+
+/**
+ * The known character [inCareer] confidently names when that is not [target]'s own character, else null. Only a read that matches a real
+ * character name at [threshold] counts, and any candidate that is the target's character wins, so a noisy read never stops a career.
+ */
+internal fun confidentOtherTrainee(inCareer: String, target: String, characters: List<String>, threshold: Double): String? {
+    val read = deOutfitTraineeName(inCareer)
+    val targetCharacter = deOutfitTraineeName(target)
+    val named = characters.filter { TraineeNameMatcher.score(it, read) >= threshold }
+    if (named.isEmpty() || named.any { TraineeNameMatcher.score(it, targetCharacter) >= threshold }) return null
+    return named.maxByOrNull { TraineeNameMatcher.score(it, read) }
+}
 
 /** The Campaign subclass is fixed when Game is built, so a slot whose scenario differs from the running one cannot be repaired mid-career. */
 internal fun rotationSlotScenarioMismatch(slotScenario: String, runningScenario: String): Boolean =
@@ -1836,6 +1855,16 @@ abstract class Campaign(game: Game) : Task(game) {
             return
         }
 
+        // A trainee outside the rotation reads as a real name, not noise: a leftover career of hers would otherwise finish under this slot's preset.
+        confidentOtherTrainee(inCareer, target, VeteranIdentityNames.CHARACTERS, rotationVerifyMatchThreshold)?.let { other ->
+            val reason = "Stopped on trainee mismatch - career was '$other' but the queue loaded the preset for '$target'. The career is kept in the game."
+            MessageLog.e(TAG, "[ROTATION] Trainee MISMATCH: this career is '$inCareer' (read as '$other', not in the rotation) but the queue loaded the preset for '$target'.")
+            StartModule.queueStopKey = "TRAINEE_MISMATCH"
+            StartModule.queueStopReason = reason
+            StartModule.queueStopRequested = true
+            throw InterruptedException(reason)
+        }
+
         MessageLog.w(
             TAG,
             "[ROTATION] Trainee verify inconclusive: career '$inCareer' vs loaded target '$target' scored ${"%.2f".format(targetScore)} " +
@@ -1843,10 +1872,7 @@ abstract class Campaign(game: Game) : Task(game) {
         )
     }
 
-    private fun deOutfit(name: String): String {
-        val stripped = name.replace(Regex("^\\s*\\[[^\\]]*\\]\\s*"), "").trim()
-        return stripped.ifEmpty { name.trim() }
-    }
+    private fun deOutfit(name: String): String = deOutfitTraineeName(name)
 
     /**
      * Checks if the bot is currently at the Main screen or the screen with available options.
