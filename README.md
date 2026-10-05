@@ -82,7 +82,7 @@ This project is purely for educational purposes to learn about Android automatio
 
 # Instructions
 
-1. Download the `.apk` for your device's CPU from the [latest release](https://github.com/lhceist41/uma-auto-plus/releases/latest) and install it. Each release ships three builds: `arm64-v8a` for most phones and ARM emulators, `armeabi-v7a` for older 32-bit devices, and `x86_64` for the Windows emulators that run an x86 image. If you are not sure, try `arm64-v8a` first; installing the wrong one fails harmlessly. Download only from this repository's GitHub Releases. From 1.7.0 on, each release lists the SHA-256 of its files in its notes: compare the APK's SHA-256 with it before you install.
+1. Download the `.apk` for your device's CPU from the [latest release](https://github.com/lhceist41/uma-auto-plus/releases/latest) and install it. Each release ships three builds: `arm64-v8a` for most phones and ARM emulators, `armeabi-v7a` for older 32-bit devices, and `x86_64` for the Windows emulators that run an x86 image. If you are not sure, try `arm64-v8a` first; installing the wrong one fails harmlessly. Download only from this repository's GitHub Releases. Compare the APK's SHA-256 with the value GitHub shows next to the file on the release page before you install.
 2. Open the app and set up a run: pick a trainee preset from the Home page (this also sets her scenario), or choose a scenario yourself and configure training, racing and skill settings by hand.
 3. Review your loaded settings on the Home page.
 4. Tap `Start`. The first time, you will be prompted to grant `Overlay` permission and enable the `Accessibility` service.
