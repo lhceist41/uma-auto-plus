@@ -1,18 +1,16 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.6.0</latestVersion>
+    <latestVersion>1.7.0</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.6.0 - watch your queue from your PC, and stop after this career
+v1.7.0 - Grand Concert is fully supported, and queues are sturdier
 
-- New: watch your queue from your PC on a live dashboard (setup is in the README).
-- New: Stop after this career, on Home or the dashboard: the bot finishes its career, then pauses the queue.
-- New: live progress in the notification and a Last session card on Home.
-- New: sturdier overnight queues, with errors retried and the Data Download prompt handled.
-- New: presets keep your timing, OCR, display and stop settings.
-- Fixed: Stop in the notification now stops the bot, Start is no longer refused after Import or Reset Settings, and your fast Skip is no longer switched to slow.
-- Fixed: the bot stops before Start Career if a deck holds a card of the trainee's own character, and Trackblazer items are now used from the Training screen.
-- Do this: enter the access code shown in Debug Settings to open the dashboard, and Trackblazer players should check Consecutive Races Limit once.
+- New: Grand Concert is fully supported, with queues, trainee rotation and TP restore.
+- New: presets for every released Global trainee outfit, in all four scenarios.
+- New: on MuMu for Windows, a helper from the release page opens the dashboard in one double-click.
+- New: lost goal races are retried, and the last skill points buy the best skills.
+- Fixed: Stop keeps your queue, and the bot stops a career it can tell is of another trainee or scenario.
+- Fixed: a frozen game is restarted for you where Android allows it, and a career the game did not finish is no longer reported as finished.
 
     </releaseNotes>
   </update>

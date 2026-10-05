@@ -10,37 +10,41 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-05
+
+### Highlights
+
+- **Grand Concert is fully supported:** no experimental label, and it runs unattended like the other scenarios.
+- **Presets for every released Global trainee outfit,** in all four scenarios, shown the way the game titles them.
+- **Sturdier queues:** Stop keeps your queue, the bot stops a career it can tell is of another trainee or scenario instead of playing it with the wrong settings, and a frozen game is restarted for you.
+- **Smarter careers:** lost goal races are retried, hinted trainings no longer beat much better ones, and the last skill points buy the best skills.
+- **Dashboard in one double-click** on MuMu for Windows, and it fits phone screens.
+
 ### What's new and changed
 
-- **Grand Concert is now fully supported:** the experimental label is gone from the scenario picker, and it runs unattended like the other scenarios, including queues, trainee rotation and TP restore.
-
-- **Presets show outfits the way the game titles them:** the trainee picker, the Home preset card and the Run Queue rotation list now write an outfit in brackets, such as [Rouge Caroler] or [MB-19890425], and a farm preset reads "Legacy Farm build" or "Blue Farm build" instead of looking like an outfit. The rotation list shows the trainee's name and outfit instead of the internal preset name.
-
-- **A lost goal race gets more tries:** when a career goal race is lost, the bot now retries it with your free retries and Alarm Clocks for as long as the career's retry budget lasts (3 retries, 5 in Trackblazer) instead of stopping after one, since losing it ends the career. The new Alarm Clock option **Goal races only** buys an Alarm Clock for 10 carats only in that case; the default is still Never. Optional races and goals already passed are still never retried, and the Trackblazer settings for retrying optional races are removed (at their default values they never led to a retry).
-
-- **Six more trainee cards get presets for all four scenarios:** Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O Sole Suo!), Yamanin Zephyr and Yukino Bijin. They are research-graded until a full career completes. Aston Machan and Seeking the Pearl show a Trackblazer caution: their Sprint and Mile aptitudes leave few winnable races after Junior.
-
-- **Every released Global trainee outfit now has presets for all four scenarios, 107 trainee cards in all.** The 27 outfits added in this release that share a character with an existing preset keep that preset's build with the outfit's own skills. Special Week (Ruler of Japan) runs as a Late Surger, and Air Groove (Quercus Civilis) and Symboli Rudolf (Archer by Moonlight) as Pace Chasers. They are research-graded until a full career completes. If you own one of these outfits but not the base outfit, apply the outfit's own preset: when it picks the trainee, a base preset skips every outfit that has its own preset.
-
-- **Skill hints no longer cost you big training turns:** with Prioritize Skill Hints on, the bot now takes a hinted training only when it is at least 75% as good as the best training that turn, so it no longer passes up a much better training, such as a rainbow, for a weak hinted one.
-
-- **Presets race the running style their skills are for:** Oguri Cap, Oguri Cap (Ashen Miracle), Tamamo Cross, Special Week and Special Week (Hopp'n♪Happy Heart) now race as Pace Chasers, and Sakura Bakushin O (Unity Cup) and Daiwa Scarlet (Legacy Farm) as Front Runners, so the style skills they buy take effect. Air Groove now buys Pace Chaser skills and El Condor Pasa (Kukulkan Warrior) Late Surger skills, the styles they already race. Several presets also stop buying skills for another style and plan more of the trainee's own race skills, and Daiwa Scarlet (Nuit Étoilée de Scarlet) now trains for Medium, where most of her goals are.
-
-- **Presets now plan each outfit's top-rated Potential skills:** the bot buys one whenever it is on offer in a career, once you have unlocked it with Potential or when a support card offers it.
-
-- **A higher rating from the career's last skill points:** with the Rank objective, the points left after the final race now go to the skills that add the most to the rating, still limited to skills the trainee's running style can use (at any distance or surface). To spend them on any skill for the highest rating, turn on **Buy Any Skill at Career End** in Skill Settings.
-
-- **Better training event choices:** with Prioritize Energy Options on, the bot now strongly prefers the energy option while the trainee is below 50% energy. Above that it weighs energy against the other rewards, so a larger stat or skill point reward wins, for example +15 Speed instead of +15 energy at 80% energy. It also counts "All stats" rewards for all five stats, and judges a random-outcome option by its likely result, using the chances the event states.
+- **Grand Concert is fully supported:** no experimental label, and it runs unattended with queues, trainee rotation and TP restore.
+- **Dashboard in one double-click on MuMu for Windows:** extract `UMA-Auto-Plus-Open-Dashboard.zip` and run `open-dashboard.cmd`; it also fits phone screens and shows a course map for every career scenario.
+- **Presets for every released Global trainee outfit:** 107 trainee cards, all four scenarios, shown the way the game titles them, such as [Rouge Caroler]. If you own an outfit but not its base outfit, apply the outfit's own preset.
+- **Aston Machan and Seeking the Pearl carry a Trackblazer caution:** few winnable races after Junior.
+- **Presets race the style their skills are for:** several, including Oguri Cap, Tamamo Cross and Special Week, switch running style, and outfits plan their top-rated Potential skills.
+- **Gold City's URA Finale presets train for her long goal races:** Gold City (Autumn Cosmos) and Gold City (Authentic / 1928) now aim for Long distance targets with more Stamina, a better chance at the 3200 m Tenno Sho (Spring) goal; their Grand Concert presets are unchanged.
+- **A lost goal race gets more tries:** the bot retries it with free retries and Alarm Clocks while the career's retry budget lasts; the new Alarm Clock option **Goal races only** buys one only then (default still Never).
+- **Skill hints no longer cost you big training turns:** a hinted training is taken only when it is at least 75% as good as the best one that turn.
+- **A higher rating from the last skill points:** with most presets, they go to the skills that add the most rating.
+- **Better training event choices** with Prioritize Energy Options on: energy is strongly preferred below 50% and weighed against other rewards above it.
+- **Skill buying is more reliable:** six gold skills that could not be bought after their white version now can, double-circle upgrades are read correctly, and a buy that spends your last Skill Points counts.
+- **A trainee the bot cannot start is skipped, and the queue says why:** in a rotation the run is skipped and the rotation goes on, while a queue without a rotation stops.
+- **A frozen game is restarted for you,** up to twice per run; on Android 14 and newer the bot brings it to the front once, then asks you to close and reopen it.
 
 ### Fixed
 
-- **Stop no longer throws away your queue in the middle of a career:** Start within 24 hours finishes the career you stopped with its own trainee's settings and continues the queue. Tap Discard on Home to start over instead.
-- **A career from another scenario is no longer played with the wrong settings:** before the first turn of a career it did not start itself, the bot checks the career screen, and if it shows a different scenario than the run's settings, it stops and keeps the career.
-- **Goal races are read on the right day:** the bot now reads the date on a goal race's race list, so it names that race and its grade instead of the previous turn's, and an Alarm Clock setting such as G1 Only applies to G1 goal races. If the date cannot be read there, the bot uses the last turn it saw, as before.
-- **A career that ends on a lost goal race now shows as ended early** in the queue report, the dashboard and the career log, and the log says what each race retry used.
-- **Opening UMA Auto+ during a queue no longer changes the next careers' settings:** leaving the app used to save all of its settings again, over the trainee settings the queue had loaded for its next run. It now saves only what you changed yourself.
-- **Each queued run starts with its trainee's own settings:** in a queue that rotates trainees, every run now checks that its trainee's saved settings are still in place when it starts and restores them if not. If they still do not match the trainee's scenario, the queue stops before it plays a turn, keeps the career, and tells you to press Start, which continues it with that trainee's settings.
-- **Scenario help pages no longer trap a run:** the bot closes the game's multi-page scenario help with its Close button, and a run that keeps flipping back and forth between two pages now stops on its own instead of looping.
+- **Stop keeps your queue:** pressing Stop in the middle of a career or while the next run launches keeps it, and Start within 24 hours continues it; tap Discard on Home to start over.
+- **Each queued run starts with its trainee's own settings:** it restores them if they are not in place, and opening UMA Auto+ during a queue no longer overwrites them.
+- **A career that does not match the run is stopped and kept,** not played with the wrong settings: one of a trainee outside your rotation, or a Unity Cup, Trackblazer or Grand Concert career when the run is set up for another scenario.
+- **A career the game did not finish is no longer reported as finished:** the queue stops and keeps it, Start finishes it, and the report says Not finished.
+- **Goal races are read on the right day,** so the bot names the right race and an Alarm Clock setting such as G1 only applies to G1 goal races.
+- **A career that ends on a lost goal race shows as ended early** in the queue report, the dashboard and the career log.
+- **Scenario help pages no longer trap a run:** the bot closes them, and a run that keeps flipping between two pages now stops instead of looping.
 
 ## [1.6.0] - 2026-09-29
 
@@ -592,6 +596,7 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 
 ---
 
+[1.7.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.3.8...v1.4.0
@@ -604,4 +609,4 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.6.0...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.0...main

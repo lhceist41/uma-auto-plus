@@ -10,14 +10,14 @@ export const RELEASE_NOTES_BASE_URL = "https://github.com/lhceist41/uma-auto-plu
  * no dialog. To announce a new release, add its entry here.
  */
 export const whatsNewEntries: Record<string, WhatsNewEntry> = {
-    "1.6.0": {
+    "1.7.0": {
         highlights: [
-            "Watch your queue from your PC on a live dashboard (Debug Settings, Enable Remote Log Viewer; on MuMu for Windows tools/open-dashboard.cmd opens it).",
-            "Stop after this career: the bot finishes the career it is playing, then pauses the queue.",
-            "The notification shows live progress and how a session really ended, and Home has a Last session card.",
-            "Tap Update in the update dialog to install a new version inside the app.",
-            "Sturdier overnight queues: the screen stays on, errors are retried, and the notification's Stop button really stops the bot.",
-            "Applying a preset no longer resets your timing, OCR, display or stop settings.",
+            "Grand Concert is fully supported: no experimental label, and it runs unattended with queues, trainee rotation and TP restore.",
+            "Every released Global trainee outfit has presets for all four scenarios, shown the way the game titles them.",
+            "Stop keeps your queue, and the bot stops a career it can tell is of another trainee or scenario instead of playing it with the wrong settings.",
+            "A frozen game is restarted for you where Android allows it.",
+            "Better careers: lost goal races are retried, hinted trainings no longer beat much better ones, and the last skill points buy the best skills.",
+            "On MuMu for Windows, the dashboard helper from the release page opens the dashboard in one double-click.",
         ],
     },
 }
