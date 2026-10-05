@@ -1411,7 +1411,7 @@ describe("Grand Concert derived presets", () => {
 
     it("raises Speed exactly as intended and leaves stayers alone", () => {
         for (const name of derived) {
-            const distance = ura(name).settings.training!.preferredDistanceOverride as string
+            const distance = gc(name).settings.training!.preferredDistanceOverride as string
             const key = SPEED_KEY[distance]
             const got = (gc(name).settings.trainingStatTarget as any)[key]
             const uraValue = (ura(name).settings.trainingStatTarget as any)[key]
@@ -1429,19 +1429,35 @@ describe("Grand Concert derived presets", () => {
         }
     })
 
-    it("differs from its URA source ONLY in the scenario, racing and Speed-target fields", () => {
-        const allowed = new Set(["general.scenario", "racing.enableRacingPlan", "racing.enableMandatoryRacingPlan", "racing.racingPlan", "skills.skillSpendObjective"])
-        for (const name of derived) {
-            const a = ura(name).settings as any
-            const b = gc(name).settings as any
-            const speedKey = SPEED_KEY[a.training.preferredDistanceOverride as string]
-            for (const category of new Set([...Object.keys(a), ...Object.keys(b)])) {
-                for (const key of new Set([...Object.keys(a[category] ?? {}), ...Object.keys(b[category] ?? {})])) {
-                    const path = `${category}.${key}`
-                    if (allowed.has(path) || (category === "trainingStatTarget" && key === speedKey)) continue
-                    expect({ path, value: JSON.stringify(b[category]?.[key]) }).toEqual({ path, value: JSON.stringify(a[category]?.[key]) })
-                }
+    const SCENARIO_FIELDS = ["general.scenario", "racing.enableRacingPlan", "racing.enableMandatoryRacingPlan", "racing.racingPlan", "skills.skillSpendObjective"]
+    const PINNED_MILE_TWINS = ["Gold City (Autumn Cosmos)", "Gold City (Authentic / 1928)"]
+    const expectOnlyDiffers = (name: string, allowed: Set<string>, speedKey: string) => {
+        const a = ura(name).settings as any
+        const b = gc(name).settings as any
+        for (const category of new Set([...Object.keys(a), ...Object.keys(b)])) {
+            for (const key of new Set([...Object.keys(a[category] ?? {}), ...Object.keys(b[category] ?? {})])) {
+                const path = `${category}.${key}`
+                if (allowed.has(path) || (category === "trainingStatTarget" && key === speedKey)) continue
+                expect({ path, value: JSON.stringify(b[category]?.[key]) }).toEqual({ path, value: JSON.stringify(a[category]?.[key]) })
             }
+        }
+    }
+
+    it("differs from its URA source ONLY in the scenario, racing and Speed-target fields", () => {
+        for (const name of derived.filter((n) => !PINNED_MILE_TWINS.includes(n))) {
+            expectOnlyDiffers(name, new Set(SCENARIO_FIELDS), SPEED_KEY[ura(name).settings.training!.preferredDistanceOverride as string])
+        }
+    })
+
+    it("keeps Gold City's twins on the Mile build while her URA builds train Long", () => {
+        for (const name of PINNED_MILE_TWINS) {
+            expect(ura(name).settings.training!.preferredDistanceOverride).toBe("Long")
+            expect(gc(name).settings.training!.preferredDistanceOverride).toBe("Mile")
+            const targets = gc(name).settings.trainingStatTarget!
+            expect(targets.trainingMileStatTarget_speedStatTarget).toBe(1400)
+            expect(targets.trainingLongStatTarget_speedStatTarget).toBe(1000)
+            expect(targets.trainingLongStatTarget_staminaStatTarget).toBe(600)
+            expectOnlyDiffers(name, new Set([...SCENARIO_FIELDS, "training.preferredDistanceOverride", "trainingStatTarget.trainingLongStatTarget_staminaStatTarget"]), SPEED_KEY.Mile)
         }
     })
 

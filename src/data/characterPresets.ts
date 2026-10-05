@@ -11348,7 +11348,7 @@ const basePresets: CharacterPreset[] = [
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
-                preferredDistanceOverride: "Mile",
+                preferredDistanceOverride: "Long",
                 mustRestBeforeSummer: true,
                 enableRiskyTraining: false,
                 riskyTrainingMinStatGain: 20,
@@ -11375,7 +11375,7 @@ const basePresets: CharacterPreset[] = [
                 trainingMediumStatTarget_gutsStatTarget: 300,
                 trainingMediumStatTarget_witStatTarget: 300,
                 trainingLongStatTarget_speedStatTarget: 1000,
-                trainingLongStatTarget_staminaStatTarget: 600,
+                trainingLongStatTarget_staminaStatTarget: 900,
                 trainingLongStatTarget_powerStatTarget: 800,
                 trainingLongStatTarget_gutsStatTarget: 300,
                 trainingLongStatTarget_witStatTarget: 300,
@@ -60692,7 +60692,7 @@ const basePresets: CharacterPreset[] = [
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
-                preferredDistanceOverride: "Mile",
+                preferredDistanceOverride: "Long",
                 mustRestBeforeSummer: true,
                 enableRiskyTraining: false,
                 riskyTrainingMinStatGain: 20,
@@ -60719,7 +60719,7 @@ const basePresets: CharacterPreset[] = [
                 trainingMediumStatTarget_gutsStatTarget: 300,
                 trainingMediumStatTarget_witStatTarget: 300,
                 trainingLongStatTarget_speedStatTarget: 1000,
-                trainingLongStatTarget_staminaStatTarget: 600,
+                trainingLongStatTarget_staminaStatTarget: 900,
                 trainingLongStatTarget_powerStatTarget: 800,
                 trainingLongStatTarget_gutsStatTarget: 300,
                 trainingLongStatTarget_witStatTarget: 300,
@@ -67174,6 +67174,18 @@ const grandConcertFrom = (uraName: string, speedTarget?: number): CharacterPrese
     }
 }
 
+// Her URA builds train Long for the 3200m Tenno Sho (Spring) goal; her Grand Concert twins stay on the Mile build.
+const goldCityGrandConcertFrom = (uraName: string): CharacterPreset => {
+    const preset = grandConcertFrom(uraName)
+    preset.settings.training = { ...preset.settings.training, preferredDistanceOverride: "Mile" }
+    preset.settings.trainingStatTarget = {
+        ...preset.settings.trainingStatTarget,
+        trainingMileStatTarget_speedStatTarget: 1400,
+        trainingLongStatTarget_staminaStatTarget: 600,
+    }
+    return preset
+}
+
 /**
  * Grand Concert coverage: a derived twin for every URA build in the roster. The scenario's own
  * concert system is trainee-agnostic (result tier is set solely by songs learned this cycle, with
@@ -67247,8 +67259,8 @@ const grandConcertPresets: CharacterPreset[] = [
     grandConcertFrom("Agnes Digital (Fanatic♡Jiangshi)", 1400),
     grandConcertFrom("Fuji Kiseki", 1400),
     grandConcertFrom("Fuji Kiseki (Succès Étoilé)", 1400),
-    grandConcertFrom("Gold City (Autumn Cosmos)", 1400),
-    grandConcertFrom("Gold City (Authentic / 1928)", 1400),
+    goldCityGrandConcertFrom("Gold City (Autumn Cosmos)"),
+    goldCityGrandConcertFrom("Gold City (Authentic / 1928)"),
     grandConcertFrom("Smart Falcon", 1400),
     grandConcertFrom("Smart Falcon (Twilight Triumph)", 1400),
     // Medium: the uniform 1400 headroom raise.

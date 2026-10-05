@@ -130,6 +130,9 @@ written out a second time (Taiki Shuttle's is an early hand-written exception). 
 entry, fixing the URA build fixes its Grand Concert twin automatically, instead of leaving a
 hand-copied clone quietly stale.
 
+One exception: Gold City's URA builds train Long for her 3200m Tenno Sho (Spring) goal, while her
+Grand Concert twins stay pinned to her Mile targets.
+
 Three things change in the derivation:
 
 - The scenario is set, so applying the preset switches to Grand Concert with it.
