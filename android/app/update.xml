@@ -10,7 +10,7 @@ v1.7.0 - Grand Concert is fully supported, and queues are sturdier
 - New: on MuMu for Windows, a helper from the release page opens the dashboard in one double-click.
 - New: lost goal races are retried, and the last skill points buy the best skills.
 - Fixed: Stop keeps your queue, and the bot stops a career it can tell is of another trainee or scenario.
-- Fixed: a frozen game is restarted for you where Android allows it, and a career the game did not finish is no longer reported as finished.
+- Fixed: a frozen game is restarted for you where Android allows it, and a career the game did not finish is kept for Start to finish.
 
     </releaseNotes>
   </update>

@@ -41,7 +41,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Stop keeps your queue:** pressing Stop in the middle of a career or while the next run launches keeps it, and Start within 24 hours continues it; tap Discard on Home to start over.
 - **Each queued run starts with its trainee's own settings:** it restores them if they are not in place, and opening UMA Auto+ during a queue no longer overwrites them.
 - **A career that does not match the run is stopped and kept,** not played with the wrong settings: one of a trainee outside your rotation, or a Unity Cup, Trackblazer or Grand Concert career when the run is set up for another scenario.
-- **A career the game did not finish is no longer reported as finished:** the queue stops and keeps it, Start finishes it, and the report says Not finished.
+- **A career the game did not finish is caught when the game comes back quickly:** the queue stops, keeps it and says Not finished, and Start finishes it; if the game takes longer than about half a minute, the report may still say Completed, and Start still finishes it.
 - **Goal races are read on the right day,** so the bot names the right race and an Alarm Clock setting such as G1 only applies to G1 goal races.
 - **A career that ends on a lost goal race shows as ended early** in the queue report, the dashboard and the career log.
 - **Scenario help pages no longer trap a run:** the bot closes them, and a run that keeps flipping between two pages now stops instead of looping.
