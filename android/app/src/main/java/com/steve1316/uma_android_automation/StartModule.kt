@@ -477,6 +477,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         fun priorCompletedRunsFor(phase: String, currentRun: Int): Int =
             if (phase == PHASE_LAUNCHING) currentRun else currentRun - 1
 
+        /** What a resume says it is doing. A saved career phase may only mean the run's launch had begun, so it never claims a career was in flight. */
+        internal fun resumeWords(reEnter: Boolean, savedRun: Int, next: Int, totalRuns: Int): Pair<String, String> =
+            if (reEnter) {
+                "Re-entering run $next of $totalRuns; it was interrupted, and a career already in the game finishes under the same trainee's preset." to
+                    "Auto-resuming: starting at run $next of $totalRuns (run $next was interrupted)"
+            } else {
+                "Resuming at run $next of $totalRuns, after run $savedRun." to
+                    "Auto-resuming: starting at run $next of $totalRuns"
+            }
+
         /** Where a resumed queue starts and how many of its careers are already finished. */
         data class ResumePlan(val startFromRun: Int, val priorCompletedRuns: Int)
 
@@ -2176,20 +2186,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             ledger.nothingToResume = true
                             return@run totalRuns + 1 // skips the for-loop entirely
                         }
-                        MessageLog.w(
-                            TAG,
-                            if (reEnter) {
-                                "[RESUME] Detected interrupted queue, last saved ${saved.ageMs / 60_000}m ago. Re-entering run $next of $totalRuns; its career was in flight and finishes under the same trainee's preset."
-                            } else {
-                                "[RESUME] Detected interrupted queue, last saved ${saved.ageMs / 60_000}m ago. Resuming at run $next of $totalRuns (run ${saved.currentRun} was interrupted)."
-                            },
-                        )
-                        sendQueueProgressEvent(
-                            next,
-                            totalRuns,
-                            "resuming",
-                            message = "Auto-resuming: starting at run $next of $totalRuns (previous run was interrupted)",
-                        )
+                        val (resumeLog, resumeNote) = resumeWords(reEnter, saved.currentRun, next, totalRuns)
+                        MessageLog.w(TAG, "[RESUME] Detected interrupted queue, last saved ${saved.ageMs / 60_000}m ago. $resumeLog")
+                        sendQueueProgressEvent(next, totalRuns, "resuming", message = resumeNote)
                         resumedQueue = true
                         next
                     }
@@ -2237,6 +2236,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // looking for the wrong thing.
                 var queueHaltCareerInFlight = false
                 var lastCareerFinished = false
+                // The halted run's career was played to its end but the game kept it: that run is not among the finished ones.
+                var queueHaltFinishLost = false
                 // True when a stop ended a run mid-career: that career is still in the slot, so the saved run is kept for Start to re-enter.
                 var stopLeftCareer = false
                 // The run after which the player's stop after this career paused the queue, or null.
@@ -2273,8 +2274,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                     queueHaltRun = run
                     queueHaltCareerInFlight = true
+                    queueHaltFinishLost = true
                     lastCareerFinished = false
                     completedRuns--
+                    ledger.markFinishLost(run)?.let {
+                        StatusBoard.runUpdated(it)
+                        QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
+                    }
                     saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_CAREER, completedRuns = completedRuns)
                     ledger.phase = StartModule.PHASE_CAREER
                 }
@@ -2830,14 +2836,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         // to be dealt with by hand before any of them can start.
                         // Count from the halted run index, not this session's completions: runs
                         // before startFromRun finished in an earlier session and are still done.
-                        val doneRuns = if (queueHaltRun > 0) queueHaltRun else completedRuns
-                        val unrun = (totalRuns - doneRuns).coerceAtLeast(0)
+                        val reachedRuns = if (queueHaltRun > 0) queueHaltRun else completedRuns
+                        val doneRuns = if (queueHaltFinishLost) completedRuns else reachedRuns
+                        val unrun = (totalRuns - reachedRuns).coerceAtLeast(0)
                         // The JS-facing message is queueHaltDetail (only ever set, and only ever
                         // safe, for a breakpoint) or a plain numeric summary - never $halt, which
                         // can carry raw navigation-exception text and is for MessageLog/Discord
                         // below only.
                         sendQueueProgressEvent(
-                            doneRuns,
+                            reachedRuns,
                             totalRuns,
                             "queueFailed",
                             resultCode = queueHaltResultCode,

@@ -188,6 +188,8 @@ internal data class RunRecord(
     val reasonKey: String? = null,
     val reasonTrainee: String? = null,
     val reasonOutfit: String? = null,
+    /** The career was played to its end, but the game kept it: the Finish never went through, so the run is not a finished one. */
+    val finishLost: Boolean = false,
 )
 
 /**
@@ -463,6 +465,14 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
         runs.add(record)
     }
 
+    /** Marks the latest record of [run] as a career the game did not finish, returning the updated record, or null when [run] has none. */
+    @Synchronized
+    fun markFinishLost(run: Int): RunRecord? {
+        val index = runs.indexOfLast { it.run == run }
+        if (index < 0) return null
+        return runs[index].copy(finishLost = true).also { runs[index] = it }
+    }
+
     /** Adds [kept] to the latest record of [run], returning the updated record, or null when [run] has none. */
     @Synchronized
     fun attachSparks(
@@ -610,6 +620,7 @@ internal fun runRecordJson(r: RunRecord): JSONObject =
         .put("retried", r.retried)
         .apply { r.progress?.let { put("progress", it) } }
         .apply { r.traineeName?.let { put("traineeName", it) } }
+        .apply { if (r.finishLost) put("finishLost", true) }
         .apply {
             // Additive and present only when known, so records written before these keys read the same.
             r.result?.let { result ->

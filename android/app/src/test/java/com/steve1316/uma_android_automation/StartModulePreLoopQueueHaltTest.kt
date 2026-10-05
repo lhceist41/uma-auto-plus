@@ -218,7 +218,7 @@ class StartModulePreLoopQueueHaltTest {
         @Test
         fun `it reports the halted run from queueHaltRun`() {
             assertTrue(
-                haltBranch.contains("val doneRuns = if (queueHaltRun > 0) queueHaltRun else completedRuns"),
+                haltBranch.contains("val reachedRuns = if (queueHaltRun > 0) queueHaltRun else completedRuns"),
                 "the halt branch must report the run count the failing site recorded",
             )
         }

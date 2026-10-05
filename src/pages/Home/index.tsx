@@ -31,7 +31,7 @@ import { keepPersonalSettings } from "../../lib/personalSettings"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
 import { offersStopAfterCareer, presentQueueProgress, restoredQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
 import { confirmStopAfterCareer, sendStopAfterCareer } from "../../lib/stopAfterCareer"
-import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
+import { interruptedBannerReport, interruptedQueueTitle, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
 import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightItem } from "../../lib/preflightWarnings"
 import { accessibilityRepairStatus } from "../../lib/accessibilityRepairStatus"
 import { useNavigation } from "@react-navigation/native"
@@ -966,9 +966,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                     }}
                 >
                     <Text style={{ fontSize: 13, color: colors.warningText, fontWeight: "600", marginBottom: 6 }}>
-                        {interruptedReport?.paused
-                            ? `Queue paused after run ${interruptedQueue.currentRun} of ${interruptedQueue.totalRuns}`
-                            : `Queue interrupted at run ${interruptedQueue.currentRun} of ${interruptedQueue.totalRuns}`}{" "}
+                        {interruptedQueueTitle(interruptedQueue, interruptedReport?.paused === true)}{" "}
                         ({interruptedReport?.minutesAgo ?? Math.round(interruptedQueue.ageMinutes)} min ago)
                     </Text>
                     {interruptedReport && <Text style={{ fontSize: 12, color: colors.warningText, marginBottom: 6 }}>{interruptedReport.reason}</Text>}

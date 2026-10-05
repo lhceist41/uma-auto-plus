@@ -1,7 +1,7 @@
 import fs from "fs"
 import path from "path"
 import { transformSync } from "@babel/core"
-import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../queueReportPresentation"
+import { interruptedBannerReport, interruptedQueueTitle, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../queueReportPresentation"
 import { sendStopAfterCareer } from "../stopAfterCareer"
 
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, "../__fixtures__/queueReportText.json"), "utf8")) as {
@@ -164,6 +164,20 @@ describe("parseLastSession: one line per run", () => {
             "Run 4: El Condor Pasa, Completed",
             "Run 5: Somebody New, Completed",
         ])
+    })
+
+    it("does not call a career the game kept a completed run", () => {
+        const runs = [run(1, "TASK_RESULT_COMPLETE", { traineeName: "Special Week" }), run(2, "TASK_RESULT_COMPLETE", { traineeName: "Super Creek", finishLost: true })]
+        expect(view({ runs }).runs).toEqual(["Run 1: Special Week, Completed", "Run 2: Super Creek, Not finished"])
+        expect(view({ runs: [run(2, "TASK_RESULT_COMPLETE", { finishLost: false })] }).runs).toEqual(["Run 2: Completed"])
+    })
+
+    it("names the run a stop landed in the same way whichever phase was saved", () => {
+        const at = (currentRun: number, phase: string, paused = false) => interruptedQueueTitle({ currentRun, totalRuns: 2, phase }, paused)
+        expect(at(2, "career")).toBe("Queue interrupted at run 2 of 2")
+        expect(at(1, "launching")).toBe("Queue interrupted at run 2 of 2")
+        expect(at(2, "launching")).toBe("Queue interrupted at run 2 of 2")
+        expect(at(1, "launching", true)).toBe("Queue paused after run 1 of 2")
     })
 
     it("leaves the trainee out of a run whose career never named her", () => {
@@ -459,7 +473,7 @@ describe("Home wiring", () => {
     })
 
     it("words a saved pause as a pause, and says which run Start continues with", () => {
-        expect(home).toContain("? `Queue paused after run ${interruptedQueue.currentRun} of ${interruptedQueue.totalRuns}`")
+        expect(home).toContain("{interruptedQueueTitle(interruptedQueue, interruptedReport?.paused === true)}")
         expect(home).toContain("? `Pressing Start continues this queue with run ${interruptedQueue.currentRun + 1}.`")
     })
 })

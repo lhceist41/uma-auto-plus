@@ -103,7 +103,7 @@ class QueueReportTextTest {
         fun `the queue log never doubles the period of a stop reason and dates a saved queue by its last save`() {
             val start = source("$main/StartModule.kt")
             assertEquals(2, Regex("queueStopReason\\?\\.trimEnd\\('\\.'\\)").findAll(start).count(), "both queue lines that end a stop reason with a period")
-            assertEquals(2, Regex("Detected interrupted queue, last saved \\$\\{saved\\.ageMs / 60_000\\}m ago\\.").findAll(start).count(), "both resume lines")
+            assertEquals(1, Regex("Detected interrupted queue, last saved \\$\\{saved\\.ageMs / 60_000\\}m ago\\.").findAll(start).count(), "the resume line")
         }
 
         @Test

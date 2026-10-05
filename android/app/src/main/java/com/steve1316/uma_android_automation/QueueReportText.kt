@@ -186,6 +186,7 @@ private fun singleRunText(code: String?): ReportText =
 internal fun runWords(code: String?): String? = if (code == "TASK_RESULT_COMPLETE") null else singleRunText(code).reason
 
 internal fun runWords(run: RunRecord): String? {
+    if (run.finishLost) return keyText(CAREER_NOT_FINISHED, JSONObject()).reason.replaceFirstChar { it.uppercase() }
     val key = run.reasonKey ?: return runWords(run.resultCode)
     val skipped = run.resultCode == "TASK_RESULT_SKIPPED_BY_QUEUE"
     val why = keyText(key, runRecordJson(run).put("reasonRotation", skipped))

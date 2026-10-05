@@ -86,7 +86,8 @@ function runLines(runs: unknown): string[] {
         if (n === 0) return []
         const trainee = traineeName(run)
         const who = trainee.length > 0 && trainee.length <= 40 ? `${trainee}, ` : ""
-        return [`Run ${n}: ${who}${runLabel(run.resultCode, run.outcome)}${run.retried === true ? " after a retry" : ""}`]
+        const label = run.finishLost === true ? "Not finished" : runLabel(run.resultCode, run.outcome)
+        return [`Run ${n}: ${who}${label}${run.retried === true ? " after a retry" : ""}`]
     })
 }
 
@@ -190,4 +191,14 @@ export function lastSessionCardVisible(view: LastSessionView | null, botRunning:
 export function interruptedBannerReport(view: LastSessionView | null, interrupted: { totalRuns: number } | null, nowMs: number): { reason: string; minutesAgo: number | null; paused: boolean } | null {
     if (view === null || interrupted === null || !view.runEnding || !view.resumable || view.totalRuns !== interrupted.totalRuns) return null
     return { reason: view.reason, minutesAgo: view.endedAt === null ? null : Math.max(0, Math.round((nowMs - view.endedAt) / 60000)), paused: view.paused }
+}
+
+/**
+ * The interrupted-queue banner's headline. A saved "launching" phase holds the last finished run, so the run
+ * the queue was at is the next one: the same number the banner shows when a Stop lands inside that run.
+ */
+export function interruptedQueueTitle(queue: { currentRun: number; totalRuns: number; phase: string }, paused: boolean): string {
+    if (paused) return `Queue paused after run ${queue.currentRun} of ${queue.totalRuns}`
+    const run = queue.phase === "launching" ? Math.min(queue.currentRun + 1, queue.totalRuns) : queue.currentRun
+    return `Queue interrupted at run ${run} of ${queue.totalRuns}`
 }

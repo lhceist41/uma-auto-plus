@@ -243,10 +243,11 @@ internal object StatusBoard {
     /** A run's display name: the name the game showed, else the stored identifier with its spaces back; null when the career-end line had no name ("unknown"). */
     private fun displayName(record: RunRecord): String? = record.traineeName ?: record.trainee?.takeUnless { it == "unknown" }?.replace('_', ' ')
 
-    private fun runState(code: String): String =
+    private fun runState(record: RunRecord): String =
         when {
-            code == "TASK_RESULT_COMPLETE" -> "done"
-            runEndedWithError(code) -> "errored"
+            record.finishLost -> "stopped"
+            record.resultCode == "TASK_RESULT_COMPLETE" -> "done"
+            runEndedWithError(record.resultCode) -> "errored"
             else -> "stopped"
         }
 
@@ -263,7 +264,7 @@ internal object StatusBoard {
                     .put("n", r.run)
                     .put("trainee", displayName(r) ?: JSONObject.NULL)
                     .put("scenario", scenarioName(r.scenario))
-                    .put("state", runState(r.resultCode))
+                    .put("state", runState(r))
                     .put("outcome", r.outcome ?: JSONObject.NULL)
                     .put("rank", result?.rank ?: JSONObject.NULL)
                     .put("estScore", result?.estScore ?: JSONObject.NULL)
