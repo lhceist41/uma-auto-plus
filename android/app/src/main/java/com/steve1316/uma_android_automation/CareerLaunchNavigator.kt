@@ -55,6 +55,10 @@ import com.steve1316.uma_android_automation.bot.keepDialogVerdict
 import com.steve1316.uma_android_automation.bot.CompleteCareerBalances
 import com.steve1316.uma_android_automation.bot.classifyCompleteCareerBalances
 import com.steve1316.uma_android_automation.bot.popupContradictsVerifiedBalance
+import com.steve1316.uma_android_automation.bot.blockResolvableByDialog
+import com.steve1316.uma_android_automation.bot.dialogBalanceResolvesBlock
+import com.steve1316.uma_android_automation.bot.FinalizeDecision
+import com.steve1316.uma_android_automation.bot.SkillSpendTelemetry
 import com.steve1316.uma_android_automation.bot.sanitizeOcrExcerpt
 import com.steve1316.uma_android_automation.bot.SparkPagerAction
 import com.steve1316.uma_android_automation.bot.SparkPagerNav
@@ -2354,7 +2358,8 @@ class CareerLaunchNavigator(private val context: Context) {
         // or the evidence was incomplete) after the careerComplete plan and its one retry.
         // Completing the career would discard the points, so fail the transition here instead
         // of walking into the Finish dialog. The career stays exactly as it is for the operator.
-        finalizeBlockFailure("CAREER_SUMMARY -> COMPLETE_CAREER_CONFIRMATION")?.let { return it }
+        // A BLOCK the dialog balance may settle opens the dialog; its handler decides.
+        finalizeBlockFailure("CAREER_SUMMARY -> COMPLETE_CAREER_CONFIRMATION", opensDialog = true)?.let { return it }
 
         MessageLog.i(TAG, "[NAV] Career summary screen detected. Clicking 'Complete Career'...")
 
@@ -2384,9 +2389,13 @@ class CareerLaunchNavigator(private val context: Context) {
      * (process restart, a verdict from a different career, an expired verdict). Never click
      * Complete Career or Finish on faith in Adaptive mode; Manual mode never fails here.
      */
-    private fun finalizeBlockFailure(transition: String): TransitionResult.Failed? {
+    private fun finalizeBlockFailure(transition: String, opensDialog: Boolean = false): TransitionResult.Failed? {
         val verdict = usableFinalizeVerdict()
         if (verdict != null && verdict.approved) return null
+        if (opensDialog && verdict != null && verdict.blockResolvableByDialog()) {
+            MessageLog.i(TAG, "[NAV] [FINALIZE] Opening the Complete Career dialog to check the balance the BLOCK verdict depends on.")
+            return null
+        }
         if (verdict == null && !finalizeGuardActive) return null
         val reason =
             verdict?.reason
@@ -2411,10 +2420,16 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: ButtonFinish.click() (template-matched).
      */
     private fun handleCompleteCareerConfirmation(): TransitionResult {
-        // Finalization guard, second gate: never press Finish on a BLOCK verdict or without a
-        // usable verdict in Adaptive mode, even when the flow arrived here without passing the
-        // summary handler (a POST_RUN_RESULTS misclassification clicks Complete Career too).
-        finalizeBlockFailure("COMPLETE_CAREER_CONFIRMATION -> POST_RUN_RESULTS")?.let { return it }
+        // Finalization guard, second gate: never press Finish on a BLOCK verdict the dialog balance
+        // does not settle, or without a usable verdict in Adaptive mode, even when the flow arrived
+        // here without passing the summary handler (a POST_RUN_RESULTS misclassification clicks
+        // Complete Career too).
+        val resolvable = usableFinalizeVerdict()?.takeIf { it.blockResolvableByDialog() }
+        if (resolvable != null) {
+            settleBlockWithDialogBalance(resolvable)?.let { return it }
+        } else {
+            finalizeBlockFailure("COMPLETE_CAREER_CONFIRMATION -> POST_RUN_RESULTS")?.let { return it }
+        }
 
         // Approved verdict: cross-check the dialog's own "Remaining Skill Points" line against
         // the career-side verified balance. The popup is a consistency check, never the sole
@@ -2431,7 +2446,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // prints in both its banner and its loss warning, so a dialog whose banner OCRs badly is
         // still identified. Every branch here proceeds on the verified balance; none of them can
         // block Finish on a dialog that carries no skill-point value in the first place.
-        usableFinalizeVerdict()?.let { verdict ->
+        usableFinalizeVerdict()?.takeIf { it.approved }?.let { verdict ->
             val balances = readCompleteCareerBalances()
             val firstRead =
                 when (balances) {
@@ -2500,6 +2515,57 @@ class CareerLaunchNavigator(private val context: Context) {
             reason = "COMPLETE_CAREER_CONFIRMATION detected (ButtonFinish matched) but click failed.",
             transition = "COMPLETE_CAREER_CONFIRMATION -> POST_RUN_RESULTS",
             recommendedAction = "Manually click 'Finish' and restart the queue.",
+        )
+    }
+
+    /**
+     * Settles a resolvable BLOCK verdict with two fresh reads of this dialog's own balance: null lets Finish proceed, anything else
+     * presses Cancel and fails exactly like any other BLOCK. The skill-screen balance it overrides was contradicted by a refused purchase.
+     */
+    private fun settleBlockWithDialogBalance(verdict: FinalizeVerdict): TransitionResult.Failed? {
+        val first = readCompleteCareerBalances()
+        waitSafe(0.5)
+        val second = readCompleteCareerBalances()
+        val firstSp = (first as? CompleteCareerBalances.SkillPoints)?.value
+        val secondSp = (second as? CompleteCareerBalances.SkillPoints)?.value
+        val settled = dialogBalanceResolvesBlock(verdict, first, second)
+        val reason =
+            if (settled) {
+                "The Complete Career dialog reads $firstSp remaining skill points twice, below the cheapest candidate affordable at the " +
+                    "skill-screen read (${verdict.dialogResolvableBelowSp} points); the skill-screen read of ${verdict.verifiedRemainingSp} was " +
+                    "contradicted by a refused purchase. Finish is approved on the dialog balance."
+            } else {
+                "${verdict.reason} The Complete Career dialog reads ${firstSp ?: "unreadable"}/${secondSp ?: "unreadable"}, which does not settle it. " +
+                    "Not pressing Finish; the career is left untouched."
+            }
+        runCatching {
+            OutcomeCorpus.append(
+                context,
+                SkillSpendTelemetry.buildDialogBalanceFinalizeRecord(
+                    timestamp = System.currentTimeMillis(),
+                    decision = if (settled) FinalizeDecision.FINISH.name else FinalizeDecision.BLOCK.name,
+                    reason = reason,
+                    verdict = verdict,
+                    firstRead = firstSp,
+                    secondRead = secondSp,
+                ),
+            )
+        }.onFailure { MessageLog.w(TAG, "[NAV] [FINALIZE] Failed to append the career_finalize_dialog record: $it") }
+        if (settled) {
+            MessageLog.i(TAG, "[NAV] [FINALIZE] $reason")
+            return null
+        }
+        MessageLog.e(TAG, "[NAV] [FINALIZE] $reason")
+        if (ButtonCancel.click(iu)) {
+            waitSafe(1.5)
+        } else {
+            MessageLog.w(TAG, "[NAV] [FINALIZE] Could not press Cancel on the Complete Career dialog; it stays open and Finish is not pressed.")
+        }
+        return TransitionResult.Failed(
+            reason = reason,
+            transition = "COMPLETE_CAREER_CONFIRMATION -> POST_RUN_RESULTS",
+            recommendedAction = "Open the career and spend the remaining skill points (or press Finish yourself if the balance is intentional), then restart the queue.",
+            reasonKey = "UNSPENT_SKILL_POINTS",
         )
     }
 
@@ -4558,7 +4624,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // CAREER_SUMMARY, and the advancement cascade below would click Complete Career. That
         // click must not happen on a BLOCK verdict or, in Adaptive mode, without a usable one.
         if (ButtonCompleteCareer.check(iu, sourceBitmap = bitmap)) {
-            finalizeBlockFailure("POST_RUN_RESULTS -> COMPLETE_CAREER_CONFIRMATION")?.let { return it }
+            finalizeBlockFailure("POST_RUN_RESULTS -> COMPLETE_CAREER_CONFIRMATION", opensDialog = true)?.let { return it }
         }
 
         var clickedButton = ""

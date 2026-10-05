@@ -293,6 +293,16 @@ describe("career-corpus join", () => {
         expect(result.exitCode).toBe(EXIT_WARNINGS)
     })
 
+    test("the navigator's dialog follow-up row is not a second careers row", () => {
+        const dialog = JSON.stringify({ type: "career_finalize_dialog", ts: 1784214000000, careerToken: token, finalizationDecision: "FINISH" })
+        const result = analyze([traceLine({ turn: 1 })], [finalizeLine(token, { finalizationDecision: "BLOCK" }), dialog])
+        const career = result.careers[0]
+        expect(career.join).toBe("one")
+        expect(career.joinMatchTypes).toEqual(["career_finalize"])
+        expect(result.warningCount).toBe(0)
+        expect(result.exitCode).toBe(EXIT_CLEAN)
+    })
+
     test("a weak trainee|scenario|run match (different nonce) is a diagnostic suggestion only", () => {
         // Same career except the nonce differs: NOT proven identity, so join stays "none".
         const result = analyze([traceLine({ turn: 1 })], [finalizeLine("Biwa Hayahide|Trackblazer|run0|DIFFERENT")])
@@ -506,6 +516,14 @@ describe("cross-career aggregate", () => {
         expect(a.corpus.careersWithDuplicateFinalize).toBe(1)
         expect(a.outcomes.joinedCareerCount).toBe(0) // duplicates are not aggregated
         expect(a.outcomes.careersWithDuplicateFinalize).toBe(1)
+    })
+
+    test("9b. a dialog follow-up row keeps its career counted exactly once", () => {
+        const dialog = JSON.stringify({ type: "career_finalize_dialog", ts: 1784214000000, careerToken: careerA, finalizationDecision: "FINISH", verifiedRemainingSp: 66 })
+        const a = agg([aLine({ turn: 1 })], [finalize(careerA, { finalizationDecision: "BLOCK", verifiedRemainingSp: 99 }), dialog])
+        expect(a.corpus.careersWithExactlyOneFinalize).toBe(1)
+        expect(a.corpus.careersWithDuplicateFinalize).toBe(0)
+        expect(a.outcomes.joinedCareerCount).toBe(1)
     })
 
     test("10. joined finalize fields aggregate only across 1:1-joined careers", () => {

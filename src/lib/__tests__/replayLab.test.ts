@@ -242,6 +242,13 @@ describe("finalize join", () => {
         expect(run([decisionLine({ seq: 1 })], [stateLine({ seq: 1 })], []).exitCode).toBe(0)
     })
 
+    it("a dialog follow-up row never replaces or duplicates the career's finalize", () => {
+        const dialog = JSON.stringify({ type: "career_finalize_dialog", ts: 10000, careerToken: TOKEN, finalizationDecision: "FINISH" })
+        const r = run([decisionLine({ seq: 1 })], [stateLine({ seq: 1 })], [finalizeLine({ finalizationDecision: "BLOCK" }), dialog])
+        expect(r.careers[0].finalize.finalizationDecision).toBe("BLOCK")
+        expect(r.failures).toHaveLength(0)
+    })
+
     it("skips non-finalize rows in a mixed careers corpus without error", () => {
         const mixed = [JSON.stringify({ type: "spark_choice", careerToken: TOKEN }), finalizeLine()]
         const r = run([decisionLine({ seq: 1 })], [stateLine({ seq: 1 })], mixed)

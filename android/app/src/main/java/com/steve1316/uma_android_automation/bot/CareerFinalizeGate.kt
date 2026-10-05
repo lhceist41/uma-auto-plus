@@ -11,6 +11,9 @@ internal const val FINALIZE_SP_OCR_PLAUSIBLE_MAX = 99_999
 /** Armed verdict lifetime: three times the 10-minute between-run deadline, so a verdict from an abandoned finalization is unusable. */
 internal const val FINALIZE_VERDICT_MAX_AGE_MS: Long = 30L * 60L * 1000L
 
+/** Exclusion key for a row the game refused across the whole tap-retry budget. */
+internal const val DEAD_TAP_EXCLUSION = "unbuyable_dead_tap"
+
 internal enum class FinalizeDecision {
     FINISH,
 
@@ -19,7 +22,11 @@ internal enum class FinalizeDecision {
     BLOCK,
 }
 
-internal data class FinalizeEvaluation(val decision: FinalizeDecision, val reason: String)
+/**
+ * [dialogResolvableBelowSp] is set only on a BLOCK whose sole cause is affordable candidates in a session where the game refused a
+ * purchase the read balance allowed: that balance read is in doubt, so the Complete Career dialog's own balance may settle it.
+ */
+internal data class FinalizeEvaluation(val decision: FinalizeDecision, val reason: String, val dialogResolvableBelowSp: Int? = null)
 
 /**
  * Candidate-exhaustion evidence from a skill-spend session. Every excluded candidate is counted under its recorded reason,
@@ -51,7 +58,8 @@ internal data class FinalizeEvidence(
 }
 
 /**
- * Decides whether the career may be finished from session evidence plus the independent Details-dialog balance read.
+ * Decides whether the career may be finished from session evidence. [detailsSp] is the trainee's balance, which today is copied
+ * from the same skill-screen read as the evidence, so the stale check only catches a later overwrite, never an OCR misread.
  * No price-floor shortcut: hint discounts are screen-observed and never bounded by repository data, so even a tiny balance
  * needs the same proof. Manual mode always finishes; otherwise the evidence must be complete and no affordable eligible
  * candidate may remain. Anything else is RETRY_SPEND while the one re-run is unused, then BLOCK.
@@ -66,12 +74,18 @@ internal fun evaluateCareerFinalization(
         return FinalizeEvaluation(FinalizeDecision.FINISH, "Manual skill-spend mode: finalization guard not armed.")
     }
 
-    fun notFinishable(problem: String, balance: Int?): FinalizeEvaluation {
+    fun notFinishable(problem: String, balance: Int?, dialogResolvableBelowSp: Int? = null): FinalizeEvaluation {
         val prefix = "UNSPENT_SKILL_POINTS: ${balance?.toString() ?: "an unknown number of"} skill points remain at career finalization and $problem"
         return if (retryUsed) {
+            val outcome =
+                dialogResolvableBelowSp?.let {
+                    "The game refused a purchase this balance allowed, so the Complete Career dialog decides: Finish only if two reads " +
+                        "agree on fewer than $it points."
+                } ?: "Not pressing Finish; the career is left untouched."
             FinalizeEvaluation(
                 FinalizeDecision.BLOCK,
-                "$prefix. The one controlled re-run of the careerComplete plan was already used. Not pressing Finish; the career is left untouched.",
+                "$prefix. The one controlled re-run of the careerComplete plan was already used. $outcome",
+                dialogResolvableBelowSp,
             )
         } else {
             FinalizeEvaluation(FinalizeDecision.RETRY_SPEND, "$prefix.")
@@ -102,6 +116,7 @@ internal fun evaluateCareerFinalization(
         return notFinishable(
             "${evidence.affordableEligibleCandidateCount} affordable compatible candidate(s) remain - cheapest $cheapest",
             sp,
+            evidence.cheapestAffordableEligiblePrice.takeIf { (evidence.excludedByReason[DEAD_TAP_EXCLUSION] ?: 0) > 0 },
         )
     }
     if (evidence.eligibleCandidateCount == 0) {
@@ -162,7 +177,7 @@ internal fun classifyRemainingCandidates(
         val exclusionReason: String? =
             when {
                 // Strongest exclusion: the buy was attempted and refused (no SP movement across the retry budget).
-                candidate.deadTapExhausted -> "unbuyable_dead_tap"
+                candidate.deadTapExhausted -> DEAD_TAP_EXCLUSION
                 candidate.isNegative -> "negative"
                 candidate.isInheritedUnique -> "inherited_unique"
                 skipDoubleCircleUpgrades && candidate.isDoubleCircle -> "double_circle"
@@ -298,7 +313,25 @@ internal data class FinalizeVerdict(
     val sessionTimestampMs: Long?,
     val reason: String,
     val armedAtMs: Long,
+    /** Copied from [FinalizeEvaluation.dialogResolvableBelowSp]; only a BLOCK verdict carries it. */
+    val dialogResolvableBelowSp: Int? = null,
 )
+
+/** A BLOCK the navigator may open the Complete Career dialog for, to settle with [dialogBalanceResolvesBlock]. */
+internal fun FinalizeVerdict.blockResolvableByDialog(): Boolean = !approved && dialogResolvableBelowSp != null
+
+/**
+ * Whether two Complete Career dialog reads settle a resolvable BLOCK. Both must be skill-point values, agree, and sit below both the
+ * skill-screen balance and the cheapest candidate that was affordable at it: every eligible candidate then costs more than the
+ * dialog balance. One read, a disagreement, or a Grand Concert performance-point dialog never settles it.
+ */
+internal fun dialogBalanceResolvesBlock(verdict: FinalizeVerdict, first: CompleteCareerBalances, second: CompleteCareerBalances): Boolean {
+    if (!verdict.blockResolvableByDialog()) return false
+    val bound = verdict.dialogResolvableBelowSp ?: return false
+    val a = (first as? CompleteCareerBalances.SkillPoints)?.value ?: return false
+    val b = (second as? CompleteCareerBalances.SkillPoints)?.value ?: return false
+    return a == b && a < verdict.verifiedRemainingSp && a < bound
+}
 
 /** Whether [verdict] may govern this finalization: it exists, matches the captured token and is younger than [FINALIZE_VERDICT_MAX_AGE_MS]. */
 internal fun finalizeVerdictUsable(verdict: FinalizeVerdict?, expectedToken: String?, nowMs: Long): Boolean =

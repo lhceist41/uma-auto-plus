@@ -291,6 +291,9 @@ abstract class Campaign(game: Game) : Task(game) {
 
     private var careerEndLastKnownStats: List<String> = emptyList()
 
+    /** The game refused a purchase the skill-screen balance allowed, so the ledger's skillPts may be a misread. */
+    private var careerEndSkillPointsDisputed: Boolean = false
+
     /** Fallback when running outside a real career task (debug harness, helper instance); throwaway Campaigns must never mint the primary identity. */
     private val fallbackFinalizeNonce: String = java.util.UUID.randomUUID().toString().substring(0, 8)
 
@@ -3797,6 +3800,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 put("wit", st.wit)
                 if (careerEndLastKnownStats.isNotEmpty()) put("lastKnown", JSONArray(careerEndLastKnownStats))
                 put("skillPts", trainee.skillPoints)
+                if (careerEndSkillPointsDisputed) put("skillPtsDisputed", true)
                 put("finaleRaces", finaleRaces)
                 put("finaleWins", finaleRaces1st)
                 put("quality", quality)
@@ -3827,6 +3831,7 @@ abstract class Campaign(game: Game) : Task(game) {
             append(" wit=").append(st.wit)
             if (careerEndLastKnownStats.isNotEmpty()) append(" lastKnown=").append(careerEndLastKnownStats.joinToString(","))
             append(" skillPts=").append(trainee.skillPoints)
+            if (careerEndSkillPointsDisputed) append(" skillPtsDisputed=true")
             append(" finaleRaces=").append(finaleRaces)
             append(" finaleWins=").append(finaleRaces1st)
             append(" quality=").append(quality)
@@ -4132,7 +4137,9 @@ abstract class Campaign(game: Game) : Task(game) {
                             sessionTimestampMs = evidence?.timestampMs,
                             reason = evaluation.reason,
                             armedAtMs = System.currentTimeMillis(),
+                            dialogResolvableBelowSp = evaluation.dialogResolvableBelowSp,
                         )
+                    careerEndSkillPointsDisputed = verdict.blockResolvableByDialog()
                     CareerFinalizeGate.arm(verdict)
                     MessageLog.i(TAG, "[FINALIZE] Verdict armed for token ${verdict.careerToken} (queueRun=${verdict.queueRun ?: "-"}).")
                     runCatching {

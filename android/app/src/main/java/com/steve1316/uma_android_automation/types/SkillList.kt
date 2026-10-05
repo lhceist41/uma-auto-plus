@@ -377,6 +377,9 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         }
     }
 
+    /** Raw text of the latest [detectSkillPoints] OCR, for the refused-purchase log: a misread balance is otherwise undiagnosable. */
+    private var lastSkillPointsOcrText: String = ""
+
     /**
      * Detects the current skill points from the Skill List screen.
      *
@@ -385,6 +388,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      *   unreadable read can mean the balance just reached 0.
      */
     fun detectSkillPoints(bitmap: Bitmap? = null): Int? {
+        lastSkillPointsOcrText = ""
         val srcBitmap: Bitmap = bitmap ?: game.imageUtils.getSourceBitmap()
 
         // Two color variants of the Skill Points banner: legacy yellow-green and the
@@ -453,6 +457,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         }
 
         val skillPointsString: String = extractText(skillPointsBitmap)
+        lastSkillPointsOcrText = skillPointsString
         val read: Int? = parseSkillListPointsText(skillPointsString)
         if (read == null) {
             MessageLog.w(TAG, "[SKILLS] detectSkillPoints:: refused a Skill Points read with no digits (raw OCR: \"${sanitizeOcrExcerpt(skillPointsString)}\").")
@@ -1259,7 +1264,8 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             MessageLog.e(
                 TAG,
                 "[ERROR] buySkill:: \"$name\" tap at (${tapTarget.x.toInt()}, ${tapTarget.y.toInt()}) did NOT register after $maxAttempts attempts — " +
-                    "Skill Points did not drop ($spBefore -> ${spAfter ?: "unreadable"}). NOT counted as bought; excluded from re-planning this session.",
+                    "Skill Points did not drop ($spBefore -> ${spAfter ?: "unreadable"}). NOT counted as bought; excluded from re-planning this session. " +
+                    "Last Skill Points OCR: \"${sanitizeOcrExcerpt(lastSkillPointsOcrText)}\".",
             )
             return null
         }

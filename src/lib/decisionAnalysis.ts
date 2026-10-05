@@ -701,6 +701,8 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
         }
         if (!isObject(parsed)) return
         const token = parsed.careerToken
+        // The navigator's dialog follow-up shares its career's token by design; it is not a second careers row.
+        if (parsed.type === "career_finalize_dialog") return
         if (typeof token === "string" && token.length > 0) {
             const type = typeof parsed.type === "string" ? parsed.type : "(untyped)"
             const list = careerTokenIndex.get(token) ?? []

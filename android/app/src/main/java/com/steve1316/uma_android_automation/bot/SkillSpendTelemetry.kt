@@ -192,6 +192,38 @@ object SkillSpendTelemetry {
     }
 
     /**
+     * The navigator's follow-up record when the Complete Career dialog settled (or failed to settle) a resolvable BLOCK. Its own type keeps
+     * the career's single `career_finalize` row the 1:1 join target. `skillScreenSp` is the career-side read the BLOCK was based on;
+     * `verifiedRemainingSp` is written only when the dialog balance won.
+     */
+    internal fun buildDialogBalanceFinalizeRecord(
+        timestamp: Long,
+        decision: String,
+        reason: String,
+        verdict: FinalizeVerdict,
+        firstRead: Int?,
+        secondRead: Int?,
+    ): JSONObject {
+        val record = JSONObject()
+        record.put("type", "career_finalize_dialog")
+        record.put("ts", timestamp)
+        record.put("policy", POLICY_VERSION)
+        record.put("finalizationDecision", decision)
+        record.put("finalizationReason", reason)
+        record.put("careerToken", verdict.careerToken)
+        record.put("retryUsed", true)
+        record.put("trainee", verdict.trainee.replace(" ", "_"))
+        record.put("scenario", verdict.scenario.replace(" ", "_"))
+        record.put("objective", verdict.objective)
+        verdict.queueRun?.let { record.put("queueRun", it) }
+        record.put("skillScreenSp", verdict.verifiedRemainingSp)
+        verdict.dialogResolvableBelowSp?.let { record.put("cheapestAffordableEligiblePrice", it) }
+        record.put("dialogRemainingSp", JSONArray(listOf(firstRead ?: JSONObject.NULL, secondRead ?: JSONObject.NULL)))
+        if (decision == FinalizeDecision.FINISH.name && firstRead != null) record.put("verifiedRemainingSp", firstRead)
+        return record
+    }
+
+    /**
      * True when more points left the account than the confirmed skills' prices explain, so the obtained set missed a real
      * purchase ([SkillList.getObtainedSkills] is known to under-report skills bought moments earlier). The caller must then
      * emit no skip reasons: which skills were missed is unknown. False when either total is unknown.
