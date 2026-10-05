@@ -4,7 +4,7 @@ import { TextClassContext } from "@/src/components/ui/text"
 import { cn } from "@/src/lib/utils"
 import * as AlertDialogPrimitive from "@rn-primitives/alert-dialog"
 import * as React from "react"
-import { Platform, Pressable, View, type ViewProps } from "react-native"
+import { Platform, Pressable, useWindowDimensions, View, type ViewProps } from "react-native"
 import { FadeIn, FadeOut } from "react-native-reanimated"
 import { FullWindowOverlay as RNFullWindowOverlay } from "react-native-screens"
 
@@ -15,6 +15,9 @@ const AlertDialogTrigger = AlertDialogPrimitive.Trigger
 const AlertDialogPortal = AlertDialogPrimitive.Portal
 
 const FullWindowOverlay = Platform.OS === "ios" ? RNFullWindowOverlay : React.Fragment
+
+// Percent widths only resolve under a stretched parent, so every wrapper down to the content needs a definite width; box-none lets taps beside the dialog reach the closer.
+const fullWidthCentered = { width: "100%", alignItems: "center" } as const
 
 function AlertDialogOverlay({
     className,
@@ -39,7 +42,7 @@ function AlertDialogOverlay({
                 {...props}
             >
                 <Pressable
-                    style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+                    style={{ flex: 1, alignSelf: "stretch", justifyContent: "center", alignItems: "center" }}
                     onPress={() => {
                         // Close the dialog when background is tapped.
                         if (onDismiss) {
@@ -47,8 +50,10 @@ function AlertDialogOverlay({
                         }
                     }}
                 >
-                    <NativeOnlyAnimatedView entering={FadeIn.duration(200).delay(50)} exiting={FadeOut.duration(150)}>
+                    <NativeOnlyAnimatedView entering={FadeIn.duration(200).delay(50)} exiting={FadeOut.duration(150)} style={fullWidthCentered} pointerEvents="box-none">
                         <Pressable
+                            style={fullWidthCentered}
+                            pointerEvents="box-none"
                             onPress={(e) => {
                                 // Prevent the dialog content from closing when tapped.
                                 e.stopPropagation()
@@ -67,12 +72,17 @@ function AlertDialogContent({
     className,
     portalHost,
     onDismiss,
+    style,
     ...props
 }: AlertDialogPrimitive.ContentProps &
     React.RefAttributes<AlertDialogPrimitive.ContentRef> & {
         portalHost?: string
         onDismiss?: () => void
     }) {
+    const { width: windowWidth } = useWindowDimensions()
+    // Native drops the max-w calc below, so keep 16 dp per side and the 512 dp (max-w-lg) cap inline, where it also overrides sm:max-w-lg.
+    const nativeMaxWidth = Platform.OS === "web" ? undefined : { maxWidth: Math.min(512, windowWidth - 32) }
+
     return (
         <AlertDialogPortal hostName={portalHost}>
             <AlertDialogOverlay onDismiss={onDismiss}>
@@ -84,6 +94,7 @@ function AlertDialogContent({
                         }),
                         className
                     )}
+                    style={[nativeMaxWidth, style]}
                     {...props}
                 />
             </AlertDialogOverlay>
