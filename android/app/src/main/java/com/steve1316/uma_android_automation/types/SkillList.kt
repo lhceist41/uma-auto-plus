@@ -95,6 +95,13 @@ internal fun inPlaceUpgradeRowName(row: SkillData, upgrade: SkillData?, price: I
     return if (row.name in owned || priceOnlyFitsUpgrade) upgrade.name else row.name
 }
 
+/**
+ * A ○/◎ title whose glyph OCR dropped fuzzy-matches its × twin, which sorts first. A × never shows above its cost while a ○ (at most
+ * 40% off) does in every chain but one, so a dearer × read is the ○ row and [inPlaceUpgradeRowName] then decides ○ or ◎.
+ */
+internal fun negativeTwinRowName(row: SkillData, upgrade: SkillData?, price: Int, rowObtained: Boolean): String =
+    if (!rowObtained && row.bIsNegative && upgrade != null && upgrade.id == row.upgrade && !upgrade.bIsNegative && price > row.cost) upgrade.name else row.name
+
 /** The bought skill plus every lower version in its chain, which the game completes with it; a gold below a white is inverted data and stays buyable. */
 internal fun namesCoveredByVerifiedBuy(name: String, isGold: (String) -> Boolean, lowerVersionOf: (String) -> String?): Set<String> {
     val names: MutableSet<String> = linkedSetOf()
@@ -971,10 +978,15 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Applies [inPlaceUpgradeRowName] to a parsed row. On resolution the ○ is obtained and, like any in-place level its upgrade
+     * Applies [negativeTwinRowName], then [inPlaceUpgradeRowName], to a parsed row. On resolution the ○ is obtained and, like any in-place level its upgrade
      * replaced on screen, virtual, so the planner never offers it again even after a plan reset sells it.
      */
-    private fun resolveInPlaceUpgradeRow(name: String, price: Int, rowObtained: Boolean): String {
+    private fun resolveInPlaceUpgradeRow(readName: String, price: Int, rowObtained: Boolean): String {
+        val read: SkillListEntry = entries[readName] ?: return readName
+        val name: String = negativeTwinRowName(read.skillData, read.next?.skillData, price, rowObtained)
+        if (name != readName && upgradeRowsLogged.add(readName)) {
+            MessageLog.i(TAG, "[SKILLS] \"$readName\" row price $price is above its cost ${read.skillData.cost}: reading the row as \"$name\".")
+        }
         val row: SkillListEntry = entries[name] ?: return name
         val owned: Set<String> = campaign.trainee.ownedSkillNames + ownedThisSession
         val upgrade: SkillListEntry? = row.next

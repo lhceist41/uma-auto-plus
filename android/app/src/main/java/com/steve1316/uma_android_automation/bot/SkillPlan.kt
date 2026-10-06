@@ -307,6 +307,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 compareBy({ it.recoveryClass != RecoveryClass.WHITE }, { it.price }, { it.skillId }),
             )
 
+        /** The rank fill spends leftovers by ratio, so it skips negatives (their toggle owns them) and skills that add no rating. */
+        fun rankFillAllows(isNegative: Boolean, evaluationPoints: Int): Boolean = !isNegative && evaluationPoints > 0
+
         /**
          * Pure calculation function that determines which skills to buy using the Optimize Rank strategy.
          *
@@ -330,7 +333,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
             val sorted =
                 candidates
-                    .filter { it.name !in alreadyPlanned && it.price > 0 && (!skipDoubleCircle || !isDoubleCircleUpgrade(it.name)) }
+                    .filter { it.name !in alreadyPlanned && it.price > 0 && rankFillAllows(it.isNegative, it.evaluationPoints) && (!skipDoubleCircle || !isDoubleCircleUpgrade(it.name)) }
                     .sortedByDescending { it.evaluationPointRatio }
 
             for (skill in sorted) {
@@ -1111,7 +1114,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // Iterate until no more affordable skills are found, as purchasing can unlock new options.
         val maxIterations = 10
         var i = 0
-        var remainingSkills: Map<String, SkillListEntry> = skillList.getAvailableSkills()
+
+        fun rankFillSkills(): Map<String, SkillListEntry> = skillList.getAvailableSkills().filterValues { rankFillAllows(it.skillData.bIsNegative, it.evaluationPoints) }
+        var remainingSkills: Map<String, SkillListEntry> = rankFillSkills()
         while (remainingSkills.any { it.value.screenPrice <= remainingSkillPoints }) {
             val sortedByPointRatio: List<SkillListEntry> =
                 remainingSkills.values
@@ -1152,7 +1157,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 entry.buy()
             }
 
-            remainingSkills = skillList.getAvailableSkills()
+            remainingSkills = rankFillSkills()
 
             if (i++ > maxIterations) {
                 break

@@ -1037,4 +1037,77 @@ class SkillPlanPurchasingTest {
             assertTrue(calculateOptimizeKnapsackPurchases(buildKnapsackGroups(emptyList(), emptyMap()), 716).isEmpty())
         }
     }
+
+    @Nested
+    @DisplayName("Rank fill never buys a negative skill")
+    inner class RankFillNegativeTests {
+        private val sympathy = SkillCandidate("Sympathy", price = 49, evaluationPoints = 129, communityTier = 3)
+        private val firmConditionsX = SkillCandidate("Firm Conditions ×", price = 50, evaluationPoints = -129, isNegative = true)
+
+        @Test
+        fun `rank fill skips a negative skill that fits the leftover exactly`() {
+            assertEquals(listOf("Sympathy" to 49), calculateOptimizeRankPurchases(listOf(sympathy, firmConditionsX), 99))
+        }
+
+        @Test
+        fun `rank fill skips a negative skill even when its listed rating is positive`() {
+            val negative = SkillCandidate("Corner Recovery ×", price = 40, evaluationPoints = 40, isNegative = true)
+            assertTrue(calculateOptimizeRankPurchases(listOf(negative), 500).isEmpty())
+        }
+
+        @Test
+        fun `rank fill skips a skill that adds no rating`() {
+            val zero = SkillCandidate("Long Race Enthusiast", price = 60, evaluationPoints = 0)
+            assertTrue(calculateOptimizeRankPurchases(listOf(zero), 500).isEmpty())
+        }
+
+        @Test
+        fun `Optimize Skills tail with negatives off leaves the × row alone`() {
+            // The tiered picks leave exactly 50 SP, which only the × fits.
+            val settings =
+                SkillPlanSettings(
+                    bIsEnabled = true,
+                    strategy = SpendingStrategy.OPTIMIZE_SKILLS,
+                    bEnableBuyInheritedUniqueSkills = true,
+                    bEnableBuyNegativeSkills = false,
+                    skillNames = emptyList(),
+                )
+            val candidates =
+                listOf(
+                    SkillCandidate("Late Surger Savvy ○", price = 110, evaluationPoints = 191, communityTier = 0),
+                    sympathy,
+                    firmConditionsX,
+                )
+            val result = calculateSkillPurchases(candidates, 209, settings)
+            assertEquals(listOf("Late Surger Savvy ○", "Sympathy"), result.map { it.first })
+        }
+
+        @Test
+        fun `the negative-skill setting still buys negatives in the common phase`() {
+            val settings =
+                SkillPlanSettings(
+                    bIsEnabled = true,
+                    strategy = SpendingStrategy.OPTIMIZE_RANK,
+                    bEnableBuyInheritedUniqueSkills = false,
+                    bEnableBuyNegativeSkills = true,
+                    skillNames = emptyList(),
+                )
+            assertTrue(calculateSkillPurchases(listOf(firmConditionsX), 100, settings).any { it.first == "Firm Conditions ×" })
+        }
+
+        @Test
+        fun `the live rank greedy uses the same filter`() {
+            // getSkillsToBuyOptimizeRankStrategy needs a live Game, so its filter is pinned by source.
+            var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+            val rel = "android/app/src/main/java/com/steve1316/uma_android_automation/bot/SkillPlan.kt"
+            while (dir != null && !java.io.File(dir, rel).isFile) dir = dir.parentFile
+            val src: String = java.io.File(dir ?: throw AssertionError("$rel not found"), rel).readText()
+            val start: Int = src.indexOf("private fun getSkillsToBuyOptimizeRankStrategy(")
+            assertTrue(start >= 0)
+            val body: String = src.substring(start, src.indexOf("\n    }", start))
+            assertTrue(body.contains("rankFillAllows(it.skillData.bIsNegative, it.evaluationPoints)"))
+            assertFalse(body.contains("remainingSkills = skillList.getAvailableSkills()"))
+            assertFalse(body.contains("remainingSkills: Map<String, SkillListEntry> = skillList.getAvailableSkills()"))
+        }
+    }
 }
