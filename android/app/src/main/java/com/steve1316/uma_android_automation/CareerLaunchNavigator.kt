@@ -4390,7 +4390,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 iu.performOCROnRegion(
                     bitmap,
                     (bitmap.width * detailsTitleRegion[0]).toInt(),
-                    (bitmap.height * detailsTitleRegion[1]).toInt(),
+                    gameY((1920 * detailsTitleRegion[1]).toDouble(), ScreenBand.MIDDLE, bitmap.width, bitmap.height).toInt(),
                     (bitmap.width * detailsTitleRegion[2]).toInt(),
                     (bitmap.height * detailsTitleRegion[3]).toInt(),
                     useThreshold = false,
@@ -4756,7 +4756,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 iu.performOCROnRegion(
                     bitmap,
                     (bitmap.width * 0.55).toInt(),
-                    (bitmap.height * 0.80).toInt(),
+                    gameY(1920 * 0.80, ScreenBand.BOTTOM, bitmap.width, bitmap.height).toInt(),
                     (bitmap.width * 0.40).toInt(),
                     (bitmap.height * 0.12).toInt(),
                     useThreshold = false,
@@ -4885,7 +4885,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // after confirming the CAREER/Event text is on screen AND the state detection
             // already established HOME_SCREEN.
             val tapX = (bitmap.width * 0.75).toDouble()
-            val tapY = (bitmap.height * 0.86).toDouble()
+            val tapY = gameY(1920 * 0.86, ScreenBand.BOTTOM, bitmap.width, bitmap.height)
             CoordinateTap.tap(gestureUtils, tapX, tapY, "career_ocr_tap")
             waitSafe(3.0)
             return TransitionResult.Continue
@@ -6336,7 +6336,7 @@ class CareerLaunchNavigator(private val context: Context) {
             iu.performOCROnRegion(
                 bitmap,
                 (bitmap.width * traineeHeaderRegion[0]).toInt(),
-                (bitmap.height * traineeHeaderRegion[1]).toInt(),
+                gameY((1920 * traineeHeaderRegion[1]).toDouble(), ScreenBand.TOP, bitmap.width, bitmap.height).toInt(),
                 (bitmap.width * traineeHeaderRegion[2]).toInt(),
                 (bitmap.height * traineeHeaderRegion[3]).toInt(),
                 useThreshold = false,
@@ -6716,7 +6716,7 @@ class CareerLaunchNavigator(private val context: Context) {
             CoordinateTap.tap(
                 gestureUtils,
                 (jumpBitmap.width * traineeColFractions[rCol]).toDouble(),
-                (jumpBitmap.height * (traineeRow0Fraction + rRow * traineeRowStepFraction)).toDouble(),
+                gameY((1920 * (traineeRow0Fraction + rRow * traineeRowStepFraction)).toDouble(), ScreenBand.MIDDLE, jumpBitmap.width, jumpBitmap.height),
                 "trainee_remembered_c${rCol}_r$rRow",
             )
             waitSafe(1.0)
@@ -6947,7 +6947,7 @@ class CareerLaunchNavigator(private val context: Context) {
             CoordinateTap.tap(
                 gestureUtils,
                 (bitmap.width * traineeColFractions[col]).toDouble(),
-                (bitmap.height * (traineeRow0Fraction + row * traineeRowStepFraction)).toDouble(),
+                gameY((1920 * (traineeRow0Fraction + row * traineeRowStepFraction)).toDouble(), ScreenBand.MIDDLE, bitmap.width, bitmap.height),
                 "trainee_grid_c${col}_r$row",
             )
             waitSafe(1.0)
@@ -6992,7 +6992,7 @@ class CareerLaunchNavigator(private val context: Context) {
             CoordinateTap.tap(
                 gestureUtils,
                 (anchorBmp.width * traineeColFractions[0]).toDouble(),
-                (anchorBmp.height * traineeRow0Fraction).toDouble(),
+                gameY((1920 * traineeRow0Fraction).toDouble(), ScreenBand.MIDDLE, anchorBmp.width, anchorBmp.height),
                 "trainee_anchor_top",
             )
             waitSafe(0.8)
@@ -7027,7 +7027,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 .findTextByColor(
                     bitmap,
                     (bitmap.width * traineePreviewRegion[0]).toInt(),
-                    (bitmap.height * traineePreviewRegion[1]).toInt(),
+                    gameY((1920 * traineePreviewRegion[1]).toDouble(), ScreenBand.MIDDLE, bitmap.width, bitmap.height).toInt(),
                     (bitmap.width * traineePreviewRegion[2]).toInt(),
                     (bitmap.height * traineePreviewRegion[3]).toInt(),
                     targetR = 255,
@@ -9068,10 +9068,15 @@ class CareerLaunchNavigator(private val context: Context) {
             // runs at most once, and it is off unless enableLineageCapture is set.
             if (!lineageCaptureAttempted && SettingsHelper.getBooleanSetting("runQueue", "enableLineageCapture", false)) {
                 lineageCaptureAttempted = true
-                try {
-                    captureLineageTelemetry()
-                } catch (e: Exception) {
-                    MessageLog.w(TAG, "[LINEAGE] Passive lineage capture failed; continuing the launch unchanged. $e")
+                // The Sparks view it opens and closes by fixed points is measured on 1080x1920 only.
+                if (SharedData.displayWidth != 1080 || SharedData.displayHeight != 1920) {
+                    MessageLog.i(TAG, "[LINEAGE] Passive lineage capture is skipped on a ${SharedData.displayWidth}x${SharedData.displayHeight} screen.")
+                } else {
+                    try {
+                        captureLineageTelemetry()
+                    } catch (e: Exception) {
+                        MessageLog.w(TAG, "[LINEAGE] Passive lineage capture failed; continuing the launch unchanged. $e")
+                    }
                 }
             }
             MessageLog.i(TAG, "[NAV] Legacy Auto-Select already done this session. Clicking Next to advance...")
