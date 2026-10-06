@@ -10,13 +10,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [1.7.1] - 2026-10-06
+## [1.7.1] - 2026-10-07
 
 ### Highlights
 
 - **Start no longer freezes on phones with Android 14 or newer (seen on Android 16).** Before, choosing "Entire screen" showed no floating button and Android reported the app as not responding.
+- **Careers run on phones:** on screens 1080 pixels wide and taller than 1920 the bot now places its taps and reads correctly, including trainee names in rotation queues. Tested on one 1080x2316 phone: a Trackblazer and a URA Finale career were completed, and a Unity Cup career launched on its own and ran 56 turns.
+- **Grand Concert needs 1080x1920 for now:** on any other screen size it stops before Start without spending TP, and on taller screens the bot keeps the first spark set instead of rerolling.
+- **Stuck taps on a phone:** a run that stops because Android stopped delivering the bot's taps now says to turn UMA Auto+ off and on again in Settings > Accessibility, instead of asking for an adb permission.
+- **The opening "Would you like to skip this scene?" question is answered** (it appears on a fresh game install), and a cinematic that ends mid-tap no longer stops the run.
+- **Training gains:** a "+4" is no longer read as "+41".
 - **Skill buying:** the bot no longer buys a skill's upgrade while logging it as the negative (×) skill, and never fills rank spending with negative skills.
-- **Easier phone setup:** Android lists the accessibility service as "UMA Auto+" (if you already turned it on, it stays on), and the README explains the "Restricted setting" step for Android 13 and newer.
+- **Easier phone setup:** Android lists the accessibility service as "UMA Auto+" (if you already turned it on, it stays on), the README explains the "Restricted setting" step for Android 13 and newer, the Home page, log and README say which screens work, and the log warns at Start when the floating button may cover the goal banner or the buttons at the bottom.
 - **Dialogs use the screen width** instead of a narrow column, such as What's new.
 
 ## [1.7.0] - 2026-10-05

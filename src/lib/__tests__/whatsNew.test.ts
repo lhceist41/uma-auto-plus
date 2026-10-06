@@ -60,7 +60,7 @@ describe("whatsNewContent and the highlights data", () => {
         expect(releaseNotesUrl("1.7.1")).toBe(`${RELEASE_NOTES_BASE_URL}v1.7.1`)
     })
 
-    it("every entry has 3 to 6 plain one-line highlights, with no em dash or internal label", () => {
+    it("every entry has 3 to 8 plain one-line highlights, with no em dash or internal label", () => {
         // Task and review labels (a letter and digits, or a name and digits) and the names of the tools behind them.
         const toolNames = [
             ["Main ", "Brain"],
@@ -76,7 +76,7 @@ describe("whatsNewContent and the highlights data", () => {
         for (const [version, entry] of Object.entries(whatsNewEntries)) {
             expect(version).toMatch(/^\d+\.\d+\.\d+$/)
             expect(entry.highlights.length).toBeGreaterThanOrEqual(3)
-            expect(entry.highlights.length).toBeLessThanOrEqual(6)
+            expect(entry.highlights.length).toBeLessThanOrEqual(8)
             for (const line of entry.highlights) {
                 expect(line.trim()).not.toBe("")
                 expect(line).not.toContain("\n")

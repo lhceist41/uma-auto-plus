@@ -3,11 +3,13 @@
     <latestVersion>1.7.1</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.7.1 - Start works on phones with Android 14 or newer
+v1.7.1 - Start works on phones with Android 14 or newer, and phones can run careers
 
 - Fixed: Start no longer freezes on phones with Android 14 or newer (seen on Android 16).
 - Fixed: the bot no longer buys a skill's upgrade while logging it as the negative skill, and never fills rank spending with negative skills.
-- Changed: Android lists the accessibility service as "UMA Auto+", and dialogs use the screen width.
+- New: careers run on screens 1080 pixels wide and taller than 1920, tested on one 1080x2316 phone. The bot also reads trainee names on those screens. Grand Concert needs 1080x1920 for now and stops before Start without spending TP on other sizes.
+- Fixed: the "Would you like to skip this scene?" question on a fresh game install is answered, and a "+4" training gain is no longer read as "+41".
+- Changed: Android lists the accessibility service as "UMA Auto+", the Home page and log say which screens work, and a run stopped by lost taps on a phone says to turn UMA Auto+ off and on again in Settings > Accessibility. Dialogs use the screen width.
 
     </releaseNotes>
   </update>
