@@ -13,7 +13,7 @@ export const whatsNewEntries: Record<string, WhatsNewEntry> = {
     "1.7.1": {
         highlights: [
             "Start no longer freezes on phones with Android 14 or newer (seen on Android 16).",
-            "Careers run on phones now: on screens 1080 pixels wide and taller than 1920 the bot places its taps and reads correctly, trainee names included (tested on one 1080x2316 phone). Grand Concert needs 1080x1920 for now and stops before Start without spending TP on other sizes.",
+            "Careers run on phones now: on screens 1080 pixels wide and taller than 1920 the bot places its taps and reads correctly (tested on one 1080x2316 phone). Grand Concert needs 1080x1920 for now and stops before Start Career without spending TP on other sizes.",
             "A run on a phone that stops because Android stopped delivering the bot's taps now tells you to turn UMA Auto+ off and on again in Settings > Accessibility.",
             "The opening \"Would you like to skip this scene?\" question on a fresh game install is answered, and a cinematic that ends mid-tap no longer stops the run.",
             "A \"+4\" training gain is no longer read as \"+41\".",

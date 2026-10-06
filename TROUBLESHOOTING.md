@@ -53,7 +53,7 @@ When the game sits idle for a long time, for example overnight, it ends its sess
 
 In the same no-career situation, if the bot cannot recognise the game's screen, it brings the game back to the front once (starting it again if it had closed) and starts the launch over. If the game still shows nothing the bot knows, the queue stops with "the game showed a screen the bot could not recognise, and reopening the game did not bring it back": open the game, check what it shows, then press Start in UMA Auto+.
 
-The title screen is recognised only on screens 1080 wide and at least 1920 tall. On taller screens it has been checked on a screenshot, not yet in a live run. Neither recovery has been seen working on a device yet.
+The title screen is recognised only on screens 1080 wide and at least 1920 tall. On taller screens it has been seen working once, on a 1080x2316 phone. Neither recovery has been seen working on a device yet.
 
 ### 7. The game asked to download additional data
 

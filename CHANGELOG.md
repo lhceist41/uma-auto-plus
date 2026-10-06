@@ -15,8 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Highlights
 
 - **Start no longer freezes on phones with Android 14 or newer (seen on Android 16).** Before, choosing "Entire screen" showed no floating button and Android reported the app as not responding.
-- **Careers run on phones:** on screens 1080 pixels wide and taller than 1920 the bot now places its taps and reads correctly, including trainee names in rotation queues. Tested on one 1080x2316 phone: a Trackblazer and a URA Finale career were completed, and a Unity Cup career launched on its own and ran 56 turns.
-- **Grand Concert needs 1080x1920 for now:** on any other screen size it stops before Start without spending TP, and on taller screens the bot keeps the first spark set instead of rerolling.
+- **Careers run on phones:** on screens 1080 pixels wide and taller than 1920 the bot now places its taps and reads correctly. On screens other than 1080x1920 the optional spark reroll is skipped and the bot keeps the first spark set. Tested on one 1080x2316 phone with 1.7.1 test builds: the bot played a Trackblazer, a URA Finale and a Unity Cup career to the end, and the final build launched and finished a URA Finale career with no help.
+- **Grand Concert needs 1080x1920 for now:** on any other screen size it stops before Start Career without spending TP.
 - **Stuck taps on a phone:** a run that stops because Android stopped delivering the bot's taps now says to turn UMA Auto+ off and on again in Settings > Accessibility, instead of asking for an adb permission.
 - **The opening "Would you like to skip this scene?" question is answered** (it appears on a fresh game install), and a cinematic that ends mid-tap no longer stops the run.
 - **Training gains:** a "+4" is no longer read as "+41".
