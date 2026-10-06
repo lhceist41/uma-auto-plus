@@ -514,7 +514,7 @@ class QueueReportTest {
             while (dir != null && !File(dir, fixture).isFile) dir = dir.parentFile
             val cases = JSONObject(File(dir ?: fail(fixture), fixture).readText()).getJSONArray("cases")
             val resumableHalts = (0 until cases.length()).map { cases.getJSONObject(it) }.filter { it.getJSONObject("report").let { r -> r.optString("kind") == "RUN_HALTED" && r.optBoolean("resumable") } }
-            for (key in listOf("A11Y_GRANT_MISSING", "A11Y_INPUT_DEAD", "TAPS_HAD_NO_EFFECT", "GAME_NOT_RESPONDING")) {
+            for (key in listOf("A11Y_GRANT_MISSING", "A11Y_TAPS_STOPPED", "A11Y_INPUT_DEAD", "TAPS_HAD_NO_EFFECT", "GAME_NOT_RESPONDING")) {
                 val case = resumableHalts.first { it.getJSONObject("report").optString("reasonKey") == key }
                 val stored = case.getJSONObject("report")
                 val halted =

@@ -11,6 +11,8 @@ internal const val A11Y_GRANT_MISSING = "A11Y_GRANT_MISSING"
 
 internal const val A11Y_INPUT_DEAD = "A11Y_INPUT_DEAD"
 
+internal const val STUCK_ON_SCREEN = "STUCK_ON_SCREEN"
+
 /** The bot's own taps still reached the screen, and the game ignored them. */
 internal const val GAME_NOT_RESPONDING = "GAME_NOT_RESPONDING"
 
@@ -20,6 +22,27 @@ internal const val TAPS_HAD_NO_EFFECT = "TAPS_HAD_NO_EFFECT"
 /** A dialog showed none of the buttons the bot taps, so nothing was tapped and neither input nor the game is in question. */
 internal const val DIALOG_NOT_CLOSED = "DIALOG_NOT_CLOSED"
 
+/** Without WRITE_SECURE_SETTINGS (phones): the probe's own touch arrived and the bot's dispatched tap did not, so Android dropped its taps. */
+internal const val A11Y_TAPS_STOPPED = "A11Y_TAPS_STOPPED"
+
+internal enum class RebindStep { REBIND, HALT, SKIP }
+
+/** Only the grant makes a rebind possible; without it, the probe decides, and only lost taps stop the run. */
+internal fun rebindStep(grant: Boolean, probe: () -> OwnInputProbeResult): RebindStep =
+    when {
+        grant -> RebindStep.REBIND
+        probe() == OwnInputProbeResult.LOST -> RebindStep.HALT
+        else -> RebindStep.SKIP
+    }
+
+/** A stuck stop without the grant, where no rebind was tried: the probe alone names the cause, and an inconclusive one names none. */
+internal fun noGrantStuckKey(probe: OwnInputProbeResult): String? =
+    when (probe) {
+        OwnInputProbeResult.ARRIVED -> GAME_NOT_RESPONDING
+        OwnInputProbeResult.LOST -> A11Y_TAPS_STOPPED
+        OwnInputProbeResult.INCONCLUSIVE -> null
+    }
+
 /** A tap that reached the probe window proves the bot's input works, so the game is not responding. An inconclusive probe proves neither side, so dead input is not claimed. */
 internal fun stuckInputKey(rebindKey: String?, probe: OwnInputProbeResult): String? =
     when (probe) {
@@ -28,9 +51,13 @@ internal fun stuckInputKey(rebindKey: String?, probe: OwnInputProbeResult): Stri
         OwnInputProbeResult.INCONCLUSIVE -> if (rebindKey == A11Y_INPUT_DEAD) TAPS_HAD_NO_EFFECT else rebindKey
     }
 
-/** Only an input-repair key asks [probe] whether the bot's own taps still reach the screen. */
-internal fun stuckKeyAfterProbe(key: String, probe: () -> OwnInputProbeResult): String =
-    if (key == A11Y_INPUT_DEAD || key == A11Y_GRANT_MISSING) stuckInputKey(key, probe()) ?: key else key
+/** Only an input-repair key asks [probe] whether the bot's own taps still reach the screen; without the grant, a plain stuck screen asks too. */
+internal fun stuckKeyAfterProbe(key: String, grant: Boolean = true, probe: () -> OwnInputProbeResult): String =
+    when {
+        key == A11Y_INPUT_DEAD || key == A11Y_GRANT_MISSING -> stuckInputKey(key, probe()) ?: key
+        !grant && key == STUCK_ON_SCREEN -> noGrantStuckKey(probe()) ?: key
+        else -> key
+    }
 
 /** A game that freezes again after this many restarts halts with [GAME_NOT_RESPONDING] instead of restarting forever. */
 internal const val MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN = 2
@@ -56,7 +83,7 @@ internal fun navigatorStuckKey(repairRefused: Boolean, rebindIssuedOnThisScreen:
         dialogButtonsMissing -> DIALOG_NOT_CLOSED
         repairRefused -> A11Y_GRANT_MISSING
         rebindIssuedOnThisScreen -> A11Y_INPUT_DEAD
-        else -> "STUCK_ON_SCREEN"
+        else -> STUCK_ON_SCREEN
     }
 
 internal const val STRONG_TOGGLE_GRACE_TICKS = 6

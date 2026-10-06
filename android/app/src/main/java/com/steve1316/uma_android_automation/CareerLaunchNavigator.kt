@@ -18,6 +18,9 @@ import com.steve1316.uma_android_automation.bot.GameReopen
 import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
 import com.steve1316.uma_android_automation.bot.stuckCountAfter
 import com.steve1316.uma_android_automation.bot.stuckKeyAfterProbe
+import com.steve1316.uma_android_automation.bot.A11Y_TAPS_STOPPED
+import com.steve1316.uma_android_automation.bot.RebindStep
+import com.steve1316.uma_android_automation.bot.rebindStep
 import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
@@ -1150,8 +1153,12 @@ class CareerLaunchNavigator(private val context: Context) {
                     }
                     if (!exceptionRecoveryUsed) {
                         exceptionRecoveryUsed = true
-                        MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} during screen detection: ${e.message}. Force-rebinding the accessibility service and retrying once.")
-                        rebindAccessibility()
+                        if (StartModule.secureSettingsGrant) {
+                            MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} during screen detection: ${e.message}. Force-rebinding the accessibility service and retrying once.")
+                            rebindAccessibility()
+                        } else {
+                            MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} during screen detection: ${e.message}. Retrying once.")
+                        }
                         // The rebind may have fixed whatever wedged the FSM, so grant fresh attempts -
                         // carrying stale stuck/progress counters into recovery would fail it early.
                         stuckInStateCount = 0
@@ -1198,8 +1205,12 @@ class CareerLaunchNavigator(private val context: Context) {
                     // still returns true). Rebind once mid-episode - a real transition resets
                     // the counter, so this only fires when clicks demonstrably do nothing.
                     if (stuckInStateCount == STUCK_STATE_REBIND_AT) {
-                        MessageLog.w(TAG, "[NAV] $detectedState repeated $STUCK_STATE_REBIND_AT times with no effect from clicks; force-rebinding the accessibility service.")
-                        stuckScreenRebindIssued = rebindAccessibility()
+                        if (StartModule.secureSettingsGrant) {
+                            MessageLog.w(TAG, "[NAV] $detectedState repeated $STUCK_STATE_REBIND_AT times with no effect from clicks; force-rebinding the accessibility service.")
+                            stuckScreenRebindIssued = rebindAccessibility()
+                        } else {
+                            tapsStoppedWithoutGrant(detectedState)?.let { return it }
+                        }
                     }
                     if (stuckInStateCount >= MAX_STUCK_ITERATIONS) {
                         val dialogButtonsMissing = detectedState == LaunchScreenState.DIALOG_HANDLED && !dialogTappedOnThisScreen
@@ -1230,8 +1241,12 @@ class CareerLaunchNavigator(private val context: Context) {
                 if (detectedState == LaunchScreenState.TAP_TO_CONTINUE) {
                     tapToContinueCount++
                     if (tapToContinueCount == TAP_TO_CONTINUE_REBIND_AT) {
-                        MessageLog.w(TAG, "[NAV] TAP_TO_CONTINUE not advancing after $TAP_TO_CONTINUE_REBIND_AT taps; force-rebinding accessibility service.")
-                        tapScreenRebindIssued = rebindAccessibility()
+                        if (StartModule.secureSettingsGrant) {
+                            MessageLog.w(TAG, "[NAV] TAP_TO_CONTINUE not advancing after $TAP_TO_CONTINUE_REBIND_AT taps; force-rebinding accessibility service.")
+                            tapScreenRebindIssued = rebindAccessibility()
+                        } else {
+                            tapsStoppedWithoutGrant(detectedState)?.let { return it }
+                        }
                     }
                     if (tapToContinueCount >= MAX_TAP_TO_CONTINUE_ITERATIONS) {
                         val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, tapScreenRebindIssued))
@@ -1254,8 +1269,12 @@ class CareerLaunchNavigator(private val context: Context) {
                 if (titleLoggingIn) {
                     titleLoginLooks++
                     if (titleLoginLooks == TITLE_LOGIN_REBIND_AT) {
-                        MessageLog.w(TAG, "[NAV] The title screen is still up after $TITLE_LOGIN_REBIND_AT looks; force-rebinding the accessibility service in case its taps stopped landing.")
-                        titleScreenRebindIssued = rebindAccessibility()
+                        if (StartModule.secureSettingsGrant) {
+                            MessageLog.w(TAG, "[NAV] The title screen is still up after $TITLE_LOGIN_REBIND_AT looks; force-rebinding the accessibility service in case its taps stopped landing.")
+                            titleScreenRebindIssued = rebindAccessibility()
+                        } else {
+                            tapsStoppedWithoutGrant(detectedState)?.let { return it }
+                        }
                     }
                     if (titleLoginLooks >= BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT) {
                         val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, titleScreenRebindIssued))
@@ -1382,7 +1401,11 @@ class CareerLaunchNavigator(private val context: Context) {
                 // hard off->on rebind that the string check can't see. Not while the game loads its way
                 // back through its title: no tap is waiting to land then, and its splash screens are
                 // unknown by design.
-                if (consecutiveUnknowns >= 2 && !betweenRunRecovery.gameComingBack) {
+                if (!StartModule.secureSettingsGrant && consecutiveUnknowns >= 2 && !betweenRunRecovery.gameComingBack) {
+                    // Without the grant: one probe per unknown episode, not a rebind every tick.
+                    if (consecutiveUnknowns == 2) tapsStoppedWithoutGrant(detectedState)?.let { return it }
+                    checkAccessibility()
+                } else if (consecutiveUnknowns >= 2 && !betweenRunRecovery.gameComingBack) {
                     rebindAccessibility()
                 } else {
                     checkAccessibility()
@@ -1411,8 +1434,12 @@ class CareerLaunchNavigator(private val context: Context) {
                     }
                     if (!exceptionRecoveryUsed) {
                         exceptionRecoveryUsed = true
-                        MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} while handling $currentState: ${e.message}. Force-rebinding the accessibility service and retrying once.")
-                        rebindAccessibility()
+                        if (StartModule.secureSettingsGrant) {
+                            MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} while handling $currentState: ${e.message}. Force-rebinding the accessibility service and retrying once.")
+                            rebindAccessibility()
+                        } else {
+                            MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} while handling $currentState: ${e.message}. Retrying once.")
+                        }
                         // Fresh attempts post-rebind, mirroring the detection catch.
                         stuckInStateCount = 0
                         tapToContinueCount = 0
@@ -1506,7 +1533,23 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /** Taps that still reach the screen mean the game stopped responding, not that the bot's input died. */
-    private fun probedStuckKey(key: String): String = stuckKeyAfterProbe(key) { tempGame?.ownInputReachesScreen() ?: OwnInputProbeResult.INCONCLUSIVE }
+    private fun probedStuckKey(key: String): String = stuckKeyAfterProbe(key, StartModule.secureSettingsGrant) { ownInputProbe() }
+
+    private fun ownInputProbe(): OwnInputProbeResult = tempGame?.ownInputReachesScreen() ?: OwnInputProbeResult.INCONCLUSIVE
+
+    /** Without the grant no rebind is tried: the stuck episode's one probe ends the navigation only when Android dropped the bot's taps. */
+    private fun tapsStoppedWithoutGrant(state: LaunchScreenState): NavigationResult? {
+        if (rebindStep(StartModule.secureSettingsGrant) { ownInputProbe() } != RebindStep.HALT) return null
+        return NavigationResult(
+            success = false,
+            lastDetectedState = state.name,
+            failureReason = "Android stopped delivering the bot's taps on $state.",
+            isRecoverable = true,
+            recommendedAction = "Turn UMA Auto+ off and on again in Settings > Accessibility, then press Start.",
+            reasonKey = A11Y_TAPS_STOPPED,
+            screenshotPath = captureFailureScreenshot("taps_stopped_${state.name}"),
+        )
+    }
 
     /** The stop after the one relaunch did not bring back a screen the navigator knows. */
     private fun gameUnrecoverable(lastState: LaunchScreenState, reason: String): NavigationResult =
@@ -7567,6 +7610,10 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun recoverGestureDispatch(): Boolean {
         val game = tempGame ?: return false
+        if (!StartModule.secureSettingsGrant) {
+            MessageLog.w(TAG, "[NAV] [BORROW] Borrow-list scroll stalled after the gesture ladder; without the self-repair permission no rebind is tried, so the scroll stays stalled.")
+            return false
+        }
         MessageLog.w(TAG, "[NAV] [BORROW] Borrow-list scroll stalled after the gesture ladder; rebinding the accessibility service to recover silently-dead gesture dispatch.")
         // Capture the pre-toggle service object. The 2.5.9 library never clears its static instance on
         // destroy and getInstance() never returns null (it throws IllegalStateException when uninitialised or

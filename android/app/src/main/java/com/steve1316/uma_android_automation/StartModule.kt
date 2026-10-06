@@ -36,6 +36,7 @@ import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.SparkRerollGate
 import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
+import com.steve1316.uma_android_automation.bot.hasSecureSettingsGrant as secureSettingsGranted
 import com.steve1316.uma_android_automation.bot.shouldClearSparkTransactionForRunResult
 import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
 import com.steve1316.uma_android_automation.utils.KeepScreenOn
@@ -197,6 +198,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         /** Set by a run whose taps changed nothing and whose repair could not help; the queue halts after it, keeping the saved queue for Start. Reset every session. */
         @Volatile
         var accessibilityHaltKey: String? = null
+
+        /** WRITE_SECURE_SETTINGS, read once per session: without it the bot never tries an accessibility rebind. */
+        @Volatile
+        var secureSettingsGrant: Boolean = true
 
         /** Set when the player's Stop ended a launch navigation, whose saved run has not started; the record is kept for Start. Reset every session. */
         @Volatile
@@ -2038,6 +2043,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 gameRecoveryFailed = false
                 accessibilityHaltKey = null
                 launchStoppedByPlayer = false
+                secureSettingsGrant = secureSettingsGranted(context)
+                MessageLog.i(TAG, if (secureSettingsGrant) "[A11Y] Self-repair permission granted: stuck taps rebind the accessibility service." else "[A11Y] No self-repair permission: stuck taps are checked with a probe tap instead of a rebind.")
                 SessionTally.reset()
                 ProgressTracker.beginWindow()
                 StatusBoard.reset(ledger.startedAt)

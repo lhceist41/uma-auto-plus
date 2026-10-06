@@ -401,8 +401,9 @@ internal val REPORT_REASON_KEYS =
         "A11Y_GRANT_MISSING" to
             KeyText(
                 "its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",
-                "Grant the self-repair permission shown on Home, and turn the accessibility service back on if it is off",
+                "Turn UMA Auto+ off and on again in Settings > Accessibility",
             ),
+        "A11Y_TAPS_STOPPED" to KeyText("Android stopped delivering its taps.", "Turn UMA Auto+ off and on again in Settings > Accessibility"),
         "A11Y_INPUT_DEAD" to KeyText("its taps stopped having any effect, even after it restarted its accessibility service.", "Restart MuMu or the device"),
         "TAPS_HAD_NO_EFFECT" to
             KeyText(

@@ -3895,8 +3895,8 @@ abstract class Campaign(game: Game) : Task(game) {
             // main-screen ticks: both early-return, so a gesture-death during a dialog looped unbounded to the runtime cap.
             if (!game.ensureAccessibilityService()) {
                 val reason =
-                    "The Accessibility Service was disabled mid-run and could not be restored automatically. " +
-                        "Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log)."
+                    "The Accessibility Service was turned off mid-run and could not be turned back on automatically. " +
+                        "Turn UMA Auto+ back on in Settings > Accessibility, then press Start."
                 requestAccessibilityHalt(A11Y_GRANT_MISSING)
                 throw InterruptedException(reason)
             }
@@ -3917,8 +3917,12 @@ abstract class Campaign(game: Game) : Task(game) {
                 // ladder points and stop cleanly.
                 if (consecutiveDialogTicks == 13 || consecutiveDialogTicks == 19) {
                     if (consecutiveDialogTicks == 13) dialogRebinds.start()
-                    MessageLog.w(TAG, "[WARN] process:: $consecutiveDialogTicks consecutive dialog ticks without progress - forcing an accessibility service rebind.")
-                    dialogRebinds.record(game.forceRebindAccessibilityService())
+                    if (StartModule.secureSettingsGrant) {
+                        MessageLog.w(TAG, "[WARN] process:: $consecutiveDialogTicks consecutive dialog ticks without progress - forcing an accessibility service rebind.")
+                        dialogRebinds.record(game.forceRebindAccessibilityService())
+                    } else if (consecutiveDialogTicks == 13) {
+                        stopIfTapsStopped("a dialog")
+                    }
                 } else if (consecutiveDialogTicks >= dialogStopAt) {
                     dialogRebinds.closeLast()
                     if (shouldTryStrongToggle(dialogRebinds, game.strongToggleUsed)) {
@@ -4405,7 +4409,7 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     private fun stopForStuckInput(episode: RebindEpisode, message: String) {
         val ownInput = game.ownInputReachesScreen()
-        val key = stuckInputKey(episode.stopKey(), ownInput)
+        val key = stuckInputKey(episode.stopKey(), ownInput) ?: noGrantStuckKey(ownInput).takeUnless { StartModule.secureSettingsGrant }
         if (reopensUnresponsiveGame(key, careerScreenObservedThisTask, unresponsiveGameReopens)) {
             val reopen = game.reopenGame(attempt = 2)
             val attempt = unresponsiveGameReopens + 1
@@ -4429,6 +4433,13 @@ abstract class Campaign(game: Game) : Task(game) {
         MessageLog.w(TAG, "[RECOVERY] Stopping for taps that changed nothing: own-input probe $ownInput, reason ${key ?: "none"}.")
         key?.let { requestAccessibilityHalt(it) }
         throw InterruptedException(if (key == GAME_NOT_RESPONDING) "$message The bot's own taps still reached the screen, so the game stopped responding." else message)
+    }
+
+    /** Without the grant, the first threshold of a stuck episode probes once instead of rebinding; only taps Android dropped stop the run. */
+    private fun stopIfTapsStopped(where: String) {
+        if (rebindStep(StartModule.secureSettingsGrant) { game.ownInputReachesScreen() } != RebindStep.HALT) return
+        requestAccessibilityHalt(A11Y_TAPS_STOPPED)
+        throw InterruptedException("Android stopped delivering the bot's taps on $where. Turn UMA Auto+ off and on again in Settings > Accessibility, then press Start.")
     }
 
     private fun recoverFromUnknownScreen(count: Int) {
@@ -4461,11 +4472,15 @@ abstract class Campaign(game: Game) : Task(game) {
                     cutsceneRebinds.start()
                     cutsceneStopAt = maxCutsceneAdvanceBeforeStop
                 }
-                MessageLog.w(
-                    TAG,
-                    "[WARN] recoverFromUnknownScreen:: Event cutscene not advancing after $count taps - forcing an Accessibility Service rebind in case gesture dispatch died.",
-                )
-                cutsceneRebinds.record(game.forceRebindAccessibilityService())
+                if (StartModule.secureSettingsGrant) {
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] recoverFromUnknownScreen:: Event cutscene not advancing after $count taps - forcing an Accessibility Service rebind in case gesture dispatch died.",
+                    )
+                    cutsceneRebinds.record(game.forceRebindAccessibilityService())
+                } else if (count == cutsceneRebindThresholds.min()) {
+                    stopIfTapsStopped("an event cutscene")
+                }
             }
             // Before the rebind ladder starts only: a stuck-input episode must not gain pill taps.
             if (count < cutsceneRebindThresholds.min()) setFastSkipIfOff("event screen")
@@ -4502,11 +4517,15 @@ abstract class Campaign(game: Game) : Task(game) {
         // cannot help (e.g. WRITE_SECURE_SETTINGS missing).
         if (count in gestureRebindThresholds) {
             if (count == gestureRebindThresholds.min()) unknownScreenRebinds.start()
-            MessageLog.w(
-                TAG,
-                "[WARN] recoverFromUnknownScreen:: Stuck for $count cycles - forcing an Accessibility Service rebind in case gesture dispatch died silently.",
-            )
-            unknownScreenRebinds.record(game.forceRebindAccessibilityService())
+            if (StartModule.secureSettingsGrant) {
+                MessageLog.w(
+                    TAG,
+                    "[WARN] recoverFromUnknownScreen:: Stuck for $count cycles - forcing an Accessibility Service rebind in case gesture dispatch died silently.",
+                )
+                unknownScreenRebinds.record(game.forceRebindAccessibilityService())
+            } else if (count == gestureRebindThresholds.min()) {
+                stopIfTapsStopped("an unrecognized screen")
+            }
         }
 
         // Last resort: reopen the game, for a GAME-side soft-lock a rebind cannot fix or a game that has gone away. Gated to a career in

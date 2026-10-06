@@ -159,7 +159,7 @@ class AccessibilityRepairTest {
             assertTrue(nav.contains("probedStuckKey(navigatorStuckKey(navRepairRefused, stuckScreenRebindIssued, dialogButtonsMissing))"))
             assertTrue(nav.contains("val tapped = step.taps.any { it.click(iu) }\n        if (tapped) dialogTappedOnThisScreen = true\n"))
             assertTrue(nav.contains("stuckInStateCount = 0\n                    dialogTappedOnThisScreen = false\n"), "a new screen starts untapped")
-            assertTrue(nav.contains("private fun probedStuckKey(key: String): String = stuckKeyAfterProbe(key) {"))
+            assertTrue(nav.contains("private fun probedStuckKey(key: String): String = stuckKeyAfterProbe(key, StartModule.secureSettingsGrant) {"))
         }
     }
 

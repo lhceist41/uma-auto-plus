@@ -751,7 +751,23 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped during run 1 of 3: its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",
-                "nextAction": "Grant the self-repair permission shown on Home, and turn the accessibility service back on if it is off, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+                "nextAction": "Turn UMA Auto+ off and on again in Settings > Accessibility, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "halted in a run: Android stopped the taps",
+            "report": {
+                "kind": "RUN_HALTED",
+                "queueEnabled": true,
+                "totalRuns": 3,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "A11Y_TAPS_STOPPED"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped during run 2 of 3: Android stopped delivering its taps.",
+                "nextAction": "Turn UMA Auto+ off and on again in Settings > Accessibility, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -1742,7 +1758,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",
-                "nextAction": "Grant the self-repair permission shown on Home, and turn the accessibility service back on if it is off, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+                "nextAction": "Turn UMA Auto+ off and on again in Settings > Accessibility, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -1759,6 +1775,22 @@
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the game stopped responding to taps while the bot's own taps still reached the screen, and UMA Auto+ could not get it going again. Close the game fully (swipe it away in Recent apps) and open it again.",
                 "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: A11Y_TAPS_STOPPED",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "A11Y_TAPS_STOPPED"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: Android stopped delivering its taps.",
+                "nextAction": "Turn UMA Auto+ off and on again in Settings > Accessibility, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

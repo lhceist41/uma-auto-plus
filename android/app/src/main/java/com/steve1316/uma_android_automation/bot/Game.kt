@@ -976,7 +976,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         if (!ensureAccessibilityService()) {
             return accessibilityHaltResult(
                 A11Y_GRANT_MISSING,
-                "The Accessibility Service is disabled and could not be restored automatically. Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log).",
+                "The Accessibility Service is off and could not be turned back on automatically. Turn UMA Auto+ back on in Settings > Accessibility, then press Start.",
             )
         }
 
