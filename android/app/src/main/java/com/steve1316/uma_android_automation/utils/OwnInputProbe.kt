@@ -37,7 +37,7 @@ internal fun ownInputProbeY(buttonX: Int, buttonY: Int, buttonSize: Int): Int? {
 }
 
 /** Read the way the overlay stores it: last dragged top-left in OverlayPrefs, else screen centre. Its window is the button plus a 2 dp margin per side. */
-private fun floatingButtonRect(context: Context): Triple<Int, Int, Int> {
+internal fun floatingButtonRect(context: Context): Triple<Int, Int, Int> {
     val metrics = context.resources.displayMetrics
     val sizeDp = runCatching { SharedData.overlayButtonSizeDP }.getOrDefault(50f) + 4f
     val size = (sizeDp * metrics.density).toInt()

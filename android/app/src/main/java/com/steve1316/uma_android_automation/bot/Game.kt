@@ -45,7 +45,10 @@ import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkill
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ScreenBand
+import com.steve1316.uma_android_automation.utils.floatingButtonRect
 import com.steve1316.uma_android_automation.utils.gameY
+import com.steve1316.uma_android_automation.utils.isMappedSurface
+import com.steve1316.uma_android_automation.utils.overlayKeepClearHits
 import com.steve1316.uma_android_automation.utils.rememberScreenTopInset
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
@@ -935,16 +938,20 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         val topInset = rememberScreenTopInset(myContext)
         val bandOffsets = ScreenBand.entries.joinToString { "${it.name.lowercase()} +${gameY(0.0, it, SharedData.displayWidth, SharedData.displayHeight).toInt()}" }
         MessageLog.i(TAG, "[LAYOUT] Top cutout inset $topInset px; offsets from 1080x1920: $bandOffsets.")
-        if (SharedData.displayWidth != 1080) {
-            MessageLog.w(TAG, "[LAYOUT] A ${SharedData.displayWidth}-pixel-wide screen is not supported. Set the phone's screen resolution to FHD+ (1080 wide).")
-        }
-        val isConfig1 = SharedData.displayWidth == 1080 && SharedData.displayHeight == 1920 && SharedData.displayDPI == 240
-        val isConfig2 = SharedData.displayWidth == 1080 && SharedData.displayHeight == 2340 && SharedData.displayDPI == 450
-        if (!isConfig1 && !isConfig2) {
+        if (!isMappedSurface(SharedData.displayWidth, SharedData.displayHeight)) {
             MessageLog.w(
                 TAG,
-                "[WARN] ⚠️ Bot performance will be severely degraded since display configuration is not 1080x1920 @ 240 DPI or 1080x2340 @ 450 DPI unless an appropriate scale is set for your device.",
+                "[LAYOUT] A ${SharedData.displayWidth}x${SharedData.displayHeight} screen is not supported and the bot will work badly. " +
+                    "The screen must be 1080 pixels wide and at least 1920 tall. On a phone, switch the screen resolution to FHD+ (1080 wide) if it offers it, for example on Samsung: Settings > Display > Screen resolution.",
             )
+        }
+        val coveredAreas =
+            runCatching {
+                val (buttonX, buttonY, buttonSize) = floatingButtonRect(myContext)
+                overlayKeepClearHits(buttonX, buttonY, buttonSize, SharedData.displayWidth, SharedData.displayHeight, topInset)
+            }.getOrDefault(emptyList())
+        if (coveredAreas.isNotEmpty()) {
+            MessageLog.w(TAG, "[OVERLAY] The floating button may cover the ${coveredAreas.joinToString(" and the ")}, where the bot reads or taps. Drag the button to the top right corner, above the goal banner.")
         }
         if (debugMode) MessageLog.w(TAG, "[WARN] ⚠️ Debug Mode is enabled. All bot operations will be significantly slower as a result.")
         // toDoubleOrNull: an empty/unset manual-scale setting threw NumberFormatException at startup.

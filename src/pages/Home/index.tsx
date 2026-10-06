@@ -605,14 +605,12 @@ const Home = () => {
             const metrics = await StartModule.getDeviceDimensions()
             setDeviceMetrics(metrics)
 
-            const { width, height, dpi } = metrics
-            const isConfig1 = width === 1080 && height === 1920 && dpi === 240
-            const isConfig2 = width === 1080 && height === 2340 && dpi === 450
+            const { width, height } = metrics
 
-            if (isConfig1 || isConfig2) {
+            if (width === 1080 && height >= 1920) {
                 setUnsupportedReason(null)
             } else {
-                setUnsupportedReason(`unsupported configuration: ${width}x${height} @ ${dpi} DPI`)
+                setUnsupportedReason("an unsupported screen size")
             }
         } catch (error) {
             logErrorWithTimestamp("[Home] Failed to fetch device dimensions:", error)
@@ -868,19 +866,13 @@ const Home = () => {
 
     /** Returns a status indicator based on the device state. */
     const renderStatus = (): React.ReactElement | null => {
-        const warningText = `Current Display: ${deviceMetrics?.width}x${deviceMetrics?.height} (${deviceMetrics?.dpi} DPI).
+        const warningText = `Current Display: ${deviceMetrics?.width}x${deviceMetrics?.height}.
 
 Warning: Performance may be degraded due to ${unsupportedReason}.
 
-Supported Configurations:
-• 1080x1920 @ 240 DPI
-• 1080x2340 @ 450 DPI
+Supported screens are 1080 pixels wide and at least 1920 tall. Grand Concert needs 1080x1920 for now.
 
-Note: Height is not as important to meet as the width. In addition, DPI is tied to the width and height together. How to calculate your specific DPI:
-
-DPI = sqrt(width^2 + height^2) / diagonal
-
-where width and height of the screen is in pixels, and diagonal is the diagonal size of the physical screen in inches.`
+If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offers it (for example on Samsung: Settings > Display > Screen resolution).`
 
         if (unsupportedReason) {
             return (

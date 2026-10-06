@@ -66,13 +66,14 @@ This project is purely for educational purposes to learn about Android automatio
 # Requirements
 
 - An Android device or emulator running Android 7.0 or newer.
-- A supported display configuration. Template matching is calibrated for **1080x1920 at 240 DPI**, or **1080x2340 at 450 DPI** for Samsung phones. On anything else the Home page warns you, detection misfires, and the bot stalls. If your phone cannot be set to one of those, try the `Basic Template Matching Test` under `Settings` > `Go to Debug Settings` > `Debug Tests` to find a working custom scale, or force the display down with the [resolution steps](#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate) below.
+- A supported screen: **1080 pixels wide and at least 1920 tall**, such as 1080x1920 or a 1080x2316 phone. URA Finale, Unity Cup and Trackblazer are supported on these screens. So far a Trackblazer and a URA Finale career have been completed on a 1080x2316 phone, and a Unity Cup career ran 56 turns there before it stopped for battery; no other size has been tested. Grand Concert needs 1080x1920 for now, and on taller screens the bot keeps the first spark set instead of rerolling. On any other width the Home page warns you, detection misfires, and the bot stalls. If your phone is not 1080 wide, switch its screen resolution to FHD+, for example on Samsung under `Settings` > `Display` > `Screen resolution`, or force the display down with the [resolution steps](#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate) below. The `Basic Template Matching Test` under `Settings` > `Go to Debug Settings` > `Debug Tests` can find a working custom scale.
+- On a phone, keep the floating button off the goal banner at the top of the career screen and off the stats and buttons at the bottom. At Start, the bot logs a warning when the button's saved position may cover them.
 - Tested emulators are Bluestacks 5 (Pie 64-bit, other versions should work) and MuMu Player 12.0 (6.5.6.0) running an Android 12 guest, both on **x86_64**. Set either up as follows:
     - Portrait mode forced on always.
-    - 4 CPU cores, 4 GB memory, 1080 x 1920 (width x height), 240 DPI. The DPI matters.
+    - 4 CPU cores, 4 GB memory, 1080 x 1920 (width x height), 240 DPI.
     - Bluestacks only: update to the latest version to avoid Uma Musume crashing, and set the predefined profile under `Settings` > `Phone` to a modern high-end phone such as the Samsung Galaxy S22.
 
-  The advanced Veteran Roster Scan and Veteran Inspiration debug tests need the resolution set exactly to 1080x1920; the 1080x2340 Samsung alternative above does not work for them.
+  The advanced Veteran Roster Scan and Veteran Inspiration debug tests need the resolution set exactly to 1080x1920; taller screens do not work for them.
 
 > [!IMPORTANT]
 > The in-game graphics need to be set to `Standard` instead of `Basic`.

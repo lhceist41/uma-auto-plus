@@ -8,7 +8,9 @@ Most stops come down to one of these three.
 
 ### 1. Unsupported screen resolution
 
-Template matching is calibrated for **1080×1920 @ 240 DPI** or **1080×2340 @ 450 DPI** (Samsung). On anything else, detection misfires and the bot stalls. Set your emulator/device to one of those (see the resolution steps in the [README](README.md#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate)), or use the `Basic Template Matching Test` under **Settings → Go to Debug Settings → Debug Tests** to find a working custom scale.
+The bot supports screens **1080 pixels wide and at least 1920 tall**, such as 1080×1920 or a 1080×2316 phone. Grand Concert needs 1080×1920 for now. On any other width, detection misfires and the bot stalls. If your phone is not 1080 wide, switch its screen resolution to FHD+ (for example on Samsung: **Settings → Display → Screen resolution**), set your emulator to 1080×1920 (see the resolution steps in the [README](README.md#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate)), or use the `Basic Template Matching Test` under **Settings → Go to Debug Settings → Debug Tests** to find a working custom scale.
+
+On a phone, the floating button must not sit over the goal banner at the top of the career screen or over the stats and buttons at the bottom. At Start the bot checks the button's saved position and logs an `[OVERLAY]` line when it may cover them: drag the button to the top right corner, above the goal banner.
 
 ### 2. The emulator killed the Accessibility service (MuMu)
 
@@ -51,7 +53,7 @@ When the game sits idle for a long time, for example overnight, it ends its sess
 
 In the same no-career situation, if the bot cannot recognise the game's screen, it brings the game back to the front once (starting it again if it had closed) and starts the launch over. If the game still shows nothing the bot knows, the queue stops with "the game showed a screen the bot could not recognise, and reopening the game did not bring it back": open the game, check what it shows, then press Start in UMA Auto+.
 
-The title screen is recognised only at 1080×1920. Neither recovery has been seen working on a device yet.
+The title screen is recognised only on screens 1080 wide and at least 1920 tall. On taller screens it has been checked on a screenshot, not yet in a live run. Neither recovery has been seen working on a device yet.
 
 ### 7. The game asked to download additional data
 
