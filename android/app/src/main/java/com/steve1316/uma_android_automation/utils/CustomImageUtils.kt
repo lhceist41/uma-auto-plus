@@ -1741,6 +1741,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                         Log.i(TAG, "[YOLO] Detections for $statName ${row.rowName}: $resultString")
                                     }
                                 } else {
+                                    val rowScores = mutableListOf<StatGainDigits.TemplateMatch>()
                                     // Process templates for this row using the row's specific suffix.
                                     for (templateName in rowTemplates) {
                                         // Check before each template processing operation.
@@ -1760,6 +1761,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                                     },
                                                     row.rowName,
                                                     trainingContext,
+                                                    rowScores,
                                                 )
                                             // Store original matches for this row (for debug visualization).
                                             processedMatches[templateName]?.forEach { point ->
@@ -1768,6 +1770,14 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                         } else {
                                             Log.e(TAG, "[ERROR] determineStatGainFromTraining:: Could not load template \"$templateName\" to process stat gains for $trainingName training.")
                                         }
+                                    }
+
+                                    val kept = StatGainDigits.keepBestPerGlyph(rowScores, relWidth(StatGainDigits.SAME_GLYPH_MAX_DX).toDouble())
+                                    if (kept.size < rowScores.size) {
+                                        fun describe(matches: List<StatGainDigits.TemplateMatch>) = matches.map { "${it.template}@${it.x.toInt()}=${"%.3f".format(it.score)}" }
+                                        val dropped = describe(rowScores.filter { it !in kept })
+                                        Log.d(TAG, "[DEBUG] determineStatGainFromTraining:: Dropped $dropped on already matched glyphs, keeping ${describe(kept)} for $trainingContext ${row.rowName}.")
+                                        rowMatches.forEach { (template, points) -> points.retainAll { point -> kept.any { it.template == template && it.x == point.x } } }
                                     }
                                 }
 
@@ -1914,6 +1924,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @param matchResults Map to store match results, organized by template name.
      * @param rowName The name of the row being processed (e.g., "row 1", "row 2").
      * @param trainingContext The training context (e.g., "SPEED training for POWER side effect").
+     * @param scores Receives each valid match with its pixel correlation.
      * @return The modified matchResults mapping containing all valid matches found for this template
      */
     private fun processStatGainTemplateWithTransparency(
@@ -1923,6 +1934,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         matchResults: MutableMap<String, MutableList<Point>>,
         rowName: String = "",
         trainingContext: String = "",
+        scores: MutableList<StatGainDigits.TemplateMatch>,
     ): MutableMap<String, MutableList<Point>> {
         // These values have been tested for the best results against the dynamic background.
         val matchConfidence = 0.9
@@ -2059,6 +2071,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                     }
                                 Log.d(TAG, "[DEBUG] processStatGainTemplateWithTransparency:: Found valid match for template \"$templateName\" at ($centerX, $centerY)$rowSuffix.")
                                 matchResults[templateName]?.add(Point(centerX.toDouble(), centerY.toDouble()))
+                                scores.add(StatGainDigits.TemplateMatch(templateName, centerX.toDouble(), pixelCorrelation))
 
                                 // If it found the + symbol, then there is no need to look for additional pluses.
                                 if (templateName in listOf("+", "+_mini")) {

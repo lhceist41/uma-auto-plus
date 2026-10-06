@@ -77,6 +77,21 @@ object StatGainDigits {
     /** A gold row's pixel read replaces the template read, which cannot see gold digits. */
     fun resolveRowValue(templateValue: Int, pixel: Row?): Int = if (pixel != null && pixel.gold) pixel.value ?: 0 else templateValue
 
+    /** One template hit in a gain row: template name, centre x in the row crop, and its pixel correlation. */
+    class TemplateMatch(val template: String, val x: Double, val score: Double)
+
+    // A template can also fire on a similar glyph (1 on the stem of a 4, 0 on a 9) 0-2 px from the real hit; distinct glyphs sit 33 px or more apart.
+    const val SAME_GLYPH_MAX_DX = 12
+
+    /** One match per glyph: a match closer than [maxDx] to a better-scoring one is dropped. Result is sorted by x. */
+    fun keepBestPerGlyph(matches: List<TemplateMatch>, maxDx: Double): List<TemplateMatch> {
+        val kept = mutableListOf<TemplateMatch>()
+        for (match in matches.sortedByDescending { it.score }) {
+            if (kept.none { kotlin.math.abs(it.x - match.x) < maxDx }) kept.add(match)
+        }
+        return kept.sortedBy { it.x }
+    }
+
     private class Comp(val x0: Int, val x1: Int, val area: Int, val label: Char?)
 
     private fun components(glyph: BooleanArray, white: BooleanArray, w: Int, h: Int, scale: Double): List<Comp> {

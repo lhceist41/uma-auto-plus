@@ -22,3 +22,8 @@ read every such row as 0.
 
 Every value above was checked by eye on the frame. The reader's glyph templates were measured on
 the same careers' 745 frames.
+
+`logged_template_matches.txt` lists the template matcher's sorted per-row matches (template name and
+centre x in the row crop) as logged by `constructIntegerFromMatches` on MuMu (single-row URA Finale and
+two-row careers, 2026-09-26 to 2026-10-05) and on a 1080x2316 phone (Trackblazer, 2026-10-06): every
+distinct list without two matches closer than 12 px, 329 lists covering 10,111 reads.
