@@ -10,6 +10,7 @@ describe("accessibilityRepairStatus", () => {
         expect(status.state).toBe("granted")
         expect(status.title).toBe("Accessibility self-repair: on")
         expect(status.command).toBeNull()
+        expect(status.text).toContain("emulator or Android switches off")
         expect(status.text).toContain("restart MuMu or the device")
     })
 

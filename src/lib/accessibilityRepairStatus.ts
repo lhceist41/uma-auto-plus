@@ -26,7 +26,7 @@ export function accessibilityRepairStatus(granted: boolean | null | undefined, p
         return {
             state: "granted",
             title: "Accessibility self-repair: on",
-            text: "If the emulator switches off the bot's accessibility service during a run, the bot can switch it back on. If its taps stop landing while the service stays on, restart MuMu or the device.",
+            text: "If the emulator or Android switches off the bot's accessibility service during a run, the bot can switch it back on. If its taps stop landing while the service stays on, restart MuMu or the device.",
             command: null,
         }
     }
@@ -36,8 +36,8 @@ export function accessibilityRepairStatus(granted: boolean | null | undefined, p
             state: "missing",
             title: "Accessibility self-repair: off",
             text: command
-                ? "If the emulator switches off the bot's accessibility service during a run, the bot cannot switch it back on, and the queue stops. Run this once from a computer with adb (or on the device with aShell You and Shizuku):"
-                : "If the emulator switches off the bot's accessibility service during a run, the bot cannot switch it back on, and the queue stops. Grant UMA Auto+ the WRITE_SECURE_SETTINGS permission once with adb (see Troubleshooting).",
+                ? "If the emulator or Android switches off the bot's accessibility service during a run, the bot cannot switch it back on, and the queue stops. Run this once from a computer with adb (or on the device with aShell You and Shizuku):"
+                : "If the emulator or Android switches off the bot's accessibility service during a run, the bot cannot switch it back on, and the queue stops. Grant UMA Auto+ the WRITE_SECURE_SETTINGS permission once with adb (see Troubleshooting).",
             command,
         }
     }

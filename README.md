@@ -88,7 +88,7 @@ This project is purely for educational purposes to learn about Android automatio
 4. Tap `Start`. The first time, you will be prompted to grant `Overlay` permission and enable the `Accessibility` service.
 
 > [!NOTE]
-> On newer Android versions, you are required to enable `Allow restricted settings` in the app's `App Info` settings.
+> On Android 13 and newer, enabling the service can be blocked with "Restricted setting". Open `Settings`, `Apps`, `UMA Auto+`, tap the three dots at the top right, choose `Allow restricted settings`, then enable the service again.
 
 > [!TIP]
 > **Emulator users, especially MuMu: grant this permission once** so the bot can recover when the emulator silently kills the Accessibility service mid-run. Without it, unattended runs stop the first time that happens:
