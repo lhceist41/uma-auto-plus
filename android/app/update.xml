@@ -1,16 +1,13 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.7.0</latestVersion>
+    <latestVersion>1.7.1</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.7.0 - Grand Concert is fully supported, and queues are sturdier
+v1.7.1 - Start works on phones with Android 14 or newer
 
-- New: Grand Concert is fully supported, with queues, trainee rotation and TP restore.
-- New: presets for every released Global trainee outfit, in all four scenarios.
-- New: on MuMu for Windows, a helper from the release page opens the dashboard in one double-click.
-- New: lost goal races are retried, and the last skill points buy the best skills.
-- Fixed: Stop keeps your queue, and the bot stops a career it can tell is of another trainee or scenario.
-- Fixed: a frozen game is restarted for you where Android allows it, and a career the game did not finish is kept for Start to finish.
+- Fixed: Start no longer freezes on phones with Android 14 or newer (seen on Android 16).
+- Fixed: the bot no longer buys a skill's upgrade while logging it as the negative skill, and never fills rank spending with negative skills.
+- Changed: Android lists the accessibility service as "UMA Auto+", and dialogs use the screen width.
 
     </releaseNotes>
   </update>

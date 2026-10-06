@@ -7,8 +7,8 @@ app-minSdk = "24"
 # Keep below 34: from 34, Android 14+ throws at Start because the foundation library's
 # MediaProjectionService creates its VirtualDisplay before registering a MediaProjection callback.
 app-targetSdk = "33"
-app-versionCode = "170"
-app-versionName = "1.7.0"
+app-versionCode = "171"
+app-versionName = "1.7.1"
 app-jvm-toolchain = "17"
 
 androidGradleBuildTools = "8.13.0"

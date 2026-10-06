@@ -10,6 +10,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-06
+
+### Highlights
+
+- **Start no longer freezes on phones with Android 14 or newer (seen on Android 16).** Before, choosing "Entire screen" showed no floating button and Android reported the app as not responding.
+- **Skill buying:** the bot no longer buys a skill's upgrade while logging it as the negative (×) skill, and never fills rank spending with negative skills.
+- **Easier phone setup:** Android lists the accessibility service as "UMA Auto+" (if you already turned it on, it stays on), and the README explains the "Restricted setting" step for Android 13 and newer.
+- **Dialogs use the screen width** instead of a narrow column, such as What's new.
+
 ## [1.7.0] - 2026-10-05
 
 ### Highlights
@@ -596,6 +605,7 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 
 ---
 
+[1.7.1]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.4.0...v1.5.0
@@ -609,4 +619,4 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.0...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.1...main
