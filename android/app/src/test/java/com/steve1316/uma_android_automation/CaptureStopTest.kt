@@ -92,7 +92,7 @@ class CaptureStopTest {
             val guard = get.indexOf("if (!MediaProjectionService.isRunning)")
             val stop = get.indexOf("StartModule.stopForLostCapture()")
             val thrown = get.indexOf("throw InterruptedException(")
-            val capture = get.indexOf("val bitmap = super.getSourceBitmap(saveImage)")
+            val capture = get.indexOf("val bitmap = cropToScreenWidth(super.getSourceBitmap(saveImage), SharedData.displayWidth)")
             assertTrue(guard >= 0, "getSourceBitmap must check that capture is running")
             assertTrue(stop in guard until thrown, "the guard must request the stop, then throw")
             assertTrue(capture > thrown, "the library capture must come after the guard")

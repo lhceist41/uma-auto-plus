@@ -64,13 +64,29 @@ class TrainingSelectionProbeFixtureTest {
     }
 
     @Test
-    @DisplayName("rejects a blank surface and any other surface size")
+    @DisplayName("rejects a blank surface, another width and a surface shorter than 1920")
     fun ignoresBlankAndOtherSizes() {
         assertFalse(TrainingSelectionProbe.isTrainingSelection(SparkPixelSampler { _, _ -> 0xFFFFFFFF.toInt() }, 1080, 1920))
         assertFalse(TrainingSelectionProbe.isTrainingSelection(SparkPixelSampler { _, _ -> 0xFF000000.toInt() }, 1080, 1920))
         val screen = image("trainingselection", "training_selection")
         val sampler = SparkPixelSampler { x, y -> screen.getRGB(x, y) }
-        assertFalse(TrainingSelectionProbe.isTrainingSelection(sampler, 1080, 2340))
+        assertFalse(TrainingSelectionProbe.isTrainingSelection(sampler, 1081, 1920))
         assertFalse(TrainingSelectionProbe.isTrainingSelection(sampler, 1080, 1840))
+    }
+
+    @Test
+    @DisplayName("reads a taller 1080-wide capture with the header moved by the inset and the Back pill by the extra height")
+    fun readsTallerCapture() {
+        // 1080x2316 with a 94 px top inset, as measured on a phone: the top group moved 94 px, the bottom group 396 px.
+        fun tall(img: FixturePng) = SparkPixelSampler { x, y -> img.getRGB(x, if (y < 1158) y - 94 else y - 396) }
+        val saved = screenTopInset
+        try {
+            screenTopInset = 94
+            assertTrue(TrainingSelectionProbe.isTrainingSelection(tall(image("trainingselection", "training_selection")), 1080, 2316))
+            assertFalse(TrainingSelectionProbe.isTrainingSelection(tall(image("trainingselection", "race_list")), 1080, 2316))
+            assertFalse(TrainingSelectionProbe.isTrainingSelection(tall(image("trainingselection", "training_result_cutscene")), 1080, 2316))
+        } finally {
+            screenTopInset = saved
+        }
     }
 }

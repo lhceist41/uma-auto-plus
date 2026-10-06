@@ -44,6 +44,9 @@ import com.steve1316.uma_android_automation.components.LabelNowLoading
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPoints
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.ScreenBand
+import com.steve1316.uma_android_automation.utils.gameY
+import com.steve1316.uma_android_automation.utils.rememberScreenTopInset
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.TitleScreenProbe
@@ -929,6 +932,12 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
         // Print device and version information.
         MessageLog.i(TAG, "[INFO] Device Information: ${SharedData.displayWidth}x${SharedData.displayHeight}, DPI ${SharedData.displayDPI}")
+        val topInset = rememberScreenTopInset(myContext)
+        val bandOffsets = ScreenBand.entries.joinToString { "${it.name.lowercase()} +${gameY(0.0, it, SharedData.displayWidth, SharedData.displayHeight).toInt()}" }
+        MessageLog.i(TAG, "[LAYOUT] Top cutout inset $topInset px; offsets from 1080x1920: $bandOffsets.")
+        if (SharedData.displayWidth != 1080) {
+            MessageLog.w(TAG, "[LAYOUT] A ${SharedData.displayWidth}-pixel-wide screen is not supported. Set the phone's screen resolution to FHD+ (1080 wide).")
+        }
         val isConfig1 = SharedData.displayWidth == 1080 && SharedData.displayHeight == 1920 && SharedData.displayDPI == 240
         val isConfig2 = SharedData.displayWidth == 1080 && SharedData.displayHeight == 2340 && SharedData.displayDPI == 450
         if (!isConfig1 && !isConfig2) {

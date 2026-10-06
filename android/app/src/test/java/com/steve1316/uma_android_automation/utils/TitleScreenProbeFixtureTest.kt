@@ -60,4 +60,14 @@ class TitleScreenProbeFixtureTest {
         assertFalse(TitleScreenProbe.isTitleScreen(sampler, 1080, 1840))
         assertFalse(TitleScreenProbe.isTitleScreen(sampler, 1440, 2560))
     }
+
+    @Test
+    @DisplayName("reads a taller 1080-wide capture with both controls moved down by the extra height")
+    fun readsTallerCapture() {
+        // 1080x2316 as measured on a phone title screen: the badge and the menu button moved 396 px.
+        fun tall(img: FixturePng) = SparkPixelSampler { x, y -> img.getRGB(x, y - 396) }
+        assertTrue(TitleScreenProbe.isTitleScreen(tall(image("titlescreen", "title_screen")), 1080, 2316))
+        assertTrue(TitleScreenProbe.isTitleScreen(tall(image("titlescreen", "title_screen_other_background")), 1080, 2316))
+        assertFalse(TitleScreenProbe.isTitleScreen(tall(image("titlescreen", "now_loading")), 1080, 2316))
+    }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.SystemClock
+import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
@@ -18,6 +19,7 @@ import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
 import com.steve1316.uma_android_automation.bot.stuckCountAfter
 import com.steve1316.uma_android_automation.bot.stuckKeyAfterProbe
 import com.steve1316.uma_android_automation.bot.CoordinateTap
+import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.LaunchTransactionGate
@@ -91,6 +93,10 @@ import com.steve1316.uma_android_automation.utils.InCareerSkipFix
 import com.steve1316.uma_android_automation.utils.PersistentSkipState
 import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_X_FRACTION
 import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_Y_FRACTION
+import com.steve1316.uma_android_automation.utils.ScreenBand
+import com.steve1316.uma_android_automation.utils.gameY
+import com.steve1316.uma_android_automation.utils.onScreen
+import com.steve1316.uma_android_automation.utils.rememberScreenTopInset
 import com.steve1316.uma_android_automation.utils.SkipFixOutcome
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
 import com.steve1316.uma_android_automation.utils.skipOffPillByColour
@@ -465,6 +471,10 @@ class CareerLaunchNavigator(private val context: Context) {
             maxTpRestoresThisSession = sessionRestoreCapFor(totalRuns)
             pendingTpRestoreItem = null
         }
+    }
+
+    init {
+        rememberScreenTopInset(context)
     }
 
     /** Screen states in the between-run navigation flow. */
@@ -1835,7 +1845,7 @@ class CareerLaunchNavigator(private val context: Context) {
         if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) ||
             ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
             ButtonStartCareerRight.check(iu, sourceBitmap = bitmap) ||
-            finalConfirmationScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+            finalConfirmationScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, bitmap.width, bitmap.height))
         ) {
             return LaunchScreenState.PRE_RUN_CONFIRMATION
         }
@@ -1852,7 +1862,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // through to TAP_TO_CONTINUE, body-tapping until the launch failed (observed 2026-07-24 on
         // the 4th Concert: 30 taps then TASK_RESULT_QUEUE_NAVIGATION_FAILED). It is a drivable
         // in-career state: navigation is complete there and the campaign's concert escort owns it.
-        if (grandConcertConcertPendingScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
+        if (GrandConcert.supportsScreen(bitmap.width, bitmap.height) && grandConcertConcertPendingScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
             MessageLog.i(TAG, "[NAV] Grand Concert concert-pending screen -> ACTIVE_TRAINING_MENU (the campaign's concert escort owns it).")
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
@@ -1909,7 +1919,10 @@ class CareerLaunchNavigator(private val context: Context) {
         //     returned success without launching anything, run 2 attached to the finished career
         //     instead, and wrote a phantom CAREER_END at turn=1 carrying run 1's exact stats.
         val campaignWillDriveThisScreen = !finalizeToHomeMode && !previousCareerCompleteMode
-        if (campaignWillDriveThisScreen && grandConcertCareerCompleteScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
+        if (campaignWillDriveThisScreen &&
+            GrandConcert.supportsScreen(bitmap.width, bitmap.height) &&
+            grandConcertCareerCompleteScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+        ) {
             MessageLog.i(TAG, "[NAV] Grand Concert Complete Career screen -> ACTIVE_TRAINING_MENU (the campaign's Lessons drain owns it).")
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
@@ -1985,7 +1998,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 iu.performOCROnRegion(
                     bitmap,
                     (bitmap.width * 0.22).toInt(),
-                    (bitmap.height * 0.94).toInt(),
+                    gameY(1920 * 0.94, ScreenBand.BOTTOM, bitmap.width, bitmap.height).toInt(),
                     (bitmap.width * 0.31).toInt(),
                     (bitmap.height * 0.04).toInt(),
                     useThreshold = false,
@@ -2187,7 +2200,12 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Continue
         }
         MessageLog.i(TAG, "[NAV] Title screen between runs; tapping to start the game.")
-        CoordinateTap.tap(gestureUtils, TitleScreenProbe.TAP_TO_START_X, TitleScreenProbe.TAP_TO_START_Y, "title_tap_to_start")
+        CoordinateTap.tap(
+            gestureUtils,
+            TitleScreenProbe.TAP_TO_START_X,
+            gameY(TitleScreenProbe.TAP_TO_START_Y, ScreenBand.BOTTOM, SharedData.displayWidth, SharedData.displayHeight),
+            "title_tap_to_start",
+        )
         betweenRunRecovery.tappedToStart(now)
         waitSafe(3.0)
         return TransitionResult.Continue
@@ -2659,6 +2677,16 @@ class CareerLaunchNavigator(private val context: Context) {
             // The spend was declined earlier (or its dialog never opened) - the original set is
             // still up; Confirm it.
             MessageLog.i(TAG, "[REROLL] The spend was declined earlier - the original set is still up. Confirming it.")
+            return confirmSparks(bitmap)
+        }
+
+        // The SPARKS list is measured on 1080x1920 only; anywhere else its read is junk, so it is neither recorded nor priced.
+        if (bitmap.width != 1080 || bitmap.height != 1920) {
+            if (!sparksSetRecorded) {
+                sparksSetRecorded = true
+                MessageLog.w(TAG, "[SPARKS] Sparks are not read on a ${bitmap.width}x${bitmap.height} screen yet. Keeping the rolled set: no reroll, no TP spent.")
+            }
+            transaction?.declineSpend("spark list not readable on ${bitmap.width}x${bitmap.height}")
             return confirmSparks(bitmap)
         }
 
@@ -5720,7 +5748,7 @@ class CareerLaunchNavigator(private val context: Context) {
     /** The exact pixel point [tapDeckArrow] taps for [direction] on a [width]x[height] capture. */
     private fun deckArrowPoint(direction: SupportDeckSelector.Direction, width: Int, height: Int): Pair<Double, Double> {
         val xFraction = if (direction == SupportDeckSelector.Direction.LEFT) deckArrowLeftXFraction else deckArrowRightXFraction
-        return (width * xFraction).toDouble() to (height * deckArrowYFraction).toDouble()
+        return (width * xFraction).toDouble() to gameY((1920 * deckArrowYFraction).toDouble(), ScreenBand.MIDDLE, width, height)
     }
 
     /**
@@ -9216,6 +9244,18 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun handlePreRunConfirmation(): TransitionResult {
         lastBorrowPostSelectionValidationResult?.let { return borrowPostSelectionValidationStopped(it) }
 
+        if (GrandConcert.isGrandConcert(SettingsHelper.getStringSetting("general", "scenario")) &&
+            !GrandConcert.supportsScreen(SharedData.displayWidth, SharedData.displayHeight)
+        ) {
+            MessageLog.e(TAG, "[NAV] [LAUNCH] ${GrandConcert.UNSUPPORTED_SCREEN_MESSAGE} Start Career not pressed.")
+            return TransitionResult.Failed(
+                reason = "${GrandConcert.UNSUPPORTED_SCREEN_MESSAGE} Start Career was not pressed, so nothing was spent.",
+                transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
+                recommendedAction = "Pick another scenario's preset, or play Grand Concert on an emulator at 1080x1920.",
+                reasonKey = "GRAND_CONCERT_SCREEN_UNSUPPORTED",
+            )
+        }
+
         // Positively verify Normal Career mode before the irreversible Start Career press. The
         // Final Confirmation screen has two tabs (Normal Career / Independent Training) and defaults to
         // the last-started mode, so "not Independent Training" is NOT "Normal Career". Read the selected
@@ -9334,6 +9374,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     reason = decision.reason,
                     transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
                     recommendedAction = "Open the Final Confirmation screen, select the Normal Career tab, and restart the queue.",
+                    reasonKey = "FINAL_CONFIRMATION_MODE_UNVERIFIED",
                 )
             }
             // Independent Training: fall through to the single corrective tab tap below.
@@ -9345,7 +9386,7 @@ class CareerLaunchNavigator(private val context: Context) {
         CoordinateTap.tap(
             gestureUtils,
             FinalConfirmationTabGeometry.NORMAL_TAB_CLICK_X.toDouble(),
-            FinalConfirmationTabGeometry.NORMAL_TAB_CLICK_Y.toDouble(),
+            gameY(FinalConfirmationTabGeometry.NORMAL_TAB_CLICK_Y.toDouble(), ScreenBand.DIALOG, SharedData.displayWidth, SharedData.displayHeight),
             "final_confirmation_normal_career_tab",
         )
         waitSafe(0.8)
@@ -9363,6 +9404,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     reason = decision.reason,
                     transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
                     recommendedAction = "Open the Final Confirmation screen, select the Normal Career tab, and restart the queue.",
+                    reasonKey = "FINAL_CONFIRMATION_MODE_UNVERIFIED",
                 )
             }
             // Unreachable by construction (one-shot); fail closed rather than tap again.
@@ -9371,6 +9413,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     reason = "Final Confirmation mode could not be corrected to Normal Career within one tap; Start Career refused.",
                     transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
                     recommendedAction = "Open the Final Confirmation screen, select the Normal Career tab, and restart the queue.",
+                    reasonKey = "FINAL_CONFIRMATION_MODE_UNVERIFIED",
                 )
         }
     }
@@ -9378,7 +9421,7 @@ class CareerLaunchNavigator(private val context: Context) {
     /** Reads the current Final Confirmation mode from a FRESH screen capture. */
     private fun readFinalConfirmationMode(): FinalConfirmationMode {
         val bitmap = iu.getSourceBitmap()
-        return classifyFinalConfirmationMode(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+        return classifyFinalConfirmationMode(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, bitmap.width, bitmap.height))
     }
 
     /**
@@ -9448,6 +9491,8 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: ButtonSkipCinematic.click() or ButtonSkip.click(), plus optional confirmation dialog.
      */
     private fun handleCinematicIntro(): TransitionResult {
+        // The skip's own confirmation leaves the dimmed skip button matching behind it, so it must be answered before any skip tap.
+        if (pressSceneSkipConfirmation()) return TransitionResult.Continue
         MessageLog.i(TAG, "[NAV] Cinematic detected. Attempting to skip...")
 
         // Try the >> fast-forward button first (directly skips the cinematic).
@@ -9455,7 +9500,9 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] Clicked cinematic skip (>>) button.")
             waitSafe(3.0)
             // Handle any confirmation dialog that may appear.
-            if (ButtonConfirm.check(iu)) {
+            if (pressSceneSkipConfirmation()) {
+                return TransitionResult.Continue
+            } else if (ButtonConfirm.check(iu)) {
                 ButtonConfirm.click(iu)
                 waitSafe(2.0)
             } else if (ButtonOk.check(iu)) {
@@ -9469,7 +9516,9 @@ class CareerLaunchNavigator(private val context: Context) {
         if (ButtonSkip.click(iu)) {
             MessageLog.i(TAG, "[NAV] Clicked text Skip button.")
             waitSafe(2.0)
-            if (ButtonConfirm.check(iu)) {
+            if (pressSceneSkipConfirmation()) {
+                return TransitionResult.Continue
+            } else if (ButtonConfirm.check(iu)) {
                 ButtonConfirm.click(iu)
                 waitSafe(2.0)
             } else if (ButtonOk.check(iu)) {
@@ -9479,12 +9528,38 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Continue
         }
 
-        return TransitionResult.Failed(
-            reason = "CINEMATIC_INTRO detected but neither skip button could be clicked.",
-            transition = "CINEMATIC_INTRO -> ACTIVE_TRAINING_MENU",
-            isRecoverable = true,
-            recommendedAction = "Manually skip the cinematic and restart the queue.",
-        )
+        // The cinematic can end between detection and this click's fresh capture; look again, the stuck limit still bounds it.
+        MessageLog.i(TAG, "[NAV] Neither skip button is on screen any more; detecting the screen again.")
+        return TransitionResult.Continue
+    }
+
+    /**
+     * Answers "Would you like to skip this scene?" (the game asks by default on a fresh install). Its Skip has no template:
+     * the dialog is found by its Cancel and "Do not show again" templates, Skip is Cancel's mirror across the centre, and
+     * its label is read before the tap. "Do not show again" is left as the player set it.
+     */
+    private fun pressSceneSkipConfirmation(): Boolean {
+        val bitmap = iu.getSourceBitmap()
+        if (!CheckboxDoNotShowAgain.check(iu, sourceBitmap = bitmap)) return false
+        val cancel = ButtonCancel.findImageWithBitmap(iu, bitmap, null, null) ?: return false
+        val skipX = bitmap.width - cancel.x
+        val label =
+            iu.performOCROnRegion(
+                bitmap,
+                (skipX - 150).toInt().coerceAtLeast(0),
+                (cancel.y - 35).toInt().coerceAtLeast(0),
+                300,
+                70,
+                useThreshold = false,
+                useGrayscale = false,
+                scale = 2.0,
+                debugName = "scene_skip_confirm_label",
+            )
+        if (!label.uppercase().contains("SKIP")) return false
+        MessageLog.i(TAG, "[NAV] Skip-scene confirmation is up; pressing its Skip.")
+        CoordinateTap.tap(gestureUtils, skipX, cancel.y, "scene_skip_confirm")
+        waitSafe(2.0)
+        return true
     }
 
     /**
@@ -9501,7 +9576,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // choice 2 (2026-09-29). The campaign's event handler picks the preset's choice instead.
         // The Quick Mode Settings dialog's rows carry the same glyph and are not an event.
         if ((resumeInProgressCareerMode || careerInFlightMode || careerResumed) && IconTrainingEventHorseshoe.check(iu, sourceBitmap = bitmap) &&
-            !quickModeDialogPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+            !quickModeDialogPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, bitmap.width, bitmap.height))
         ) {
             MessageLog.i(TAG, "[NAV] Event choices are showing; handing the career to the campaign to pick one.")
             return TransitionResult.Success
@@ -9538,7 +9613,7 @@ class CareerLaunchNavigator(private val context: Context) {
         val bitmap = iu.getSourceBitmap()
         val pillState = readSkipPill(bitmap)
         val tapX = bitmap.width * SKIP_PILL_CENTRE_X_FRACTION
-        val tapY = bitmap.height * SKIP_PILL_CENTRE_Y_FRACTION
+        val tapY = gameY(1920 * SKIP_PILL_CENTRE_Y_FRACTION, ScreenBand.BOTTOM, bitmap.width, bitmap.height)
         val outcome =
             InCareerSkipFix().attempt(
                 pillState,
@@ -9566,17 +9641,24 @@ class CareerLaunchNavigator(private val context: Context) {
         // confirming. The blind Confirm remains as the fallback for the non-dialog variants of
         // this screen.
         val dialogBitmap = iu.getSourceBitmap()
-        val dialogSampler = SparkPixelSampler { x, y -> dialogBitmap.getPixel(x, y) }
+        val dialogSampler = SparkPixelSampler { x, y -> dialogBitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, dialogBitmap.width, dialogBitmap.height)
+        val dialogWidth = dialogBitmap.width
+        val dialogHeight = dialogBitmap.height
         if (quickModeDialogPresent(dialogSampler)) {
             val configured = SettingsHelper.getStringSetting("scenarioOverrides", "grandConcertQuickMode", "dont_use")
             when (val action = QuickModePlanner.plan(configured, quickModeSelectedIndex(dialogSampler))) {
                 is QuickModeAction.Select -> {
                     MessageLog.i(TAG, "[NAV] Quick Mode: selecting \"${QuickModeOption.entries[action.rowIndex].label}\".")
-                    CoordinateTap.tap(gestureUtils, QuickModeGeometry.RADIO_X.toDouble(), QuickModeGeometry.ROW_YS[action.rowIndex].toDouble(), "quickmode_select")
+                    CoordinateTap.tap(
+                        gestureUtils,
+                        QuickModeGeometry.RADIO_X.toDouble(),
+                        gameY(QuickModeGeometry.ROW_YS[action.rowIndex].toDouble(), ScreenBand.DIALOG, dialogWidth, dialogHeight),
+                        "quickmode_select",
+                    )
                     waitSafe(0.8)
                     val verifyBitmap = iu.getSourceBitmap()
-                    if (quickModeSelectedIndex(SparkPixelSampler { x, y -> verifyBitmap.getPixel(x, y) }) == action.rowIndex) {
-                        CoordinateTap.tap(gestureUtils, QuickModeGeometry.CONFIRM_X.toDouble(), QuickModeGeometry.CONFIRM_Y.toDouble(), "quickmode_confirm")
+                    if (quickModeSelectedIndex(SparkPixelSampler { x, y -> verifyBitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, verifyBitmap.width, verifyBitmap.height)) == action.rowIndex) {
+                        CoordinateTap.tap(gestureUtils, QuickModeGeometry.CONFIRM_X.toDouble(), gameY(QuickModeGeometry.CONFIRM_Y.toDouble(), ScreenBand.DIALOG, dialogWidth, dialogHeight), "quickmode_confirm")
                         waitSafe(2.0)
                     } else {
                         MessageLog.w(TAG, "[NAV] Quick Mode: the selection did not take; not confirming this tick.")
@@ -9584,7 +9666,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 QuickModeAction.ConfirmOnly -> {
                     MessageLog.i(TAG, "[NAV] Quick Mode: configured option already selected; confirming.")
-                    CoordinateTap.tap(gestureUtils, QuickModeGeometry.CONFIRM_X.toDouble(), QuickModeGeometry.CONFIRM_Y.toDouble(), "quickmode_confirm")
+                    CoordinateTap.tap(gestureUtils, QuickModeGeometry.CONFIRM_X.toDouble(), gameY(QuickModeGeometry.CONFIRM_Y.toDouble(), ScreenBand.DIALOG, dialogWidth, dialogHeight), "quickmode_confirm")
                     waitSafe(2.0)
                 }
                 is QuickModeAction.HandOff -> {
@@ -9681,7 +9763,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 // centre - the same "tap what we cannot always detect" approach the carousel chevron
                 // below already uses. y=0.85 is the clean green centre, clear of the top banner.
                 MessageLog.w(TAG, "[NAV] Scenario Select Next template did not match (event banner over the button?). Tapping the fixed Next position.")
-                CoordinateTap.tap(gestureUtils, bitmap.width * 0.5, bitmap.height * 0.85, "scenario_select_next_fallback")
+                CoordinateTap.tap(gestureUtils, bitmap.width * 0.5, gameY(1920 * 0.85, ScreenBand.BOTTOM, bitmap.width, bitmap.height), "scenario_select_next_fallback")
                 waitSafe(2.0)
                 return TransitionResult.Continue
             }
@@ -9708,7 +9790,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // threshold to straddle. Its POSITION is fixed on this screen, which is all we need; the
             // earlier note about the chevron matching unreliably at ~0.55 was about DETECTING it as a
             // template, and we do not have to detect what we can simply tap.
-            CoordinateTap.tap(gestureUtils, bitmap.width * 0.949, bitmap.height * 0.458, "scenario_carousel_next")
+            CoordinateTap.tap(gestureUtils, bitmap.width * 0.949, gameY(1920 * 0.458, ScreenBand.MIDDLE, bitmap.width, bitmap.height), "scenario_carousel_next")
             waitSafe(1.5)
         }
         return TransitionResult.Failed(

@@ -106,8 +106,8 @@ class PagedHelpDialogTest {
 
         @Test
         fun `a paged help dialog is closed before the Back branch can turn its page`() {
-            val help = misc.indexOf("pagedHelpDialogPresent(SparkPixelSampler { x, y -> sourceBitmap.getPixel(x, y) })")
-            val close = misc.indexOf("game.tapCoordinate(PagedHelpGeometry.CLOSE_X.toDouble(), PagedHelpGeometry.CLOSE_Y.toDouble(), \"paged_help_close\")")
+            val help = misc.indexOf("pagedHelpDialogPresent(SparkPixelSampler { x, y -> sourceBitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, sourceBitmap.width, sourceBitmap.height))")
+            val close = misc.indexOf("gameY(PagedHelpGeometry.CLOSE_Y.toDouble(), ScreenBand.DIALOG, sourceBitmap.width, sourceBitmap.height),\n                \"paged_help_close\",")
             val back = misc.indexOf("} else if (ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)) {")
             assertTrue(help >= 0 && close > help && back > close, "probe, then Close, then the Back branch")
             assertTrue(misc.contains("if (pagedHelpCloseTaps > maxPagedHelpCloseTaps) {"), "repeated Close taps are bounded")

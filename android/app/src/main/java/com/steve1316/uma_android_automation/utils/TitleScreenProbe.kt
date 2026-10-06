@@ -35,10 +35,11 @@ object TitleScreenProbe {
     private const val TOLERANCE = 30
     private const val MIN_HITS = 11
 
-    /** True on the title screen. The points are absolute, so any other surface size reads false. */
+    /** True on the title screen. The points are measured on 1080x1920; both controls sit in [ScreenBand.BOTTOM] on taller screens. */
     fun isTitleScreen(sampler: SparkPixelSampler, width: Int, height: Int): Boolean {
-        if (width != 1080 || height != 1920) return false
-        return POINTS.count { (x, y, r, g, b) -> near(sampler.argb(x, y), r, g, b) } >= MIN_HITS
+        if (!isMappedSurface(width, height)) return false
+        val screen = sampler.onScreen(ScreenBand.BOTTOM, width, height)
+        return POINTS.count { (x, y, r, g, b) -> near(screen.argb(x, y), r, g, b) } >= MIN_HITS
     }
 
     private fun near(argb: Int, r: Int, g: Int, b: Int): Boolean =

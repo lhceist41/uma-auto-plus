@@ -136,9 +136,24 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             StartModule.stopForLostCapture()
             throw InterruptedException("Screen capture stopped")
         }
-        val bitmap = super.getSourceBitmap(saveImage)
+        val bitmap = cropToScreenWidth(super.getSourceBitmap(saveImage), SharedData.displayWidth)
         ProgressTracker.noteCapture(bitmap)
         return bitmap
+    }
+
+    @Volatile
+    private var lastCrop: Pair<Bitmap, Bitmap>? = null
+
+    /** The library sizes its Bitmap by the ImageReader row stride, which phones pad past the screen (1088 for 1080); the padding columns are not screen. */
+    private fun cropToScreenWidth(
+        capture: Bitmap,
+        screenWidth: Int,
+    ): Bitmap {
+        if (!capturePaddedPastScreen(capture.width, screenWidth)) return capture
+        lastCrop?.let { (source, cropped) -> if (source === capture) return cropped }
+        val cropped = Bitmap.createBitmap(capture, 0, 0, screenWidth, capture.height)
+        lastCrop = capture to cropped
+        return cropped
     }
 
     /**
@@ -2652,7 +2667,12 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         val bbox =
             BoundingBox(
                 x = relX(0.0, 365),
-                y = relY(0.0, 110),
+                y =
+                    if (isMappedSurface(SharedData.displayWidth, SharedData.displayHeight)) {
+                        gameY(110.0, ScreenBand.TOP, SharedData.displayWidth, SharedData.displayHeight).toInt()
+                    } else {
+                        relY(0.0, 110)
+                    },
                 w = relWidth(550),
                 h = relHeight(40),
             )

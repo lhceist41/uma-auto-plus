@@ -1,5 +1,7 @@
 package com.steve1316.uma_android_automation.bot.campaigns
 
+import com.steve1316.uma_android_automation.StartModule
+import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.CampaignBreakpointException
@@ -141,6 +143,17 @@ class GrandConcert(game: Game) : Campaign(game) {
         )
     }
 
+    /** Stops before any Grand Concert probe or tap on a screen its geometry was not measured on; the career is kept in the game. */
+    private fun stopOnUnsupportedScreen() {
+        if (supportsScreen(SharedData.displayWidth, SharedData.displayHeight)) return
+        val reason = "$UNSUPPORTED_SCREEN_MESSAGE The career is kept in the game."
+        MessageLog.e(TAG, "[GRAND_CONCERT] $reason")
+        StartModule.queueStopKey = "GRAND_CONCERT_SCREEN_UNSUPPORTED"
+        StartModule.queueStopReason = reason
+        StartModule.queueStopRequested = true
+        throw InterruptedException(reason)
+    }
+
     /**
      * Typed stop for a screen the bot cannot drive: stop rather than relaunch or tap a generic Confirm that could spend
      * points.
@@ -157,6 +170,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * unspent.
      */
     override fun checkEndScreen(): Boolean {
+        stopOnUnsupportedScreen()
         if (super.checkEndScreen()) return true
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
@@ -172,6 +186,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * Career is handled earlier by [checkEndScreen].
      */
     override fun checkCampaignSpecificConditions(): Boolean {
+        stopOnUnsupportedScreen()
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
@@ -362,6 +377,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * once, then open Skills via the screen's own button. Other layouts use the shared entry.
      */
     override fun openCareerEndSkillScreen() {
+        stopOnUnsupportedScreen()
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
         if (!grandConcertCareerCompleteScreenPresent(sampler)) {
@@ -484,6 +500,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * shop's own Back is the way out. Bounded by [MAX_LESSON_VISITS_PER_RUN] and [MAX_PURCHASES_PER_VISIT].
      */
     override fun onBeforeMainScreenUpdate() {
+        stopOnUnsupportedScreen()
         if (lessonVisitsThisRun >= MAX_LESSON_VISITS_PER_RUN) return
         val visitDay = date.day
         if (visitDay > 1 && visitDay == lastNoBuyVisitDay) return
@@ -920,5 +937,13 @@ class GrandConcert(game: Game) : Campaign(game) {
 
         /** Convenience for callers that only have the raw settings string. */
         fun isGrandConcert(scenario: String?): Boolean = GrandConcertScenario.matches(scenario)
+
+        /** Every Grand Concert probe and tap is measured on 1080x1920 only. */
+        fun supportsScreen(
+            width: Int,
+            height: Int,
+        ): Boolean = width == 1080 && height == 1920
+
+        const val UNSUPPORTED_SCREEN_MESSAGE = "Grand Concert is not supported on this screen size yet (it needs 1080x1920)."
     }
 }

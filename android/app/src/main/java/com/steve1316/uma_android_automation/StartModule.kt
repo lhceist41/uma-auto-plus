@@ -2602,7 +2602,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 queueHaltCareerInFlight = true
                                 break
                             } else {
-                                MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false); the run is recorded as errored.")
+                                if (enableRunQueue) {
+                                    MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false); the run is recorded as errored.")
+                                } else {
+                                    MessageLog.w(TAG, "[QUEUE] The run ended with ${effectiveResult.code}.")
+                                }
                             }
                         }
                     }
@@ -2792,7 +2796,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     ledger.reasonRotation = navResult.reasonRotation
                                     queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                     queueHaltRun = i
-                                    queueHaltCareerInFlight = !careerFinished || navResult.careerResumed
+                                    // The game offers Final Confirmation only while its career slot is empty.
+                                    queueHaltCareerInFlight = (!careerFinished || navResult.careerResumed) && navResult.reasonKey !in FINAL_CONFIRMATION_REFUSAL_KEYS
                                 }
                                 break
                             }

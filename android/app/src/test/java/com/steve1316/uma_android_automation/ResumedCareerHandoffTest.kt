@@ -129,7 +129,7 @@ class ResumedCareerHandoffTest {
         @Test
         fun `a between-run Resume counts as a career left in the slot`() {
             assertTrue(betweenRuns.contains("if (navResult.careerResumed) previousRunLeftCareer = true"))
-            assertTrue(betweenRuns.contains("queueHaltCareerInFlight = !careerFinished || navResult.careerResumed"))
+            assertTrue(betweenRuns.contains("queueHaltCareerInFlight = (!careerFinished || navResult.careerResumed) && navResult.reasonKey !in FINAL_CONFIRMATION_REFUSAL_KEYS"))
         }
     }
 
@@ -195,7 +195,7 @@ class ResumedCareerHandoffTest {
             // Its four option rows match the same horseshoe glyph at 0.97-0.98 (skip_launch captures).
             val guard = handler.indexOf("IconTrainingEventHorseshoe.check(iu, sourceBitmap = bitmap)")
             val handover = handler.indexOf("return TransitionResult.Success", guard)
-            assertTrue(handler.substring(guard, handover).contains("&&\n            !quickModeDialogPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })"))
+            assertTrue(handler.substring(guard, handover).contains("&&\n            !quickModeDialogPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, bitmap.width, bitmap.height))"))
         }
 
         @Test

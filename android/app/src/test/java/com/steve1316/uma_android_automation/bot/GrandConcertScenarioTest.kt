@@ -433,7 +433,9 @@ class GrandConcertScenarioTest {
                 "the Complete Career routing must require BOTH no-campaign flags to be clear",
             )
             assertTrue(
-                nav.contains("if (campaignWillDriveThisScreen && grandConcertCareerCompleteScreenPresent("),
+                nav.contains(
+                    "if (campaignWillDriveThisScreen &&\n            GrandConcert.supportsScreen(bitmap.width, bitmap.height) &&\n            grandConcertCareerCompleteScreenPresent(",
+                ),
                 "the routing no longer consults the combined guard",
             )
         }

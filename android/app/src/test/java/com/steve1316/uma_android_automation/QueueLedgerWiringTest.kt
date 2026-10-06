@@ -375,6 +375,8 @@ class QueueLedgerWiringTest {
                     "TRAINEE_ONLY_OTHER_OUTFIT",
                     "GAME_UNRECOVERABLE",
                     "CAREER_NOT_FINISHED",
+                    "FINAL_CONFIRMATION_MODE_UNVERIFIED",
+                    "GRAND_CONCERT_SCREEN_UNSUPPORTED",
                 ),
                 keys,
             )

@@ -354,6 +354,16 @@ internal val REPORT_REASON_KEYS =
                 "the support deck has a card of the trainee's own character, so the game would not start the career. Nothing was spent.",
                 "Swap that card or choose another deck in the game, or turn on Auto-Fill Support Deck with Required Support Deck off",
             ),
+        "FINAL_CONFIRMATION_MODE_UNVERIFIED" to
+            KeyText(
+                "the bot could not confirm that Normal Career was selected on the Final Confirmation screen, so it did not press Start Career. No career was started and no TP was spent.",
+                "Check that Normal Career is selected on the Final Confirmation screen",
+            ),
+        "GRAND_CONCERT_SCREEN_UNSUPPORTED" to
+            KeyText(
+                "Grand Concert is not supported on this screen size yet (it needs 1080x1920). The bot stopped without starting a new career; a career already in the game is kept.",
+                "Pick another scenario's preset, or play Grand Concert on an emulator at 1080x1920",
+            ),
         "CAPTURE_OR_ACCESSIBILITY" to KeyText("the bot lost screen capture or its accessibility service.", "Check that both are on"),
         "STUCK_ON_SCREEN" to STUCK_TEXT,
         "DIALOG_NOT_CLOSED" to KeyText("it was stuck on a game dialog that showed none of the buttons it knows how to press.", "Close the dialog in the game"),

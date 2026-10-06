@@ -43,10 +43,11 @@ object TrainingSelectionProbe {
     private const val MIN_HEADER_HITS = 11
     private const val MIN_BACK_PILL_HITS = 7
 
-    /** True on the Training selection screen. The points are absolute, so any other surface size reads false. */
+    /** True on the Training selection screen. The points are measured on 1080x1920, so other widths and shorter surfaces read false. */
     fun isTrainingSelection(sampler: SparkPixelSampler, width: Int, height: Int): Boolean {
-        if (width != 1080 || height != 1920) return false
-        return hits(sampler, HEADER) >= MIN_HEADER_HITS && hits(sampler, BACK_PILL) >= MIN_BACK_PILL_HITS
+        if (!isMappedSurface(width, height)) return false
+        return hits(sampler.onScreen(ScreenBand.TOP, width, height), HEADER) >= MIN_HEADER_HITS &&
+            hits(sampler.onScreen(ScreenBand.BOTTOM, width, height), BACK_PILL) >= MIN_BACK_PILL_HITS
     }
 
     private fun hits(sampler: SparkPixelSampler, points: List<IntArray>): Int = points.count { (x, y, r, g, b) -> near(sampler.argb(x, y), r, g, b) }

@@ -101,16 +101,17 @@ const val SKIP_PILL_CENTRE_Y_FRACTION = 1873.0 / 1920.0
  * threshold and below the 0.70 it gives chevron pills on event screens, so a template threshold
  * cannot separate them. Measured: every Off pill reads fill 1.00 and lettering 0.195; every `>` and
  * `>>` pill reads 0.00 and 0.000; a blank white screen has the fill but no lettering; none of 631
- * other screenshots matched. Gated on the 1080x1920 surface the boxes were measured on.
+ * other screenshots matched. Gated on 1080-wide surfaces at least 1920 tall, where [ScreenBand.BOTTOM] maps the boxes.
  */
 fun skipOffPillByColour(
     sampler: SparkPixelSampler,
     width: Int,
     height: Int,
 ): Boolean {
-    if (width != 1080 || height != 1920) return false
-    return fraction(sampler, 282..300, 1858..1885, ::isPillWhite) >= 0.9 &&
-        fraction(sampler, 310..470, 1852..1892, ::isPillLettering) >= 0.10
+    if (!isMappedSurface(width, height)) return false
+    val pill = sampler.onScreen(ScreenBand.BOTTOM, width, height)
+    return fraction(pill, 282..300, 1858..1885, ::isPillWhite) >= 0.9 &&
+        fraction(pill, 310..470, 1852..1892, ::isPillLettering) >= 0.10
 }
 
 private fun fraction(

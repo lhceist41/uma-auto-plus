@@ -241,7 +241,11 @@ class PersistentSkipPillTest {
         @DisplayName("it reads Off by template or colour, taps the pill centre, and the fix is one per career")
         fun tapsThePillCentre() {
             assertTrue(campaign.contains("if (!skipOffPill(bitmap)) return"))
-            assertTrue(campaign.contains("game.tapCoordinate(bitmap.width * SKIP_PILL_CENTRE_X_FRACTION, bitmap.height * SKIP_PILL_CENTRE_Y_FRACTION, \"skip_pill\")"))
+            assertTrue(
+                campaign.contains(
+                    "game.tapCoordinate(bitmap.width * SKIP_PILL_CENTRE_X_FRACTION, gameY(1920 * SKIP_PILL_CENTRE_Y_FRACTION, ScreenBand.BOTTOM, bitmap.width, bitmap.height), \"skip_pill\")",
+                ),
+            )
             assertTrue(campaign.contains("    private val skipFix = InCareerSkipFix()"))
             assertTrue(
                 campaign.contains(
@@ -320,10 +324,22 @@ class PersistentSkipPillTest {
         }
 
         @Test
-        @DisplayName("another capture size is not read at all, even over an Off pill")
+        @DisplayName("another width or a surface shorter than 1920 is not read at all, even over an Off pill")
         fun otherSize() {
-            assertFalse(skipOffPillByColour(sampler("off_main"), 1080, 1921))
+            assertFalse(skipOffPillByColour(sampler("off_main"), 1080, 1919))
             assertFalse(skipOffPillByColour(sampler("off_main"), 1081, 1920))
+        }
+
+        @Test
+        @DisplayName("a taller 1080-wide capture is read with the pill moved down by the extra height")
+        fun tallerCapture() {
+            fun tall(name: String): SparkPixelSampler {
+                val crop = sampler(name)
+                return SparkPixelSampler { x, y -> crop.argb(x, y - 396) }
+            }
+            assertTrue(skipOffPillByColour(tall("off_main"), 1080, 2316))
+            assertTrue(skipOffPillByColour(tall("off_launch_light"), 1080, 2316))
+            assertFalse(skipOffPillByColour(tall("on_main_two"), 1080, 2316))
         }
 
         @Test

@@ -214,7 +214,7 @@ class RunRetryAndResumeTest {
 
         @Test
         fun `a halt after an unfinished career says the career is still in the slot`() {
-            assertEquals(2, Regex("queueHaltCareerInFlight = !careerFinished").findAll(loop).count(), "the missing-snapshot and navigation halts")
+            assertEquals(2, Regex("queueHaltCareerInFlight = \\(?!careerFinished").findAll(loop).count(), "the missing-snapshot and navigation halts")
         }
 
         @Test

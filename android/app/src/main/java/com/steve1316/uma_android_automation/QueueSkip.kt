@@ -3,6 +3,9 @@ package com.steve1316.uma_android_automation
 /** Launch stops that belong to one trainee: another trainee's career can start. Any other stop (TP, deck setup, Veterans, connection) would stop the next trainee the same way. */
 internal val TRAINEE_SKIP_REASON_KEYS: Set<String> = setOf("TRAINEE_IN_DECK", "TRAINEE_ONLY_OTHER_OUTFIT", "TRAINEE_NOT_FOUND")
 
+/** Launch stops refused on the Final Confirmation screen before Start Career: no career is in the slot. */
+internal val FINAL_CONFIRMATION_REFUSAL_KEYS: Set<String> = setOf("FINAL_CONFIRMATION_MODE_UNVERIFIED", "GRAND_CONCERT_SCREEN_UNSUPPORTED")
+
 internal enum class UnplayableRunStep {
     SKIP,
 

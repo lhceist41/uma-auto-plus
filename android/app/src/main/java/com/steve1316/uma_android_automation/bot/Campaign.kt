@@ -99,6 +99,10 @@ import com.steve1316.uma_android_automation.utils.PersistentSkipState
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
 import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_X_FRACTION
 import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_Y_FRACTION
+import com.steve1316.uma_android_automation.utils.ScreenBand
+import com.steve1316.uma_android_automation.utils.gameY
+import com.steve1316.uma_android_automation.utils.isMappedSurface
+import com.steve1316.uma_android_automation.utils.onScreen
 import com.steve1316.uma_android_automation.utils.SkipFixOutcome
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.PagedHelpGeometry
@@ -2913,7 +2917,9 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.i(TAG, "[MISC] Dismissed the Umamusume Class popup via its Close button.")
             game.wait(0.5)
             return true
-        } else if (sourceBitmap.width == 1080 && sourceBitmap.height == 1920 && pagedHelpDialogPresent(SparkPixelSampler { x, y -> sourceBitmap.getPixel(x, y) })) {
+        } else if (isMappedSurface(sourceBitmap.width, sourceBitmap.height) &&
+            pagedHelpDialogPresent(SparkPixelSampler { x, y -> sourceBitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, sourceBitmap.width, sourceBitmap.height))
+        ) {
             // Its Back button only turns to the previous page, which the Next branch then turns forward again.
             bMiscStepTakenLastTick = true
             pagedHelpCloseTaps++
@@ -2925,7 +2931,11 @@ abstract class Campaign(game: Game) : Task(game) {
                 )
             }
             MessageLog.i(TAG, "[MISC] Paged help dialog detected; closing it with its Close button (tap $pagedHelpCloseTaps).")
-            game.tapCoordinate(PagedHelpGeometry.CLOSE_X.toDouble(), PagedHelpGeometry.CLOSE_Y.toDouble(), "paged_help_close")
+            game.tapCoordinate(
+                PagedHelpGeometry.CLOSE_X.toDouble(),
+                gameY(PagedHelpGeometry.CLOSE_Y.toDouble(), ScreenBand.DIALOG, sourceBitmap.width, sourceBitmap.height),
+                "paged_help_close",
+            )
             game.wait(1.0)
             return true
         } else if (ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
@@ -4335,7 +4345,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 PersistentSkipState.OFF,
                 tapPillTwice = {
                     repeat(2) {
-                        game.tapCoordinate(bitmap.width * SKIP_PILL_CENTRE_X_FRACTION, bitmap.height * SKIP_PILL_CENTRE_Y_FRACTION, "skip_pill")
+                        game.tapCoordinate(bitmap.width * SKIP_PILL_CENTRE_X_FRACTION, gameY(1920 * SKIP_PILL_CENTRE_Y_FRACTION, ScreenBand.BOTTOM, bitmap.width, bitmap.height), "skip_pill")
                         game.wait(0.6)
                     }
                 },
@@ -4354,7 +4364,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 game.imageUtils.performOCROnRegion(
                     sourceBitmap,
                     (sourceBitmap.width * 0.22).toInt(),
-                    (sourceBitmap.height * 0.94).toInt(),
+                    gameY(1920 * 0.94, ScreenBand.BOTTOM, sourceBitmap.width, sourceBitmap.height).toInt(),
                     (sourceBitmap.width * 0.31).toInt(),
                     (sourceBitmap.height * 0.04).toInt(),
                     useThreshold = false,
