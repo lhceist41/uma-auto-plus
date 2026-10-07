@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### What's new and changed
+
+- **Restore TP with Items, Allow Carats for TP Restore and Auto-Reroll Sparks are now visible without a run queue** (Settings > Run Queue). The bot already used them for single careers, but the switches only showed while Enable Run Queue was on.
+
 ## [1.7.1] - 2026-10-07
 
 ### Highlights

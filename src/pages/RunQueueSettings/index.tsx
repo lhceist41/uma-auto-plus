@@ -219,35 +219,6 @@ const RunQueueSettings = () => {
                                 />
 
                                 <CustomCheckbox
-                                    searchId="run-queue-tp-restore-items"
-                                    checked={runQueueSettings.enableTpRestoreWithItems}
-                                    onCheckedChange={(checked) => updateSetting("enableTpRestoreWithItems", checked)}
-                                    label="Restore TP with Items"
-                                    description="When the game asks to restore TP between queued runs or for a spark reroll, restore it and continue: Toughness 30 first, then Star Fruit, then Carats if allowed below, each filling TP with the game's Max button (a single + tap if Max is not found). If Carats are not allowed and the items run out, the restore is declined: a spark reroll is skipped, and a career start stops the queue and says why. At most 10 restores per bot session, or twice the number of queued runs plus 2 if that is more."
-                                    className="mt-4"
-                                />
-
-                                {runQueueSettings.enableTpRestoreWithItems && (
-                                    <CustomCheckbox
-                                        searchId="run-queue-tp-restore-carats"
-                                        checked={runQueueSettings.allowCaratsForTpRestore}
-                                        onCheckedChange={(checked) => updateSetting("allowCaratsForTpRestore", checked)}
-                                        label="Allow Carats for TP Restore"
-                                        description="Carats are premium currency (they can be bought with real money). On by default: when Toughness 30 and Star Fruit have run out, the bot restores TP with Carats, filling with the Max button like the items, so the queue keeps going. Carat restores count toward the same per-session limit. Turn this off to stop instead: a career start ends the queue and says why, and a spark reroll is skipped."
-                                        className="mt-4"
-                                    />
-                                )}
-
-                                <CustomCheckbox
-                                    searchId="run-queue-spark-reroll"
-                                    checked={runQueueSettings.enableSparkReroll}
-                                    onCheckedChange={(checked) => updateSetting("enableSparkReroll", checked)}
-                                    label="Auto-Reroll Sparks (30 TP)"
-                                    description="On the career-end Sparks screen, spend 30 TP to redraw the spark set once when it prices below a fresh roll: a 2 or 3-star stat spark is always kept, and a 1-star stat spark is redrawn unless every stat finished under 600 (a redraw cannot roll a 3-star there) or the set holds a 3-star aptitude or skill spark worth protecting. After the spend, the bot reads both sets on the game's selection screen and keeps the better one, verifying which set is named on the final confirmation before committing; if it cannot verify the selection it stops safely and you finish the choice by hand (keeping the original is always available there). Experimental: supervise the first spends. This spends TP."
-                                    className="mt-4"
-                                />
-
-                                <CustomCheckbox
                                     searchId="run-queue-event-boost"
                                     checked={runQueueSettings.enableEventBoost}
                                     onCheckedChange={(checked) => updateSetting("enableEventBoost", checked)}
@@ -410,6 +381,35 @@ const RunQueueSettings = () => {
                                 </WarningContainer>
                             </View>
                         )}
+
+                        <CustomCheckbox
+                            searchId="run-queue-tp-restore-items"
+                            checked={runQueueSettings.enableTpRestoreWithItems}
+                            onCheckedChange={(checked) => updateSetting("enableTpRestoreWithItems", checked)}
+                            label="Restore TP with Items"
+                            description="When the game asks to restore TP before a career starts (single runs and queued runs) or for a spark reroll, restore it and continue: Toughness 30 first, then Star Fruit, then Carats if allowed below, each filling TP with the game's Max button (a single + tap if Max is not found). If Carats are not allowed and the items run out, the restore is declined: a spark reroll is skipped, and a career start stops the run or queue and says why. At most 10 restores per bot session, or twice the number of queued runs plus 2 if that is more."
+                            className="mt-4"
+                        />
+
+                        {runQueueSettings.enableTpRestoreWithItems && (
+                            <CustomCheckbox
+                                searchId="run-queue-tp-restore-carats"
+                                checked={runQueueSettings.allowCaratsForTpRestore}
+                                onCheckedChange={(checked) => updateSetting("allowCaratsForTpRestore", checked)}
+                                label="Allow Carats for TP Restore"
+                                description="Carats are premium currency (they can be bought with real money). On by default: when Toughness 30 and Star Fruit have run out, the bot restores TP with Carats, filling with the Max button like the items, so the run or queue keeps going. Carat restores count toward the same per-session limit. Turn this off to stop instead: a career start stops the run or queue and says why, and a spark reroll is skipped."
+                                className="mt-4"
+                            />
+                        )}
+
+                        <CustomCheckbox
+                            searchId="run-queue-spark-reroll"
+                            checked={runQueueSettings.enableSparkReroll}
+                            onCheckedChange={(checked) => updateSetting("enableSparkReroll", checked)}
+                            label="Auto-Reroll Sparks (30 TP)"
+                            description="On the career-end Sparks screen, spend 30 TP to redraw the spark set once when it prices below a fresh roll: a 2 or 3-star stat spark is always kept, and a 1-star stat spark is redrawn unless every stat finished under 600 (a redraw cannot roll a 3-star there) or the set holds a 3-star aptitude or skill spark worth protecting. After the spend, the bot reads both sets on the game's selection screen and keeps the better one, verifying which set is named on the final confirmation before committing; if it cannot verify the selection it stops safely and you finish the choice by hand (keeping the original is always available there). Experimental: supervise the first spends. This spends TP."
+                            className="mt-4"
+                        />
 
                         <CustomCheckbox
                             searchId="run-queue-smart-borrow"
