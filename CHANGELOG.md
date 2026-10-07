@@ -620,6 +620,7 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 
 ---
 
+[1.7.2]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.5.0...v1.6.0
@@ -634,4 +635,4 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.1...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.2...main
