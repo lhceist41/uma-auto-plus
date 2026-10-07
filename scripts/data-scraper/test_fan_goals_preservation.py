@@ -45,7 +45,7 @@ def _run_scraper(objectives, characters, existing=None):
 
 
 def _chars(*entries):
-    return [{"char_id": cid, "en_name": name, "playable_en": True} for cid, name in entries]
+    return [{"char_id": cid, "name_en": name, "playable_en": True} for cid, name in entries]
 
 
 def _race(name, *, gained=1000, needed=0, grade=100, terrain=1, distance=2000):

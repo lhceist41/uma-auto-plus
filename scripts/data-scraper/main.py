@@ -192,6 +192,20 @@ def order_skill_versions(skill_id: int, versions: List[int], rarity_by_id: Dict[
     return sorted(chain, key=lambda i: (-rarity_by_id.get(i, 1), i))
 
 
+def character_name(char: Dict[str, Any]) -> Optional[str]:
+    """Reads a GameTora character's English name.
+
+    GameTora renamed the field from `en_name` to `name_en`. Both are accepted so an older cached manifest still works.
+
+    Args:
+        char (Dict[str, Any]): One entry of the `characters` dataset.
+
+    Returns:
+        The English name, or None if the entry has neither field.
+    """
+    return char.get("name_en") or char.get("en_name")
+
+
 def exists_on_global(entry: Dict[str, Any]) -> bool:
     """Reports whether a GameTora entry has been released on the Global server.
 
@@ -674,7 +688,7 @@ class TrainingEventScraper(BaseScraper):
         global _event_skill_names, _event_char_names, _event_status_names, _event_race_names, _event_event_names
         if _event_skill_names is None:
             _event_skill_names = {s["id"]: (s.get("name_en") or s.get("enname")) for s in fetch_gametora_manifest_data("skills")}
-            char_names = {c["char_id"]: c.get("en_name") for c in fetch_gametora_manifest_data("characters")}
+            char_names = {c["char_id"]: character_name(c) for c in fetch_gametora_manifest_data("characters")}
             for card in fetch_gametora_manifest_data("support-cards"):
                 char_names.setdefault(card["char_id"], card["char_name"])  # Support-only characters (NPCs) aren't in `characters`.
             _event_char_names = char_names
@@ -2101,7 +2115,7 @@ class EpithetScraper(BaseScraper):
         """
         nicknames = fetch_gametora_manifest_data("nicknames")
         id_to_race = {r["id"]: r.get("name_en") for r in fetch_gametora_manifest_data("races")}
-        id_to_char = {c["char_id"]: c.get("en_name") for c in fetch_gametora_manifest_data("characters")}
+        id_to_char = {c["char_id"]: character_name(c) for c in fetch_gametora_manifest_data("characters")}
         id_to_scenario = {s["id"]: s.get("name_en") for s in fetch_gametora_manifest_data("scenarios")}
         id_to_skill = {s["id"]: (s.get("name_en") or s.get("enname")) for s in fetch_gametora_manifest_data("skills")}
         id_to_nickname = {e["id"]: (e.get("name_en_gl") or e.get("name_en")) for e in nicknames}
@@ -2190,7 +2204,7 @@ class CharacterPresetScraper(BaseScraper):
             base_card_by_char.setdefault(card["char_id"], card)
 
         for char in characters:
-            name = char.get("en_name")
+            name = character_name(char)
             if not char.get("playable_en") or not name:
                 continue
             card = base_card_by_char.get(char["char_id"])
@@ -2252,7 +2266,7 @@ class CharacterOutfitScraper(BaseScraper):
         characters = fetch_gametora_manifest_data("characters")
         cards = fetch_gametora_manifest_data("character-cards")
 
-        names_by_id = {c["char_id"]: c["en_name"] for c in characters if c.get("playable_en") and c.get("en_name")}
+        names_by_id = {c["char_id"]: character_name(c) for c in characters if c.get("playable_en") and character_name(c)}
 
         for card in sorted(cards, key=lambda c: c["card_id"]):
             name = names_by_id.get(card["char_id"])
@@ -2350,8 +2364,8 @@ class CharacterObjectivesScraper(BaseScraper):
         objectives = fetch_gametora_manifest_data("ura-objectives")
         characters = fetch_gametora_manifest_data("characters")
 
-        id_to_name = {c["char_id"]: c.get("en_name") for c in characters if c.get("char_id") and c.get("en_name")}
-        en_playable = {c["char_id"] for c in characters if c.get("char_id") and c.get("playable_en") and c.get("en_name")}
+        id_to_name = {c["char_id"]: character_name(c) for c in characters if c.get("char_id") and character_name(c)}
+        en_playable = {c["char_id"] for c in characters if c.get("char_id") and c.get("playable_en") and character_name(c)}
 
         for entry in objectives:
             char_id = entry.get("char_id")
