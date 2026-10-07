@@ -648,22 +648,22 @@ const Settings = () => {
 
                 <CustomTitle searchId="settings-management-title" title="Settings Management" description="Import and export settings from JSON file or access the app's data directory." />
 
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                    <CustomButton onPress={handleImportSettings} variant="default" style={{ width: 150 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                    <CustomButton onPress={handleImportSettings} variant="default" style={{ flex: 1, maxWidth: 190 }} fontSize={12}>
                         📥 Import Settings
                     </CustomButton>
 
-                    <CustomButton onPress={handleExportSettings} variant="default" style={{ width: 150 }}>
+                    <CustomButton onPress={handleExportSettings} variant="default" style={{ flex: 1, maxWidth: 190 }} fontSize={12}>
                         📤 Export Settings
                     </CustomButton>
                 </View>
 
-                <View style={{ flexDirection: "row", marginTop: 16, justifyContent: "space-between" }}>
-                    <CustomButton onPress={openDataDirectory} variant="default" style={{ width: 150 }} fontSize={12}>
+                <View style={{ flexDirection: "row", marginTop: 16, justifyContent: "space-between", gap: 12 }}>
+                    <CustomButton onPress={openDataDirectory} variant="default" style={{ flex: 1, maxWidth: 190 }} fontSize={12}>
                         📁 Open Data Directory
                     </CustomButton>
 
-                    <CustomButton onPress={() => setShowResetDialog(true)} variant="destructive" style={{ width: 150 }}>
+                    <CustomButton onPress={() => setShowResetDialog(true)} variant="destructive" style={{ flex: 1, maxWidth: 190 }} fontSize={12}>
                         🔄 Reset Settings
                     </CustomButton>
                 </View>
@@ -726,7 +726,7 @@ const Settings = () => {
                         <AlertDialogTitle>
                             <Text style={{ color: "white" }}>Reset Settings to Default</Text>
                         </AlertDialogTitle>
-                        <AlertDialogDescription style={{ height: 50 }}>
+                        <AlertDialogDescription>
                             <Text style={{ color: "white" }}>
                                 Are you sure you want to reset all settings to their default values? This action cannot be undone and will overwrite your current configuration.
                             </Text>

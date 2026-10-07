@@ -2,7 +2,9 @@ import React, { useMemo, useState } from "react"
 import { Modal, SectionList, TextInput, TouchableOpacity, View } from "react-native"
 import { BadgeCheck, FlaskConical, Search, Star, ThumbsUp, TriangleAlert, X } from "lucide-react-native"
 import { Text } from "../ui/text"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useTheme } from "../../context/ThemeContext"
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight"
 import { characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { presetCharacter, presetOutfit, presetValidation } from "../../data/presetMeta"
 import { presetOutfitLabel } from "../../lib/rotationSnapshots"
@@ -84,6 +86,8 @@ const buildSummary = (presetName: string, scenario: string): string => {
  */
 const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }) => {
     const { colors } = useTheme()
+    const insets = useSafeAreaInsets()
+    const keyboardHeight = useKeyboardHeight()
     const [query, setQuery] = useState("")
     const [expandedPreset, setExpandedPreset] = useState<string | null>(null)
     const [favorites, toggleFavorite] = useFavoritePresets()
@@ -310,6 +314,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }
                         </View>
                     }
                     stickySectionHeadersEnabled={false}
+                    contentContainerStyle={{ paddingBottom: insets.bottom + keyboardHeight }}
                     keyboardShouldPersistTaps="handled"
                 />
             </View>

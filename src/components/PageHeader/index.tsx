@@ -209,6 +209,7 @@ const PageHeader = ({ title, showHomeButton = true, titleComponent, leftComponen
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 8,
+                    flexShrink: 1,
                 },
                 headerCenter: {
                     flexDirection: "row",
@@ -232,6 +233,7 @@ const PageHeader = ({ title, showHomeButton = true, titleComponent, leftComponen
                     fontSize: 24,
                     fontWeight: "bold",
                     color: colors.foreground,
+                    flexShrink: 1,
                 },
                 searchContainer: {
                     flex: 1,
@@ -322,7 +324,11 @@ const PageHeader = ({ title, showHomeButton = true, titleComponent, leftComponen
                     {!isSearching && leftComponent}
 
                     {/* Page title */}
-                    {!isSearching && !!title && <Text style={styles.title}>{title}</Text>}
+                    {!isSearching && !!title && (
+                        <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                            {title}
+                        </Text>
+                    )}
                     {!isSearching && titleComponent}
 
                     {/* Search bar */}

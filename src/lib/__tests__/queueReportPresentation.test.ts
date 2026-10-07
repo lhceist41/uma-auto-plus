@@ -414,7 +414,7 @@ describe("Home wiring", () => {
     })
 
     it("shows the card by the pure rule, hands over from the end banner, and states the dismiss consequence at the control", () => {
-        expect(home).toContain("{lastSession && lastSessionCardVisible(lastSession, botRunning, queueProgressView?.isTerminal === true) && (")
+        expect(home).toContain("{!keyboardUp && lastSession && lastSessionCardVisible(lastSession, botRunning, queueProgressView?.isTerminal === true) && (")
         expect(home).toContain("setTimeout(() => setQueueProgress((shown) => (shown === event ? null : shown)), 10000)")
         const control = home.slice(home.indexOf("onPress={() => dismissLastSession(lastSession.sessionId)}"), home.indexOf("Hides this summary."))
         expect(control).toContain(">Dismiss</Text>")

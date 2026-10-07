@@ -2,6 +2,7 @@ import { NavigationContainer } from "@react-navigation/native"
 import { createDrawerNavigator } from "@react-navigation/drawer"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { useCallback } from "react"
+import { View } from "react-native"
 import { PortalHost } from "@rn-primitives/portal"
 import { StatusBar } from "expo-status-bar"
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context"
@@ -13,6 +14,7 @@ import { ThemeProvider, useTheme } from "./context/ThemeContext"
 import { SearchProvider } from "./context/SearchRegistryContext"
 import { ProfileProvider } from "./context/ProfileContext"
 import { useBootstrap } from "./hooks/useBootstrap"
+import { useKeyboardHeight } from "./hooks/useKeyboardHeight"
 import Home from "./pages/Home"
 import Settings from "./pages/Settings"
 import TrainingSettings from "./pages/TrainingSettings"
@@ -94,14 +96,17 @@ function MainDrawer() {
 function AppWithBootstrap({ theme, colors }: { theme: string; colors: any }) {
     // Initialize app with bootstrap logic.
     useBootstrap()
+    const keyboardHeight = useKeyboardHeight()
 
     return (
-        <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: colors.background }}>
-            <NavigationContainer theme={NAV_THEME[theme as "light" | "dark"]}>
-                <StatusBar style={theme === "light" ? "dark" : "light"} />
-                <MainDrawer />
-                <PortalHost />
-            </NavigationContainer>
+        <SafeAreaView edges={["top", "bottom"]} style={{ flex: 1, backgroundColor: colors.background }}>
+            <View style={{ flex: 1, paddingBottom: keyboardHeight }}>
+                <NavigationContainer theme={NAV_THEME[theme as "light" | "dark"]}>
+                    <StatusBar style={theme === "light" ? "dark" : "light"} />
+                    <MainDrawer />
+                    <PortalHost />
+                </NavigationContainer>
+            </View>
         </SafeAreaView>
     )
 }

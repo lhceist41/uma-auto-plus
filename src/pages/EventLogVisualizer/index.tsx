@@ -178,11 +178,11 @@ const EventLogVisualizer: React.FC = () => {
             <View style={styles.content}>
                 <PageHeader title="Event Log Visualizer" style={{ marginBottom: 12 }} />
 
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
-                    <CustomButton onPress={openDataDirectory} variant="default">
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+                    <CustomButton onPress={openDataDirectory} variant="default" fontSize={12}>
                         📁 Open Data Directory
                     </CustomButton>
-                    <CustomButton onPress={onPickFiles} variant="default">
+                    <CustomButton onPress={onPickFiles} variant="default" fontSize={12}>
                         📂 Select Log Files
                     </CustomButton>
                     <Tooltip>

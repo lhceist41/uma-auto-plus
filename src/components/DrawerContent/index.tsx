@@ -502,7 +502,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
 
     return (
         <>
-            <DrawerContentScrollView {...props} style={styles.container} contentContainerStyle={{ flexGrow: 1 }}>
+            <DrawerContentScrollView {...props} style={styles.container} contentContainerStyle={{ flexGrow: 1, paddingBottom: 12 }}>
                 <View style={styles.header}>
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle}>UMA Auto+</Text>

@@ -221,21 +221,22 @@ const RacingSettings = () => {
                                 placeholder="Select policy"
                             />
                             <Text style={styles.inputDescription}>
-                                A race retry uses a free retry or an Alarm Clock you hold. When neither is left, the game offers to buy an Alarm Clock for 10 carats, and this setting
-                                decides whether the bot buys one. The bot retries a lost career goal race while its career retry budget lasts (3 retries, 5 in Trackblazer), and
-                                never retries optional races or goals it passed.
+                                A race retry uses a free retry or an Alarm Clock you hold. When neither is left, the game offers to buy an Alarm Clock for 10 carats, and this setting decides whether
+                                the bot buys one. The bot retries a lost career goal race while its career retry budget lasts (3 retries, 5 in Trackblazer), and never retries optional races or goals
+                                it passed.
                                 {"\n\n"}
-                                <Text style={{ fontWeight: "bold" }}>Never</Text>: always cancel and continue the run without retry. Default — never spends carats without opt-in.
+                                <Text style={{ fontWeight: "bold", color: colors.foreground }}>Never</Text>: always cancel and continue the run without retry. Default: never spends carats without
+                                opt-in.
                                 {"\n"}
-                                <Text style={{ fontWeight: "bold" }}>Goal races only</Text>: spend 10 carats only when a career goal race was lost, because losing it ends the
+                                <Text style={{ fontWeight: "bold", color: colors.foreground }}>Goal races only</Text>: spend 10 carats only when a career goal race was lost, because losing it ends the
                                 career.
                                 {"\n"}
-                                <Text style={{ fontWeight: "bold" }}>G1 only</Text>: spend 10 carats only for failed G1 races.
+                                <Text style={{ fontWeight: "bold", color: colors.foreground }}>G1 only</Text>: spend 10 carats only for failed G1 races.
                                 {"\n"}
-                                <Text style={{ fontWeight: "bold" }}>G1 + Finale</Text>: G1 races plus the Twinkle Star Climax finale races (turns 73-75 in Trackblazer). Recommended for active
-                                players.
+                                <Text style={{ fontWeight: "bold", color: colors.foreground }}>G1 + Finale</Text>: G1 races plus the Twinkle Star Climax finale races (turns 73-75 in Trackblazer).
+                                Recommended for active players.
                                 {"\n"}
-                                <Text style={{ fontWeight: "bold" }}>Always</Text>: spend 10 carats on every alarm clock prompt.
+                                <Text style={{ fontWeight: "bold", color: colors.foreground }}>Always</Text>: spend 10 carats on every alarm clock prompt.
                             </Text>
                             <CustomCheckbox
                                 searchId="enable-stop-on-mandatory-races"

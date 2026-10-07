@@ -86,7 +86,7 @@ const CustomButton: React.FC<CustomButtonProps> = ({
 
     /** Text color for the current variant and theme. */
     const getTextColor = () => {
-        if (disabled) return { opacity: 0.5 }
+        if (disabled) return {}
 
         switch (variant) {
             case "destructive":

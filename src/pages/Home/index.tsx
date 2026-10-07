@@ -21,6 +21,7 @@ import SelectButton from "../../components/SelectButton"
 import PresetPicker from "../../components/PresetPicker"
 import WhatsNewDialog from "../../components/WhatsNewDialog"
 import { useWhatsNew } from "../../hooks/useWhatsNew"
+import { useKeyboardHeight } from "../../hooks/useKeyboardHeight"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { bumpSettingsRevision, createSingleFlight } from "../../lib/launchConfig"
 import { presetCharacter } from "../../data/presetMeta"
@@ -156,6 +157,7 @@ const Home = () => {
     const [secureSettingsGrant, setSecureSettingsGrant] = useState<boolean | null | undefined>(undefined)
 
     const navigation = useNavigation()
+    const keyboardUp = useKeyboardHeight() > 0
 
     const bsc = useContext(BotStateContext)
     const mlc = useContext(MessageLogContext)
@@ -944,7 +946,7 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
                 rightComponent={renderStatus()}
             />
 
-            {interruptedQueue && !botRunning && (
+            {!keyboardUp && interruptedQueue && !botRunning && (
                 <View
                     style={{
                         width: "100%",
@@ -1000,7 +1002,7 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
                 </View>
             )}
 
-            {lastSession && lastSessionCardVisible(lastSession, botRunning, queueProgressView?.isTerminal === true) && (
+            {!keyboardUp && lastSession && lastSessionCardVisible(lastSession, botRunning, queueProgressView?.isTerminal === true) && (
                 <View
                     style={{
                         width: "100%",
@@ -1045,7 +1047,7 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
                 </View>
             )}
 
-            {repairStatus && (
+            {!keyboardUp && repairStatus && (
                 <View
                     style={{
                         width: "100%",
@@ -1068,7 +1070,7 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
                 </View>
             )}
 
-            {!armed && (
+            {!keyboardUp && !armed && (
                 <View style={{ width: "100%", paddingHorizontal: 4, marginBottom: 6 }}>
                     <TouchableOpacity
                         onPress={() => setPickerOpen(true)}
@@ -1170,7 +1172,7 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
                 }}
             />
 
-            {queueProgressView && (
+            {!keyboardUp && queueProgressView && (
                 <View
                     style={{
                         flexDirection: "row",
