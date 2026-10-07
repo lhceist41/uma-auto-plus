@@ -1,15 +1,20 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.bot.Racing.Companion.FAN_EMERGENCY_TURN_WINDOW
-import com.steve1316.uma_android_automation.bot.Racing.Companion.admitsSingleStarRowsForG1Goal
+import com.steve1316.uma_android_automation.bot.Racing.Companion.admitsSingleStarRowsForGradedGoal
 import com.steve1316.uma_android_automation.bot.Racing.Companion.canonicalizeRaceLabelForLookup
+import com.steve1316.uma_android_automation.bot.Racing.Companion.countsForGoalGrade
 import com.steve1316.uma_android_automation.bot.Racing.Companion.enterablePredictionAnchors
+import com.steve1316.uma_android_automation.bot.Racing.Companion.goalGradeDbLabels
+import com.steve1316.uma_android_automation.bot.Racing.Companion.goalGradeLabel
 import com.steve1316.uma_android_automation.bot.Racing.Companion.indexOfBestByTierThenFans
 import com.steve1316.uma_android_automation.bot.Racing.Companion.isFanEmergency
 import com.steve1316.uma_android_automation.bot.Racing.Companion.mergePredictionAnchors
+import com.steve1316.uma_android_automation.bot.Racing.Companion.minimumGoalGrade
 import com.steve1316.uma_android_automation.bot.Racing.Companion.requirementForcesExtraRace
 import com.steve1316.uma_android_automation.bot.Racing.Companion.restrictsToG1Only
 import com.steve1316.uma_android_automation.types.PredictionTier
+import com.steve1316.uma_android_automation.types.RaceGrade
 import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -428,7 +433,7 @@ class RacingRaceSelectionTest {
     }
 
     // ////////////////////////////////////////////////////////////////////////////////////////////
-    // admitsSingleStarRowsForG1Goal / enterablePredictionAnchors
+    // admitsSingleStarRowsForGradedGoal / enterablePredictionAnchors
 
     private fun near(turnsRemaining: Int) = turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
 
@@ -436,7 +441,7 @@ class RacingRaceSelectionTest {
     @DisplayName("A G1-only goal admits single-star rows inside the deadline window")
     fun g1GoalAdmitsSinglesNearDeadline() {
         for (turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW) {
-            assertTrue(admitsSingleStarRowsForG1Goal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true), "turnsRemaining=$turnsRemaining")
+            assertTrue(admitsSingleStarRowsForGradedGoal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true), "turnsRemaining=$turnsRemaining")
         }
     }
 
@@ -444,28 +449,28 @@ class RacingRaceSelectionTest {
     @DisplayName("A G1-only goal far from its deadline keeps single-star rows out")
     fun g1GoalFarFromDeadlineKeepsSinglesOut() {
         val turnsRemaining = FAN_EMERGENCY_TURN_WINDOW + 1
-        assertFalse(admitsSingleStarRowsForG1Goal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true))
-        assertFalse(admitsSingleStarRowsForG1Goal(true, near(11), 11, countdownReadable = true))
+        assertFalse(admitsSingleStarRowsForGradedGoal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true))
+        assertFalse(admitsSingleStarRowsForGradedGoal(true, near(11), 11, countdownReadable = true))
     }
 
     @Test
     @DisplayName("An unread G1-goal deadline errs toward admitting single-star rows")
     fun g1GoalUnreadDeadlineAdmitsSingles() {
-        assertTrue(admitsSingleStarRowsForG1Goal(true, false, Int.MAX_VALUE, countdownReadable = true))
+        assertTrue(admitsSingleStarRowsForGradedGoal(true, false, Int.MAX_VALUE, countdownReadable = true))
     }
 
     @Test
     @DisplayName("A scenario that never reads the countdown (Grand Concert) does not admit on an unread deadline")
     fun unreadableCountdownDoesNotAdmitSingles() {
-        assertFalse(admitsSingleStarRowsForG1Goal(true, false, Int.MAX_VALUE, countdownReadable = false))
-        assertTrue(admitsSingleStarRowsForG1Goal(true, true, 0, countdownReadable = false))
+        assertFalse(admitsSingleStarRowsForGradedGoal(true, false, Int.MAX_VALUE, countdownReadable = false))
+        assertTrue(admitsSingleStarRowsForGradedGoal(true, true, 0, countdownReadable = false))
     }
 
     @Test
     @DisplayName("Without a G1-only goal the deadline never admits single-star rows")
     fun noG1GoalNeverAdmitsSingles() {
-        assertFalse(admitsSingleStarRowsForG1Goal(false, true, 0, countdownReadable = true))
-        assertFalse(admitsSingleStarRowsForG1Goal(false, false, Int.MAX_VALUE, countdownReadable = true))
+        assertFalse(admitsSingleStarRowsForGradedGoal(false, true, 0, countdownReadable = true))
+        assertFalse(admitsSingleStarRowsForGradedGoal(false, false, Int.MAX_VALUE, countdownReadable = true))
     }
 
     @Test
@@ -478,7 +483,7 @@ class RacingRaceSelectionTest {
 
         // Goal deadline at the end of turn 24.
         for ((turn, turnsRemaining) in listOf(23 to 1, 24 to 0)) {
-            val allowSingles = admitsSingleStarRowsForG1Goal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true)
+            val allowSingles = admitsSingleStarRowsForGradedGoal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true)
             val enterable = enterablePredictionAnchors(anchors, allowSingles)
             assertEquals(2, enterable.size, "turn $turn")
             assertEquals(1427.0, enterable[1].location.y, "turn $turn")
@@ -495,5 +500,77 @@ class RacingRaceSelectionTest {
                 RaceDetails(6500, true),
             )
         assertEquals(1, indexOfBestByTierThenFans(bothG1))
+    }
+
+    // ////////////////////////////////////////////////////////////////////////////////////////////
+    // minimumGoalGrade / countsForGoalGrade / goalGradeLabel
+
+    @Test
+    @DisplayName("Each read goal tier maps to its minimum grade; an unread tier has none")
+    fun goalTierMinimumGrades() {
+        assertEquals(RaceGrade.PRE_OP, minimumGoalGrade(GoalCriteriaTier.PRE_OP_OR_ABOVE))
+        assertEquals(RaceGrade.G3, minimumGoalGrade(GoalCriteriaTier.G3_OR_ABOVE))
+        assertEquals(RaceGrade.G1, minimumGoalGrade(GoalCriteriaTier.G1_ONLY))
+        assertEquals(null, minimumGoalGrade(null))
+    }
+
+    @Test
+    @DisplayName("A G3-or-above goal counts G3, G2 and G1 races and never an OP or Pre-OP race")
+    fun g3GoalNeverCountsOpOrPreOp() {
+        val counted = RaceGrade.entries.filter { countsForGoalGrade(it, RaceGrade.G3) }
+        assertEquals(listOf(RaceGrade.G3, RaceGrade.G2, RaceGrade.G1), counted)
+    }
+
+    @Test
+    @DisplayName("A Pre-OP-or-above goal counts Pre-OP through G1 but never a maiden, debut, finale or exhibition race")
+    fun preOpGoalCountsGradedRacesOnly() {
+        val counted = RaceGrade.entries.filter { countsForGoalGrade(it, RaceGrade.PRE_OP) }
+        assertEquals(listOf(RaceGrade.PRE_OP, RaceGrade.OP, RaceGrade.G3, RaceGrade.G2, RaceGrade.G1), counted)
+    }
+
+    @Test
+    @DisplayName("A G1-only goal counts exactly the races the G1 check counted")
+    fun g1GoalCountsOnlyG1() {
+        for (grade in RaceGrade.entries) {
+            assertEquals(grade == RaceGrade.G1, countsForGoalGrade(grade, RaceGrade.G1), "grade=$grade")
+        }
+    }
+
+    @Test
+    @DisplayName("The race DB query uses the races-table grade spellings, including \"Pre-OP\"")
+    fun goalGradeDbLabelsMatchRacesTable() {
+        // src/data/races.json, which seeds the races table, spells the grades "Pre-OP", "OP", "G3", "G2" and "G1".
+        assertEquals(listOf("Pre-OP", "OP", "G3", "G2", "G1"), goalGradeDbLabels(RaceGrade.PRE_OP))
+        assertEquals(listOf("G3", "G2", "G1"), goalGradeDbLabels(RaceGrade.G3))
+        assertEquals(listOf("G1"), goalGradeDbLabels(RaceGrade.G1))
+    }
+
+    @Test
+    @DisplayName("Goal log labels keep the G1 wording and name the other tiers")
+    fun goalGradeLabels() {
+        assertEquals("G1", goalGradeLabel(RaceGrade.G1))
+        assertEquals("G3-or-above", goalGradeLabel(RaceGrade.G3))
+        assertEquals("Pre-OP-or-above", goalGradeLabel(RaceGrade.PRE_OP))
+    }
+
+    @Test
+    @DisplayName("For a G3 goal the OP row is filtered out and the single-star G3 is the pick near the deadline, not far from it")
+    fun g3GoalPicksSingleStarG3NearDeadline() {
+        // Two rows: an OP race with a double star and a G3 with a single star.
+        val anchors = mergePredictionAnchors(listOf(Point(881.0, 1197.0)), listOf(Point(881.0, 1427.0)))
+        val grades = listOf(RaceGrade.OP, RaceGrade.G3)
+        val races = listOf(RaceDetails(1600, true), RaceDetails(3300, false, predictionTier = PredictionTier.SINGLE))
+        val gradedGoal = minimumGoalGrade(GoalCriteriaTier.G3_OR_ABOVE) != null
+
+        fun pick(turnsRemaining: Int): Int? {
+            val allowSingles = admitsSingleStarRowsForGradedGoal(gradedGoal, near(turnsRemaining), turnsRemaining, countdownReadable = true)
+            val enterable = enterablePredictionAnchors(anchors, allowSingles).map { anchors.indexOf(it) }
+            val goalRows = enterable.filter { countsForGoalGrade(grades[it], RaceGrade.G3) }
+            if (goalRows.isEmpty()) return null
+            return goalRows[indexOfBestByTierThenFans(goalRows.map { races[it] })]
+        }
+
+        assertEquals(1, pick(turnsRemaining = 2))
+        assertEquals(null, pick(turnsRemaining = FAN_EMERGENCY_TURN_WINDOW + 1))
     }
 }

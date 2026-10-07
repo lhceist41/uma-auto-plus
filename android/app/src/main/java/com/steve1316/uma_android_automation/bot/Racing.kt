@@ -215,6 +215,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** True only for a positively read G1-only requirement, never from a failed read of the other tiers (see [restrictsToG1Only]). */
     val hasG1OnlyRequirement: Boolean get() = restrictsToG1Only(goalCriteriaTier)
 
+    /** The lowest race grade the active trophy goal counts, or null for an unread tier, which stays permissive. */
+    private val goalMinimumGrade: RaceGrade? get() = minimumGoalGrade(goalCriteriaTier)
+
     /** How the active trophy goal's criteria reads in the log, including the case where its tier could not be read at all. */
     private val goalCriteriaDescription: String get() = goalCriteriaTier?.description ?: "an unread criteria tier"
 
@@ -230,10 +233,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Cached turns-remaining behind [bGoalDeadlineNear]; Int.MAX_VALUE when unknown. */
     var goalDeadlineTurnsRemaining = Int.MAX_VALUE
 
-    private val admitsG1GoalSingleStarRows: Boolean
+    private val admitsGoalSingleStarRows: Boolean
         get() =
-            admitsSingleStarRowsForG1Goal(
-                hasG1OnlyRequirement,
+            admitsSingleStarRowsForGradedGoal(
+                goalMinimumGrade != null,
                 bGoalDeadlineNear,
                 goalDeadlineTurnsRemaining,
                 countdownReadable = !GrandConcertScenario.matches(game.scenario),
@@ -514,17 +517,46 @@ class Racing(private val game: Game, private val campaign: Campaign) {
          */
         internal fun restrictsToG1Only(tier: GoalCriteriaTier?): Boolean = tier == GoalCriteriaTier.G1_ONLY
 
+        /** The lowest race grade that counts for a trophy goal's tier; null for an unread tier. */
+        internal fun minimumGoalGrade(tier: GoalCriteriaTier?): RaceGrade? =
+            when (tier) {
+                GoalCriteriaTier.PRE_OP_OR_ABOVE -> RaceGrade.PRE_OP
+                GoalCriteriaTier.G3_OR_ABOVE -> RaceGrade.G3
+                GoalCriteriaTier.G1_ONLY -> RaceGrade.G1
+                null -> null
+            }
+
+        private val GOAL_GRADE_ORDER = listOf(RaceGrade.PRE_OP, RaceGrade.OP, RaceGrade.G3, RaceGrade.G2, RaceGrade.G1)
+
+        /** Whether a race of [grade] counts for a goal of [minimum] or above. Maiden and debut races never count. */
+        internal fun countsForGoalGrade(grade: RaceGrade, minimum: RaceGrade): Boolean {
+            val rank = GOAL_GRADE_ORDER.indexOf(grade)
+            return rank >= 0 && rank >= GOAL_GRADE_ORDER.indexOf(minimum)
+        }
+
+        /** The races-table spellings of every grade that counts for a goal of [minimum] or above; the table stores grades as the game labels them ("Pre-OP", "OP", "G3"). */
+        internal fun goalGradeDbLabels(minimum: RaceGrade): List<String> =
+            RaceGrade.entries.filter { countsForGoalGrade(it, minimum) }.map { if (it == RaceGrade.PRE_OP) "Pre-OP" else it.name }
+
+        /** How a goal's minimum grade reads in the log: "G1" for a G1-only goal, else e.g. "G3-or-above". */
+        internal fun goalGradeLabel(minimum: RaceGrade): String =
+            when (minimum) {
+                RaceGrade.G1 -> "G1"
+                RaceGrade.PRE_OP -> "Pre-OP-or-above"
+                else -> "$minimum-or-above"
+            }
+
         /**
-         * A G1-only goal admits single-star rows near its deadline, or when the deadline could not be read: a missed goal ends the career, while a weak
-         * G1 risks one race. The Junior G1s run only on turns 23 and 24, and a weaker trainee often draws a single star on them. A scenario whose
-         * countdown is never read (Grand Concert) would otherwise admit on every turn, so only a readable countdown's miss counts as unread.
+         * A graded goal admits single-star rows near its deadline, or when the deadline could not be read: a missed goal ends the career, while a weak
+         * race of the goal's grade risks one race. The Junior G1s run only on turns 23 and 24, and a weaker trainee often draws a single star on them. A
+         * scenario whose countdown is never read (Grand Concert) would otherwise admit on every turn, so only a readable countdown's miss counts as unread.
          */
-        internal fun admitsSingleStarRowsForG1Goal(
-            g1OnlyGoal: Boolean,
+        internal fun admitsSingleStarRowsForGradedGoal(
+            gradedGoal: Boolean,
             goalDeadlineNear: Boolean,
             goalDeadlineTurnsRemaining: Int,
             countdownReadable: Boolean,
-        ): Boolean = g1OnlyGoal && (goalDeadlineNear || (countdownReadable && goalDeadlineTurnsRemaining == Int.MAX_VALUE))
+        ): Boolean = gradedGoal && (goalDeadlineNear || (countdownReadable && goalDeadlineTurnsRemaining == Int.MAX_VALUE))
 
         internal fun enterablePredictionAnchors(anchors: List<PredictionAnchor>, allowSingles: Boolean): List<PredictionAnchor> =
             anchors.filter { allowSingles || it.tier == PredictionTier.DOUBLE }
@@ -1265,8 +1297,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 when (val tier = goalCriteriaTier) {
                     // Which grades qualify is genuinely unknown, so race every turn rather than sit out. Skipping turns is what loses a career when the goal actually accepts lesser grades.
                     null -> MessageLog.w(TAG, "[WARN] checkRacingRequirements:: Trophy requirement detected but its criteria line matched none of the known grades. Racing every turn to be safe.")
-                    GoalCriteriaTier.G1_ONLY -> MessageLog.i(TAG, "[RACE] Trophy requirement with ${tier.description} detected. Only G1 races will fulfill the requirement.")
-                    else -> MessageLog.i(TAG, "[RACE] Trophy requirement with ${tier.description} detected. Any race can be run to fulfill the requirement.")
+                    else -> {
+                        val label = minimumGoalGrade(tier)?.let { goalGradeLabel(it) }
+                        MessageLog.i(TAG, "[RACE] Trophy requirement with ${tier.description} detected. Only $label races will fulfill the requirement.")
+                    }
                 }
             } else {
                 // Clear the flags if requirement is no longer present.
@@ -1459,14 +1493,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return !raceRepeatWarningCheck
         } else if (hasTrophyRequirement) {
             if (!hasG1OnlyRequirement) {
-                // Pre-OP, G3, or an unread tier: any grade satisfies the goal, so proceed without gating on G1 availability. An unread tier stays here rather than falling into the G1-only branch.
+                // Pre-OP, G3, or an unread tier: no G1 availability gate. The race list filters a read tier to its grade, and an unread tier stays here rather than falling into the
+                // G1-only branch.
                 MessageLog.i(TAG, "[RACE] Trophy requirement with $goalCriteriaDescription detected. Proceeding to racing screen.")
                 return !raceRepeatWarningCheck
             }
 
             // Positively read G1-only: check if G1 races exist at current turn before proceeding.
             // If no G1 races are available, it will still allow regular racing if it's a regular race day or smart racing day.
-            if (!hasG1RacesAtTurn(campaign.date.day)) {
+            if (!hasGoalGradeRacesAtTurn(campaign.date.day, RaceGrade.G1)) {
                 // Skip interval check if Racing Plan is enabled.
                 val isRegularRacingDay = enableFarmingFans && !enableRacingPlan && (turnsRemaining % daysToRunExtraRaces == 0)
                 val isSmartRacingDay = enableRacingPlan && enableFarmingFans && nextSmartRaceDay == turnsRemaining
@@ -2322,15 +2357,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Checks if any G1 races exist at the specified turn number in the database.
+     * Checks if any race of [minimum] grade or above exists at the specified turn number in the database.
      *
-     * @param turnNumber The turn number to check for G1 races.
-     * @return True if at least one G1 race exists at the specified turn, false otherwise.
+     * @param turnNumber The turn number to check.
+     * @param minimum The lowest grade that counts.
+     * @return True if at least one such race exists at the specified turn, false otherwise.
      */
-    private fun hasG1RacesAtTurn(turnNumber: Int): Boolean {
+    private fun hasGoalGradeRacesAtTurn(turnNumber: Int, minimum: RaceGrade): Boolean {
         val settingsManager = SQLiteSettingsManager(game.myContext)
         if (!settingsManager.isAvailable()) {
-            MessageLog.e(TAG, "[ERROR] hasG1RacesAtTurn:: Database not available for G1 race check.")
+            MessageLog.e(TAG, "[ERROR] hasGoalGradeRacesAtTurn:: Database not available for the goal-grade race check.")
             settingsManager.close()
             return false
         }
@@ -2338,27 +2374,28 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         return try {
             val database = settingsManager.readableDatabase
             if (database == null) {
-                MessageLog.e(TAG, "[ERROR] hasG1RacesAtTurn:: Database is null for G1 race check.")
+                MessageLog.e(TAG, "[ERROR] hasGoalGradeRacesAtTurn:: Database is null for the goal-grade race check.")
                 return false
             }
 
+            val grades = goalGradeDbLabels(minimum)
             val cursor =
                 database.query(
                     TABLE_RACES,
                     arrayOf(RACES_COLUMN_GRADE),
-                    "$RACES_COLUMN_TURN_NUMBER = ? AND $RACES_COLUMN_GRADE = ?",
-                    arrayOf(turnNumber.toString(), "G1"),
+                    "$RACES_COLUMN_TURN_NUMBER = ? AND $RACES_COLUMN_GRADE IN (${grades.joinToString(",") { "?" }})",
+                    arrayOf(turnNumber.toString()) + grades,
                     null,
                     null,
                     null,
                 )
 
-            val hasG1 = cursor.count > 0
+            val found = cursor.count > 0
             cursor.close()
 
-            hasG1
+            found
         } catch (e: Exception) {
-            MessageLog.e(TAG, "[ERROR] hasG1RacesAtTurn:: Error checking for G1 races: ${e.message}")
+            MessageLog.e(TAG, "[ERROR] hasGoalGradeRacesAtTurn:: Error checking for goal-grade races: ${e.message}")
             false
         } finally {
             settingsManager.close()
@@ -2864,10 +2901,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Racing process on ${campaign.date}.")
 
-        // A requirement turn skips the eligibility check, so the countdown that gates G1-goal single-star admission is read here, on the main screen.
-        if (!atRaceList && hasG1OnlyRequirement) {
+        // A requirement turn skips the eligibility check, so the countdown that gates graded-goal single-star admission is read here, on the main screen.
+        val minimumGrade = goalMinimumGrade
+        if (!atRaceList && minimumGrade != null) {
             val turnsRemaining = refreshGoalDeadline()
-            MessageLog.i(TAG, "[RACE] G1 goal countdown: $turnsRemaining turn(s) left (single-star G1 rows admitted: $admitsG1GoalSingleStarRows).")
+            val label = goalGradeLabel(minimumGrade)
+            MessageLog.i(TAG, "[RACE] $label goal countdown: $turnsRemaining turn(s) left (single-star $label rows admitted: $admitsGoalSingleStarRows).")
         }
 
         // If the races button exists AND is disabled, we can exit early since we know that we're at the home screen and the bot cannot race.
@@ -3478,7 +3517,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             if (hasFanRequirement) MessageLog.v(TAG, "[RACE] Fan requirement criteria detected. This race must be completed to meet the requirement.")
             if (hasInsufficientGoalRacePtsRequirement) MessageLog.v(TAG, "[RACE] Goal race result pts requirement criteria detected. This race must be completed to meet the requirement.")
             if (hasTrophyRequirement) {
-                val selectable = if (hasG1OnlyRequirement) "Only G1 races will be selected" else "Any race can be selected"
+                val selectable = goalMinimumGrade?.let { "Only ${goalGradeLabel(it)} races will be selected" } ?: "Any race can be selected"
                 MessageLog.v(TAG, "[RACE] Trophy requirement with $goalCriteriaDescription detected. $selectable to meet the requirement.")
             }
 
@@ -3488,7 +3527,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     // If fan or goal pts requirement is needed, force standard racing to ensure the race proceeds and picks double stars.
                     false
                 } else if (hasTrophyRequirement) {
-                    // Trophy requirement can use smart racing as it filters to G1 races internally.
+                    // Trophy requirement can use smart racing as it filters to the goal's grade internally.
                     // Use smart racing for all years except Year 1 (Junior Year).
                     campaign.date.year != DateYear.JUNIOR
                 } else if (enableRacingPlan && campaign.date.year != DateYear.JUNIOR) {
@@ -3619,7 +3658,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[RACE] No predictions found. Canceling racing process.")
             return false
         }
-        if (mandatoryExtraRaceData == null && anchors.none { it.tier == PredictionTier.DOUBLE } && !enableForceRacing && !admitsG1GoalSingleStarRows) {
+        if (mandatoryExtraRaceData == null && anchors.none { it.tier == PredictionTier.DOUBLE } && !enableForceRacing && !admitsGoalSingleStarRows) {
             MessageLog.i(TAG, "[RACE] Only single-star predictions on screen. Skipping racing in smart mode.")
             return false
         }
@@ -3752,17 +3791,20 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         MessageLog.i(TAG, "[RACE] Successfully matched ${currentRaces.size} races in database.")
 
-        // G1-only filter applies only to a positively read G1-only goal; Pre-OP, G3 and an unread tier use the full list, since restricting on an unread tier would cancel racing on a G1-less turn.
+        // The grade filter applies only to a positively read goal tier; an unread tier uses the full list, since restricting on it would cancel racing on a turn
+        // with no race of a guessed grade.
+        val minimumGrade = goalMinimumGrade
         val racesForSelection =
-            if (hasG1OnlyRequirement) {
-                val g1Races = currentRaces.filter { it.grade == RaceGrade.G1 }
-                if (g1Races.isEmpty()) {
-                    // No G1 races available. Cancel since a G1-only goal specifically needs G1 races.
-                    MessageLog.v(TAG, "[RACE] Trophy requirement active but no G1 races available. Canceling racing process (independent of racing plan/farming fans).")
+            if (minimumGrade != null) {
+                val label = goalGradeLabel(minimumGrade)
+                val goalRaces = currentRaces.filter { countsForGoalGrade(it.grade, minimumGrade) }
+                if (goalRaces.isEmpty()) {
+                    // A graded goal needs a race of its grade; a lower-grade race does not count toward it.
+                    MessageLog.v(TAG, "[RACE] Trophy requirement active but no $label races available. Canceling racing process (independent of racing plan/farming fans).")
                     return false
                 } else {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement active. Filtering to ${g1Races.size} G1 races: ${g1Races.map { it.name }}.")
-                    g1Races
+                    MessageLog.i(TAG, "[RACE] Trophy requirement active. Filtering to ${goalRaces.size} $label races: ${goalRaces.map { it.name }}.")
+                    goalRaces
                 }
             } else {
                 if (hasTrophyRequirement) MessageLog.i(TAG, "[RACE] Trophy requirement with $goalCriteriaDescription active. Using all ${currentRaces.size} races.")
@@ -3992,19 +4034,20 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return processGrandConcertForcedFanRace()
         }
 
-        // Fan emergency, force racing or a G1-only goal near its deadline admits single-star races; otherwise singles are logged only. The G1 filter below keeps an
-        // admitted non-G1 single out of a G1-only goal.
-        val allowSingles = bFanEmergencyActive || enableForceRacing || admitsG1GoalSingleStarRows
+        // Fan emergency, force racing or a graded goal near its deadline admits single-star races; otherwise singles are logged only. The grade filter below keeps an
+        // admitted single below the goal's grade out of a graded goal.
+        val allowSingles = bFanEmergencyActive || enableForceRacing || admitsGoalSingleStarRows
+        val minimumGrade = goalMinimumGrade
 
         var anchors = findPredictionAnchors(includeSingles = true)
 
         fun enterable(list: List<PredictionAnchor>) = enterablePredictionAnchors(list, allowSingles)
 
         // With no enterable race and an any-grade requirement active, scroll for more. bFanEmergencyActive counts on its own: the OCR-driven emergency arms without hasFanRequirement
-        // (dead templates), and its weak-prediction trainee's visible rows draw no icon. A trophy goal not positively G1-only also scrolls; a G1-only goal is gated separately.
+        // (dead templates), and its weak-prediction trainee's visible rows draw no icon. A trophy goal with an unread tier also scrolls; a graded goal is gated separately.
         if (enterable(anchors).isEmpty() &&
             (campaign.date.year != DateYear.JUNIOR || bFanEmergencyActive) &&
-            (hasFanRequirement || bFanEmergencyActive || (hasTrophyRequirement && !hasG1OnlyRequirement) || hasInsufficientGoalRacePtsRequirement)
+            (hasFanRequirement || bFanEmergencyActive || (hasTrophyRequirement && minimumGrade == null) || hasInsufficientGoalRacePtsRequirement)
         ) {
             val maxScrollAttempts = 5
             MessageLog.i(TAG, "[RACE] No enterable predictions found on initial screen. Scrolling to find races to satisfy requirements...")
@@ -4026,18 +4069,20 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
         }
 
-        // A G1-only goal looks past the first page when the race DB lists a G1 this turn: the race list shows only about two rows at a time.
-        if (hasG1OnlyRequirement && hasG1RacesAtTurn(campaign.date.day)) {
-            fun isG1Row(anchor: PredictionAnchor): Boolean =
-                lookupRaceInDatabase(campaign.date.day, game.imageUtils.extractRaceName(anchor.location)).any { it.grade == RaceGrade.G1 }
+        // A graded goal looks past the first page when the race DB lists a race of its grade this turn: the race list shows only about two rows at a time.
+        if (minimumGrade != null && hasGoalGradeRacesAtTurn(campaign.date.day, minimumGrade)) {
+            val label = goalGradeLabel(minimumGrade)
+
+            fun isGoalGradeRow(anchor: PredictionAnchor): Boolean =
+                lookupRaceInDatabase(campaign.date.day, game.imageUtils.extractRaceName(anchor.location)).any { countsForGoalGrade(it.grade, minimumGrade) }
 
             val maxScrollAttempts = 5
             for (scrollAttempt in 1..maxScrollAttempts) {
-                if (enterable(anchors).any { isG1Row(it) }) break
-                MessageLog.i(TAG, "[RACE] No enterable G1 on this page of the race list. Scrolling down (attempt $scrollAttempt/$maxScrollAttempts)...")
+                if (enterable(anchors).any { isGoalGradeRow(it) }) break
+                MessageLog.i(TAG, "[RACE] No enterable $label on this page of the race list. Scrolling down (attempt $scrollAttempt/$maxScrollAttempts)...")
                 val newAnchors = scrollRaceListAndRedetectAnchors(scrollDown = true, includeSingles = true)
                 if (newAnchors == null || newAnchors.map { it.location } == anchors.map { it.location }) {
-                    MessageLog.i(TAG, "[RACE] The race list did not move. Stopping the G1 search.")
+                    MessageLog.i(TAG, "[RACE] The race list did not move. Stopping the $label search.")
                     break
                 }
                 anchors = newAnchors
@@ -4047,7 +4092,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val usableAnchors = enterable(anchors)
         val skippedSingles = anchors.size - usableAnchors.size
         if (skippedSingles > 0) {
-            MessageLog.i(TAG, "[RACE] $skippedSingles single-star race(s) visible but not enterable (no fan emergency, force racing or G1 goal near its deadline).")
+            MessageLog.i(TAG, "[RACE] $skippedSingles single-star race(s) visible but not enterable (no fan emergency, force racing or graded goal near its deadline).")
             if (hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
                 for (anchor in anchors.filter { it.tier != PredictionTier.DOUBLE }) {
                     val raceName = game.imageUtils.extractRaceName(anchor.location)
@@ -4063,26 +4108,26 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
         if (allowSingles && usableAnchors.none { it.tier == PredictionTier.DOUBLE }) {
-            MessageLog.i(TAG, "[RACE] Proceeding with single-star prediction races only (fan emergency, force racing or G1 goal near its deadline).")
+            MessageLog.i(TAG, "[RACE] Proceeding with single-star prediction races only (fan emergency, force racing or graded goal near its deadline).")
         }
 
         val onlyAnchor = usableAnchors[0]
         val onlyAnchorTemplatePath =
             if (onlyAnchor.tier == PredictionTier.SINGLE) IconRaceListPredictionSingleStar.template.path else IconRaceListPredictionDoubleStar.template.path
 
-        // With one enterable race, require G1 only for a positively read G1-only goal; Pre-OP, G3 and an unread tier accept any grade.
+        // With one enterable race, require the goal's grade only for a positively read goal tier; an unread tier accepts any grade.
         if (maxCount == 1) {
-            if (hasG1OnlyRequirement) {
+            if (minimumGrade != null) {
+                val label = goalGradeLabel(minimumGrade)
                 campaign.updateDate(isOnMainScreen = false)
                 val raceName = game.imageUtils.extractRaceName(onlyAnchor.location)
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
-                // Check if any matched race is G1.
-                if (raceDataList.any { it.grade == RaceGrade.G1 }) {
-                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and it's G1. Selecting it.")
+                if (raceDataList.any { countsForGoalGrade(it.grade, minimumGrade) }) {
+                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and it's $label. Selecting it.")
                     game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                     return true
                 } else {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement active but only non-G1 race available. Canceling racing process...")
+                    MessageLog.i(TAG, "[RACE] Trophy requirement active but only non-$label race available. Canceling racing process...")
                     return false
                 }
             } else {
@@ -4111,7 +4156,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             val selectedExtraRace = IconRaceListSelectionBracketBottomRight.find(game.imageUtils).first ?: break
             extraRaceLocations.add(selectedExtraRace)
 
-            // Extract race name for G1 filtering if trophy requirement is active.
+            // Extract race name for the goal-grade filter if trophy requirement is active.
             if (hasTrophyRequirement) {
                 val raceName = game.imageUtils.extractRaceName(anchor.location)
                 raceNamesList.add(raceName)
@@ -4121,27 +4166,27 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             listOfRaces.add(raceDetails)
         }
 
-        // Filter to only G1 races only for a positively read G1-only goal; Pre-OP, G3, and an unread tier all keep the full list.
+        // Filter to the goal's grade only for a positively read goal tier; an unread tier keeps the full list.
         val (filteredRaces, filteredLocations, filteredNames) =
-            if (hasG1OnlyRequirement) {
+            if (minimumGrade != null) {
+                val label = goalGradeLabel(minimumGrade)
                 campaign.updateDate(isOnMainScreen = false)
-                val g1Indices =
+                val goalIndices =
                     raceNamesList.mapIndexedNotNull { index, raceName ->
                         val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
-                        // Check if any matched race is G1.
-                        if (raceDataList.any { it.grade == RaceGrade.G1 }) index else null
+                        if (raceDataList.any { countsForGoalGrade(it.grade, minimumGrade) }) index else null
                     }
 
-                if (g1Indices.isEmpty()) {
-                    // No G1 races available. Cancel since a G1-only goal specifically needs G1 races.
+                if (goalIndices.isEmpty()) {
+                    // A graded goal needs a race of its grade; a lower-grade race does not count toward it.
                     // Trophy requirement is independent of racing plan and farming fans settings.
-                    MessageLog.i(TAG, "[RACE] Trophy requirement active but no G1 races available. Canceling racing process (independent of racing plan/farming fans).")
+                    MessageLog.i(TAG, "[RACE] Trophy requirement active but no $label races available. Canceling racing process (independent of racing plan/farming fans).")
                     return false
                 } else {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement active. Filtering to ${g1Indices.size} G1 races.")
-                    val filtered = g1Indices.map { listOfRaces[it] }
-                    val filteredLocations = g1Indices.map { extraRaceLocations[it] }
-                    val filteredNames = g1Indices.map { raceNamesList[it] }
+                    MessageLog.i(TAG, "[RACE] Trophy requirement active. Filtering to ${goalIndices.size} $label races.")
+                    val filtered = goalIndices.map { listOfRaces[it] }
+                    val filteredLocations = goalIndices.map { extraRaceLocations[it] }
+                    val filteredNames = goalIndices.map { raceNamesList[it] }
                     Triple(filtered, filteredLocations, filteredNames)
                 }
             } else {
