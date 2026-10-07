@@ -32,6 +32,20 @@ every Grand Concert and career-end spark probe in `GrandConcertAndSparksOnTallPh
 | confirmation_rerolled.png | Keep confirmation with the `Rerolled Sparks` pill and the 4-row rerolled set |
 | tutorial_menu.png | Grand Concert "Tutorial" event menu: The Grand Concert / Performance Points / Lessons / That's all, thank you. |
 | tutorial_confirm.png | The same event's "Are you sure?" confirm: Yep! / On second thought... (captured while the bot was on it) |
+| grand_pending.png | Grand Concert (finale) pending screen: Hype banner, Lessons and Grand Concert buttons |
+| grand_confirm_unchecked.png | The finale's start confirmation, "Skip the Grand Concert cutscene" unchecked |
+| grand_confirm_checked.png | The same with the checkbox checked |
+| on_stage.png | The finale's "ON STAGE!" medallion |
+| playback_menu.png | The finale performance with the three-bar menu button in the disc |
+| playback_menu_open.png | The same after one tap: Skip / Rotate above the disc, which now holds a close cross |
+| grand_success.png | GREAT SUCCESS result with the green Next |
+| grand_overview.png | The final schedule overview (five concerts) with Next |
+| bonuses_updated_after_grand.png | "Bonuses Updated!" after the finale |
+| confirm_playback.png | "Confirm Playback" (song, Landscape / Portrait, Cancel / OK), shown after Start with the cutscene box unchecked |
+| skip_concert_confirm.png | "Would you like to skip the concert?" with "Do not show again", after the performance menu's Skip |
+
+The eleven finale frames were captured by hand on the same phone on 2026-10-07 (turn 72) and are masked
+like the frames above.
 
 The two tutorial frames come from a later bot run on the same phone (2026-10-07, turn 12) and are
 used by `TutorialConfirmTest`. Only rows 880-1979 (the option rows and the speech bubble) are kept;
@@ -43,8 +57,8 @@ the rest is opaque black.
 8-bit RGBA (the shape `FixturePng` reads) at the full 1080x2316 size, so every probe reads its real
 coordinates. To keep them small, everything farther than 48 px from a pixel the test reads (wrong-band
 shifts included) is painted opaque black; the kept pixels are exactly the capture's. A new probe point
-or OCR region outside the kept areas needs that area restored from the original capture first. The bot
-was not running, so no overlay button appears.
+or OCR region outside the kept areas needs that area restored from the original capture first. The bot's
+floating button is not in any kept area.
 
 No personally identifying information is present: the frames show game characters, stats, sparks
 and game UI, and no trainer name or ID. The game hides the Android status bar.

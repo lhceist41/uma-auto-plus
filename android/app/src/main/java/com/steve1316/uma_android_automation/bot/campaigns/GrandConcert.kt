@@ -32,6 +32,7 @@ import com.steve1316.uma_android_automation.bot.ScenarioState
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
+import com.steve1316.uma_android_automation.components.DialogBonusesUpdated
 import com.steve1316.uma_android_automation.components.DialogSongAcquired
 import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
@@ -47,7 +48,6 @@ import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.gameY
 import com.steve1316.uma_android_automation.utils.isMappedSurface
 import com.steve1316.uma_android_automation.utils.grandConcertActiveBonusesPanelPresent
-import com.steve1316.uma_android_automation.utils.grandConcertBonusesUpdatedPresent
 import com.steve1316.uma_android_automation.utils.grandConcertCareerCompleteScreenPresent
 import com.steve1316.uma_android_automation.utils.grandConcertConcertConfirmPresent
 import com.steve1316.uma_android_automation.utils.grandConcertConcertPendingScreenPresent
@@ -158,8 +158,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * The Grand finale's confirmation (cutscene checkbox), ON STAGE and the playback menu are measured on 1080x1920 only. Elsewhere a
-     * concert the turn cannot prove to be one of the first four is left to the player before any tap.
+     * The Grand finale's confirmation (cutscene checkbox), ON STAGE and the playback menu are measured on the mapped surfaces only.
+     * Elsewhere a concert the turn cannot prove to be one of the first four is left to the player before any tap.
      */
     private fun stopBeforeUnmeasuredFinale(
         width: Int,
@@ -179,7 +179,7 @@ class GrandConcert(game: Game) : Campaign(game) {
     private fun finaleMeasuredOn(
         width: Int,
         height: Int,
-    ): Boolean = width == 1080 && height == 1920
+    ): Boolean = isMappedSurface(width, height)
 
     /**
      * Typed stop for a screen the bot cannot drive: stop rather than relaunch or tap a generic Confirm that could spend
@@ -297,10 +297,10 @@ class GrandConcert(game: Game) : Campaign(game) {
                     game.wait(2.0)
                 }
                 // With a menu button in the skip disc, a tap there only toggles the menu: tap the Skip entry once the menu shows it, never Rotate.
-                finaleMeasured && grandConcertPlaybackMenuSkipPresent(sampler) && menuSkips < MAX_PLAYBACK_MENU_TAPS -> {
+                finaleMeasured && grandConcertPlaybackMenuSkipPresent(sampler, bitmap.width, bitmap.height) && menuSkips < MAX_PLAYBACK_MENU_TAPS -> {
                     menuSkips++
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Performance menu open; tapping its Skip (try $menuSkips of $MAX_PLAYBACK_MENU_TAPS).")
-                    game.tapCoordinate(GrandConcertEscort.MENU_SKIP_X.toDouble(), GrandConcertEscort.MENU_SKIP_Y.toDouble(), "gc_concert_menu_skip")
+                    tap(GrandConcertEscort.MENU_SKIP_X, GrandConcertEscort.MENU_SKIP_Y, ScreenBand.BOTTOM, "gc_concert_menu_skip")
                     game.wait(2.0)
                     if (playbackControlsPresent()) {
                         MessageLog.w(TAG, "[GRAND_CONCERT] [CONCERT] The performance is still showing after its menu Skip.")
@@ -308,17 +308,18 @@ class GrandConcert(game: Game) : Campaign(game) {
                         MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Performance skipped from its menu.")
                     }
                 }
-                finaleMeasured && grandConcertPlaybackMenuButtonPresent(sampler) && menuOpens < MAX_PLAYBACK_MENU_TAPS -> {
+                finaleMeasured && grandConcertPlaybackMenuButtonPresent(sampler, bitmap.width, bitmap.height) && menuOpens < MAX_PLAYBACK_MENU_TAPS -> {
                     menuOpens++
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Playback shows a menu button, not Skip; opening the menu (try $menuOpens of $MAX_PLAYBACK_MENU_TAPS).")
-                    game.tapCoordinate(GrandConcertEscort.PLAYBACK_MENU_X.toDouble(), GrandConcertEscort.PLAYBACK_MENU_Y.toDouble(), "gc_concert_menu")
+                    tap(GrandConcertEscort.PLAYBACK_MENU_X, GrandConcertEscort.PLAYBACK_MENU_Y, ScreenBand.BOTTOM, "gc_concert_menu")
                     game.wait(1.0)
                 }
                 grandConcertResultNextPresent(sampler, bitmap.width, bitmap.height) -> {
                     tap(GrandConcertEscort.NEXT_BUTTON_X, GrandConcertEscort.NEXT_BUTTON_Y, ScreenBand.BOTTOM, "gc_concert_next")
                     game.wait(1.5)
                 }
-                grandConcertBonusesUpdatedPresent(sampler, bitmap.width, bitmap.height) -> {
+                // The yellow title script is checked too: "Confirm Playback" and "skip the concert?" share the green band and button.
+                DialogUtils.titleFromPixels(bitmap) == DialogBonusesUpdated.title -> {
                     // Close dismisses the queued-bonus notice; Confirm opens the Active Concert Bonuses panel.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Bonuses Updated acknowledgment; closing.")
                     tap(GrandConcertEscort.BONUSES_CLOSE_X, GrandConcertEscort.BONUSES_CLOSE_Y, ScreenBand.DIALOG, "gc_concert_bonuses_close")
@@ -330,10 +331,10 @@ class GrandConcert(game: Game) : Campaign(game) {
                     tap(GrandConcertEscort.ACTIVE_BONUSES_CLOSE_X, GrandConcertEscort.ACTIVE_BONUSES_CLOSE_Y, ScreenBand.DIALOG, "gc_concert_active_bonuses_close")
                     game.wait(1.2)
                 }
-                finaleMeasured && grandConcertOnStagePresent(sampler) -> {
+                finaleMeasured && grandConcertOnStagePresent(sampler, bitmap.width, bitmap.height) -> {
                     // The Grand's "ON STAGE!" huddle: one tap on the medallion proceeds.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] ON STAGE huddle; tapping to proceed.")
-                    game.tapCoordinate(GrandConcertEscort.ON_STAGE_TAP_X.toDouble(), GrandConcertEscort.ON_STAGE_TAP_Y.toDouble(), "gc_concert_on_stage")
+                    tap(GrandConcertEscort.ON_STAGE_TAP_X, GrandConcertEscort.ON_STAGE_TAP_Y, ScreenBand.MIDDLE, "gc_concert_on_stage")
                     game.wait(2.0)
                 }
                 grandConcertConcertConfirmPresent(sampler, bitmap.width, bitmap.height) -> {
@@ -373,7 +374,8 @@ class GrandConcert(game: Game) : Campaign(game) {
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
         return grandConcertPlaybackSkipPresent(sampler, bitmap.width, bitmap.height) ||
-            finaleMeasuredOn(bitmap.width, bitmap.height) && (grandConcertPlaybackMenuButtonPresent(sampler) || grandConcertPlaybackMenuSkipPresent(sampler))
+            finaleMeasuredOn(bitmap.width, bitmap.height) &&
+                (grandConcertPlaybackMenuButtonPresent(sampler, bitmap.width, bitmap.height) || grandConcertPlaybackMenuSkipPresent(sampler, bitmap.width, bitmap.height))
     }
 
     /**
@@ -386,10 +388,10 @@ class GrandConcert(game: Game) : Campaign(game) {
             val bitmap = game.imageUtils.getSourceBitmap()
             val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
             if (!grandConcertConcertConfirmPresent(sampler, bitmap.width, bitmap.height)) return true
-            when (if (finaleMeasuredOn(bitmap.width, bitmap.height)) grandConcertCutsceneCheckboxState(sampler) else GrandCutsceneCheckbox.ABSENT) {
+            when (if (finaleMeasuredOn(bitmap.width, bitmap.height)) grandConcertCutsceneCheckboxState(sampler, bitmap.width, bitmap.height) else GrandCutsceneCheckbox.ABSENT) {
                 GrandCutsceneCheckbox.UNCHECKED -> {
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Grand finale confirm: checking the cutscene-skip box.")
-                    game.tapCoordinate(GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_X.toDouble(), GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_Y.toDouble(), "gc_grand_cutscene_skip")
+                    tap(GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_X, GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_Y, ScreenBand.DIALOG, "gc_grand_cutscene_skip")
                     game.wait(0.8)
                 }
                 GrandCutsceneCheckbox.CHECKED, GrandCutsceneCheckbox.ABSENT -> {
@@ -985,7 +987,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         /** Convenience for callers that only have the raw settings string. */
         fun isGrandConcert(scenario: String?): Boolean = GrandConcertScenario.matches(scenario)
 
-        /** The Grand Concert screens up to the 4th concert are measured on the mapped surfaces; the finale stops in [stopBeforeUnmeasuredFinale]. */
+        /** Every Grand Concert screen the bot drives, the finale included, is measured on the mapped surfaces. */
         fun supportsScreen(
             width: Int,
             height: Int,

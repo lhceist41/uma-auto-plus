@@ -46,7 +46,7 @@ class PhoneLaunchStopsTest {
         }
 
         @Test
-        @DisplayName("off 1080x1920 the finale concert stops before any tap, and its unmeasured screens are never read")
+        @DisplayName("the finale is read on the mapped surfaces; elsewhere it stops before any tap")
         fun finaleStops() {
             val gc = source("bot/campaigns/GrandConcert.kt")
             val pending = body(gc, "    override fun checkCampaignSpecificConditions(): Boolean {")
@@ -56,13 +56,19 @@ class PhoneLaunchStopsTest {
             assertTrue(gate.contains("if (finaleMeasuredOn(width, height)) return"))
             assertTrue(gate.contains("if (!finaleCannotBeRuledOut(date.dayObserved, date.day)) return"), "only a read turn of concerts 1-4 lets the escort run")
             assertTrue(gate.contains("throw CampaignBreakpointException(handoff.playerMessage())"))
-            assertTrue(gc.contains("): Boolean = width == 1080 && height == 1920"), "the finale screens stay 1080x1920 only")
+            assertTrue(body(gc, "    private fun finaleMeasuredOn(").contains("): Boolean = isMappedSurface(width, height)"), "the finale screens are measured on the mapped surfaces")
             val escort = body(gc, "    private fun runConcertEscort(): Boolean {")
-            for (probe in listOf("grandConcertPlaybackMenuSkipPresent(sampler)", "grandConcertPlaybackMenuButtonPresent(sampler)", "grandConcertOnStagePresent(sampler)")) {
-                assertTrue(escort.contains("finaleMeasured && $probe"), probe)
+            assertTrue(escort.contains("DialogUtils.titleFromPixels(bitmap) == DialogBonusesUpdated.title ->"), "Bonuses Updated is named by its script before the Close tap")
+            assertFalse(gc.contains("grandConcertBonusesUpdatedPresent("), "the bare probe also matches Confirm Playback and the skip confirm")
+            for (probe in listOf("grandConcertPlaybackMenuSkipPresent", "grandConcertPlaybackMenuButtonPresent", "grandConcertOnStagePresent")) {
+                assertTrue(escort.contains("finaleMeasured && $probe(sampler, bitmap.width, bitmap.height)"), probe)
             }
             val confirm = body(gc, "    private fun startConcertFromConfirm(): Boolean {")
-            assertTrue(confirm.contains("when (if (finaleMeasuredOn(bitmap.width, bitmap.height)) grandConcertCutsceneCheckboxState(sampler) else GrandCutsceneCheckbox.ABSENT) {"))
+            assertTrue(
+                confirm.contains(
+                    "when (if (finaleMeasuredOn(bitmap.width, bitmap.height)) grandConcertCutsceneCheckboxState(sampler, bitmap.width, bitmap.height) else GrandCutsceneCheckbox.ABSENT) {",
+                ),
+            )
         }
 
         @Test

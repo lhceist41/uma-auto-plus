@@ -11,8 +11,7 @@ import com.steve1316.uma_android_automation.bot.PerformancePointType
  * 1080x1920 (see src/test/resources/fixtures/grandconcert/PROVENANCE.md) and is pinned by
  * fixture tests, following the same Android-free pattern as [SparkScreenProbes]: the runtime
  * wraps a Bitmap in a [SparkPixelSampler], the JUnit fixtures wrap a decoded PNG. Probes that take the
- * capture size read their points in the [ScreenBand] measured on a tall phone (fixtures/tallphone); the
- * playback menu, ON STAGE and the Grand finale checkbox have no phone capture yet and do not.
+ * capture size read their points in the [ScreenBand] measured on a tall phone (fixtures/tallphone).
  *
  * Scope discipline: only screens the maintainer has actually captured are probed here. The
  * Lesson shop, the concert screens, and the unlocked Lesson button have no capture yet, so
@@ -946,7 +945,12 @@ enum class GrandCutsceneCheckbox { ABSENT, UNCHECKED, CHECKED }
 /** Reads the cutscene-skip checkbox on an open start confirmation. The purple Hype Level banner
  * gates the read so the numbered concerts' shorter dialog reports ABSENT; the checkbox itself is
  * classified by its glyph color (gray unchecked, escort-green checked). */
-fun grandConcertCutsceneCheckboxState(sampler: SparkPixelSampler): GrandCutsceneCheckbox {
+fun grandConcertCutsceneCheckboxState(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): GrandCutsceneCheckbox {
+    val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val banner =
         GrandConcertEscort.GRAND_CONFIRM_HYPE_BANNER_POINTS.count { (x, y) ->
             val (r, g, b) = mean(sampler, x, y)
@@ -973,12 +977,23 @@ fun grandConcertPlaybackSkipPresent(
     return skipDiscWhite(sampler) && allGlyphBrown(sampler, GrandConcertEscort.SKIP_GLYPH_BAR_POINTS)
 }
 
-fun grandConcertPlaybackMenuButtonPresent(sampler: SparkPixelSampler): Boolean =
-    skipDiscWhite(sampler) &&
+fun grandConcertPlaybackMenuButtonPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.BOTTOM, width, height)
+    return skipDiscWhite(sampler) &&
         allGlyphBrown(sampler, GrandConcertEscort.PLAYBACK_MENU_BAR_POINTS) &&
         allGlyphClear(sampler, GrandConcertEscort.PLAYBACK_MENU_GAP_POINTS)
+}
 
-fun grandConcertPlaybackMenuSkipPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertPlaybackMenuSkipPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.BOTTOM, width, height)
     val cross =
         skipDiscWhite(sampler) &&
             allGlyphBrown(sampler, GrandConcertEscort.PLAYBACK_MENU_CROSS_INK_POINTS) &&
@@ -1031,11 +1046,17 @@ fun grandConcertResultNextPresent(
 /** True when the "ON STAGE!" huddle is up: all four medallion points read the vivid pink-purple
  * disc. Observed on the Grand Concert (the finale's Inspiration-style interstitial); one tap on
  * the medallion proceeds to playback. */
-fun grandConcertOnStagePresent(sampler: SparkPixelSampler): Boolean =
-    GrandConcertEscort.ON_STAGE_MEDALLION_POINTS.count { (x, y) ->
+fun grandConcertOnStagePresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.MIDDLE, width, height)
+    return GrandConcertEscort.ON_STAGE_MEDALLION_POINTS.count { (x, y) ->
         val (r, g, b) = mean(sampler, x, y)
         r >= 200 && b >= 230 && r - g >= 25 && b - g >= 25
     } == 4
+}
 
 /** True when the post-concert "Bonuses Updated!" acknowledgment is up: its green title band (a
  * softer gradient green than the dialog headers) plus the green Confirm at its own height. */

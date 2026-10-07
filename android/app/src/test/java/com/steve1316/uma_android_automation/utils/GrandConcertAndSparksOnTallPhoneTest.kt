@@ -56,6 +56,8 @@ class GrandConcertAndSparksOnTallPhoneTest {
         listOf(
             "career_scheduled", "technique_list", "song_list", "learn_confirm_technique", "schedule_confirm_technique",
             "concert_pending", "concert_confirm", "concert4_pending", "concert4_confirm", "concert_playback", "concert_success_banner", "bonuses_updated",
+            "grand_pending", "grand_confirm_unchecked", "grand_confirm_checked", "on_stage", "playback_menu", "playback_menu_open", "grand_success",
+            "grand_overview",
             "active_bonuses_panel", "career_complete", "training_guts_selected",
             "sparks_screen", "keep_confirmation_plain", "sparks_rerolled_result", "spark_selection_intro",
             "pager_original", "pager_rerolled", "confirmation_rerolled",
@@ -94,10 +96,10 @@ class GrandConcertAndSparksOnTallPhoneTest {
                 Probe(setOf("schedule_confirm_technique"), listOf(towardTop, dialogToMiddle)) { s, w, h ->
                     grandConcertDialogHeaderPresent(s, w, h) && grandConcertScheduleShortfallPresent(s, w, h)
                 },
-            "concert pending" to Probe(setOf("concert_pending", "concert4_pending"), listOf(dialogToMiddle + middleToBottom, -middleToBottom)) { s, w, h -> grandConcertConcertPendingScreenPresent(s, w, h) },
-            "concert start confirmation" to Probe(setOf("concert_confirm", "concert4_confirm"), listOf(towardTop, dialogToMiddle)) { s, w, h -> grandConcertConcertConfirmPresent(s, w, h) },
+            "concert pending" to Probe(setOf("concert_pending", "concert4_pending", "grand_pending"), listOf(dialogToMiddle + middleToBottom, -middleToBottom)) { s, w, h -> grandConcertConcertPendingScreenPresent(s, w, h) },
+            "concert start confirmation" to Probe(setOf("concert_confirm", "concert4_confirm", "grand_confirm_unchecked", "grand_confirm_checked"), listOf(towardTop, dialogToMiddle)) { s, w, h -> grandConcertConcertConfirmPresent(s, w, h) },
             "playback skip" to Probe(setOf("concert_playback"), listOf(-middleToBottom)) { s, w, h -> grandConcertPlaybackSkipPresent(s, w, h) },
-            "result Next" to Probe(setOf("concert_success_banner"), listOf(-middleToBottom)) { s, w, h -> grandConcertResultNextPresent(s, w, h) },
+            "result Next" to Probe(setOf("concert_success_banner", "grand_success", "grand_overview"), listOf(-middleToBottom)) { s, w, h -> grandConcertResultNextPresent(s, w, h) },
             "Bonuses Updated" to Probe(setOf("bonuses_updated"), listOf(towardTop, dialogToMiddle)) { s, w, h -> grandConcertBonusesUpdatedPresent(s, w, h) },
             "Active Concert Bonuses" to Probe(setOf("active_bonuses_panel"), listOf(towardTop, dialogToMiddle)) { s, w, h -> grandConcertActiveBonusesPanelPresent(s, w, h) },
             "Complete Career" to Probe(setOf("career_complete"), listOf(-middleToBottom)) { s, w, h -> grandConcertCareerCompleteScreenPresent(s, w, h) },
@@ -107,6 +109,18 @@ class GrandConcertAndSparksOnTallPhoneTest {
                 Probe(setOf("keep_confirmation_plain", "confirmation_rerolled"), listOf(towardTop, dialogToMiddle + middleToBottom)) { s, w, h ->
                     sparkConfirmationStructurePresent(s, w, h)
                 },
+            "Grand finale checkbox unchecked" to
+                Probe(setOf("grand_confirm_unchecked"), listOf(towardTop, dialogToMiddle)) { s, w, h ->
+                    grandConcertCutsceneCheckboxState(s, w, h) == GrandCutsceneCheckbox.UNCHECKED
+                },
+            "Grand finale checkbox checked" to
+                Probe(setOf("grand_confirm_checked"), listOf(towardTop, dialogToMiddle)) { s, w, h ->
+                    grandConcertCutsceneCheckboxState(s, w, h) == GrandCutsceneCheckbox.CHECKED
+                },
+            // The medallion is about 200 px tall, so DIALOG (47 px off) still lands on it; TOP and BOTTOM miss.
+            "ON STAGE" to Probe(setOf("on_stage"), listOf(-middleToBottom, middleToBottom)) { s, w, h -> grandConcertOnStagePresent(s, w, h) },
+            "playback menu button" to Probe(setOf("playback_menu"), listOf(-middleToBottom)) { s, w, h -> grandConcertPlaybackMenuButtonPresent(s, w, h) },
+            "playback menu Skip" to Probe(setOf("playback_menu_open"), listOf(-middleToBottom)) { s, w, h -> grandConcertPlaybackMenuSkipPresent(s, w, h) },
             "spark selection intro" to Probe(setOf("spark_selection_intro"), listOf(towardTop, dialogToMiddle + middleToBottom)) { s, w, h -> sparkIntroStructurePresent(s, w, h) },
             "spark pager" to Probe(setOf("pager_original", "pager_rerolled"), listOf(-dialogToMiddle, middleToBottom)) { s, w, h -> sparkPagerStructurePresent(s, w, h) },
             "Sparks Rerolled" to Probe(setOf("sparks_rerolled_result"), listOf(middleToBottom)) { s, w, h -> sparkRerolledStructurePresent(s, w, h) },
@@ -186,6 +200,16 @@ class GrandConcertAndSparksOnTallPhoneTest {
         fun bonusesUpdatedTitle() {
             assertEquals(DialogBonusesUpdated.title, DialogUtils.titleFromPixels(sampler("bonuses_updated").onScreen(ScreenBand.DIALOG, w, h)))
             for (name in fixtures - "bonuses_updated") assertEquals(null, DialogUtils.titleFromPixels(sampler(name).onScreen(ScreenBand.DIALOG, w, h)), name)
+        }
+
+        @Test
+        @DisplayName("the escort's Bonuses read names the finale's popup, not Confirm Playback or \"skip the concert?\"")
+        fun escortBonusesGate() {
+            assertEquals(DialogBonusesUpdated.title, DialogUtils.titleFromPixels(sampler("bonuses_updated_after_grand").onScreen(ScreenBand.DIALOG, w, h)))
+            for (name in listOf("confirm_playback", "skip_concert_confirm")) {
+                assertTrue(grandConcertBonusesUpdatedPresent(sampler(name), w, h), "$name shares the green band and button")
+                assertEquals(null, DialogUtils.titleFromPixels(sampler(name).onScreen(ScreenBand.DIALOG, w, h)), name)
+            }
         }
     }
 

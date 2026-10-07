@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.components.ButtonClose
+import com.steve1316.uma_android_automation.components.DialogBonusesUpdated
 import com.steve1316.uma_android_automation.components.DialogObjects
 import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.utils.FixturePng
@@ -75,6 +76,13 @@ class ConcertBonusPopupsTest {
     fun `an ordinary green dialog is not named from pixels even when OCR found nothing`() {
         for (name in listOf("concertbonuses/warning_live", "concertbonuses/auto_select_live", "concertbonuses/restore_tp_live")) {
             assertNull(DialogUtils.titleOrPixelFallback(null, sampler(name)), name)
+        }
+    }
+
+    @Test
+    fun `the concert escort's Bonuses read still names both MuMu popups`() {
+        for (name in listOf("grandconcert/bonuses_updated", "concertbonuses/bonuses_updated_live")) {
+            assertEquals(DialogBonusesUpdated.title, DialogUtils.titleFromPixels(sampler(name)), name)
         }
     }
 
