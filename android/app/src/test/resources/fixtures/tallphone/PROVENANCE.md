@@ -30,6 +30,12 @@ every Grand Concert and career-end spark probe in `GrandConcertAndSparksOnTallPh
 | pager_original.png | Spark Selection pager, "Original Sparks" page, page dot 2 lit |
 | pager_rerolled.png | Spark Selection pager, "Rerolled Sparks" page, page dot 1 lit |
 | confirmation_rerolled.png | Keep confirmation with the `Rerolled Sparks` pill and the 4-row rerolled set |
+| tutorial_menu.png | Grand Concert "Tutorial" event menu: The Grand Concert / Performance Points / Lessons / That's all, thank you. |
+| tutorial_confirm.png | The same event's "Are you sure?" confirm: Yep! / On second thought... (captured while the bot was on it) |
+
+The two tutorial frames come from a later bot run on the same phone (2026-10-07, turn 12) and are
+used by `TutorialConfirmTest`. Only rows 880-1979 (the option rows and the speech bubble) are kept;
+the rest is opaque black.
 
 ## Source and colour
 

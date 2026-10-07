@@ -32,6 +32,9 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
      */
     private var pendingAcupunctureTreatment: AcupuncturePendingTreatment? = null
 
+    /** The turn on which a 2-option Tutorial was last answered with its last option; null before any. */
+    private var tutorialLastOptionTurn: Int? = null
+
     /** Whether to prioritize options that provide energy gains. */
     private val enablePrioritizeEnergyOptions: Boolean = SettingsHelper.getBooleanSetting("trainingEvent", "enablePrioritizeEnergyOptions")
 
@@ -178,6 +181,20 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]TrainingEvent"
+
+        /**
+         * Unity Cup's 2-option Tutorial ends on its last option. Grand Concert follows "That's all, thank you." with "Are you sure?"
+         * ("Yep!" / "On second thought..."), where the last option reopens the menu. In Grand Concert, a 2-option Tutorial already
+         * answered with its last option this turn is that loop, whatever the read.
+         */
+        internal fun tutorialTwoOptionChoice(
+            firstText: String,
+            lastText: String,
+            answeredLastThisTurn: Boolean,
+        ): Int {
+            val confirm = firstText.trim().startsWith("yep", ignoreCase = true) || lastText.contains("thought", ignoreCase = true)
+            return if (confirm || answeredLastThisTurn) 0 else 1
+        }
 
         /**
          * With Prioritize Energy on, energy outweighs any stat only while it is short (below 50%): above that, a small energy gain beat a much
@@ -462,6 +479,25 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
         return null
     }
+
+    /** One option row's text, from the same crop beside its icon as the team-name read; empty when unreadable. */
+    private fun readTutorialOptionText(
+        optionCenter: Point,
+        index: Int,
+    ): String =
+        game.imageUtils
+            .performOCROnRegion(
+                game.imageUtils.getSourceBitmap(),
+                game.imageUtils.relX(optionCenter.x, 45),
+                game.imageUtils.relY(optionCenter.y, -30),
+                800,
+                55,
+                useThreshold = false,
+                useGrayscale = true,
+                scale = 1.0,
+                ocrEngine = "tesseract",
+                debugName = "tutorial_option_${index + 1}",
+            ).trim()
 
     /**
      * Select the team name for the Unity Cup "A Team at Last" event.
@@ -750,9 +786,20 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
             when (tutorialOptionCount) {
                 2 -> {
-                    // If 2 options detected, select the last one (index 1).
-                    optionSelected = 1
-                    MessageLog.v(TAG, "[TRAINING_EVENT] Selecting last option (option 2) to dismiss Tutorial.")
+                    val texts = tutorialOptionLocations.mapIndexed { i, location -> readTutorialOptionText(location, i) }
+                    val turn = campaign.date.day
+                    val repeated = GrandConcertScenario.matches(game.scenario) && tutorialLastOptionTurn == turn
+                    optionSelected = tutorialTwoOptionChoice(texts[0], texts[1], repeated)
+                    if (optionSelected == 1) {
+                        tutorialLastOptionTurn = turn
+                        MessageLog.v(TAG, "[TRAINING_EVENT] Selecting last option (option 2) to dismiss Tutorial.")
+                    } else {
+                        MessageLog.i(
+                            TAG,
+                            "[TRAINING_EVENT] Tutorial confirm (\"${texts[0]}\" / \"${texts[1]}\"${if (repeated) ", seen again this turn" else ""}): " +
+                                "selecting option 1 to leave it; the last option reopens the menu.",
+                        )
+                    }
                 }
 
                 5 -> {
