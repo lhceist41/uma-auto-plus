@@ -42,7 +42,10 @@ import com.steve1316.uma_android_automation.utils.GrandCutsceneCheckbox
 import com.steve1316.uma_android_automation.utils.GrandConcertLessonGeometry
 import com.steve1316.uma_android_automation.utils.GrandConcertTheme
 import com.steve1316.uma_android_automation.utils.LessonSlotState
+import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.gameY
+import com.steve1316.uma_android_automation.utils.isMappedSurface
 import com.steve1316.uma_android_automation.utils.grandConcertActiveBonusesPanelPresent
 import com.steve1316.uma_android_automation.utils.grandConcertBonusesUpdatedPresent
 import com.steve1316.uma_android_automation.utils.grandConcertCareerCompleteScreenPresent
@@ -155,6 +158,30 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
+     * The Grand finale's confirmation (cutscene checkbox), ON STAGE and the playback menu are measured on 1080x1920 only. Elsewhere a
+     * concert the turn cannot prove to be one of the first four is left to the player before any tap.
+     */
+    private fun stopBeforeUnmeasuredFinale(
+        width: Int,
+        height: Int,
+    ) {
+        if (finaleMeasuredOn(width, height)) return
+        if (!finaleCannotBeRuledOut(date.dayObserved, date.day)) return
+        val handoff =
+            handOffToPlayer(
+                GrandConcertHandoffReason.CONCERT_NOT_AUTOMATED,
+                "this may be the Grand Concert finale, which is not supported on a ${width}x$height screen yet, so play this concert in the game; " +
+                    "last turn read: ${if (date.dayObserved) date.day else "none"}",
+            )
+        throw CampaignBreakpointException(handoff.playerMessage())
+    }
+
+    private fun finaleMeasuredOn(
+        width: Int,
+        height: Int,
+    ): Boolean = width == 1080 && height == 1920
+
+    /**
      * Typed stop for a screen the bot cannot drive: stop rather than relaunch or tap a generic Confirm that could spend
      * points.
      */
@@ -174,7 +201,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         if (super.checkEndScreen()) return true
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
-        if (grandConcertCareerCompleteScreenPresent(sampler)) {
+        if (grandConcertCareerCompleteScreenPresent(sampler, bitmap.width, bitmap.height)) {
             MessageLog.i(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] Complete Career screen recognised by the scenario probe (button template not yet matched).")
             return true
         }
@@ -190,7 +217,8 @@ class GrandConcert(game: Game) : Campaign(game) {
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
-        if (grandConcertConcertPendingScreenPresent(sampler)) {
+        if (grandConcertConcertPendingScreenPresent(sampler, bitmap.width, bitmap.height)) {
+            stopBeforeUnmeasuredFinale(bitmap.width, bitmap.height)
             concertEscortAttempts++
             MessageLog.i(
                 TAG,
@@ -236,13 +264,13 @@ class GrandConcert(game: Game) : Campaign(game) {
                 "(Great Success needs ${GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value}; career purchased total " +
                 "$songsBoughtThisCareer).",
         )
-        game.tapCoordinate(GrandConcertEscort.CONCERT_BUTTON_X.toDouble(), GrandConcertEscort.CONCERT_BUTTON_Y.toDouble(), "gc_concert_open")
+        tap(GrandConcertEscort.CONCERT_BUTTON_X, GrandConcertEscort.CONCERT_BUTTON_Y, ScreenBand.BOTTOM, "gc_concert_open")
         game.wait(1.2)
 
         var confirmSeen = false
         for (attempt in 1..3) {
             val bitmap = game.imageUtils.getSourceBitmap()
-            if (grandConcertConcertConfirmPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
+            if (grandConcertConcertConfirmPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)) {
                 confirmSeen = true
                 break
             }
@@ -261,14 +289,15 @@ class GrandConcert(game: Game) : Campaign(game) {
         while (ticks++ < MAX_ESCORT_TICKS) {
             val bitmap = game.imageUtils.getSourceBitmap()
             val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
+            val finaleMeasured = finaleMeasuredOn(bitmap.width, bitmap.height)
             when {
-                grandConcertPlaybackSkipPresent(sampler) -> {
+                grandConcertPlaybackSkipPresent(sampler, bitmap.width, bitmap.height) -> {
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Playback detected; skipping the performance.")
-                    game.tapCoordinate(GrandConcertEscort.SKIP_GLYPH_X.toDouble(), GrandConcertEscort.SKIP_GLYPH_Y.toDouble(), "gc_concert_skip")
+                    tap(GrandConcertEscort.SKIP_GLYPH_X, GrandConcertEscort.SKIP_GLYPH_Y, ScreenBand.BOTTOM, "gc_concert_skip")
                     game.wait(2.0)
                 }
                 // With a menu button in the skip disc, a tap there only toggles the menu: tap the Skip entry once the menu shows it, never Rotate.
-                grandConcertPlaybackMenuSkipPresent(sampler) && menuSkips < MAX_PLAYBACK_MENU_TAPS -> {
+                finaleMeasured && grandConcertPlaybackMenuSkipPresent(sampler) && menuSkips < MAX_PLAYBACK_MENU_TAPS -> {
                     menuSkips++
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Performance menu open; tapping its Skip (try $menuSkips of $MAX_PLAYBACK_MENU_TAPS).")
                     game.tapCoordinate(GrandConcertEscort.MENU_SKIP_X.toDouble(), GrandConcertEscort.MENU_SKIP_Y.toDouble(), "gc_concert_menu_skip")
@@ -279,35 +308,35 @@ class GrandConcert(game: Game) : Campaign(game) {
                         MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Performance skipped from its menu.")
                     }
                 }
-                grandConcertPlaybackMenuButtonPresent(sampler) && menuOpens < MAX_PLAYBACK_MENU_TAPS -> {
+                finaleMeasured && grandConcertPlaybackMenuButtonPresent(sampler) && menuOpens < MAX_PLAYBACK_MENU_TAPS -> {
                     menuOpens++
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Playback shows a menu button, not Skip; opening the menu (try $menuOpens of $MAX_PLAYBACK_MENU_TAPS).")
                     game.tapCoordinate(GrandConcertEscort.PLAYBACK_MENU_X.toDouble(), GrandConcertEscort.PLAYBACK_MENU_Y.toDouble(), "gc_concert_menu")
                     game.wait(1.0)
                 }
-                grandConcertResultNextPresent(sampler) -> {
-                    game.tapCoordinate(GrandConcertEscort.NEXT_BUTTON_X.toDouble(), GrandConcertEscort.NEXT_BUTTON_Y.toDouble(), "gc_concert_next")
+                grandConcertResultNextPresent(sampler, bitmap.width, bitmap.height) -> {
+                    tap(GrandConcertEscort.NEXT_BUTTON_X, GrandConcertEscort.NEXT_BUTTON_Y, ScreenBand.BOTTOM, "gc_concert_next")
                     game.wait(1.5)
                 }
-                grandConcertBonusesUpdatedPresent(sampler) -> {
+                grandConcertBonusesUpdatedPresent(sampler, bitmap.width, bitmap.height) -> {
                     // Close dismisses the queued-bonus notice; Confirm opens the Active Concert Bonuses panel.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Bonuses Updated acknowledgment; closing.")
-                    game.tapCoordinate(GrandConcertEscort.BONUSES_CLOSE_X.toDouble(), GrandConcertEscort.BONUSES_CLOSE_Y.toDouble(), "gc_concert_bonuses_close")
+                    tap(GrandConcertEscort.BONUSES_CLOSE_X, GrandConcertEscort.BONUSES_CLOSE_Y, ScreenBand.DIALOG, "gc_concert_bonuses_close")
                     game.wait(1.2)
                 }
-                grandConcertActiveBonusesPanelPresent(sampler) -> {
+                grandConcertActiveBonusesPanelPresent(sampler, bitmap.width, bitmap.height) -> {
                     // Defensive: the detail panel behind the Bonuses Updated dialog's Confirm.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Active Concert Bonuses panel; closing.")
-                    game.tapCoordinate(GrandConcertEscort.ACTIVE_BONUSES_CLOSE_X.toDouble(), GrandConcertEscort.ACTIVE_BONUSES_CLOSE_Y.toDouble(), "gc_concert_active_bonuses_close")
+                    tap(GrandConcertEscort.ACTIVE_BONUSES_CLOSE_X, GrandConcertEscort.ACTIVE_BONUSES_CLOSE_Y, ScreenBand.DIALOG, "gc_concert_active_bonuses_close")
                     game.wait(1.2)
                 }
-                grandConcertOnStagePresent(sampler) -> {
+                finaleMeasured && grandConcertOnStagePresent(sampler) -> {
                     // The Grand's "ON STAGE!" huddle: one tap on the medallion proceeds.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] ON STAGE huddle; tapping to proceed.")
                     game.tapCoordinate(GrandConcertEscort.ON_STAGE_TAP_X.toDouble(), GrandConcertEscort.ON_STAGE_TAP_Y.toDouble(), "gc_concert_on_stage")
                     game.wait(2.0)
                 }
-                grandConcertConcertConfirmPresent(sampler) -> {
+                grandConcertConcertConfirmPresent(sampler, bitmap.width, bitmap.height) -> {
                     // Start confirmation back mid-flow: a tap was swallowed or an interstitial bounced the game back.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Start confirmation reappeared; driving it again.")
                     if (!startConcertFromConfirm()) return false
@@ -343,7 +372,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     private fun playbackControlsPresent(): Boolean {
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
-        return grandConcertPlaybackSkipPresent(sampler) || grandConcertPlaybackMenuButtonPresent(sampler) || grandConcertPlaybackMenuSkipPresent(sampler)
+        return grandConcertPlaybackSkipPresent(sampler, bitmap.width, bitmap.height) ||
+            finaleMeasuredOn(bitmap.width, bitmap.height) && (grandConcertPlaybackMenuButtonPresent(sampler) || grandConcertPlaybackMenuSkipPresent(sampler))
     }
 
     /**
@@ -355,15 +385,15 @@ class GrandConcert(game: Game) : Campaign(game) {
         for (attempt in 1..4) {
             val bitmap = game.imageUtils.getSourceBitmap()
             val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
-            if (!grandConcertConcertConfirmPresent(sampler)) return true
-            when (grandConcertCutsceneCheckboxState(sampler)) {
+            if (!grandConcertConcertConfirmPresent(sampler, bitmap.width, bitmap.height)) return true
+            when (if (finaleMeasuredOn(bitmap.width, bitmap.height)) grandConcertCutsceneCheckboxState(sampler) else GrandCutsceneCheckbox.ABSENT) {
                 GrandCutsceneCheckbox.UNCHECKED -> {
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Grand finale confirm: checking the cutscene-skip box.")
                     game.tapCoordinate(GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_X.toDouble(), GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_Y.toDouble(), "gc_grand_cutscene_skip")
                     game.wait(0.8)
                 }
                 GrandCutsceneCheckbox.CHECKED, GrandCutsceneCheckbox.ABSENT -> {
-                    game.tapCoordinate(GrandConcertEscort.CONFIRM_START_X.toDouble(), GrandConcertEscort.CONFIRM_START_Y.toDouble(), "gc_concert_start")
+                    tap(GrandConcertEscort.CONFIRM_START_X, GrandConcertEscort.CONFIRM_START_Y, ScreenBand.DIALOG, "gc_concert_start")
                     game.wait(2.0)
                 }
             }
@@ -380,7 +410,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         stopOnUnsupportedScreen()
         val bitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
-        if (!grandConcertCareerCompleteScreenPresent(sampler)) {
+        if (!grandConcertCareerCompleteScreenPresent(sampler, bitmap.width, bitmap.height)) {
             super.openCareerEndSkillScreen()
             return
         }
@@ -393,7 +423,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             game.wait(1.0)
         }
         MessageLog.i(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] Opening the skill screen via the Complete Career layout's Skills button.")
-        game.tapCoordinate(GrandConcertCareerComplete.SKILLS_X.toDouble(), GrandConcertCareerComplete.SKILLS_Y.toDouble(), "gc_career_complete_skills")
+        tap(GrandConcertCareerComplete.SKILLS_X, GrandConcertCareerComplete.SKILLS_Y, ScreenBand.BOTTOM, "gc_career_complete_skills")
     }
 
     /**
@@ -446,7 +476,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * the caller keeps the drain retryable.
      */
     private fun drainLessonsAtCareerComplete(): Int {
-        game.tapCoordinate(GrandConcertCareerComplete.LESSONS_X.toDouble(), GrandConcertCareerComplete.LESSONS_Y.toDouble(), "gc_career_complete_lessons")
+        tap(GrandConcertCareerComplete.LESSONS_X, GrandConcertCareerComplete.LESSONS_Y, ScreenBand.BOTTOM, "gc_career_complete_lessons")
         game.wait(1.5)
         val list = readLessonListSettled()
         if (list == null) {
@@ -507,7 +537,7 @@ class GrandConcert(game: Game) : Campaign(game) {
 
         val careerBitmap = game.imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> careerBitmap.getPixel(x, y) }
-        val slot = grandConcertLessonSlotState(sampler)
+        val slot = grandConcertLessonSlotState(sampler, careerBitmap.width, careerBitmap.height)
         if (slot != LessonSlotState.UNLOCKED && slot != LessonSlotState.UNLOCKED_SCHEDULED) {
             return
         }
@@ -518,7 +548,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             "[GRAND_CONCERT] [LESSON_READ] Lessons button state=$slot; opening shop for visit " +
                 "$lessonVisitsThisRun/$MAX_LESSON_VISITS_PER_RUN.",
         )
-        game.tapCoordinate(GrandConcertTheme.LESSON_SLOT_X.toDouble(), GrandConcertTheme.LESSON_SLOT_Y.toDouble(), "gc_open_lessons")
+        tap(GrandConcertTheme.LESSON_SLOT_X, GrandConcertTheme.LESSON_SLOT_Y, ScreenBand.BOTTOM, "gc_open_lessons")
         game.wait(1.0)
 
         val list = readLessonListSettled()
@@ -789,7 +819,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             TAG,
             "[GRAND_CONCERT] [LESSON_BUY] Attempting slot ${intended.slot} \"${intended.title}\" (${intended.kind}, score=$score).",
         )
-        game.tapCoordinate(540.0, (GrandConcertLessonGeometry.CARD_HEADER_YS[intended.slot] + 120).toDouble(), "gc_lesson_card")
+        tap(540, GrandConcertLessonGeometry.CARD_HEADER_YS[intended.slot] + 120, ScreenBand.MIDDLE, "gc_lesson_card")
         game.wait(1.0)
 
         var confirmation = lessonReader.readConfirmation(game.imageUtils.getSourceBitmap())
@@ -817,10 +847,10 @@ class GrandConcert(game: Game) : Campaign(game) {
             return false
         }
 
-        game.tapCoordinate(GrandConcertLessonGeometry.CONFIRM_AFFIRMATIVE_X.toDouble(), GrandConcertLessonGeometry.CONFIRM_AFFIRMATIVE_Y.toDouble(), "gc_lesson_learn")
+        tap(GrandConcertLessonGeometry.CONFIRM_AFFIRMATIVE_X, GrandConcertLessonGeometry.CONFIRM_AFFIRMATIVE_Y, ScreenBand.DIALOG, "gc_lesson_learn")
         game.wait(1.6)
         val after = game.imageUtils.getSourceBitmap()
-        val stillUp = grandConcertDialogHeaderPresent(SparkPixelSampler { x, y -> after.getPixel(x, y) })
+        val stillUp = grandConcertDialogHeaderPresent(SparkPixelSampler { x, y -> after.getPixel(x, y) }, after.width, after.height)
         if (stillUp) {
             MessageLog.w(TAG, "[GRAND_CONCERT] [LESSON_BUY] The dialog is still up after Learn; not tapping again this visit.")
             return false
@@ -830,7 +860,7 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     private fun tapCancel() {
-        game.tapCoordinate(GrandConcertLessonGeometry.CONFIRM_CANCEL_X.toDouble(), GrandConcertLessonGeometry.CONFIRM_CANCEL_Y.toDouble(), "gc_lesson_cancel")
+        tap(GrandConcertLessonGeometry.CONFIRM_CANCEL_X, GrandConcertLessonGeometry.CONFIRM_CANCEL_Y, ScreenBand.DIALOG, "gc_lesson_cancel")
         game.wait(0.8)
     }
 
@@ -858,7 +888,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * Back/Cancel/Close (none confirm a learn or schedule).
      */
     private fun exitLessonShop() {
-        game.tapCoordinate(GrandConcertLessonGeometry.LIST_BACK_X.toDouble(), GrandConcertLessonGeometry.LIST_BACK_Y.toDouble(), "gc_lesson_back")
+        tap(GrandConcertLessonGeometry.LIST_BACK_X, GrandConcertLessonGeometry.LIST_BACK_Y, ScreenBand.BOTTOM, "gc_lesson_back")
         game.wait(1.0)
         if (checkMainScreen()) return
         ButtonCancel.click(game.imageUtils)
@@ -868,6 +898,14 @@ class GrandConcert(game: Game) : Campaign(game) {
         ButtonClose.click(game.imageUtils)
         game.wait(0.5)
     }
+
+    /** A point measured on 1080x1920, tapped where its band puts it on this screen. */
+    private fun tap(
+        x: Int,
+        y: Int,
+        band: ScreenBand,
+        label: String,
+    ) = game.tapCoordinate(x.toDouble(), gameY(y.toDouble(), band, SharedData.displayWidth, SharedData.displayHeight), label)
 
     private fun logLessonScores(list: LessonList, context: LessonScoreContext) {
         val report = GrandConcertPolicy.describeLessonOffer(list, HypeTier.UNKNOWN, context)
@@ -935,15 +973,24 @@ class GrandConcert(game: Game) : Campaign(game) {
         /** Settle time between escort attempts, so a mid-animation frame is not re-read instantly. */
         private const val CONCERT_ESCORT_RETRY_WAIT = 3.0
 
+        /**
+         * The turn is only read on the career screen, so a concert-pending screen still shows the turn before it: 23/24 for the 1st
+         * concert, 59/60 for the 4th, 71/72 for the finale. Anything past the 4th concert's turn, or unread, may be the finale.
+         */
+        fun finaleCannotBeRuledOut(
+            dayObserved: Boolean,
+            day: Int,
+        ): Boolean = !dayObserved || day !in 2..CONCERT_TURNS[CONCERT_TURNS.size - 2]
+
         /** Convenience for callers that only have the raw settings string. */
         fun isGrandConcert(scenario: String?): Boolean = GrandConcertScenario.matches(scenario)
 
-        /** Every Grand Concert probe and tap is measured on 1080x1920 only. */
+        /** The Grand Concert screens up to the 4th concert are measured on the mapped surfaces; the finale stops in [stopBeforeUnmeasuredFinale]. */
         fun supportsScreen(
             width: Int,
             height: Int,
-        ): Boolean = width == 1080 && height == 1920
+        ): Boolean = isMappedSurface(width, height)
 
-        const val UNSUPPORTED_SCREEN_MESSAGE = "Grand Concert is not supported on this screen size yet (it needs 1080x1920)."
+        const val UNSUPPORTED_SCREEN_MESSAGE = "Grand Concert is not supported on this screen size yet (it needs a screen 1080 pixels wide and at least 1920 tall)."
     }
 }

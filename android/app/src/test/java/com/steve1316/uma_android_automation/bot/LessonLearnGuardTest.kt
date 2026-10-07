@@ -72,7 +72,7 @@ class LessonLearnGuardTest {
         fun `the check reads only Grand Concert full-size frames`() {
             val check = handler.substringAfter("private fun grandConcertLessonConfirmationShowing(): Boolean {").substringBefore("\n    }\n")
             assertTrue(check.contains("if (!GrandConcert.isGrandConcert(game.scenario)) return false"))
-            assertTrue(check.contains("if (bitmap.width != 1080 || bitmap.height != 1920) return false"))
+            assertTrue(check.contains("if (!isMappedSurface(bitmap.width, bitmap.height)) return false"))
             assertTrue(check.contains("grandConcertLessonConfirmationPresent("))
         }
 

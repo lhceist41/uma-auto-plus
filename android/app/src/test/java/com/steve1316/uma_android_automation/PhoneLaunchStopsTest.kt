@@ -36,13 +36,33 @@ class PhoneLaunchStopsTest {
     }
 
     @Nested
-    @DisplayName("Grand Concert outside 1080x1920")
+    @DisplayName("Grand Concert outside the mapped surfaces")
     inner class GrandConcertScreen {
         @Test
-        @DisplayName("only the measured 1080x1920 surface supports Grand Concert")
+        @DisplayName("the mapped 1080-wide surfaces support Grand Concert, other sizes do not")
         fun supportedScreen() {
-            assertTrue(GrandConcert.supportsScreen(1080, 1920))
-            for ((w, h) in listOf(1080 to 2316, 1080 to 2340, 1440 to 3088, 720 to 1280)) assertFalse(GrandConcert.supportsScreen(w, h), "${w}x$h")
+            for ((w, h) in listOf(1080 to 1920, 1080 to 2316, 1080 to 2340)) assertTrue(GrandConcert.supportsScreen(w, h), "${w}x$h")
+            for ((w, h) in listOf(1080 to 1800, 1440 to 3088, 720 to 1280)) assertFalse(GrandConcert.supportsScreen(w, h), "${w}x$h")
+        }
+
+        @Test
+        @DisplayName("off 1080x1920 the finale concert stops before any tap, and its unmeasured screens are never read")
+        fun finaleStops() {
+            val gc = source("bot/campaigns/GrandConcert.kt")
+            val pending = body(gc, "    override fun checkCampaignSpecificConditions(): Boolean {")
+            val stop = pending.indexOf("stopBeforeUnmeasuredFinale(bitmap.width, bitmap.height)")
+            assertTrue(stop >= 0 && stop < pending.indexOf("runConcertEscort()"), "the finale check comes before the escort's first tap")
+            val gate = body(gc, "    private fun stopBeforeUnmeasuredFinale(")
+            assertTrue(gate.contains("if (finaleMeasuredOn(width, height)) return"))
+            assertTrue(gate.contains("if (!finaleCannotBeRuledOut(date.dayObserved, date.day)) return"), "only a read turn of concerts 1-4 lets the escort run")
+            assertTrue(gate.contains("throw CampaignBreakpointException(handoff.playerMessage())"))
+            assertTrue(gc.contains("): Boolean = width == 1080 && height == 1920"), "the finale screens stay 1080x1920 only")
+            val escort = body(gc, "    private fun runConcertEscort(): Boolean {")
+            for (probe in listOf("grandConcertPlaybackMenuSkipPresent(sampler)", "grandConcertPlaybackMenuButtonPresent(sampler)", "grandConcertOnStagePresent(sampler)")) {
+                assertTrue(escort.contains("finaleMeasured && $probe"), probe)
+            }
+            val confirm = body(gc, "    private fun startConcertFromConfirm(): Boolean {")
+            assertTrue(confirm.contains("when (if (finaleMeasuredOn(bitmap.width, bitmap.height)) grandConcertCutsceneCheckboxState(sampler) else GrandCutsceneCheckbox.ABSENT) {"))
         }
 
         @Test
@@ -76,20 +96,30 @@ class PhoneLaunchStopsTest {
         }
 
         @Test
-        @DisplayName("the navigator's Grand Concert screen probes read only on 1080x1920")
+        @DisplayName("the pending screen's turn, one behind at most, lets concerts 1-4 run and stops the finale and an unread turn")
+        fun finaleTurns() {
+            // The turn is read on the career screen only: a MuMu career log shows 71 on the finale's pending screen.
+            for (day in listOf(23, 24, 35, 36, 47, 48, 59, 60)) assertFalse(GrandConcert.finaleCannotBeRuledOut(true, day), "turn $day")
+            for (day in listOf(1, 61, 71, 72, 73, 75)) assertTrue(GrandConcert.finaleCannotBeRuledOut(true, day), "turn $day")
+            for (day in listOf(1, 24, 60, 71)) assertTrue(GrandConcert.finaleCannotBeRuledOut(false, day), "unread, default $day")
+        }
+
+        @Test
+        @DisplayName("the navigator's Grand Concert screen probes read only on supported surfaces")
         fun navigatorProbesGated() {
             assertEquals(2, Regex("GrandConcert\\.supportsScreen\\(bitmap\\.width, bitmap\\.height\\)").findAll(nav).count())
         }
     }
 
     @Nested
-    @DisplayName("Spark reroll outside 1080x1920")
+    @DisplayName("Spark reroll outside the mapped 1080-wide surfaces")
     inner class SparkReroll {
         @Test
         @DisplayName("the SPARKS screen is neither read nor priced, and the rolled set is kept with no spend")
         fun keepsWithoutSpend() {
             val handler = body(nav, "    private fun handleSparksScreen(): TransitionResult {")
-            val gate = handler.indexOf("if (bitmap.width != 1080 || bitmap.height != 1920) {")
+            assertFalse(handler.contains("bitmap.width != 1080 || bitmap.height != 1920"), "a tall 1080-wide phone reads and prices the set")
+            val gate = handler.indexOf("if (!isMappedSurface(bitmap.width, bitmap.height)) {")
             assertTrue(gate >= 0, "the screen gate")
             assertTrue(gate < handler.indexOf("readCompleteSparkSet(SPARKS_SCREEN_GEOMETRY, \"original\")"), "before the original-set read")
             assertTrue(gate < handler.indexOf("SparkRerollPolicy.decide("), "before the pricing")

@@ -361,8 +361,8 @@ internal val REPORT_REASON_KEYS =
             ),
         "GRAND_CONCERT_SCREEN_UNSUPPORTED" to
             KeyText(
-                "Grand Concert is not supported on this screen size yet (it needs 1080x1920). The bot stopped without starting a new career; a career already in the game is kept.",
-                "Pick another scenario's preset, or play Grand Concert on an emulator at 1080x1920",
+                "Grand Concert is not supported on this screen size yet (it needs a screen 1080 pixels wide and at least 1920 tall). The bot stopped without starting a new career; a career already in the game is kept.",
+                "Pick another scenario's preset, or set the screen to 1080 pixels wide (FHD+ on a phone, 1080x1920 on an emulator)",
             ),
         "CAPTURE_OR_ACCESSIBILITY" to KeyText("the bot lost screen capture or its accessibility service.", "Check that both are on"),
         "STUCK_ON_SCREEN" to STUCK_TEXT,

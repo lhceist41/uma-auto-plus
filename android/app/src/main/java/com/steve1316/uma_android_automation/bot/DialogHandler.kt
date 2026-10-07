@@ -23,6 +23,7 @@ import com.steve1316.uma_android_automation.components.RadioPortrait
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.grandConcertLessonConfirmationPresent
+import com.steve1316.uma_android_automation.utils.isMappedSurface
 import org.opencv.core.Point
 
 /** Represents the result of a dialog handling operation. */
@@ -501,8 +502,8 @@ open class DialogHandler(val game: Game) {
     private fun grandConcertLessonConfirmationShowing(): Boolean {
         if (!GrandConcert.isGrandConcert(game.scenario)) return false
         val bitmap = game.imageUtils.getSourceBitmap()
-        if (bitmap.width != 1080 || bitmap.height != 1920) return false
-        return grandConcertLessonConfirmationPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+        if (!isMappedSurface(bitmap.width, bitmap.height)) return false
+        return grandConcertLessonConfirmationPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
     }
 
     /** Stops the run with its own reason after [Game.DATA_DOWNLOAD_OK_MISS_LIMIT] looks without an OK button, rather than let the dialog streak end it as dead gestures. Taps nothing. */

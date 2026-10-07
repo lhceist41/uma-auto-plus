@@ -254,9 +254,9 @@ class ResumeSettleTest {
         @Test
         fun `the lesson probes read only Grand Concert full-size frames`() {
             val read = game.substringAfter("private fun readResumeScreen(): ResumeScreen {").substringBefore("\n    }\n")
-            assertTrue(read.contains("val grandConcertFrame = GrandConcert.isGrandConcert(scenario) && bitmap.width == 1080 && bitmap.height == 1920"))
-            assertTrue(read.contains("grandConcertDialog = grandConcertFrame && grandConcertLessonConfirmationPresent(sampler)"))
-            assertTrue(read.contains("grandConcertLessonList = grandConcertFrame && grandConcertLessonListPresent(sampler)"))
+            assertTrue(read.contains("val grandConcertFrame = GrandConcert.isGrandConcert(scenario) && isMappedSurface(bitmap.width, bitmap.height)"))
+            assertTrue(read.contains("grandConcertDialog = grandConcertFrame && grandConcertLessonConfirmationPresent(sampler, bitmap.width, bitmap.height)"))
+            assertTrue(read.contains("grandConcertLessonList = grandConcertFrame && grandConcertLessonListPresent(sampler, bitmap.width, bitmap.height)"))
         }
 
         private fun source(relative: String): String = File(kotlinRoot(), relative).readText().replace("\r\n", "\n")

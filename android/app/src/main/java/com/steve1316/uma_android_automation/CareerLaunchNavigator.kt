@@ -98,6 +98,7 @@ import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_X_FRACTION
 import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_Y_FRACTION
 import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.gameY
+import com.steve1316.uma_android_automation.utils.isMappedSurface
 import com.steve1316.uma_android_automation.utils.onScreen
 import com.steve1316.uma_android_automation.utils.rememberScreenTopInset
 import com.steve1316.uma_android_automation.utils.SkipFixOutcome
@@ -1733,14 +1734,14 @@ class CareerLaunchNavigator(private val context: Context) {
         if (bitmap.width >= 1080 && bitmap.height >= 1840) {
             val sparkSampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
             val sparkDrivable = sparkSelectionDrivable(sparkTransaction, System.currentTimeMillis())
-            if (sparkConfirmationStructurePresent(sparkSampler)) {
+            if (sparkConfirmationStructurePresent(sparkSampler, bitmap.width, bitmap.height)) {
                 // Three live pill variants share this dialog chrome: "Original Sparks" and
                 // "Rerolled Sparks" belong to the post-reroll selection, while a plain "Sparks"
                 // pill is the ORDINARY keep confirmation every no-reroll career ends on. The
                 // transaction is the stronger signal where it exists - a career that never
                 // confirmed a 30 TP spend cannot be looking at a selection dialog - and the pill
                 // decides when it does not.
-                val pill = SparkTextNorm.confirmationPill(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, "spark_conf_pill"))
+                val pill = SparkTextNorm.confirmationPill(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, ScreenBand.DIALOG, "spark_conf_pill"))
                 val noSpendOnThisCareer = sparkTransaction != null && !sparkTransaction.spendEverConfirmed
                 if (noSpendOnThisCareer || pill == SparkConfirmationPill.PLAIN) {
                     // Ordinary keep confirmation. Its handler cross-checks the pill against the
@@ -1761,27 +1762,27 @@ class CareerLaunchNavigator(private val context: Context) {
                     return LaunchScreenState.SPARK_SELECTION_CONFIRMATION
                 }
             }
-            if (sparkIntroStructurePresent(sparkSampler)) {
+            if (sparkIntroStructurePresent(sparkSampler, bitmap.width, bitmap.height)) {
                 if (sparkDrivable) {
                     return LaunchScreenState.SPARK_SELECTION_INTRO
                 }
-                val title = readSparkOcrRegion(bitmap, SPARK_INTRO_TITLE_OCR_REGION, "spark_intro_title")
+                val title = readSparkOcrRegion(bitmap, SPARK_INTRO_TITLE_OCR_REGION, ScreenBand.DIALOG, "spark_intro_title")
                 if (SparkTextNorm.isSparkSelectionTitle(title)) {
                     return LaunchScreenState.SPARK_SELECTION_INTRO
                 }
             }
-            if (sparkPagerStructurePresent(sparkSampler)) {
+            if (sparkPagerStructurePresent(sparkSampler, bitmap.width, bitmap.height)) {
                 // The pager's structure (both chevrons + exactly one lit page dot + a spark
                 // list + the wide Confirm) exists nowhere else, so it claims the state even
                 // without a transaction - the handler then blocks instead of letting the
                 // generic chain confirm whatever page is showing.
                 return LaunchScreenState.SPARK_SELECTION_PAGER
             }
-            if (sparkRerolledStructurePresent(sparkSampler)) {
+            if (sparkRerolledStructurePresent(sparkSampler, bitmap.width, bitmap.height)) {
                 if (sparkTransaction?.state == SparkTxState.SPEND_CONFIRMED) {
                     return LaunchScreenState.SPARKS_REROLLED_RESULT
                 }
-                val title = readSparkOcrRegion(bitmap, SPARK_REROLLED_TITLE_OCR_REGION, "spark_rerolled_title")
+                val title = readSparkOcrRegion(bitmap, SPARK_REROLLED_TITLE_OCR_REGION, ScreenBand.MIDDLE, "spark_rerolled_title")
                 if (SparkTextNorm.isSparksRerolledTitle(title)) {
                     return LaunchScreenState.SPARKS_REROLLED_RESULT
                 }
@@ -1905,7 +1906,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // through to TAP_TO_CONTINUE, body-tapping until the launch failed (observed 2026-07-24 on
         // the 4th Concert: 30 taps then TASK_RESULT_QUEUE_NAVIGATION_FAILED). It is a drivable
         // in-career state: navigation is complete there and the campaign's concert escort owns it.
-        if (GrandConcert.supportsScreen(bitmap.width, bitmap.height) && grandConcertConcertPendingScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
+        if (GrandConcert.supportsScreen(bitmap.width, bitmap.height) && grandConcertConcertPendingScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)) {
             MessageLog.i(TAG, "[NAV] Grand Concert concert-pending screen -> ACTIVE_TRAINING_MENU (the campaign's concert escort owns it).")
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
@@ -1964,7 +1965,7 @@ class CareerLaunchNavigator(private val context: Context) {
         val campaignWillDriveThisScreen = !finalizeToHomeMode && !previousCareerCompleteMode
         if (campaignWillDriveThisScreen &&
             GrandConcert.supportsScreen(bitmap.width, bitmap.height) &&
-            grandConcertCareerCompleteScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+            grandConcertCareerCompleteScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
         ) {
             MessageLog.i(TAG, "[NAV] Grand Concert Complete Career screen -> ACTIVE_TRAINING_MENU (the campaign's Lessons drain owns it).")
             return LaunchScreenState.ACTIVE_TRAINING_MENU
@@ -2723,8 +2724,8 @@ class CareerLaunchNavigator(private val context: Context) {
             return confirmSparks(bitmap)
         }
 
-        // The SPARKS list is measured on 1080x1920 only; anywhere else its read is junk, so it is neither recorded nor priced.
-        if (bitmap.width != 1080 || bitmap.height != 1920) {
+        // The SPARKS list is measured on 1080-wide surfaces only; anywhere else its read is junk, so it is neither recorded nor priced.
+        if (!isMappedSurface(bitmap.width, bitmap.height)) {
             if (!sparksSetRecorded) {
                 sparksSetRecorded = true
                 MessageLog.w(TAG, "[SPARKS] Sparks are not read on a ${bitmap.width}x${bitmap.height} screen yet. Keeping the rolled set: no reroll, no TP spent.")
@@ -2899,13 +2900,14 @@ class CareerLaunchNavigator(private val context: Context) {
         return TransitionResult.Continue
     }
 
-    /** OCR one fixed spark-screen text region ([x, y, w, h]); null on failure. */
-    private fun readSparkOcrRegion(bitmap: Bitmap, region: IntArray, debugName: String): String? =
+    /** OCR one fixed spark-screen text region ([x, y, w, h] on 1080x1920, moved with [band]); null on failure. */
+    private fun readSparkOcrRegion(bitmap: Bitmap, region1920: IntArray, band: ScreenBand, debugName: String): String? {
+        val region = region1920.onScreen(band, bitmap.width, bitmap.height)
         // Bounded so a wedged OCR (Tesseract runs behind a process-wide lock inside a JNI call, and
         // a native/monitor wait ignores interruption) cannot hang the caller. This helper feeds both
         // spark-screen detection and the keep handler; a timeout here degrades to an unreadable read
         // (null), which every caller already treats as a miss rather than confirming anything blind.
-        BoundedExecution.runWithDeadline(
+        return BoundedExecution.runWithDeadline(
             timeoutMs = SPARK_OCR_READ_DEADLINE_MS,
             onTimeout = {
                 MessageLog.w(TAG, "[SPARKS] OCR read \"$debugName\" exceeded ${SPARK_OCR_READ_DEADLINE_MS / 1000}s; treating it as unreadable.")
@@ -2930,6 +2932,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 null
             }
         }
+    }
 
     /** The terminal failure for a selection screen that cannot be driven safely. The career is
      * left exactly as it is: the game's own fallback keeps the original set, so a blocked
@@ -3001,7 +3004,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 ButtonOk.click(iu, sourceBitmap = bitmap)
         if (!advanced) {
             // The intro's single bottom button sits at a fixed position on the card.
-            CoordinateTap.tap(gestureUtils, SPARK_INTRO_BUTTON_X.toDouble(), SPARK_INTRO_BUTTON_Y.toDouble(), "spark_intro_advance")
+            CoordinateTap.tap(gestureUtils, SPARK_INTRO_BUTTON_X.toDouble(), gameY(SPARK_INTRO_BUTTON_Y.toDouble(), ScreenBand.DIALOG, bitmap.width, bitmap.height), "spark_intro_advance")
         }
         waitSafe(2.0)
         return TransitionResult.Continue
@@ -3012,8 +3015,8 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun resolveCurrentPagerSide(): SparkSetSide? {
         repeat(2) { attempt ->
             val bitmap = iu.getSourceBitmap()
-            val heading = SparkTextNorm.headingSide(readSparkOcrRegion(bitmap, SPARK_PAGER_HEADING_OCR_REGION, "spark_pager_heading"))
-            val dot = sparkPagerActiveDotIndex(sparkSampler(bitmap))
+            val heading = SparkTextNorm.headingSide(readSparkOcrRegion(bitmap, SPARK_PAGER_HEADING_OCR_REGION, ScreenBand.MIDDLE, "spark_pager_heading"))
+            val dot = sparkPagerActiveDotIndex(sparkSampler(bitmap), bitmap.width, bitmap.height)
             when (val resolution = resolvePagerSide(heading, dot)) {
                 is SparkPagerResolution.Resolved -> return resolution.side
                 SparkPagerResolution.Contradictory ->
@@ -3067,8 +3070,8 @@ class CareerLaunchNavigator(private val context: Context) {
         var lastDots = "unreadable"
         repeat(2) { read ->
             val shot = iu.getSourceBitmap()
-            val heading = SparkTextNorm.headingSide(readSparkOcrRegion(shot, SPARK_PAGER_HEADING_OCR_REGION, "spark_pager_heading"))
-            val dotIndex = sparkPagerActiveDotIndex(sparkSampler(shot))
+            val heading = SparkTextNorm.headingSide(readSparkOcrRegion(shot, SPARK_PAGER_HEADING_OCR_REGION, ScreenBand.MIDDLE, "spark_pager_heading"))
+            val dotIndex = sparkPagerActiveDotIndex(sparkSampler(shot), shot.width, shot.height)
             lastHeading = heading?.name ?: "unreadable"
             lastDots = sparkPagerDotSide(dotIndex)?.name ?: "unreadable"
             when (classifySparkPagerRepaint(heading, dotIndex, current, target)) {
@@ -3327,7 +3330,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         "never committing a set the bot could not read on a guessed coordinate",
                 )
             }
-            CoordinateTap.tap(gestureUtils, SPARK_PAGER_CONFIRM_X.toDouble(), SPARK_PAGER_CONFIRM_Y.toDouble(), "spark_pager_confirm")
+            CoordinateTap.tap(gestureUtils, SPARK_PAGER_CONFIRM_X.toDouble(), gameY(SPARK_PAGER_CONFIRM_Y.toDouble(), ScreenBand.BOTTOM, bitmap.width, bitmap.height), "spark_pager_confirm")
         }
         waitSafe(2.0)
         return TransitionResult.Continue
@@ -3384,7 +3387,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 ?: return sparkSelectionBlocked(transition, transaction, "the confirmation dialog appeared before a winner was chosen; not confirming")
 
         val bitmap = iu.getSourceBitmap()
-        val pillSide = SparkTextNorm.headingSide(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, "spark_conf_set_name"))
+        val pillSide = SparkTextNorm.headingSide(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, ScreenBand.DIALOG, "spark_conf_set_name"))
         if (pillSide == null || pillSide != winner) {
             val problem =
                 if (pillSide == null) {
@@ -3437,7 +3440,7 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         MessageLog.i(TAG, "[SPARKS] [CHOOSER] Confirmation header verified (${pillSide.wire}); pressing the final Confirm.")
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
-            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_conf_confirm")
+            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CONFIRM_X.toDouble(), gameY(SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), ScreenBand.DIALOG, bitmap.width, bitmap.height), "spark_conf_confirm")
         }
         val completed = transaction.complete()
         if (!completed.ok) {
@@ -3508,7 +3511,7 @@ class CareerLaunchNavigator(private val context: Context) {
         val transition = "SPARKS_KEEP_CONFIRMATION -> POST_RUN_RESULTS"
         val transaction = SparkRerollGate.transaction
         val bitmap = iu.getSourceBitmap()
-        val pill = SparkTextNorm.confirmationPill(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, "spark_keep_pill"))
+        val pill = SparkTextNorm.confirmationPill(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, ScreenBand.DIALOG, "spark_keep_pill"))
 
         if (transaction == null) {
             return sparkSelectionBlocked(
@@ -3559,7 +3562,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     )
                 }
                 val frame = iu.getSourceBitmap()
-                val evidenceCells = parseSparkRowCellsWithEvidence(sparkSampler(frame), SPARKS_CONFIRM_GEOMETRY, frame.height)
+                val evidenceCells = parseSparkRowCellsWithEvidence(sparkListSampler(frame, SPARKS_CONFIRM_GEOMETRY), SPARKS_CONFIRM_GEOMETRY, frame.height)
                 val named = nameSparkCells(frame, evidenceCells.map { it.toCell() }, SPARKS_CONFIRM_GEOMETRY)
                 val endMarkerSeen = sparkWindowShowsListEnd(SPARKS_CONFIRM_GEOMETRY, evidenceCells.size, named.size)
                 val windowEvidence = evidenceCells.take(named.size).map { SparkStarEvidence(it.filledCount, it.ambiguousCount) }
@@ -3650,7 +3653,7 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Continue
         }
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
-            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_keep_confirm")
+            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CONFIRM_X.toDouble(), gameY(SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), ScreenBand.DIALOG, bitmap.width, bitmap.height), "spark_keep_confirm")
         }
         // No reroll happened on this career: the transaction's work is done. declineSpend is
         // idempotent for an already-terminal transaction, so a re-entry cannot double-record.
@@ -3663,7 +3666,7 @@ class CareerLaunchNavigator(private val context: Context) {
 
     private fun clickSparkConfirmationCancel(bitmap: Bitmap) {
         if (!ButtonCancel.click(iu, sourceBitmap = bitmap)) {
-            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CANCEL_X.toDouble(), SPARK_CONFIRMATION_CANCEL_Y.toDouble(), "spark_conf_cancel")
+            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CANCEL_X.toDouble(), gameY(SPARK_CONFIRMATION_CANCEL_Y.toDouble(), ScreenBand.DIALOG, bitmap.width, bitmap.height), "spark_conf_cancel")
         }
     }
 
@@ -3888,7 +3891,7 @@ class CareerLaunchNavigator(private val context: Context) {
             runCatching {
                 val dialogBitmap = iu.getSourceBitmap()
                 if (transaction == null && dialogBitmap.width >= 1000 && dialogBitmap.height >= 1000) {
-                    val cells = parseSparkRowCells(sparkSampler(dialogBitmap), SPARKS_CONFIRM_GEOMETRY, dialogBitmap.height)
+                    val cells = parseSparkRowCells(sparkListSampler(dialogBitmap, SPARKS_CONFIRM_GEOMETRY), SPARKS_CONFIRM_GEOMETRY, dialogBitmap.height)
                     val rows = nameSparkCells(dialogBitmap, cells, SPARKS_CONFIRM_GEOMETRY)
                     // A list not leading stat/aptitude/unique means the dialog is not up; one whose end is off screen would record 11 rows as the whole set.
                     if (keepDialogFrameIsCompleteSet(cells, rows.size)) {
@@ -3907,6 +3910,17 @@ class CareerLaunchNavigator(private val context: Context) {
      * structure) shared with the fixture tests. */
     private fun sparkSampler(bitmap: Bitmap): SparkPixelSampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
+    /** A spark list's rows in 1080x1920 coordinates, wherever its band puts them on this screen. */
+    private fun sparkListSampler(
+        bitmap: Bitmap,
+        geometry: SparkListGeometry,
+    ): SparkPixelSampler = sparkSampler(bitmap).onScreen(geometry.band, bitmap.width, bitmap.height)
+
+    private fun sparkListY(
+        y: Float,
+        geometry: SparkListGeometry,
+    ): Float = gameY(y.toDouble(), geometry.band, SharedData.displayWidth, SharedData.displayHeight).toFloat()
+
     /**
      * Reads every visible spark row of a spark list: OCR'd name, gold-star count, and the row
      * kind from its bar color - blue = stat, pink = aptitude, green = unique, grey = white skill.
@@ -3917,20 +3931,21 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun readSparkRows(bitmap: Bitmap, geometry: SparkListGeometry = SPARKS_SCREEN_GEOMETRY): List<SparkRowFact> {
         if (bitmap.width < 1000 || bitmap.height < 1000) return emptyList()
-        return nameSparkCells(bitmap, parseSparkRowCells(sparkSampler(bitmap), geometry, bitmap.height), geometry)
+        return nameSparkCells(bitmap, parseSparkRowCells(sparkListSampler(bitmap, geometry), geometry, bitmap.height), geometry)
     }
 
     /** OCR names onto parsed cells, applying the phantom-tail break. */
     private fun nameSparkCells(bitmap: Bitmap, cells: List<SparkRowCell>, geometry: SparkListGeometry): List<SparkRowFact> {
         val rows = mutableListOf<SparkRowFact>()
         for (cell in cells) {
+            val region = intArrayOf(110, cell.rowY - 42, 650, 84).onScreen(geometry.band, bitmap.width, bitmap.height)
             val name =
                 iu.performOCROnRegion(
                     bitmap,
-                    110,
-                    cell.rowY - 42,
-                    650,
-                    84,
+                    region[0],
+                    region[1],
+                    region[2],
+                    region[3],
                     useThreshold = false,
                     useGrayscale = true,
                     ocrEngine = "mlkit",
@@ -3966,7 +3981,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // A swipe does not settle on pixel-exact row multiples, so scrolled frames re-anchor
         // the grid on the detected band offset before parsing; the unscrolled first frame
         // measures within 3 px of the fixed grid (fixture-pinned), so this is a no-op there.
-        val cells = parseSparkRowCellsAligned(sparkSampler(bitmap), geometry, bitmap.height) ?: return null
+        val cells = parseSparkRowCellsAligned(sparkListSampler(bitmap, geometry), geometry, bitmap.height) ?: return null
         val rows = nameSparkCells(bitmap, cells, geometry)
         return SparkFrame(rows, sparkWindowShowsListEnd(geometry, cells.size, rows.size))
     }
@@ -4074,8 +4089,9 @@ class CareerLaunchNavigator(private val context: Context) {
             }
             previousRows = frame.rows
             scrolls++
+            val startY = sparkListY(1100f, geometry)
             OwnUiForeground.waitForGame()
-            gestureUtils.swipe(SPARK_LIST_SCROLL_X, 1100f, SPARK_LIST_SCROLL_X, 1100f - geometry.rowPitch * 4f, duration = 900L)
+            gestureUtils.swipe(SPARK_LIST_SCROLL_X, startY, SPARK_LIST_SCROLL_X, startY - geometry.rowPitch * 4f, duration = 900L)
             waitSafe(1.0)
         }
         if (scrolls > 0) {
@@ -4112,8 +4128,9 @@ class CareerLaunchNavigator(private val context: Context) {
      * acting anyway. */
     private fun restoreSparkListTop(geometry: SparkListGeometry, expectedFirst: SparkRowFact?, scrollsUsed: Int) {
         repeat(scrollsUsed + 1) {
+            val startY = sparkListY(700f, geometry)
             OwnUiForeground.waitForGame()
-            gestureUtils.swipe(SPARK_LIST_SCROLL_X, 700f, SPARK_LIST_SCROLL_X, 700f + geometry.rowPitch * 4f, duration = 900L)
+            gestureUtils.swipe(SPARK_LIST_SCROLL_X, startY, SPARK_LIST_SCROLL_X, startY + geometry.rowPitch * 4f, duration = 900L)
             waitSafe(0.8)
         }
         val frame = readSparkFrame(iu.getSourceBitmap(), geometry)
@@ -9303,7 +9320,7 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Failed(
                 reason = "${GrandConcert.UNSUPPORTED_SCREEN_MESSAGE} Start Career was not pressed, so nothing was spent.",
                 transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
-                recommendedAction = "Pick another scenario's preset, or play Grand Concert on an emulator at 1080x1920.",
+                recommendedAction = "Pick another scenario's preset, or set the screen to 1080 pixels wide (FHD+ on a phone, 1080x1920 on an emulator).",
                 reasonKey = "GRAND_CONCERT_SCREEN_UNSUPPORTED",
             )
         }

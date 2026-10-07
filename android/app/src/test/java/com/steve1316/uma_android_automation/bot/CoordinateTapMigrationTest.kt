@@ -75,7 +75,8 @@ class CoordinateTapMigrationTest {
     fun `representative migrated callers`() {
         // Waiting path: the GC career-complete Skills tap (the label that started this work).
         assertTrue(
-            grandConcert.contains(Regex("""game\.tapCoordinate\(.*"gc_career_complete_skills"""")),
+            grandConcert.contains(Regex("""\btap\(.*"gc_career_complete_skills"""")) &&
+                grandConcert.contains(") = game.tapCoordinate(x.toDouble(), gameY(y.toDouble(), band, SharedData.displayWidth, SharedData.displayHeight), label)"),
             "gc_career_complete_skills must go through game.tapCoordinate",
         )
         // Raw path: a non-GC fixed-coordinate tap.

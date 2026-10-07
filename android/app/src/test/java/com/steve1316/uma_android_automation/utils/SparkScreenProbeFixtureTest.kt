@@ -58,6 +58,13 @@ class SparkScreenProbeFixtureTest {
             "keep_confirmation_12row_bottom",
         )
 
+    @Test
+    @DisplayName("the intro's fallback tap lands on its green Next, jitter included")
+    fun introFallbackTapOnNext() {
+        assertTrue(introNextUnder(sampler("spark_selection_intro"), SPARK_INTRO_BUTTON_X, SPARK_INTRO_BUTTON_Y))
+        assertFalse(introNextUnder(sampler("spark_selection_intro"), SPARK_INTRO_BUTTON_X, 1777), "the old y sat below the card")
+    }
+
     @Nested
     @DisplayName("the ordinary keep confirmation (plain Sparks pill, live 2026-07-19)")
     inner class KeepConfirmation {

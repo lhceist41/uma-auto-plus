@@ -51,7 +51,13 @@ object GrandConcertGainDigits {
      * Reads the "+N" amount beside performance row [rowIndex] (0..4), or null when it cannot be read
      * confidently. The returned value is already range-checked to the plausible per-training band.
      */
-    fun readGainAmount(sampler: SparkPixelSampler, rowIndex: Int): Int? {
+    fun readGainAmount(
+        screen: SparkPixelSampler,
+        rowIndex: Int,
+        width: Int = 1080,
+        height: Int = 1920,
+    ): Int? {
+        val sampler = screen.onScreen(ScreenBand.TOP, width, height)
         val region = GrandConcertTrainingGeometry.perfGainAmountOcrRegion(rowIndex)
         val cx = region[0]
         val cy = region[1]

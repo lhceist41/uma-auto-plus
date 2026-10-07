@@ -59,6 +59,16 @@ fun SparkPixelSampler.onScreen(
     return SparkPixelSampler { x, y -> argb(x, gameY(y.toDouble(), band, width, height).roundToInt()) }
 }
 
+/** An (x, y, width, height) region measured on 1080x1920, moved with its band; other surfaces keep the region as it was. */
+fun IntArray.onScreen(
+    band: ScreenBand,
+    width: Int,
+    height: Int,
+): IntArray {
+    if (height == 1920 || !isMappedSurface(width, height)) return this
+    return intArrayOf(this[0], gameY(this[1].toDouble(), band, width, height).roundToInt(), this[2], this[3])
+}
+
 /** The window-level cutout inset, which Android can raise above the raw cutout (measured 71 raw, 94 for the window). */
 fun rememberScreenTopInset(context: Context): Int {
     screenTopInset =

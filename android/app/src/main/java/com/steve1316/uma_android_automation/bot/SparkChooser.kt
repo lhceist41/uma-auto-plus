@@ -1,5 +1,8 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.utils.SPARK_PAGER_GEOMETRY
+import com.steve1316.uma_android_automation.utils.gameY
+
 /**
  * Pure, Android-free decision layer for the career-end Spark Selection flow (original vs rerolled after a 30 TP
  * reroll). Pixel probing lives in [com.steve1316.uma_android_automation.utils.SparkScreenProbes]; screen handling in the navigator.
@@ -650,7 +653,7 @@ data class SparkPagerSwipePlan(
  * pager has no page 0/3 and the repaint check reads UNCHANGED.
  */
 object SparkPagerNav {
-    /** Measured layout the coordinates are anchored to (see SparkScreenProbes); plans scale linearly to the capture size. */
+    /** Measured layout the coordinates are anchored to (see SparkScreenProbes); the lanes move with the list's band on taller 1080-wide screens and scale linearly elsewhere. */
     const val REFERENCE_WIDTH = 1080
     const val REFERENCE_HEIGHT = 1920
 
@@ -695,8 +698,8 @@ object SparkPagerNav {
         val startX = if (action == SparkPagerAction.SWIPE_LEFT) nearX else farX
         val endX = if (action == SparkPagerAction.SWIPE_LEFT) farX else nearX
         val sx = screenWidth / REFERENCE_WIDTH.toFloat()
-        val sy = screenHeight / REFERENCE_HEIGHT.toFloat()
-        return SparkPagerSwipePlan(action, startX * sx, laneY * sy, endX * sx, laneY * sy, duration, target)
+        val y = gameY(laneY.toDouble(), SPARK_PAGER_GEOMETRY.band, screenWidth, screenHeight).toFloat()
+        return SparkPagerSwipePlan(action, startX * sx, y, endX * sx, y, duration, target)
     }
 }
 

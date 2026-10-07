@@ -55,8 +55,11 @@ import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.components.BaseComponentInterface
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.grandConcertBonusesUpdatedPresent
+import com.steve1316.uma_android_automation.utils.isMappedSurface
+import com.steve1316.uma_android_automation.utils.onScreen
 import org.opencv.core.Point
 
 /** Utility class for detecting and handling dialogs in the game. */
@@ -126,8 +129,8 @@ object DialogUtils {
      * so the yellow script must also be present.
      */
     fun titleFromPixels(bitmap: Bitmap): String? {
-        if (bitmap.width != 1080 || bitmap.height != 1920) return null
-        return titleFromPixels(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+        if (!isMappedSurface(bitmap.width, bitmap.height)) return null
+        return titleFromPixels(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }.onScreen(ScreenBand.DIALOG, bitmap.width, bitmap.height))
     }
 
     fun titleFromPixels(sampler: SparkPixelSampler): String? =

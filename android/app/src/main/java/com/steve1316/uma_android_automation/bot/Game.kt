@@ -593,15 +593,15 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         return TrainingSelectionProbe.isTrainingSelection(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
     }
 
-    /** The lesson probes are Grand Concert 1080x1920 only. */
+    /** The lesson probes run on the 1080-wide surfaces their bands are measured on. */
     private fun readResumeScreen(): ResumeScreen {
         val bitmap = imageUtils.getSourceBitmap()
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
-        val grandConcertFrame = GrandConcert.isGrandConcert(scenario) && bitmap.width == 1080 && bitmap.height == 1920
+        val grandConcertFrame = GrandConcert.isGrandConcert(scenario) && isMappedSurface(bitmap.width, bitmap.height)
         return ResumeScreen(
             dialogTitle = if (DialogUtils.check(imageUtils, sourceBitmap = bitmap)) DialogUtils.getTitle(imageUtils, bitmap, logOnMiss = false) else null,
-            grandConcertDialog = grandConcertFrame && grandConcertLessonConfirmationPresent(sampler),
-            grandConcertLessonList = grandConcertFrame && grandConcertLessonListPresent(sampler),
+            grandConcertDialog = grandConcertFrame && grandConcertLessonConfirmationPresent(sampler, bitmap.width, bitmap.height),
+            grandConcertLessonList = grandConcertFrame && grandConcertLessonListPresent(sampler, bitmap.width, bitmap.height),
             raceList = ButtonRaceListFullStats.check(imageUtils, sourceBitmap = bitmap),
             cancel = ButtonCancel.check(imageUtils, sourceBitmap = bitmap),
             back = ButtonBack.check(imageUtils, sourceBitmap = bitmap),

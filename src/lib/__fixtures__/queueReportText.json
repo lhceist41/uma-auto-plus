@@ -572,8 +572,8 @@
             },
             "text": {
                 "title": "Queue stopped",
-                "reason": "The bot stopped the queue with 1 of 3 runs done: Grand Concert is not supported on this screen size yet (it needs 1080x1920). The bot stopped without starting a new career; a career already in the game is kept.",
-                "nextAction": "Pick another scenario's preset, or play Grand Concert on an emulator at 1080x1920, then press Start in UMA Auto+."
+                "reason": "The bot stopped the queue with 1 of 3 runs done: Grand Concert is not supported on this screen size yet (it needs a screen 1080 pixels wide and at least 1920 tall). The bot stopped without starting a new career; a career already in the game is kept.",
+                "nextAction": "Pick another scenario's preset, or set the screen to 1080 pixels wide (FHD+ on a phone, 1080x1920 on an emulator), then press Start in UMA Auto+."
             }
         },
         {
@@ -1316,8 +1316,8 @@
             },
             "text": {
                 "title": "Queue paused",
-                "reason": "The queue stopped after run 2 of 5: Grand Concert is not supported on this screen size yet (it needs 1080x1920). The bot stopped without starting a new career; a career already in the game is kept.",
-                "nextAction": "Pick another scenario's preset, or play Grand Concert on an emulator at 1080x1920, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+                "reason": "The queue stopped after run 2 of 5: Grand Concert is not supported on this screen size yet (it needs a screen 1080 pixels wide and at least 1920 tall). The bot stopped without starting a new career; a career already in the game is kept.",
+                "nextAction": "Pick another scenario's preset, or set the screen to 1080 pixels wide (FHD+ on a phone, 1080x1920 on an emulator), then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

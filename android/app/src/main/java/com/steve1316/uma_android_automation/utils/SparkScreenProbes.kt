@@ -11,7 +11,9 @@ import com.steve1316.uma_android_automation.bot.SparkRowKind
  * (1080x1920, the nine-shot MuMu-20260708-0154xx/0155xx sequence, mirrored under
  * src/test/resources/fixtures/sparks with a provenance file), and every probe is pinned by
  * fixture tests against those exact pixels. All code is Android-free on purpose: the runtime
- * wraps a Bitmap in a [SparkPixelSampler], the JUnit fixtures wrap a BufferedImage.
+ * wraps a Bitmap in a [SparkPixelSampler], the JUnit fixtures wrap a BufferedImage. On a tall
+ * phone the lists, pager heading and dots follow MIDDLE, the dialogs DIALOG and the wide buttons
+ * BOTTOM (fixtures/tallphone).
  */
 
 /** Minimal pixel access: returns ARGB at (x, y). */
@@ -37,12 +39,14 @@ data class SparkListGeometry(
     /** Star-slot sample centers. */
     val starXs: List<Int>,
     val debugPrefix: String,
+    /** Where the list sits on a taller 1080-wide screen. */
+    val band: ScreenBand,
 )
 
 /** The career-end SPARKS screen list: 9 full rows fit the window, a 10th renders clipped at
  * the list mask, so a 10+ row set needs one scroll. The old maxRows = 6 silently truncated
  * real sets (the 2026-07-08 capture shows 9 full rows + 1 clipped). */
-val SPARKS_SCREEN_GEOMETRY = SparkListGeometry(firstRowY = 307, rowPitch = 119, maxRows = 9, starXs = listOf(846, 894, 941), debugPrefix = "sparkRow")
+val SPARKS_SCREEN_GEOMETRY = SparkListGeometry(firstRowY = 307, rowPitch = 119, maxRows = 9, starXs = listOf(846, 894, 941), debugPrefix = "sparkRow", band = ScreenBand.MIDDLE)
 
 /** The keep-set confirmation list: the window holds exactly 11 rows from y=315 and a 12+ row set scrolls.
  * A shorter set leaves the grey list body (241) below its last row. The slot under the window is the
@@ -51,11 +55,11 @@ val SPARKS_SCREEN_GEOMETRY = SparkListGeometry(firstRowY = 307, rowPitch = 119, 
  * starXs are the centers of the star glyphs (gold runs 835..856 / 881..902 / 926..947): sampling a
  * glyph's edge halves the 5x5 mean and undercounts a filled star. Filled reads (255,216,78) against
  * empty (231,227,223), so the blue channel alone separates by ~145. */
-val SPARKS_CONFIRM_GEOMETRY = SparkListGeometry(firstRowY = 315, rowPitch = 119, maxRows = 11, starXs = listOf(845, 891, 936), debugPrefix = "sparkKeepRow")
+val SPARKS_CONFIRM_GEOMETRY = SparkListGeometry(firstRowY = 315, rowPitch = 119, maxRows = 11, starXs = listOf(845, 891, 936), debugPrefix = "sparkKeepRow", band = ScreenBand.DIALOG)
 
 /** The Spark Selection pager list: 8 full rows per page, 120 px pitch, stars on the SPARKS
  * screen's columns. A 10-row set shows 8 full + 1 clipped, so pages must scroll to read. */
-val SPARK_PAGER_GEOMETRY = SparkListGeometry(firstRowY = 354, rowPitch = 120, maxRows = 8, starXs = listOf(846, 894, 941), debugPrefix = "sparkPageRow")
+val SPARK_PAGER_GEOMETRY = SparkListGeometry(firstRowY = 354, rowPitch = 120, maxRows = 8, starXs = listOf(846, 894, 941), debugPrefix = "sparkPageRow", band = ScreenBand.MIDDLE)
 
 /** All bar-kind sampling happens on this column (right of the name, left of the stars). */
 const val SPARK_BAR_SAMPLE_X = 770
@@ -80,7 +84,7 @@ const val SPARK_CONFIRMATION_CANCEL_Y = 1804
 const val SPARK_CONFIRMATION_CONFIRM_X = 777
 const val SPARK_CONFIRMATION_CONFIRM_Y = 1775
 const val SPARK_INTRO_BUTTON_X = 540
-const val SPARK_INTRO_BUTTON_Y = 1777
+const val SPARK_INTRO_BUTTON_Y = 1252
 
 /** 5x5 mean of one channel around (cx, cy), the same smoothing the production row reader has
  * always used. */
@@ -325,15 +329,25 @@ private fun chevronPresent(sampler: SparkPixelSampler, centerX: Int): Boolean {
 }
 
 /** Both pager chevrons visible at full strength. */
-fun sparkPagerChevronsPresent(sampler: SparkPixelSampler): Boolean =
-    chevronPresent(sampler, SPARK_PAGER_CHEVRON_LEFT_X) &&
-        chevronPresent(sampler, SPARK_PAGER_CHEVRON_RIGHT_X)
+fun sparkPagerChevronsPresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val list = sampler.onScreen(ScreenBand.MIDDLE, width, height)
+    return chevronPresent(list, SPARK_PAGER_CHEVRON_LEFT_X) && chevronPresent(list, SPARK_PAGER_CHEVRON_RIGHT_X)
+}
 
 /** The active page dot: 1 (Rerolled page), 2 (Original page), or null when not exactly one
  * dot is lit. */
-fun sparkPagerActiveDotIndex(sampler: SparkPixelSampler): Int? {
-    val (r1, g1, b1) = meanRgb(sampler, SPARK_PAGER_DOT_PAGE1_X, SPARK_PAGER_DOT_Y)
-    val (r2, g2, b2) = meanRgb(sampler, SPARK_PAGER_DOT_PAGE2_X, SPARK_PAGER_DOT_Y)
+fun sparkPagerActiveDotIndex(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Int? {
+    val list = sampler.onScreen(ScreenBand.MIDDLE, width, height)
+    val (r1, g1, b1) = meanRgb(list, SPARK_PAGER_DOT_PAGE1_X, SPARK_PAGER_DOT_Y)
+    val (r2, g2, b2) = meanRgb(list, SPARK_PAGER_DOT_PAGE2_X, SPARK_PAGER_DOT_Y)
     val first = isActiveDotGreen(r1, g1, b1)
     val second = isActiveDotGreen(r2, g2, b2)
     return when {
@@ -353,24 +367,36 @@ private fun probeIs(sampler: SparkPixelSampler, x: Int, y: Int, predicate: (Int,
  * a stat-blue first row on the pager geometry, the single wide green Confirm, and no green
  * Confirmation header band (which would mean the keep dialog is overlaid on top).
  */
-fun sparkPagerStructurePresent(sampler: SparkPixelSampler): Boolean =
-    sparkPagerChevronsPresent(sampler) &&
-        sparkPagerActiveDotIndex(sampler) != null &&
-        probeIs(sampler, SPARK_BAR_SAMPLE_X, SPARK_PAGER_GEOMETRY.firstRowY) { r, _, b -> b > 240 && r < 150 } &&
-        probeIs(sampler, SPARK_PAGER_CONFIRM_X, SPARK_WIDE_BUTTON_PROBE_Y, ::isButtonGreen) &&
-        !probeIs(sampler, 540, 120, ::isHeaderGreen)
+fun sparkPagerStructurePresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val list = sampler.onScreen(ScreenBand.MIDDLE, width, height)
+    return sparkPagerChevronsPresent(sampler, width, height) &&
+        sparkPagerActiveDotIndex(sampler, width, height) != null &&
+        probeIs(list, SPARK_BAR_SAMPLE_X, SPARK_PAGER_GEOMETRY.firstRowY) { r, _, b -> b > 240 && r < 150 } &&
+        probeIs(sampler.onScreen(ScreenBand.BOTTOM, width, height), SPARK_PAGER_CONFIRM_X, SPARK_WIDE_BUTTON_PROBE_Y, ::isButtonGreen) &&
+        !probeIs(list, 540, 120, ::isHeaderGreen)
+}
 
 /**
  * Structural signature of the Spark Selection Confirmation dialog: the green "Confirmation"
  * title band, the green set-name pill, a stat-blue first row on the confirmation geometry,
  * and the Cancel/Confirm pair.
  */
-fun sparkConfirmationStructurePresent(sampler: SparkPixelSampler): Boolean =
-    probeIs(sampler, 540, 120, ::isHeaderGreen) &&
-        probeIs(sampler, 540, 225, ::isHeaderGreen) &&
-        probeIs(sampler, SPARK_BAR_SAMPLE_X, SPARKS_CONFIRM_GEOMETRY.firstRowY) { r, _, b -> b > 240 && r < 150 } &&
-        probeIs(sampler, SPARK_CONFIRMATION_CONFIRM_X, SPARK_CONFIRMATION_CONFIRM_Y, ::isButtonGreen) &&
-        probeIs(sampler, SPARK_CONFIRMATION_CANCEL_X, SPARK_CONFIRMATION_CANCEL_Y, ::isWhitishButton)
+fun sparkConfirmationStructurePresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val dialog = sampler.onScreen(ScreenBand.DIALOG, width, height)
+    return probeIs(dialog, 540, 120, ::isHeaderGreen) &&
+        probeIs(dialog, 540, 225, ::isHeaderGreen) &&
+        probeIs(dialog, SPARK_BAR_SAMPLE_X, SPARKS_CONFIRM_GEOMETRY.firstRowY) { r, _, b -> b > 240 && r < 150 } &&
+        probeIs(dialog, SPARK_CONFIRMATION_CONFIRM_X, SPARK_CONFIRMATION_CONFIRM_Y, ::isButtonGreen) &&
+        probeIs(dialog, SPARK_CONFIRMATION_CANCEL_X, SPARK_CONFIRMATION_CANCEL_Y, ::isWhitishButton)
+}
 
 /**
  * Structural signature of the "Spark Selection" intro dialog: the green banner across the
@@ -379,13 +405,19 @@ fun sparkConfirmationStructurePresent(sampler: SparkPixelSampler): Boolean =
  * (778, 1252) - both differences are probed so the two dialogs can never be confused), and
  * the dimmed backdrop above the card where the pager would be pure white.
  */
-fun sparkIntroStructurePresent(sampler: SparkPixelSampler): Boolean =
-    probeIs(sampler, 540, 596, ::isHeaderGreen) &&
-        probeIs(sampler, SPARK_BAR_SAMPLE_X, 596, ::isHeaderGreen) &&
-        probeIs(sampler, 540, 1050) { r, g, b -> r >= 238 && g >= 238 && b >= 238 } &&
-        probeIs(sampler, 540, 1600) { r, g, b -> r >= 238 && g >= 238 && b >= 238 } &&
-        !probeIs(sampler, 778, 1252, ::isButtonGreen) &&
-        !probeIs(sampler, SPARK_BAR_SAMPLE_X, 280) { r, g, b -> isNearWhite(r, g, b) }
+fun sparkIntroStructurePresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val dialog = sampler.onScreen(ScreenBand.DIALOG, width, height)
+    return probeIs(dialog, 540, 596, ::isHeaderGreen) &&
+        probeIs(dialog, SPARK_BAR_SAMPLE_X, 596, ::isHeaderGreen) &&
+        probeIs(dialog, 540, 1050) { r, g, b -> r >= 238 && g >= 238 && b >= 238 } &&
+        probeIs(dialog, 540, 1600) { r, g, b -> r >= 238 && g >= 238 && b >= 238 } &&
+        !probeIs(dialog, 778, 1252, ::isButtonGreen) &&
+        !probeIs(dialog, SPARK_BAR_SAMPLE_X, 280) { r, g, b -> isNearWhite(r, g, b) }
+}
 
 /**
  * Structural signature of the "Sparks Rerolled" result screen: the SPARKS-geometry list
@@ -393,12 +425,20 @@ fun sparkIntroStructurePresent(sampler: SparkPixelSampler): Boolean =
  * SPARKS screen itself never reaches this probe (its Reroll Sparks button is detected first),
  * and its bottom differs anyway (buttons at x=777, whitish at x=540).
  */
-fun sparkRerolledStructurePresent(sampler: SparkPixelSampler): Boolean =
-    probeIs(sampler, SPARK_BAR_SAMPLE_X, 307) { r, _, b -> b > 240 && r < 150 } &&
-        probeIs(sampler, SPARK_BAR_SAMPLE_X, 426) { r, g, b -> r > 240 && g < 180 && b > 160 } &&
-        probeIs(sampler, SPARK_BAR_SAMPLE_X, 545) { r, g, b -> g > 200 && b < 100 } &&
-        probeIs(sampler, 540, SPARK_WIDE_BUTTON_PROBE_Y, ::isButtonGreen) &&
-        !sparkPagerChevronsPresent(sampler)
+fun sparkRerolledStructurePresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val list = sampler.onScreen(ScreenBand.MIDDLE, width, height)
+    return probeIs(list, SPARK_BAR_SAMPLE_X, 307) { r, _, b -> b > 240 && r < 150 } &&
+        probeIs(list, SPARK_BAR_SAMPLE_X, 426) { r, g, b -> r > 240 && g < 180 && b > 160 } &&
+        probeIs(list, SPARK_BAR_SAMPLE_X, 545) { r, g, b -> g > 200 && b < 100 } &&
+        probeIs(sampler.onScreen(ScreenBand.BOTTOM, width, height), 540, SPARK_WIDE_BUTTON_PROBE_Y, ::isButtonGreen) &&
+        !sparkPagerChevronsPresent(sampler, width, height) &&
+        // On a taller screen the keep dialog's rows fill the list points and the dimmed Confirm below it still reads green.
+        !sparkConfirmationStructurePresent(sampler, width, height)
+}
 
 // OCR regions (x, y, width, height) on 1080x1920 frames. The navigator feeds them to
 // performOCROnRegion; the fixture tests pin that each stays inside its measured text band.

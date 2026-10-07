@@ -10,7 +10,9 @@ import com.steve1316.uma_android_automation.bot.PerformancePointType
  * Every constant here was measured on the maintainer's own launch-night captures at
  * 1080x1920 (see src/test/resources/fixtures/grandconcert/PROVENANCE.md) and is pinned by
  * fixture tests, following the same Android-free pattern as [SparkScreenProbes]: the runtime
- * wraps a Bitmap in a [SparkPixelSampler], the JUnit fixtures wrap a decoded PNG.
+ * wraps a Bitmap in a [SparkPixelSampler], the JUnit fixtures wrap a decoded PNG. Probes that take the
+ * capture size read their points in the [ScreenBand] measured on a tall phone (fixtures/tallphone); the
+ * playback menu, ON STAGE and the Grand finale checkbox have no phone capture yet and do not.
  *
  * Scope discipline: only screens the maintainer has actually captured are probed here. The
  * Lesson shop, the concert screens, and the unlocked Lesson button have no capture yet, so
@@ -223,7 +225,12 @@ fun grandConcertLessonNoteMarkerPresent(sampler: SparkPixelSampler): Boolean {
  * UNLOCKED_SCHEDULED. A too-dark-to-be-lit but not-grey sample is UNKNOWN, never coerced to
  * LOCKED.
  */
-fun grandConcertLessonSlotState(sampler: SparkPixelSampler): LessonSlotState {
+fun grandConcertLessonSlotState(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): LessonSlotState {
+    val sampler = screen.onScreen(ScreenBand.BOTTOM, width, height)
     val (r, g, b) = mean(sampler, GrandConcertTheme.LESSON_SLOT_X, GrandConcertTheme.LESSON_SLOT_Y)
     val maxC = maxOf(r, g, b)
     val minC = minOf(r, g, b)
@@ -332,26 +339,39 @@ private fun isLessonDialogGreen(r: Int, g: Int, b: Int): Boolean = g >= 170 && g
  * included), card 0 happened to be unaffordable, its header read UNKNOWN, and "the list did not
  * open" fired with the list fully painted and a Learnable card sitting in slot 2
  * (fixture technique_list_career_end_dimmed). */
-fun grandConcertLessonListPresent(sampler: SparkPixelSampler): Boolean {
-    val (tr, tg, tb) = mean(sampler, GrandConcertLessonGeometry.LIST_TOP_BAND_X, GrandConcertLessonGeometry.LIST_TOP_BAND_Y)
+fun grandConcertLessonListPresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val (tr, tg, tb) = mean(sampler.onScreen(ScreenBand.TOP, width, height), GrandConcertLessonGeometry.LIST_TOP_BAND_X, GrandConcertLessonGeometry.LIST_TOP_BAND_Y)
     val darkBlueTop = tb >= 100 && tb - tr >= 40 && tb - tg >= 30 && tr < 120
     if (!darkBlueTop) return false
     return GrandConcertLessonGeometry.CARD_HEADER_YS.indices.any {
-        grandConcertLessonCardKind(sampler, it) != LessonCardKind.UNKNOWN
+        grandConcertLessonCardKind(sampler, it, width, height) != LessonCardKind.UNKNOWN
     }
 }
 
 /** True when a full-screen lesson/concert dialog (Confirmation / Schedule / Concert Info) is up:
  * the green header band at the very top. */
-fun grandConcertDialogHeaderPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertDialogHeaderPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.HEADER_GREEN_X, GrandConcertLessonGeometry.HEADER_TOP_Y)
     return isLessonDialogGreen(r, g, b)
 }
 
 /** The skill list's Learn "Confirmation" shares the header, but its row under the pill is grey (241, 241, 241) against (150, 219, 70) / (171, 130, 245). */
-fun grandConcertLessonConfirmationPresent(sampler: SparkPixelSampler): Boolean {
-    if (!grandConcertDialogHeaderPresent(sampler)) return false
-    val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_X, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_Y)
+fun grandConcertLessonConfirmationPresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    if (!grandConcertDialogHeaderPresent(sampler, width, height)) return false
+    val (r, g, b) = mean(sampler.onScreen(ScreenBand.DIALOG, width, height), GrandConcertLessonGeometry.CONFIRM_KIND_PILL_X, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_Y)
     return maxOf(r, g, b) - minOf(r, g, b) >= 60
 }
 
@@ -365,7 +385,12 @@ fun grandConcertSchedulingCompletePresent(sampler: SparkPixelSampler): Boolean {
 
 /** True when the Schedule dialog's red "Not enough performance points" shortfall band is present -
  * the signal that separates the unaffordable Schedule dialog from the affordable Learn dialog. */
-fun grandConcertScheduleShortfallPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertScheduleShortfallPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     var hits = 0
     var x = GrandConcertLessonGeometry.SHORTFALL_X_START
     while (x <= GrandConcertLessonGeometry.SHORTFALL_X_END) {
@@ -395,7 +420,13 @@ fun grandConcertConcertInfoPresent(sampler: SparkPixelSampler): Boolean {
  * (e.g. "Zero Is Where the Center Stands!") and misreads as UNKNOWN. Instead the whole bar row is
  * polled and only the SATURATED pixels are averaged: the bar colour is saturated while the white text
  * and the pale kind pill are not, so the average is the bar colour regardless of where the text sits. */
-fun grandConcertLessonCardKind(sampler: SparkPixelSampler, cardIndex: Int): LessonCardKind {
+fun grandConcertLessonCardKind(
+    screen: SparkPixelSampler,
+    cardIndex: Int,
+    width: Int = 1080,
+    height: Int = 1920,
+): LessonCardKind {
+    val sampler = screen.onScreen(ScreenBand.MIDDLE, width, height)
     if (cardIndex !in GrandConcertLessonGeometry.CARD_HEADER_YS.indices) return LessonCardKind.UNKNOWN
     val y = GrandConcertLessonGeometry.CARD_HEADER_YS[cardIndex]
     var rs = 0
@@ -579,7 +610,12 @@ private fun isGainWarm(r: Int, g: Int, b: Int): Boolean = r >= 225 && b <= 175 &
  * first, because a training never grants more than two types; any third candidate is art noise
  * by construction.
  */
-fun selectedTrainingPerformanceRows(sampler: SparkPixelSampler): List<Int> {
+fun selectedTrainingPerformanceRows(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): List<Int> {
+    val sampler = screen.onScreen(ScreenBand.TOP, width, height)
     val counted = mutableListOf<Pair<Int, Int>>()
     for (i in GrandConcertTrainingGeometry.PERF_ROW_YS.indices) {
         val y = GrandConcertTrainingGeometry.PERF_ROW_YS[i]
@@ -616,7 +652,12 @@ fun selectedTrainingPerformanceRows(sampler: SparkPixelSampler): List<Int> {
  * grazed by a floating overlay without invalidating the panel). This is the structural gate for
  * every panel read; the Failure-pill probe is NOT suitable because the pill follows the selected
  * facility across the screen. */
-fun grandConcertPerformancePanelPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertPerformancePanelPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.TOP, width, height)
     val (hr, hg, hb) = mean(sampler, GrandConcertTrainingGeometry.PANEL_HEADER_X, GrandConcertTrainingGeometry.PANEL_HEADER_Y)
     if (!(hr in 160..210 && hg in 130..180 && hb >= 225)) return false
     val checks =
@@ -772,16 +813,22 @@ object GrandConcertConcertPending {
     val GOAL_RIBBON_POINTS = listOf(700 to 1495, 840 to 1495, 700 to 1505, 840 to 1505)
 }
 
-fun grandConcertConcertPendingScreenPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertConcertPendingScreenPresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val top = sampler.onScreen(ScreenBand.TOP, width, height)
+    val bottom = sampler.onScreen(ScreenBand.BOTTOM, width, height)
     val banner =
         GrandConcertConcertPending.HYPE_BANNER_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = mean(top, x, y)
             b >= 225 && b - g >= 70 && r in 150..215
         } >= 5
     if (!banner) return false
     val ribbon =
         GrandConcertConcertPending.GOAL_RIBBON_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = mean(bottom, x, y)
             r >= 225 && g <= 95 && b <= 95
         } >= 3
     return ribbon
@@ -874,7 +921,12 @@ private fun isEscortGreen(r: Int, g: Int, b: Int): Boolean = g >= 180 && g - r >
 
 /** True when the "Ready to start the concert?" confirmation dialog is up: its green header band
  * (vertically centred, unlike the full-height lesson dialogs) plus the green Start button. */
-fun grandConcertConcertConfirmPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertConcertConfirmPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val header =
         GrandConcertEscort.CONFIRM_HEADER_POINTS.count { (x, y) ->
             val (r, g, b) = mean(sampler, x, y)
@@ -909,7 +961,12 @@ fun grandConcertCutsceneCheckboxState(sampler: SparkPixelSampler): GrandCutscene
 }
 
 /** The 3D scene is too dynamic to anchor on, so playback is identified by the skip disc; the glyph's bar keeps the menu and close buttons from reading as a skip. */
-fun grandConcertPlaybackSkipPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertPlaybackSkipPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.BOTTOM, width, height)
     val glyph = dominantSaturated(sampler, GrandConcertEscort.SKIP_GLYPH_X, GrandConcertEscort.SKIP_GLYPH_Y, 12)
     val brown = glyph != null && glyph.first >= 100 && glyph.first - glyph.third >= 60 && glyph.second in 40..110
     if (!brown) return false
@@ -959,11 +1016,17 @@ private fun skipDiscWhite(sampler: SparkPixelSampler): Boolean = allGlyphClear(s
 
 /** True when a concert result screen's green Next button is present (the Great/Success banner and
  * the schedule overview share the same control). */
-fun grandConcertResultNextPresent(sampler: SparkPixelSampler): Boolean =
-    GrandConcertEscort.NEXT_BUTTON_GREEN_POINTS.count { (x, y) ->
-        val (r, g, b) = mean(sampler, x, y)
+fun grandConcertResultNextPresent(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val bottom = sampler.onScreen(ScreenBand.BOTTOM, width, height)
+    return GrandConcertEscort.NEXT_BUTTON_GREEN_POINTS.count { (x, y) ->
+        val (r, g, b) = mean(bottom, x, y)
         isEscortGreen(r, g, b)
     } == 2
+}
 
 /** True when the "ON STAGE!" huddle is up: all four medallion points read the vivid pink-purple
  * disc. Observed on the Grand Concert (the finale's Inspiration-style interstitial); one tap on
@@ -976,7 +1039,12 @@ fun grandConcertOnStagePresent(sampler: SparkPixelSampler): Boolean =
 
 /** True when the post-concert "Bonuses Updated!" acknowledgment is up: its green title band (a
  * softer gradient green than the dialog headers) plus the green Confirm at its own height. */
-fun grandConcertBonusesUpdatedPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertBonusesUpdatedPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val title =
         listOf(540 to 655, 880 to 610).count { (x, y) ->
             val (r, g, b) = mean(sampler, x, y)
@@ -992,7 +1060,12 @@ fun grandConcertBonusesUpdatedPresent(sampler: SparkPixelSampler): Boolean {
 /** True when the "Active Concert Bonuses" detail panel is up: the strong green title band at its
  * own height plus the wide WHITE Close button (which separates it from the Start confirmation,
  * whose button at a similar height is green). */
-fun grandConcertActiveBonusesPanelPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertActiveBonusesPanelPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val title =
         GrandConcertEscort.ACTIVE_BONUSES_TITLE_POINTS.count { (x, y) ->
             val (r, g, b) = mean(sampler, x, y)
@@ -1011,7 +1084,12 @@ fun grandConcertActiveBonusesPanelPresent(sampler: SparkPixelSampler): Boolean {
     } == 2
 }
 
-fun grandConcertCareerCompleteScreenPresent(sampler: SparkPixelSampler): Boolean {
+fun grandConcertCareerCompleteScreenPresent(
+    screen: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): Boolean {
+    val sampler = screen.onScreen(ScreenBand.BOTTOM, width, height)
     // Banner: flat (183, 150, 255) fill; require most points so one text stroke cannot veto.
     val banner =
         GrandConcertCareerComplete.BANNER_POINTS.count { (x, y) ->

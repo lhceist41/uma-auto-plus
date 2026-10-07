@@ -504,7 +504,7 @@ class GrandConcertScenarioTest {
         fun `the concert escort skips a menu-button performance through the menu's Skip`() {
             val campaign = source("bot/campaigns/GrandConcert.kt")
             val escortBody = functionBody(campaign, "private fun runConcertEscort()")
-            val direct = escortBody.indexOf("grandConcertPlaybackSkipPresent(sampler) ->")
+            val direct = escortBody.indexOf("grandConcertPlaybackSkipPresent(sampler, bitmap.width, bitmap.height) ->")
             val menuSkip = escortBody.indexOf("grandConcertPlaybackMenuSkipPresent(sampler) && menuSkips < MAX_PLAYBACK_MENU_TAPS ->")
             val menuOpen = escortBody.indexOf("grandConcertPlaybackMenuButtonPresent(sampler) && menuOpens < MAX_PLAYBACK_MENU_TAPS ->")
             assertTrue(direct in 0 until menuSkip && menuSkip < menuOpen, "direct skip, then the open menu's Skip, then opening the menu")
@@ -514,7 +514,7 @@ class GrandConcertScenarioTest {
             assertTrue(skipBranch.contains("tapCoordinate(GrandConcertEscort.MENU_SKIP_X.toDouble(), GrandConcertEscort.MENU_SKIP_Y.toDouble()"))
             assertTrue(skipBranch.contains("menuSkips++") && skipBranch.contains("if (playbackControlsPresent())"), "counted and verified")
 
-            val openBranch = escortBody.substring(menuOpen).substringBefore("grandConcertResultNextPresent(sampler) ->")
+            val openBranch = escortBody.substring(menuOpen).substringBefore("grandConcertResultNextPresent(sampler, bitmap.width, bitmap.height) ->")
             assertEquals(1, Regex("""tapCoordinate\(""").findAll(openBranch).count(), "one tap in the menu button branch")
             assertTrue(openBranch.contains("tapCoordinate(GrandConcertEscort.PLAYBACK_MENU_X.toDouble(), GrandConcertEscort.PLAYBACK_MENU_Y.toDouble()"))
             assertTrue(openBranch.contains("menuOpens++"))
