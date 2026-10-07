@@ -28,7 +28,7 @@ class TraineeNameMatcherTest {
 
         @Test
         fun `de-accents and drops stars`() {
-            assertEquals("e numero 1 el condor pasa", TraineeNameMatcher.normalize("[E☆Número 1] El Condor Pasa"))
+            assertEquals("e numero l el condor pasa", TraineeNameMatcher.normalize("[E☆Número 1] El Condor Pasa"))
         }
 
         @Test
@@ -187,8 +187,16 @@ class TraineeNameMatcherTest {
         }
 
         @Test
-        fun `a partial word does not false-match`() {
-            assertFalse(TraineeNameMatcher.hasOutfit("[Kukulkan Warrior] El Condor Pasa", "Kukul"))
+        fun `a short title needs an exact hit`() {
+            assertFalse(TraineeNameMatcher.hasOutfit("[Kukulkan Warrior] El Condor Pasa", "Kuxu"))
+        }
+
+        @Test
+        fun `a sibling title survives one OCR slip`() {
+            assertTrue(TraineeNameMatcher.hasOutfit("J [CODE: ICINGJ Mihono Bourbon", "CODE: ICING"))
+            assertTrue(TraineeNameMatcher.hasOutfit("[ukulkan Warrior] El Condor Pasa", "Kukulkan Warrior"))
+            assertTrue(TraineeNameMatcher.hasOutfit("[BubblegumMemories] Taiki Shuttle", "Bubblegum☆Memories"))
+            assertFalse(TraineeNameMatcher.hasOutfit("[Wild Frontier] Taiki Shuttle", "Bubblegum☆Memories"))
         }
 
         @Test
@@ -291,6 +299,32 @@ class TraineeNameMatcherTest {
         fun `a blank read or another trainee is not the target`() {
             assertFalse(TraineeNameMatcher.isTargetBanner("Maruzensky", "", emptyList(), threshold))
             assertFalse(TraineeNameMatcher.isTargetBanner("Maruzensky", "[RisingFortune] SMatikanefukukitaru", emptyList(), threshold))
+        }
+
+        @Test
+        fun `a trailing badge or a junk letter before the name still reads as the target`() {
+            // Live reads 2026-07-28 and 2026-10-03.
+            assertTrue(TraineeNameMatcher.isTargetBanner("Hishi Amazon", "[Azure Amazon] Hishi Amazon 1", emptyList(), threshold))
+            assertTrue(TraineeNameMatcher.isTargetBanner("Hishi Amazon", "] K Hishi Amazon", emptyList(), threshold))
+        }
+
+        @Test
+        fun `a short name does not slide into a slipped outfit title`() {
+            assertFalse(TraineeNameMatcher.isTargetBanner("Narita Brian", "[Natural Brlliance] Satono Diamond", emptyList(), threshold))
+            assertFalse(TraineeNameMatcher.isTargetBanner("Mejiro Ryan", "[Crystalline] Mejiro rdan", emptyList(), threshold))
+        }
+
+        @Test
+        fun `an outfit target survives a glued letter, a lost glyph and a 0 for O`() {
+            assertTrue(TraineeNameMatcher.isTargetBanner("[CODE: ICING] Mihono Bourbon", "J [CODE: ICINGJ Mihono Bourbon", emptyList(), threshold))
+            assertTrue(TraineeNameMatcher.isTargetBanner("[Hot☆Summer Night] Maruzensky", "(HotSummer Night] Maruzensky", emptyList(), threshold))
+            assertTrue(TraineeNameMatcher.isTargetBanner("[O Sole Suo!] T.M. Opera O", "[O Sole Suo!l TM Opera 0", emptyList(), threshold))
+        }
+
+        @Test
+        fun `the 2026-09-28 read is the excluded outfit for bare Mihono Bourbon`() {
+            assertFalse(TraineeNameMatcher.isTargetBanner("Mihono Bourbon", "J [CODE: ICINGJ Mihono Bourbon", listOf("CODE: ICING"), threshold))
+            assertTrue(TraineeNameMatcher.isTargetBanner("Mihono Bourbon", "J [MB-19890425] Mihono Bourbon", listOf("CODE: ICING"), threshold))
         }
     }
 }

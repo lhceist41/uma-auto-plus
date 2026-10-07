@@ -181,6 +181,15 @@ describe("preset-name derivation", () => {
     it("gives outfit-specific presets no exclusions (their full-banner target already disambiguates)", () => {
         expect(deriveExcludeOutfits("El Condor Pasa (Kukulkan Warrior)")).toEqual([])
     })
+
+    it("excludes every non-base outfit in the outfit data, including ones without a preset", () => {
+        expect(deriveExcludeOutfits("Agnes Tachyon")).toContain("Lunatic Lab")
+        expect(deriveExcludeOutfits("Agnes Tachyon")).not.toContain("tach-nology")
+    })
+
+    it("finds the outfit data under its 'TM Opera O' spelling", () => {
+        expect(deriveExcludeOutfits("T.M. Opera O")).toEqual(["New Year, Same Radiance!"])
+    })
 })
 
 describe("preset display name vs trainee selection identity (traineeName)", () => {

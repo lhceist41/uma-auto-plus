@@ -1,5 +1,6 @@
 import { Settings } from "../context/BotStateContext"
 import { characterPresets } from "../data/characterPresets"
+import characterOutfits from "../data/character_outfits.json"
 import { parsePresetName, presetTraineeName } from "./presetNames"
 import { presetObjectiveOf } from "./adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "./moodFloorPolicy"
@@ -42,23 +43,30 @@ export function deriveInGameName(presetName: string): string {
     return outfit ? `[${outfit}] ${base}` : base
 }
 
+const squashName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "")
+
 /**
- * Sibling-outfit names the in-game matcher must skip for a bare base-name target, collected
- * from the preset roster. Outfit-specific targets already disambiguate and get none; variant
- * presets ("(Legacy Farm)") are base-character targets and need the same protection as the
- * plain name.
+ * Outfits a bare base-name target must skip: all the outfit data (unreleased included) or presets name,
+ * except the base card. Outfit targets get none; variant presets ("(Legacy Farm)") count as bare.
  */
 export function deriveExcludeOutfits(presetName: string): string[] {
     const canonical = presetTraineeName(presetName)
     if (parsePresetName(canonical).outfit) return []
     const base = baseCharacter(canonical)
     const outfits = new Set<string>()
+    // The data spells "TM Opera O" where presets and the game say "T.M. Opera O".
+    const data = Object.values(characterOutfits as Record<string, { name: string; outfits: { title: string; cardId: number }[] }>).find(
+        (c) => squashName(c.name) === squashName(base)
+    )
+    const byCard = [...(data?.outfits ?? [])].sort((a, b) => a.cardId - b.cardId)
+    byCard.forEach((o) => outfits.add(o.title))
     for (const p of characterPresets) {
         // Resolve each roster entry to its canonical trainee too, so a variant display name's suffix
         // (e.g. "(Blue Farm)") is never mistaken for a real sibling outfit to exclude.
         const parsed = parsePresetName(presetTraineeName(p.name))
         if (parsed.outfit && parsed.base === base) outfits.add(parsed.outfit)
     }
+    if (byCard.length > 0) outfits.delete(byCard[0].title)
     return [...outfits]
 }
 
