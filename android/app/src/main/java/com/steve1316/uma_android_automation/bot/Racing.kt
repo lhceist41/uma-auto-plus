@@ -230,6 +230,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Cached turns-remaining behind [bGoalDeadlineNear]; Int.MAX_VALUE when unknown. */
     var goalDeadlineTurnsRemaining = Int.MAX_VALUE
 
+    private val admitsG1GoalSingleStarRows: Boolean
+        get() =
+            admitsSingleStarRowsForG1Goal(
+                hasG1OnlyRequirement,
+                bGoalDeadlineNear,
+                goalDeadlineTurnsRemaining,
+                countdownReadable = !GrandConcertScenario.matches(game.scenario),
+            )
+
     /**
      * An unmet fan goal is due within [FAN_EMERGENCY_TURN_WINDOW] turns. Gates the generic (non-Grand-Concert) path, admitting single-star
      * predictions and the Junior scroll. Grand Concert uses processGrandConcertForcedFanRace, which ignores the row star.
@@ -504,6 +513,21 @@ class Racing(private val game: Game, private val campaign: Campaign) {
          * failed template reads once filtered a G1-less list to zero and cancelled required racing until the goal expired.
          */
         internal fun restrictsToG1Only(tier: GoalCriteriaTier?): Boolean = tier == GoalCriteriaTier.G1_ONLY
+
+        /**
+         * A G1-only goal admits single-star rows near its deadline, or when the deadline could not be read: a missed goal ends the career, while a weak
+         * G1 risks one race. The Junior G1s run only on turns 23 and 24, and a weaker trainee often draws a single star on them. A scenario whose
+         * countdown is never read (Grand Concert) would otherwise admit on every turn, so only a readable countdown's miss counts as unread.
+         */
+        internal fun admitsSingleStarRowsForG1Goal(
+            g1OnlyGoal: Boolean,
+            goalDeadlineNear: Boolean,
+            goalDeadlineTurnsRemaining: Int,
+            countdownReadable: Boolean,
+        ): Boolean = g1OnlyGoal && (goalDeadlineNear || (countdownReadable && goalDeadlineTurnsRemaining == Int.MAX_VALUE))
+
+        internal fun enterablePredictionAnchors(anchors: List<PredictionAnchor>, allowSingles: Boolean): List<PredictionAnchor> =
+            anchors.filter { allowSingles || it.tier == PredictionTier.DOUBLE }
 
         /**
          * Merges double- and single-star matches into one row-deduplicated list sorted top to bottom. A single within [rowProximityPx] (rows are
@@ -1293,19 +1317,28 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
+     * Reads the goal countdown and caches its proximity while the energy-label OCR anchor is visible on the main screen; the race list, where
+     * selectMaidenRace and the G1-goal admission need it, has no anchor.
+     *
+     * @return The turns remaining before the next goal, or -1 when unread.
+     */
+    private fun refreshGoalDeadline(): Int {
+        val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
+        StatusBoard.goal(campaign.date.day, turnsRemaining)
+        bGoalDeadlineNear = turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
+        goalDeadlineTurnsRemaining = if (turnsRemaining >= 0) turnsRemaining else Int.MAX_VALUE
+        return turnsRemaining
+    }
+
+    /**
      * Determines if the extra racing process should be started now or later.
      *
      * @return True if the current date is okay to start the extra racing process and false otherwise.
      */
     fun checkEligibilityToStartExtraRacingProcess(ignoreFanRequirement: Boolean = false): Boolean {
         MessageLog.i(TAG, "\n[RACE] Now determining eligibility to start the extra racing process...")
-        val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
-        StatusBoard.goal(campaign.date.day, turnsRemaining)
+        val turnsRemaining = refreshGoalDeadline()
         MessageLog.i(TAG, "[RACE] Current remaining number of days before the next mandatory race: $turnsRemaining.")
-
-        // Cache deadline proximity while the energy-label OCR anchor is visible; selectMaidenRace needs it on the race list, where the anchor is gone.
-        bGoalDeadlineNear = turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
-        goalDeadlineTurnsRemaining = if (turnsRemaining >= 0) turnsRemaining else Int.MAX_VALUE
 
         // Fan emergency: re-detect the "fans to go" banner on a FRESH screenshot (the cached hasFanRequirement comes from a parallel thread and has missed it mid-transition).
         // Not gated on enableFarmingFans: an unmet fan goal force-ends the career. The primary signal is goal-text OCR since the race_criteria_* templates are dead;
@@ -2820,7 +2853,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     fun handleRaceEvents(isScheduledRace: Boolean = false): Boolean {
         // If the bot is already at the Race List screen and a race has already been selected,
         // we should not reset the flags as they may have been set somewhere else.
-        if (!ButtonRace.check(game.imageUtils)) {
+        val atRaceList = ButtonRace.check(game.imageUtils)
+        if (!atRaceList) {
             lastRaceGrade = null
             lastRaceFans = 0
             bAlarmClockPolicySkippedThisRace = false
@@ -2829,6 +2863,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Racing process on ${campaign.date}.")
+
+        // A requirement turn skips the eligibility check, so the countdown that gates G1-goal single-star admission is read here, on the main screen.
+        if (!atRaceList && hasG1OnlyRequirement) {
+            val turnsRemaining = refreshGoalDeadline()
+            MessageLog.i(TAG, "[RACE] G1 goal countdown: $turnsRemaining turn(s) left (single-star G1 rows admitted: $admitsG1GoalSingleStarRows).")
+        }
 
         // If the races button exists AND is disabled, we can exit early since we know that we're at the home screen and the bot cannot race.
         if (racesButton.checkDisabled(game.imageUtils) == true) {
@@ -3565,8 +3605,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Update the current date and aptitudes for accurate scoring.
         campaign.updateDate()
 
-        // Detect all predictions. Singles are a scoring input only: without a double-star entry (or force racing) smart racing still skips the day. In mandatory mode icon-less
-        // rows are anchored via their fans icon, since a planned race is entered by name and some rows render no icon; starless anchors join only the by-name search set.
+        // Detect all predictions. Singles are a scoring input only: without a double-star entry (or force racing, or a G1 goal near its deadline) smart racing still skips the day.
+        // In mandatory mode icon-less rows are anchored via their fans icon, since a planned race is entered by name and some rows render no icon; starless anchors join only the
+        // by-name search set.
         val allAnchors = findPredictionAnchors(includeSingles = true, includeStarless = mandatoryExtraRaceData != null)
         val anchors = allAnchors.filter { it.tier != PredictionTier.NONE }
         MessageLog.i(
@@ -3578,7 +3619,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[RACE] No predictions found. Canceling racing process.")
             return false
         }
-        if (mandatoryExtraRaceData == null && anchors.none { it.tier == PredictionTier.DOUBLE } && !enableForceRacing) {
+        if (mandatoryExtraRaceData == null && anchors.none { it.tier == PredictionTier.DOUBLE } && !enableForceRacing && !admitsG1GoalSingleStarRows) {
             MessageLog.i(TAG, "[RACE] Only single-star predictions on screen. Skipping racing in smart mode.")
             return false
         }
@@ -3951,12 +3992,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return processGrandConcertForcedFanRace()
         }
 
-        // Fan emergency or force racing admits single-star races; otherwise singles are logged only.
-        val allowSingles = bFanEmergencyActive || enableForceRacing
+        // Fan emergency, force racing or a G1-only goal near its deadline admits single-star races; otherwise singles are logged only. The G1 filter below keeps an
+        // admitted non-G1 single out of a G1-only goal.
+        val allowSingles = bFanEmergencyActive || enableForceRacing || admitsG1GoalSingleStarRows
 
         var anchors = findPredictionAnchors(includeSingles = true)
 
-        fun enterable(list: List<PredictionAnchor>) = list.filter { allowSingles || it.tier == PredictionTier.DOUBLE }
+        fun enterable(list: List<PredictionAnchor>) = enterablePredictionAnchors(list, allowSingles)
 
         // With no enterable race and an any-grade requirement active, scroll for more. bFanEmergencyActive counts on its own: the OCR-driven emergency arms without hasFanRequirement
         // (dead templates), and its weak-prediction trainee's visible rows draw no icon. A trophy goal not positively G1-only also scrolls; a G1-only goal is gated separately.
@@ -3984,10 +4026,35 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
         }
 
+        // A G1-only goal looks past the first page when the race DB lists a G1 this turn: the race list shows only about two rows at a time.
+        if (hasG1OnlyRequirement && hasG1RacesAtTurn(campaign.date.day)) {
+            fun isG1Row(anchor: PredictionAnchor): Boolean =
+                lookupRaceInDatabase(campaign.date.day, game.imageUtils.extractRaceName(anchor.location)).any { it.grade == RaceGrade.G1 }
+
+            val maxScrollAttempts = 5
+            for (scrollAttempt in 1..maxScrollAttempts) {
+                if (enterable(anchors).any { isG1Row(it) }) break
+                MessageLog.i(TAG, "[RACE] No enterable G1 on this page of the race list. Scrolling down (attempt $scrollAttempt/$maxScrollAttempts)...")
+                val newAnchors = scrollRaceListAndRedetectAnchors(scrollDown = true, includeSingles = true)
+                if (newAnchors == null || newAnchors.map { it.location } == anchors.map { it.location }) {
+                    MessageLog.i(TAG, "[RACE] The race list did not move. Stopping the G1 search.")
+                    break
+                }
+                anchors = newAnchors
+            }
+        }
+
         val usableAnchors = enterable(anchors)
         val skippedSingles = anchors.size - usableAnchors.size
         if (skippedSingles > 0) {
-            MessageLog.i(TAG, "[RACE] $skippedSingles single-star race(s) visible but not enterable (no fan emergency or force racing active).")
+            MessageLog.i(TAG, "[RACE] $skippedSingles single-star race(s) visible but not enterable (no fan emergency, force racing or G1 goal near its deadline).")
+            if (hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
+                for (anchor in anchors.filter { it.tier != PredictionTier.DOUBLE }) {
+                    val raceName = game.imageUtils.extractRaceName(anchor.location)
+                    val grade = lookupRaceInDatabase(campaign.date.day, raceName).firstOrNull()?.grade
+                    MessageLog.i(TAG, "[RACE] Skipped single-star row: \"$raceName\" (${grade ?: "grade unknown"}).")
+                }
+            }
         }
 
         val maxCount = usableAnchors.size
@@ -3996,7 +4063,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
         if (allowSingles && usableAnchors.none { it.tier == PredictionTier.DOUBLE }) {
-            MessageLog.i(TAG, "[RACE] Fan emergency/force racing: proceeding with single-star prediction races only.")
+            MessageLog.i(TAG, "[RACE] Proceeding with single-star prediction races only (fan emergency, force racing or G1 goal near its deadline).")
         }
 
         val onlyAnchor = usableAnchors[0]

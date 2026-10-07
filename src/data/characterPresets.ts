@@ -16416,10 +16416,11 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Matikanetannhauser",
-        // Junior Late Dec demands top-5 in ANY one G1 - the shipped Hopeful Stakes entry at
-        // that exact turn is the goal solver (self-directed gates are how careers die
-        // unattended). Then the longest wall in the game: Kikuka 3000m, Diamond Stakes 3400m,
-        // Tenno Spring 3200m. Sta+20% growth carries it; push Speed hardest (no growth there).
+        // Junior Late Dec demands top-5 in ANY one G1 (T23 Asahi Hai FS / Hanshin JF, T24 Hopeful).
+        // The bot's G1-goal racing enters those, single-star rows included near the deadline; a
+        // Junior plan entry does not pick the race. Then the longest wall in the game: Kikuka
+        // 3000m, Diamond Stakes 3400m, Tenno Spring 3200m. Sta+20% growth carries it; push Speed
+        // hardest (no growth there).
         // Her Senior Japan Cup goal self-cancels via the nosebleed event - expected, not a bug.
         scenario: "Unity Cup",
         settings: {
@@ -16596,10 +16597,11 @@ const basePresets: CharacterPreset[] = [
     },
     {
         name: "Matikanetannhauser",
-        // Junior Late Dec demands top-5 in ANY one G1 - the shipped Hopeful Stakes entry at
-        // that exact turn is the goal solver (self-directed gates are how careers die
-        // unattended). Then the longest wall in the game: Kikuka 3000m, Diamond Stakes 3400m,
-        // Tenno Spring 3200m. Sta+20% growth carries it; push Speed hardest (no growth there).
+        // Junior Late Dec demands top-5 in ANY one G1 (T23 Asahi Hai FS / Hanshin JF, T24 Hopeful).
+        // The bot's G1-goal racing enters those, single-star rows included near the deadline; a
+        // Junior plan entry does not pick the race. Then the longest wall in the game: Kikuka
+        // 3000m, Diamond Stakes 3400m, Tenno Spring 3200m. Sta+20% growth carries it; push Speed
+        // hardest (no growth there).
         // Her Senior Japan Cup goal self-cancels via the nosebleed event - expected, not a bug.
         scenario: "URA Finale",
         settings: {

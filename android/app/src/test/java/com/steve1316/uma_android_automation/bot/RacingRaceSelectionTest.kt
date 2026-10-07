@@ -1,7 +1,9 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.bot.Racing.Companion.FAN_EMERGENCY_TURN_WINDOW
+import com.steve1316.uma_android_automation.bot.Racing.Companion.admitsSingleStarRowsForG1Goal
 import com.steve1316.uma_android_automation.bot.Racing.Companion.canonicalizeRaceLabelForLookup
+import com.steve1316.uma_android_automation.bot.Racing.Companion.enterablePredictionAnchors
 import com.steve1316.uma_android_automation.bot.Racing.Companion.indexOfBestByTierThenFans
 import com.steve1316.uma_android_automation.bot.Racing.Companion.isFanEmergency
 import com.steve1316.uma_android_automation.bot.Racing.Companion.mergePredictionAnchors
@@ -423,5 +425,75 @@ class RacingRaceSelectionTest {
         // start restricting to G1 without a deliberate decision here.
         val restricting = (GoalCriteriaTier.entries + listOf<GoalCriteriaTier?>(null)).filter { restrictsToG1Only(it) }
         assertEquals(listOf(GoalCriteriaTier.G1_ONLY), restricting)
+    }
+
+    // ////////////////////////////////////////////////////////////////////////////////////////////
+    // admitsSingleStarRowsForG1Goal / enterablePredictionAnchors
+
+    private fun near(turnsRemaining: Int) = turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
+
+    @Test
+    @DisplayName("A G1-only goal admits single-star rows inside the deadline window")
+    fun g1GoalAdmitsSinglesNearDeadline() {
+        for (turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW) {
+            assertTrue(admitsSingleStarRowsForG1Goal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true), "turnsRemaining=$turnsRemaining")
+        }
+    }
+
+    @Test
+    @DisplayName("A G1-only goal far from its deadline keeps single-star rows out")
+    fun g1GoalFarFromDeadlineKeepsSinglesOut() {
+        val turnsRemaining = FAN_EMERGENCY_TURN_WINDOW + 1
+        assertFalse(admitsSingleStarRowsForG1Goal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true))
+        assertFalse(admitsSingleStarRowsForG1Goal(true, near(11), 11, countdownReadable = true))
+    }
+
+    @Test
+    @DisplayName("An unread G1-goal deadline errs toward admitting single-star rows")
+    fun g1GoalUnreadDeadlineAdmitsSingles() {
+        assertTrue(admitsSingleStarRowsForG1Goal(true, false, Int.MAX_VALUE, countdownReadable = true))
+    }
+
+    @Test
+    @DisplayName("A scenario that never reads the countdown (Grand Concert) does not admit on an unread deadline")
+    fun unreadableCountdownDoesNotAdmitSingles() {
+        assertFalse(admitsSingleStarRowsForG1Goal(true, false, Int.MAX_VALUE, countdownReadable = false))
+        assertTrue(admitsSingleStarRowsForG1Goal(true, true, 0, countdownReadable = false))
+    }
+
+    @Test
+    @DisplayName("Without a G1-only goal the deadline never admits single-star rows")
+    fun noG1GoalNeverAdmitsSingles() {
+        assertFalse(admitsSingleStarRowsForG1Goal(false, true, 0, countdownReadable = true))
+        assertFalse(admitsSingleStarRowsForG1Goal(false, false, Int.MAX_VALUE, countdownReadable = true))
+    }
+
+    @Test
+    @DisplayName("Junior G1 replay: the T23 and T24 single-star G1 rows become enterable near the deadline")
+    fun juniorG1ReplayAdmitsSingleStarRows() {
+        // Race-list matches logged at turns 23 and 24 (1080x1920): row 1 a double-star Pre-OP, row 2 a single-star G1 the old rule dropped.
+        val anchors = mergePredictionAnchors(listOf(Point(881.0, 1197.0)), listOf(Point(881.0, 1244.0), Point(881.0, 1427.0)))
+        assertEquals(listOf(PredictionTier.DOUBLE, PredictionTier.SINGLE), anchors.map { it.tier })
+        assertEquals(1, enterablePredictionAnchors(anchors, allowSingles = false).size)
+
+        // Goal deadline at the end of turn 24.
+        for ((turn, turnsRemaining) in listOf(23 to 1, 24 to 0)) {
+            val allowSingles = admitsSingleStarRowsForG1Goal(true, near(turnsRemaining), turnsRemaining, countdownReadable = true)
+            val enterable = enterablePredictionAnchors(anchors, allowSingles)
+            assertEquals(2, enterable.size, "turn $turn")
+            assertEquals(1427.0, enterable[1].location.y, "turn $turn")
+        }
+    }
+
+    @Test
+    @DisplayName("Once G1-filtered, the single-star G1 is the pick; a double-star G1 still outranks it")
+    fun g1FilteredSingleIsPicked() {
+        assertEquals(0, indexOfBestByTierThenFans(listOf(RaceDetails(7000, false, predictionTier = PredictionTier.SINGLE))))
+        val bothG1 =
+            listOf(
+                RaceDetails(7000, false, predictionTier = PredictionTier.SINGLE),
+                RaceDetails(6500, true),
+            )
+        assertEquals(1, indexOfBestByTierThenFans(bothG1))
     }
 }
