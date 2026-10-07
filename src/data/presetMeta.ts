@@ -75,6 +75,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Yaeno Muteki": "Blazed Head, Covered Fists",
     "Yamanin Zephyr": "Fluttertail Spirit",
     "Yukino Bijin": "Darl'n Snowflake",
+    "Zenno Rob Roy": "Heroic Author",
 }
 
 /**

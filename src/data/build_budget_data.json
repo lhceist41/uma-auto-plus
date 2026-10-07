@@ -168,7 +168,7 @@
     "S"
   ],
   "counts": {
-    "factorGroups": 397,
+    "factorGroups": 398,
     "factorsByFamily": {
       "stat": 5,
       "aptitude": 10,
@@ -176,10 +176,10 @@
       "skill": 235,
       "scenario": 4,
       "bonus": 2,
-      "unique": 107
+      "unique": 108
     },
-    "traineeCards": 109,
-    "traineeBaseRows": 346,
+    "traineeCards": 110,
+    "traineeBaseRows": 349,
     "trainingEffectRows": 72
   },
   "careerTurns": [
@@ -19277,6 +19277,83 @@
       ]
     },
     {
+      "groupId": 104701,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Raise My Soul's Blade!",
+      "maxRarity": 3,
+      "factorIds": [
+        10470101,
+        10470102,
+        10470103
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            900471,
+            900471,
+            900471,
+            900471
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 62,
+          "kind": "MAX_STAT",
+          "stat": "Stamina",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 65,
+          "kind": "MAX_STAT",
+          "stat": "Wit",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            2,
+            3,
+            4,
+            4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 104801,
       "factorType": 3,
       "family": "unique",
@@ -22951,6 +23028,21 @@
         "wit": 0
       },
       "runningStyle": 1
+    },
+    {
+      "cardId": 104701,
+      "charaId": 1047,
+      "character": "Zenno Rob Roy",
+      "outfit": "[Heroic Author]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 0,
+        "stamina": 10,
+        "power": 0,
+        "guts": 0,
+        "wit": 20
+      },
+      "runningStyle": 2
     },
     {
       "cardId": 104801,
@@ -29113,6 +29205,75 @@
         "pace": "D",
         "late": "G",
         "end": "G"
+      }
+    },
+    {
+      "cardId": 104701,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 88,
+        "Stamina": 97,
+        "Power": 91,
+        "Guts": 74,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 104701,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 108,
+        "Power": 101,
+        "Guts": 82,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 104701,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 108,
+        "Stamina": 118,
+        "Power": 111,
+        "Guts": 91,
+        "Wit": 122
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "E"
       }
     },
     {

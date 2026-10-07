@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "outfitSource": "gametora character-cards title_en_gl",
-  "characterCount": 68,
-  "outfitCount": 122,
+  "characterCount": 69,
+  "outfitCount": 123,
   "characters": {
     "Admire Vega": {
       "outfits": [
@@ -396,6 +396,11 @@
     "Yukino Bijin": {
       "outfits": [
         "Darl'n Snowflake"
+      ]
+    },
+    "Zenno Rob Roy": {
+      "outfits": [
+        "Heroic Author"
       ]
     }
   }

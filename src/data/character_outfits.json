@@ -948,5 +948,15 @@
                 "releasedEn": "2026-08-05"
             }
         ]
+    },
+    "Zenno Rob Roy": {
+        "name": "Zenno Rob Roy",
+        "outfits": [
+            {
+                "title": "Heroic Author",
+                "cardId": 104701,
+                "releasedEn": "2026-10-07"
+            }
+        ]
     }
 }

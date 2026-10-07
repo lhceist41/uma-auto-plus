@@ -118,6 +118,7 @@
         1019,
         1029,
         1038,
+        1047,
         1066,
         1078,
         1087
@@ -219,6 +220,7 @@
         1031,
         1034,
         1041,
+        1047,
         1049,
         1059,
         1066,
@@ -395,7 +397,8 @@
       "relationType": 313,
       "relationPoint": 2,
       "members": [
-        1030
+        1030,
+        1047
       ]
     },
     {
@@ -1234,7 +1237,8 @@
         1005,
         1025,
         1032,
-        1036
+        1036,
+        1047
       ]
     },
     {
@@ -1560,7 +1564,8 @@
       "relationPoint": 1,
       "members": [
         1022,
-        1044
+        1044,
+        1047
       ]
     },
     {
@@ -1798,6 +1803,7 @@
         1021,
         1037,
         1045,
+        1047,
         1048,
         1057,
         1068,
@@ -1835,6 +1841,7 @@
         1014,
         1015,
         1017,
+        1047,
         1068
       ]
     },
@@ -1877,6 +1884,7 @@
         1024,
         1025,
         1034,
+        1047,
         1064,
         1067,
         1068
@@ -1988,6 +1996,7 @@
         1041,
         1045,
         1046,
+        1047,
         1048,
         1049,
         1050,
@@ -2059,6 +2068,7 @@
         1041,
         1044,
         1045,
+        1047,
         1050,
         1052,
         1056,
@@ -2118,7 +2128,8 @@
       "relationPoint": 1,
       "members": [
         1006,
-        1037
+        1037,
+        1047
       ]
     },
     {
@@ -2552,6 +2563,7 @@
         1040,
         1041,
         1045,
+        1047,
         1048,
         1051,
         1058,
@@ -2693,6 +2705,7 @@
         1044,
         1045,
         1046,
+        1047,
         1048,
         1049,
         1050,
@@ -2785,6 +2798,7 @@
         1042,
         1044,
         1045,
+        1047,
         1048,
         1049,
         1050,
@@ -2861,6 +2875,7 @@
         1035,
         1037,
         1038,
+        1047,
         1058,
         1064,
         1068,
@@ -6120,76 +6135,101 @@
       "relationType": 8334,
       "relationPoint": 1,
       "members": [
-        1003
+        1003,
+        1047
       ]
     },
     {
       "relationType": 8335,
       "relationPoint": 1,
       "members": [
-        1004
+        1004,
+        1047
       ]
     },
     {
       "relationType": 8336,
       "relationPoint": 1,
       "members": [
-        1013
+        1013,
+        1047
       ]
     },
     {
       "relationType": 8337,
       "relationPoint": 1,
       "members": [
-        1015
+        1015,
+        1047
       ]
     },
     {
       "relationType": 8338,
       "relationPoint": 1,
       "members": [
-        1017
+        1017,
+        1047
       ]
     },
     {
       "relationType": 8339,
       "relationPoint": 1,
       "members": [
-        1022
+        1022,
+        1047
       ]
     },
     {
       "relationType": 8340,
       "relationPoint": 1,
       "members": [
-        1027
+        1027,
+        1047
       ]
     },
     {
       "relationType": 8341,
       "relationPoint": 1,
       "members": [
-        1038
+        1038,
+        1047
       ]
     },
     {
       "relationType": 8342,
       "relationPoint": 1,
       "members": [
-        1040
+        1040,
+        1047
+      ]
+    },
+    {
+      "relationType": 8343,
+      "relationPoint": 1,
+      "members": [
+        1047
       ]
     },
     {
       "relationType": 8344,
       "relationPoint": 1,
       "members": [
-        1045
+        1045,
+        1047
+      ]
+    },
+    {
+      "relationType": 8345,
+      "relationPoint": 1,
+      "members": [
+        1047
       ]
     },
     {
       "relationType": 8346,
       "relationPoint": 1,
       "members": [
+        1047,
         1056
       ]
     },
@@ -6197,6 +6237,7 @@
       "relationType": 8347,
       "relationPoint": 1,
       "members": [
+        1047,
         1058
       ]
     },
@@ -6204,6 +6245,7 @@
       "relationType": 8348,
       "relationPoint": 1,
       "members": [
+        1047,
         1059
       ]
     },
@@ -6211,6 +6253,7 @@
       "relationType": 8349,
       "relationPoint": 1,
       "members": [
+        1047,
         1060
       ]
     },
@@ -7010,6 +7053,7 @@
       "relationType": 8453,
       "relationPoint": 1,
       "members": [
+        1047,
         1069
       ]
     },
@@ -7285,6 +7329,7 @@
       "relationType": 8489,
       "relationPoint": 1,
       "members": [
+        1047,
         1071
       ]
     },
@@ -7539,6 +7584,7 @@
       "relationType": 8521,
       "relationPoint": 1,
       "members": [
+        1047,
         1072
       ]
     },
@@ -7737,6 +7783,7 @@
       "relationType": 8546,
       "relationPoint": 1,
       "members": [
+        1047,
         1062
       ]
     },
@@ -8484,6 +8531,7 @@
       "relationType": 8650,
       "relationPoint": 1,
       "members": [
+        1047,
         1074
       ]
     },
@@ -8671,6 +8719,13 @@
       ]
     },
     {
+      "relationType": 8685,
+      "relationPoint": 1,
+      "members": [
+        1047
+      ]
+    },
+    {
       "relationType": 8689,
       "relationPoint": 1,
       "members": [
@@ -8794,6 +8849,13 @@
       "relationPoint": 1,
       "members": [
         1036
+      ]
+    },
+    {
+      "relationType": 8709,
+      "relationPoint": 1,
+      "members": [
+        1047
       ]
     },
     {
@@ -9727,6 +9789,13 @@
       "relationPoint": 1,
       "members": [
         1036
+      ]
+    },
+    {
+      "relationType": 8883,
+      "relationPoint": 1,
+      "members": [
+        1047
       ]
     },
     {
@@ -11103,6 +11172,13 @@
       ]
     },
     {
+      "relationType": 9161,
+      "relationPoint": 1,
+      "members": [
+        1047
+      ]
+    },
+    {
       "relationType": 9165,
       "relationPoint": 1,
       "members": [
@@ -11399,10 +11475,10 @@
   ],
   "diagnostics": {
     "relationTypes": 1616,
-    "relationTypesWithMembers": 1348,
-    "relationTypesWithoutMembers": 268,
-    "pairwiseCapableTypes": 839,
-    "memberRows": 3212,
+    "relationTypesWithMembers": 1354,
+    "relationTypesWithoutMembers": 262,
+    "pairwiseCapableTypes": 859,
+    "memberRows": 3252,
     "charactersWithMembership": 74,
     "maxPairwisePoints": 43,
     "topRankBandMinValue": 151

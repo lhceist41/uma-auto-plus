@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Presets for **Zenno Rob Roy** in all four scenarios, with her game data. She is built as a Pace Chaser for Medium races. Her URA Finale preset races the Junior Medium calendar to reach the 5000 fans her career asks for early in the Classic year, and her last three goal races must be won. The presets are research-graded until a full career completes. The roster is now 436 presets across 108 trainee cards.
+- The bot recognizes more training events: those of Daiwa Scarlet's and Vodka's newest outfits and of the Air Groove, Narita Brian and Sakura Laurel support cards.
+
 ## [1.7.2] - 2026-10-08
 
 ### Highlights

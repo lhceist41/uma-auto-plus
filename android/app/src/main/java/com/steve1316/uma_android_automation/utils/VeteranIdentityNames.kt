@@ -89,6 +89,7 @@ object VeteranIdentityNames {
             "Yaeno Muteki",
             "Yamanin Zephyr",
             "Yukino Bijin",
+            "Zenno Rob Roy",
         )
 }
 

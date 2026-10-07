@@ -921,6 +921,110 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
     })
 })
 
+describe("Zenno Rob Roy presets", () => {
+    const name = "Zenno Rob Roy"
+    const planKeys = ["skillPointCheck", "preFinals", "careerComplete"] as const
+    const planIds = (p: (typeof characterPresets)[number], planKey: (typeof planKeys)[number]) =>
+        String((p.settings.skills!.plans as any)[planKey].plan)
+            .split(",")
+            .filter(Boolean)
+            .map(Number)
+    const skillList = (Array.isArray(skills) ? skills : Object.values(skills)) as { id: number; condition?: string }[]
+    const skillById = new Map(skillList.map((s) => [s.id, s]))
+    const objective = (objectives as Record<string, any>)[name]
+    const all = characterPresets.filter((p) => p.name === name)
+    const pipeline = all.filter((p) => p.scenario !== "Grand Concert")
+    const ura = all.find((p) => p.scenario === "URA Finale")!
+    // Card 104701 from GameTora's card data: Potential Lv1 kit, then the Lv2-5 tree.
+    const ownSkills = [200192, 200572, 201112]
+    const gated = [201322, 200571, 201172, 201113]
+    const fanGoal = { turn: 27, targetFans: 5000 }
+
+    it("ships one preset per scenario, including the derived Grand Concert twin", () => {
+        expect(all.map((p) => p.scenario).sort()).toEqual(["Grand Concert", "Trackblazer", "URA Finale", "Unity Cup"])
+    })
+
+    it("selects the right card and renders research-graded with her outfit title", () => {
+        for (const p of all) expect(p.traineeName).toBeUndefined()
+        expect(deriveInGameName(name)).toBe(name)
+        expect(deriveExcludeOutfits(name)).toEqual([])
+        expect(presetCharacter(name)).toBe(name)
+        expect(presetOutfit(name)).toBe("Heroic Author")
+        expect((outfitData as Record<string, any>)[name].outfits.map((o: any) => o.title)).toContain("Heroic Author")
+        for (const p of all) expect(presetValidation(p.name, p.scenario)).toBe("research")
+    })
+
+    it("still has the goal chain the presets were built against", () => {
+        expect(objective.mandatoryRaces.map((m: any) => m.turn)).toEqual([32, 34, 44, 48, 56, 60, 68, 70, 72])
+        expect(objective.fanGoals.map((g: any) => ({ turn: g.turn, targetFans: g.targetFans }))).toEqual([fanGoal])
+        expect((gcFanRuntime as any).characters[name].fanGoals).toEqual([fanGoal])
+    })
+
+    it("carries one turf / Medium / Pace Chaser identity and the racing-plan trio in every scenario", () => {
+        for (const p of all) {
+            expect(p.settings.skills!.preferredTrackSurface).toBe("turf")
+            expect(p.settings.skills!.preferredTrackDistance).toBe("medium")
+            expect(p.settings.skills!.preferredRunningStyle).toBe("pace_chaser")
+            expect(p.settings.racing!.preferredTerrain).toBe("Turf")
+            expect(p.settings.training!.preferredDistanceOverride).toBe("Medium")
+            expect(p.settings.general!.enablePopupCheck).toBe(false)
+            expect(p.settings.general!.scenario).toBe(p.scenario)
+            expect(p.settings.racing!.enableRacingPlan).toBeDefined()
+            expect(p.settings.racing!.enableMandatoryRacingPlan).toBeDefined()
+            expect(p.settings.racing!.racingPlan).toBeDefined()
+        }
+    })
+
+    it("plans her own kit and Pace Chaser skills only, never a green-chain hold, with the required strategies", () => {
+        for (const p of pipeline) {
+            expect(p.settings.skills!.plans!.skillPointCheck!.strategy).toBe("optimize_skills")
+            expect(p.settings.skills!.plans!.preFinals!.strategy).toBe("optimize_skills")
+            expect(p.settings.skills!.plans!.careerComplete!.strategy).toBe("optimize_knapsack")
+            for (const planKey of planKeys) {
+                const ids = planIds(p, planKey)
+                expect(new Set(ids).size).toBe(ids.length)
+                for (const id of ids) expect(skillById.has(id)).toBe(true)
+                for (const id of GREEN_CHAIN_POTENTIAL_GOLDS) expect(ids).not.toContain(id)
+                for (const id of [...ownSkills, ...gated]) expect(ids).toContain(id)
+                const offStyle = ids.filter((id) => (/running_style==(\d)/.exec(skillById.get(id)?.condition ?? "")?.[1] ?? "2") !== "2")
+                expect(offStyle).toEqual([])
+            }
+        }
+    })
+
+    it("runs a curated Junior agenda on URA that clears the fan goal, and smart racing elsewhere", () => {
+        const planned: { raceName: string; date: string; turnNumber: number }[] = JSON.parse(ura.settings.racing!.racingPlan as string)
+        const entry = (r: { raceName: string; date: string }) => (races as Record<string, any>)[`${r.raceName} (${r.date})`]
+        expect(ura.settings.racing!.enableMandatoryRacingPlan).toBe(true)
+        const blocked = [12, fanGoal.turn, ...objective.mandatoryRaces.map((m: any) => m.turn)]
+        for (const r of planned) {
+            expect(entry(r).turnNumber).toBe(r.turnNumber)
+            expect(entry(r).terrain).toBe("Turf")
+            for (const turn of [r.turnNumber - 1, r.turnNumber, r.turnNumber + 1]) expect(blocked).not.toContain(turn)
+        }
+        const preDeadline = planned.filter((r) => r.turnNumber < fanGoal.turn)
+        expect(preDeadline.reduce((sum, r) => sum + entry(r).fans, 0)).toBeGreaterThanOrEqual(fanGoal.targetFans)
+        expect(Math.max(...planned.map((r) => r.turnNumber))).toBeLessThan(fanGoal.turn + 5)
+        for (const p of all.filter((x) => x.scenario !== "URA Finale")) {
+            expect(p.settings.racing!.enableRacingPlan).toBe(false)
+            expect(p.settings.racing!.racingPlan).toBe("")
+        }
+    })
+
+    it("keeps Trackblazer settings in the Trackblazer preset only and raises the Grand Concert Medium Speed target", () => {
+        for (const p of pipeline) {
+            if (p.scenario !== "Trackblazer") expect(p.settings.scenarioOverrides).toBeUndefined()
+            else for (const item of ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone"]) expect(p.settings.scenarioOverrides!.trackblazerExcludedItems).toContain(item)
+        }
+        expect((all.find((p) => p.scenario === "Grand Concert")!.settings.trainingStatTarget as any).trainingMediumStatTarget_speedStatTarget).toBe(1400)
+    })
+
+    it("carries her advisory with no recommended badge and no avoid", () => {
+        expect(trainerAdvisories[name].recommended).toEqual([])
+        for (const scenario of ["URA Finale", "Unity Cup", "Trackblazer", "Grand Concert"]) expect(avoidAdvisoryFor(name, scenario)).toBeNull()
+    })
+})
+
 describe("Alternate-outfit presets built from their base outfit's preset", () => {
     const planKeys = ["skillPointCheck", "preFinals", "careerComplete"] as const
     const planIds = (p: (typeof characterPresets)[number], planKey: (typeof planKeys)[number]) =>
@@ -1341,6 +1445,7 @@ describe("Grand Concert derived presets", () => {
         "Winning Ticket (Dream Deliverer)": 1400,
         "Yaeno Muteki": 1400,
         "Yukino Bijin": 1400,
+        "Zenno Rob Roy": 1400,
         // Long stayers.
         "Biwa Hayahide": undefined,
         "Biwa Hayahide (Rouge Caroler)": undefined,
@@ -1385,8 +1490,8 @@ describe("Grand Concert derived presets", () => {
         // The docs used to be checked with `grep -c '^        scenario: "'`, which no longer works:
         // derived twins are not literals, and grandConcertFrom's own return adds a matching line.
         // This assertion is the authoritative count now. Update the docs whenever it changes.
-        expect(characterPresets.length).toBe(432)
-        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(107)
+        expect(characterPresets.length).toBe(436)
+        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(108)
         expect(new Set(characterPresets.map((p) => `${p.name}|${p.scenario}`)).size).toBe(characterPresets.length)
     })
 
@@ -1804,6 +1909,9 @@ describe("Potential skills in preset plans", () => {
         "Yukino Bijin|Trackblazer": [200491, 201322],
         "Yukino Bijin|URA Finale": [200491, 201322],
         "Yukino Bijin|Unity Cup": [200491, 201322],
+        "Zenno Rob Roy|Trackblazer": [200571, 201113, 201322, 201172],
+        "Zenno Rob Roy|URA Finale": [200571, 201113, 201322, 201172],
+        "Zenno Rob Roy|Unity Cup": [200571, 201113, 201322, 201172],
     }
     // Gold or higher: a gold icon (ending in 2) or an inherited unique.
     const skillById = new Map((Object.values(skills as any) as { id: number; icon_id: number; inherited?: boolean }[]).map((s) => [s.id, s]))

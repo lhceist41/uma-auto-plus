@@ -5786,6 +5786,106 @@
           ]
         }
       ]
+    },
+    "Zenno Rob Roy": {
+      "fanGoals": [
+        {
+          "turn": 27,
+          "targetFans": 5000
+        }
+      ],
+      "mandatoryRaces": [
+        {
+          "turn": 32,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Aoba Sho",
+              "fansNeeded": 1800
+            }
+          ]
+        },
+        {
+          "turn": 34,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Tokyo Yushun (Japanese Derby)",
+              "fansNeeded": 6000
+            }
+          ]
+        },
+        {
+          "turn": 44,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Kikuka Sho",
+              "fansNeeded": 7500
+            }
+          ]
+        },
+        {
+          "turn": 48,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Arima Kinen",
+              "fansNeeded": 25000
+            }
+          ]
+        },
+        {
+          "turn": 56,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Tenno Sho (Spring)",
+              "fansNeeded": 20000
+            }
+          ]
+        },
+        {
+          "turn": 60,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Takarazuka Kinen",
+              "fansNeeded": 20000
+            }
+          ]
+        },
+        {
+          "turn": 68,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Tenno Sho (Autumn)",
+              "fansNeeded": 20000
+            }
+          ]
+        },
+        {
+          "turn": 70,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Japan Cup",
+              "fansNeeded": 25000
+            }
+          ]
+        },
+        {
+          "turn": 72,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Arima Kinen",
+              "fansNeeded": 25000
+            }
+          ]
+        }
+      ]
     }
   }
 }
