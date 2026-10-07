@@ -1,15 +1,15 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.7.1</latestVersion>
+    <latestVersion>1.7.2</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.7.1 - Start works on phones with Android 14 or newer, and phones can run careers
+v1.7.2 - Grand Concert plays on phones, and the app fits phone screens
 
-- Fixed: Start no longer freezes on phones with Android 14 or newer (seen on Android 16).
-- Fixed: the bot no longer buys a skill's upgrade while logging it as the negative skill, and never fills rank spending with negative skills.
-- New: careers run on screens 1080 pixels wide and taller than 1920, tested on one 1080x2316 phone. Grand Concert needs 1080x1920 for now and stops before Start Career without spending TP on other sizes.
-- Fixed: the "Would you like to skip this scene?" question on a fresh game install is answered, and a "+4" training gain is no longer read as "+41".
-- Changed: Android lists the accessibility service as "UMA Auto+", the Home page and log say which screens work, and a run stopped by lost taps on a phone says to turn UMA Auto+ off and on again in Settings > Accessibility. Dialogs use the screen width.
+- New: Grand Concert plays on screens 1080 pixels wide and taller than 1920, finale and spark reroll included. Tested on one 1080x2316 phone only.
+- Fixed: the Grand Concert tutorial's "Are you sure?" question is answered instead of reopening its menu.
+- Fixed: pages, the menu and the Home log no longer hide behind the navigation bar, the keyboard no longer covers the log search, and cut-off titles, buttons and dialog text show in full.
+- Changed: a goal that needs a G1 race, or a race of G3 or Pre-OP grade or higher, enters only races that count for it, and near its deadline also enters a single-star one. Not seen in a live career yet.
+- Changed: the TP restore and spark reroll switches show in Run Queue Settings without a run queue.
 
     </releaseNotes>
   </update>

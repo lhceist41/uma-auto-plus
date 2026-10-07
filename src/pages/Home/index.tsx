@@ -872,7 +872,7 @@ const Home = () => {
 
 Warning: Performance may be degraded due to ${unsupportedReason}.
 
-Supported screens are 1080 pixels wide and at least 1920 tall. Grand Concert needs 1080x1920 for now.
+Supported screens are 1080 pixels wide and at least 1920 tall.
 
 If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offers it (for example on Samsung: Settings > Display > Screen resolution).`
 

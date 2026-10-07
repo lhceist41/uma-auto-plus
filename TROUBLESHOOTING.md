@@ -8,7 +8,7 @@ Most stops come down to one of these three.
 
 ### 1. Unsupported screen resolution
 
-The bot supports screens **1080 pixels wide and at least 1920 tall**, such as 1080×1920 or a 1080×2316 phone. Grand Concert needs 1080×1920 for now. On any other width, detection misfires and the bot stalls. If your phone is not 1080 wide, switch its screen resolution to FHD+ (for example on Samsung: **Settings → Display → Screen resolution**), set your emulator to 1080×1920 (see the resolution steps in the [README](README.md#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate)), or use the `Basic Template Matching Test` under **Settings → Go to Debug Settings → Debug Tests** to find a working custom scale.
+The bot supports screens **1080 pixels wide and at least 1920 tall**, such as 1080×1920 or a 1080×2316 phone. Grand Concert works on these screens too, tested on one 1080×2316 phone. On any other width, detection misfires and the bot stalls. If your phone is not 1080 wide, switch its screen resolution to FHD+ (for example on Samsung: **Settings → Display → Screen resolution**), set your emulator to 1080×1920 (see the resolution steps in the [README](README.md#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate)), or use the `Basic Template Matching Test` under **Settings → Go to Debug Settings → Debug Tests** to find a working custom scale.
 
 On a phone, the floating button must not sit over the goal banner at the top of the career screen or over the stats and buttons at the bottom. At Start the bot checks the button's saved position and logs an `[OVERLAY]` line when it may cover them: drag the button to the top right corner, above the goal banner.
 

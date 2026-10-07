@@ -10,6 +10,16 @@ export const RELEASE_NOTES_BASE_URL = "https://github.com/lhceist41/uma-auto-plu
  * no dialog. To announce a new release, add its entry here.
  */
 export const whatsNewEntries: Record<string, WhatsNewEntry> = {
+    "1.7.2": {
+        highlights: [
+            "Grand Concert plays on phones: on screens 1080 pixels wide and taller than 1920 the bot plays Grand Concert careers, finale included, and can reroll sparks at the end. Tested on one 1080x2316 phone; other 1080-wide phones use the same rule but are not tested.",
+            'The Grand Concert tutorial\'s "Are you sure?" question is answered, so the bot no longer reopens its menu over and over.',
+            "The app's screens fit phones: pages, the menu and the Home log no longer hide behind the navigation bar, the last preset trainee and the Grand Concert Quick Mode option can be tapped, and the keyboard no longer covers the log search.",
+            "The Alarm Clock option names are readable in dark mode, page titles and Settings buttons are no longer cut off, and the reset dialog in Settings shows its full text.",
+            "A goal that needs a G1 race, or a race of G3 or Pre-OP grade or higher, now enters only races that count for it, and close to its deadline it also enters one marked with a single star instead of ending the career. Not seen in a live career yet.",
+            "Restore TP with Items, Allow Carats for TP Restore and Auto-Reroll Sparks show in Run Queue Settings without a run queue.",
+        ],
+    },
     "1.7.1": {
         highlights: [
             "Start no longer freezes on phones with Android 14 or newer (seen on Android 16).",

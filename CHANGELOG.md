@@ -10,9 +10,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### What's new and changed
+## [1.7.2] - 2026-10-08
 
-- **Restore TP with Items, Allow Carats for TP Restore and Auto-Reroll Sparks are now visible without a run queue** (Settings > Run Queue). The bot already used them for single careers, but the switches only showed while Enable Run Queue was on.
+### Highlights
+
+- **Grand Concert plays on phones.** On screens 1080 pixels wide and taller than 1920 the bot now plays Grand Concert careers, finale included, and can reroll sparks at the end. Tested on one 1080x2316 phone: one whole career from the game's Home to "To Home" with no help, and a spark reroll after another career. Other 1080-wide phones use the same rule but are not tested.
+- **Grand Concert tutorial:** the bot answers its "Are you sure?" question and moves on instead of reopening the menu over and over.
+- **The app's screens fit phones.** Pages, the menu and the Home log no longer hide behind the navigation bar, the last preset trainee and the Grand Concert Quick Mode option can be tapped, and the keyboard no longer covers the log search. The Alarm Clock option names are readable in dark mode, page titles and the Settings buttons are no longer cut off, and the reset dialog in Settings shows its full text.
+- **Racing:** a goal that needs a G1 race, or a race of G3 or Pre-OP grade or higher, now enters only races that count for it, and close to its deadline it also enters one marked with a single star instead of ending the career. This is covered by tests; it has not been seen in a live career yet.
+- **Restore TP with Items, Allow Carats for TP Restore and Auto-Reroll Sparks** are now visible in Run Queue Settings without a run queue. The bot already used them for single careers.
 
 ## [1.7.1] - 2026-10-07
 
