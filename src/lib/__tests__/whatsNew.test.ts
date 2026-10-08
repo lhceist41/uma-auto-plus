@@ -7,13 +7,13 @@ const source = (relative: string) => fs.readFileSync(path.join(__dirname, "..", 
 
 const EM_DASH = String.fromCharCode(0x2014)
 
-const base: WhatsNewInput = { currentVersion: "1.7.2", lastSeenVersion: null, freshInstall: false, botActive: false, hasEntry: true }
+const base: WhatsNewInput = { currentVersion: "1.7.3", lastSeenVersion: null, freshInstall: false, botActive: false, hasEntry: true }
 
 describe("decideWhatsNew: the show rule", () => {
     const cases: [string, Partial<WhatsNewInput>, string][] = [
-        ["an update from a version that never stored one (1.7.1 to 1.7.2)", {}, "show"],
-        ["an update from a stored earlier version", { lastSeenVersion: "1.7.1" }, "show"],
-        ["the version already seen", { lastSeenVersion: "1.7.2" }, "none"],
+        ["an update from a version that never stored one (1.7.2 to 1.7.3)", {}, "show"],
+        ["an update from a stored earlier version", { lastSeenVersion: "1.7.2" }, "show"],
+        ["the version already seen", { lastSeenVersion: "1.7.3" }, "none"],
         ["a fresh install records the version and shows nothing", { freshInstall: true }, "record"],
         ["a fresh install of a version without highlights also records", { freshInstall: true, hasEntry: false }, "record"],
         ["an unknown install kind with nothing stored shows nothing and changes nothing", { freshInstall: null }, "none"],
@@ -53,11 +53,11 @@ describe("whatsNewContent and the highlights data", () => {
     })
 
     it("builds the title, the lines and the release notes link for a version", () => {
-        const content = whatsNewContent("1.7.2")!
-        expect(content.title).toBe("What's new in 1.7.2")
-        expect(content.highlights).toEqual(whatsNewEntries["1.7.2"].highlights)
-        expect(content.releaseNotesUrl).toBe("https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.7.2")
-        expect(releaseNotesUrl("1.7.2")).toBe(`${RELEASE_NOTES_BASE_URL}v1.7.2`)
+        const content = whatsNewContent("1.7.3")!
+        expect(content.title).toBe("What's new in 1.7.3")
+        expect(content.highlights).toEqual(whatsNewEntries["1.7.3"].highlights)
+        expect(content.releaseNotesUrl).toBe("https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.7.3")
+        expect(releaseNotesUrl("1.7.3")).toBe(`${RELEASE_NOTES_BASE_URL}v1.7.3`)
     })
 
     it("every entry has 3 to 8 plain one-line highlights, with no em dash or internal label", () => {

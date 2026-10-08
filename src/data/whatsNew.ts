@@ -10,6 +10,13 @@ export const RELEASE_NOTES_BASE_URL = "https://github.com/lhceist41/uma-auto-plu
  * no dialog. To announce a new release, add its entry here.
  */
 export const whatsNewEntries: Record<string, WhatsNewEntry> = {
+    "1.7.3": {
+        highlights: [
+            "Zenno Rob Roy has presets for URA Finale, Unity Cup, Trackblazer and Grand Concert. They are research-based: no full career with her has been played yet.",
+            "More training events are recognized: those of Daiwa Scarlet's and Vodka's newest outfits, of the [Are You Merry?] Air Groove and [Glad Tidings] Narita Brian support cards, and of Sakura Laurel's support cards. Before, the bot took the first option for them.",
+            "The bot no longer takes a trainee's other outfit when the game's name banner is read with a small slip. If the only outfit you own is another one, the run still stops before Start Career and tells you which preset to pick.",
+        ],
+    },
     "1.7.2": {
         highlights: [
             "Grand Concert plays on phones: on screens 1080 pixels wide and taller than 1920 the bot plays Grand Concert careers, finale included, and can reroll sparks at the end. Tested on one 1080x2316 phone; other 1080-wide phones use the same rule but are not tested.",

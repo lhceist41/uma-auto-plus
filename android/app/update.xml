@@ -1,15 +1,13 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.7.2</latestVersion>
+    <latestVersion>1.7.3</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.7.2 - Grand Concert plays on phones, and the app fits phone screens
+v1.7.3 - Zenno Rob Roy presets, and safer trainee picks
 
-- New: Grand Concert plays on screens 1080 pixels wide and taller than 1920, finale and spark reroll included. Tested on one 1080x2316 phone only.
-- Fixed: the Grand Concert tutorial's "Are you sure?" question is answered instead of reopening its menu.
-- Fixed: pages, the menu and the Home log no longer hide behind the navigation bar, the keyboard no longer covers the log search, and cut-off titles, buttons and dialog text show in full.
-- Changed: a goal that needs a G1 race, or a race of G3 or Pre-OP grade or higher, enters only races that count for it, and near its deadline also enters a single-star one. Not seen in a live career yet.
-- Changed: the TP restore and spark reroll switches show in Run Queue Settings without a run queue.
+- New: Zenno Rob Roy has presets for URA Finale, Unity Cup, Trackblazer and Grand Concert. They are research-based: no full career with her has been played yet.
+- Changed: more training events are recognized (Daiwa Scarlet's and Vodka's newest outfits, the [Are You Merry?] Air Groove and [Glad Tidings] Narita Brian support cards, and Sakura Laurel's support cards). Before, the bot took the first option for them.
+- Fixed: the bot no longer takes a trainee's other outfit when the game's name banner is read with a small slip. If you own only that other outfit, the run stops before Start Career and tells you which preset to pick.
 
     </releaseNotes>
   </update>
