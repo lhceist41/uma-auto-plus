@@ -15,7 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Highlights
 
 - **Zenno Rob Roy presets.** Zenno Rob Roy now has presets for URA Finale, Unity Cup, Trackblazer and Grand Concert. She is built as a Pace Chaser for Medium races. Her URA Finale preset races the Junior Medium calendar to reach the 5000 fans her career asks for early in the Classic year, and her last three goal races must be won. The presets are research-based and show the Research badge: no full career with her has been played yet. The roster is now 436 presets across 108 trainee cards.
-- **More training events are recognized:** those of Daiwa Scarlet's and Vodka's newest outfits, of the [Are You Merry?] Air Groove and [Glad Tidings] Narita Brian support cards, and of Sakura Laurel's support cards. Before, the bot took the first option for them.
+- **More training events are recognized:** those of Daiwa Scarlet's and Vodka's newest outfits, of the [Are You Merry?] Air Groove and [Glad Tidings] Narita Brian support cards, and of Sakura Laurel's support cards. Before, the bot took the first option for them. Not seen in a live career yet.
 - **Safer trainee pick.** The bot no longer takes a trainee's other outfit when the game's name banner is read with a small slip (it happened once in our logs). If the only outfit you own is another one, the run still stops before Start Career and tells you which preset to pick.
 
 ## [1.7.2] - 2026-10-08

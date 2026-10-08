@@ -6,7 +6,7 @@
 v1.7.3 - Zenno Rob Roy presets, and safer trainee picks
 
 - New: Zenno Rob Roy has presets for URA Finale, Unity Cup, Trackblazer and Grand Concert. They are research-based: no full career with her has been played yet.
-- Changed: more training events are recognized (Daiwa Scarlet's and Vodka's newest outfits, the [Are You Merry?] Air Groove and [Glad Tidings] Narita Brian support cards, and Sakura Laurel's support cards). Before, the bot took the first option for them.
+- Changed: more training events are recognized (Daiwa Scarlet's and Vodka's newest outfits, the [Are You Merry?] Air Groove and [Glad Tidings] Narita Brian support cards, and Sakura Laurel's support cards). Before, the bot took the first option for them. Not seen in a live career yet.
 - Fixed: the bot no longer takes a trainee's other outfit when the game's name banner is read with a small slip. If you own only that other outfit, the run stops before Start Career and tells you which preset to pick.
 
     </releaseNotes>
