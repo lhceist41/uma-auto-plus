@@ -38,6 +38,18 @@ object StatReadPlausibility {
         return digits.toIntOrNull()
     }
 
+    /** Every number in a stat read's text, in order. */
+    fun statNumbers(text: String): List<Int> = Regex("\\d+").findAll(text).map { it.value.toInt() }.toList()
+
+    /** The largest number that fits under [cap], or null when every number exceeds it (an OCR misread). */
+    fun bestInRange(numbers: List<Int>, cap: Int): Int? = numbers.filter { it in 0..cap }.maxOrNull()
+
+    /** No real stat is this low: a smaller read, or the -1 sentinel, is a lost-digit read. */
+    const val MIN_GENUINE_STAT: Int = 10
+
+    /** True when a Details dialog read deserves its one re-read at a larger scale. */
+    fun needsDialogReread(value: Int): Boolean = value < MIN_GENUINE_STAT
+
     /**
      * True when [parsed] sits so far below [lastVerified] that no in-game event explains it.
      *

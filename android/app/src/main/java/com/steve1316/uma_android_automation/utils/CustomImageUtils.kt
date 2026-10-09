@@ -100,6 +100,10 @@ internal fun <K> argMaxAboveFloor(scores: Map<K, Double>, floor: Double): K? {
     return if (best.value >= floor) best.key else null
 }
 
+// Unscaled, the Details dialog stat read lost everything after a leading "1" in 34 of 152 live reads; the main screen reads the same digits at 2x and lost 0 of 727.
+internal const val DIALOG_STAT_READ_SCALE = 2.0
+internal const val DIALOG_STAT_REREAD_SCALE = 3.0
+
 /**
  * A scrollbar rail and its thumb are tall, narrow, vertical slivers, and nothing else in the scrollbar's column is. Hue and saturation are deliberately left unconstrained in
  * [CustomImageUtils.detectScrollBar] so the near-grey widget survives device rendering variance, so this shape gate is what keeps a pale badge or a rounded card corner from being crowned the
@@ -1488,43 +1492,45 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 }
 
                 // Perform OCR with no thresholding (stats are on solid background).
-                val text =
-                    performOCROnRegion(
-                        finalSourceBitmap,
-                        relX(finalLocation.x, offsetX),
-                        relY(finalLocation.y, offsetY),
-                        relWidth(width),
-                        relHeight(height),
-                        useThreshold = false,
-                        useGrayscale = true,
-                        scale = 1.0,
-                        ocrEngine = "tesseract_digits",
-                        debugName = "${statName}StatValue",
-                    )
+                fun readStat(scale: Double): Int {
+                    val text =
+                        performOCROnRegion(
+                            finalSourceBitmap,
+                            relX(finalLocation.x, offsetX),
+                            relY(finalLocation.y, offsetY),
+                            relWidth(width),
+                            relHeight(height),
+                            useThreshold = false,
+                            useGrayscale = true,
+                            scale = scale,
+                            ocrEngine = "tesseract_digits",
+                            debugName = "${statName}StatValue",
+                        )
 
-                // Parse the text.
-                Log.d(TAG, "[DEBUG] determineStatValues:: Raw OCR text for $statName: '$text' (length: ${text.length})")
+                    // Parse the text.
+                    Log.d(TAG, "[DEBUG] determineStatValues:: Raw OCR text for $statName: '$text' (length: ${text.length})")
 
-                if (text.lowercase().contains("max") || text.lowercase().contains("ax")) {
-                    // Same maxOf semantics as determineSingleStatValue's MAX branch: the 1200 manual
-                    // default must not mask a higher scenario cap.
-                    val maxedCap = maxOf(com.steve1316.uma_android_automation.bot.Training.getScenarioStatCap(game.scenario, statName), manualStatCap)
-                    Log.d(TAG, "[DEBUG] determineStatValues:: $statName seems to be maxed out. Setting it to $maxedCap.")
-                    result[statName] = maxedCap
-                } else {
-                    try {
-                        // Extract all numbers from the text
-                        val numbers = Regex("\\d+").findAll(text).map { it.value.toInt() }.toList()
+                    if (text.lowercase().contains("max") || text.lowercase().contains("ax")) {
+                        // Same maxOf semantics as determineSingleStatValue's MAX branch: the 1200 manual
+                        // default must not mask a higher scenario cap.
+                        val maxedCap = maxOf(com.steve1316.uma_android_automation.bot.Training.getScenarioStatCap(game.scenario, statName), manualStatCap)
+                        Log.d(TAG, "[DEBUG] determineStatValues:: $statName seems to be maxed out. Setting it to $maxedCap.")
+                        return maxedCap
+                    }
+                    return try {
+                        val numbers = StatReadPlausibility.statNumbers(text)
                         val cap = statReadCeiling(statName)
 
                         if (numbers.isEmpty()) {
                             MessageLog.w(TAG, "[WARN] determineStatValues:: No numbers found in '$text' for $statName")
-                            result[statName] = -1
+                            -1
                         } else {
-                            // Filter to values within the valid stat range. Values exceeding the cap are OCR misreads.
-                            val validNumbers = numbers.filter { it in 0..cap }
-                            if (validNumbers.isNotEmpty()) {
-                                val best = validNumbers.max()
+                            // Values exceeding the cap are OCR misreads.
+                            val best = StatReadPlausibility.bestInRange(numbers, cap)
+                            if (best == null) {
+                                Log.d(TAG, "[DEBUG] determineStatValues:: All parsed numbers $numbers for $statName exceed stat cap $cap, likely an OCR misread. Rejecting.")
+                                -1
+                            } else {
                                 val baseline = lastVerified[statName] ?: -1
                                 if (StatReadPlausibility.isImplausibleDrop(best, baseline)) {
                                     // Same floor as determineSingleStatValue; see StatReadPlausibility.
@@ -1534,20 +1540,28 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                             "${StatReadPlausibility.MAX_SINGLE_EVENT_DROP} below the last verified $baseline. Keeping $baseline.",
                                     )
                                     floorRejections?.put(statName, best)
-                                    result[statName] = -1
+                                    -1
                                 } else {
-                                    result[statName] = best
+                                    best
                                 }
-                            } else {
-                                Log.d(TAG, "[DEBUG] determineStatValues:: All parsed numbers $numbers for $statName exceed stat cap $cap, likely an OCR misread. Rejecting.")
-                                result[statName] = -1
                             }
                         }
                     } catch (e: Exception) {
                         MessageLog.e(TAG, "[ERROR] determineStatValues:: Failed to parse '$text' for $statName: ${e.message}")
-                        result[statName] = -1
+                        -1
                     }
                 }
+
+                var value = readStat(if (isAptitudeDialog) DIALOG_STAT_READ_SCALE else 1.0)
+                if (isAptitudeDialog && StatReadPlausibility.needsDialogReread(value)) {
+                    val reread = readStat(DIALOG_STAT_REREAD_SCALE)
+                    MessageLog.i(TAG, "[INFO] determineStatValues:: $statName dialog read gave $value; the ${DIALOG_STAT_REREAD_SCALE}x re-read gave $reread.")
+                    if (!StatReadPlausibility.needsDialogReread(reread)) {
+                        value = reread
+                        floorRejections?.remove(statName)
+                    }
+                }
+                result[statName] = value
             }
         } else {
             MessageLog.e(TAG, "[ERROR] determineStatValues:: Could not start the process of detecting stat values.")
