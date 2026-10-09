@@ -145,6 +145,8 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     "Meisho Doto|Grand Concert",
     "Nice Nature|Grand Concert",
     "Tosen Jordan|Grand Concert",
+    // First full career 2026-10-08 on the MuMu emulator: every goal passed, all three Finale races won (A 11,960).
+    "Zenno Rob Roy|URA Finale",
 ])
 
 /**

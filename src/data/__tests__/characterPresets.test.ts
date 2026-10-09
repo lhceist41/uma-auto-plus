@@ -944,14 +944,14 @@ describe("Zenno Rob Roy presets", () => {
         expect(all.map((p) => p.scenario).sort()).toEqual(["Grand Concert", "Trackblazer", "URA Finale", "Unity Cup"])
     })
 
-    it("selects the right card and renders research-graded with her outfit title", () => {
+    it("selects the right card and shows her outfit title, validated only for URA Finale", () => {
         for (const p of all) expect(p.traineeName).toBeUndefined()
         expect(deriveInGameName(name)).toBe(name)
         expect(deriveExcludeOutfits(name)).toEqual([])
         expect(presetCharacter(name)).toBe(name)
         expect(presetOutfit(name)).toBe("Heroic Author")
         expect((outfitData as Record<string, any>)[name].outfits.map((o: any) => o.title)).toContain("Heroic Author")
-        for (const p of all) expect(presetValidation(p.name, p.scenario)).toBe("research")
+        for (const p of all) expect(presetValidation(p.name, p.scenario)).toBe(p.scenario === "URA Finale" ? "validated" : "research")
     })
 
     it("still has the goal chain the presets were built against", () => {

@@ -51070,8 +51070,8 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // Kept high for URA: her last three goals (t68, t70, t72) must be won. Stamina 900 covers the 3000m Kikuka Sho and
-            // 3200m Tenno Sho (Spring); Wit leans on her +20% growth.
+            // Kept high for URA: her last three goals (t68, t70, t72) must be won. Stamina 900 is an upper target: a live career
+            // passed the 3000m Kikuka Sho and 3200m Tenno Sho (Spring) with Stamina under 450. Wit leans on her +20% growth.
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1100,
                 trainingSprintStatTarget_staminaStatTarget: 900,
