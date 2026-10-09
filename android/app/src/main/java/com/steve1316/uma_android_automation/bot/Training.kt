@@ -66,8 +66,8 @@ enum class SelectionSource {
 
 /**
  * [selectedTraining] is the executed facility (null for a recovery or backout); [turnAdvanced] is true whenever a
- * turn-advancing action ran (training, forced Wit, recovery). They are independent: a recovery advances the turn
- * with a null [selectedTraining].
+ * turn-advancing action ran (training, forced Wit, an energy recovery that moved the turn). They are independent: a
+ * recovery advances the turn with a null [selectedTraining].
  */
 data class TrainingActionOutcome(
     val selectedTraining: StatName?,
@@ -2905,8 +2905,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
      * Handle the training process and report whether the game turn advanced.
      *
      * [TrainingActionOutcome.turnAdvanced] is true when a facility training executed, forced Wit ran, or
-     * energy/mood recovery ran (all of which consume the turn), and false only on a non-advancing exit
-     * (could not open the Training screen, or could not return to the Main screen to recover). The RACE
+     * an energy recovery moved the turn, and false on a non-advancing exit (could not open the Training screen,
+     * could not return to the Main screen to recover, or the recovery did not move the turn). The RACE
      * fallback needs this because [TrainingActionOutcome.selectedTraining] is null on recovery paths that
      * still advance the turn.
      *
@@ -2971,8 +2971,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         ButtonBack.click(game.imageUtils)
                         game.wait(1.0)
                         if (campaign.checkMainScreen()) {
-                            if (campaign.recoverEnergy()) campaign.decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "Wit training button not found.")
-                            advanced = true
+                            advanced = campaign.recoverEnergy()
+                            if (advanced) campaign.decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "Wit training button not found.")
                         } else {
                             MessageLog.w(TAG, "[WARN] handleTraining:: Could not head back to the Main screen in order to recover energy.")
                         }
@@ -2988,8 +2988,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         } else {
                             MessageLog.v(TAG, "[TRAINING] Will recover energy due to either failure chance was high enough to do so or no failure chances were detected via OCR.")
                         }
-                        if (campaign.recoverEnergy()) campaign.decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "No training worth taking this turn.")
-                        advanced = true
+                        advanced = campaign.recoverEnergy()
+                        if (advanced) campaign.decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "No training worth taking this turn.")
                     } else {
                         MessageLog.w(TAG, "[WARN] handleTraining:: Could not head back to the Main screen in order to recover energy.")
                     }
@@ -3122,6 +3122,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             game.waitForLoading()
 
             MessageLog.v(TAG, "[TRAINING] Process to execute training completed.")
+            campaign.clearUnmovedEnergyRecoveries()
         } else {
             MessageLog.v(TAG, "[TRAINING] Conditions have not been met so training will not be done.")
         }

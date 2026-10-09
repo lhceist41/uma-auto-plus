@@ -85,8 +85,11 @@ class DecisionTraceItemWiringTest {
         val bare = Regex("""(?m)^\s+(campaign\.)?recover(Mood|Energy)\(\)\s*$""")
         assertEquals(emptyList<String>(), bare.findAll(trackblazer).map { it.value.trim() }.toList())
         assertEquals(emptyList<String>(), bare.findAll(training).map { it.value.trim() }.toList())
-        assertEquals(4, Regex("""if \(recover(Mood|Energy)\(\)\) decisionTracer\?\.recordRecoveryExecuted\(""").findAll(trackblazer).count())
-        assertEquals(2, Regex("""if \(campaign\.recoverEnergy\(\)\) campaign\.decisionTracer\?\.recordRecoveryExecuted\("RECOVER_ENERGY"""").findAll(training).count())
+        assertEquals(2, Regex("""if \(recoverMood\(\)\) decisionTracer\?\.recordRecoveryExecuted\(""").findAll(trackblazer).count())
+        // An energy recovery also decides whether the turn advanced, so it is kept and recorded on the next line.
+        val energy = Regex("""advanced = (campaign\.)?recoverEnergy\(\)\n\s+if \(advanced\) (campaign\.)?decisionTracer\?\.recordRecoveryExecuted\("RECOVER_ENERGY"""")
+        assertEquals(2, energy.findAll(trackblazer).count())
+        assertEquals(2, energy.findAll(training).count())
     }
 
     private fun source(relative: String): String = File(kotlinRoot(), relative).readText().replace("\r\n", "\n")

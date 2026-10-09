@@ -121,6 +121,8 @@ class Trackblazer(game: Game) : Campaign(game) {
     /** Tracks the number of consecutive races performed. */
     private var consecutiveRaceCount: Int = 0
 
+    private var energyRecoveryFailedThisAction: Boolean = false
+
     /** Flag to prevent double incrementing the counter when OCR already updated it. */
     private var counterUpdatedByOCR: Boolean = false
 
@@ -449,9 +451,14 @@ class Trackblazer(game: Game) : Campaign(game) {
     }
 
     override fun recoverEnergy(sourceBitmap: Bitmap?): Boolean {
-        MessageLog.i(TAG, "[TRACKBLAZER] Resetting $consecutiveRaceCount consecutive race counts due to energy recovery.")
-        consecutiveRaceCount = 0
-        return super.recoverEnergy(sourceBitmap)
+        val recovered = super.recoverEnergy(sourceBitmap)
+        if (recovered) {
+            MessageLog.i(TAG, "[TRACKBLAZER] Resetting $consecutiveRaceCount consecutive race counts due to energy recovery.")
+            consecutiveRaceCount = 0
+        } else {
+            energyRecoveryFailedThisAction = true
+        }
+        return recovered
     }
 
     override fun recoverMood(sourceBitmap: Bitmap?, targetMood: Mood): Boolean {
@@ -954,6 +961,7 @@ class Trackblazer(game: Game) : Campaign(game) {
     }
 
     override fun executeAction(action: MainScreenAction, bIsScheduledRaceDay: Boolean): Boolean {
+        energyRecoveryFailedThisAction = false
         val result =
             when (action) {
                 MainScreenAction.TRAIN -> {
@@ -962,10 +970,10 @@ class Trackblazer(game: Game) : Campaign(game) {
                     } else {
                         MessageLog.i(TAG, "[TRACKBLAZER] Decision made to train.")
                         StatusBoard.action("training", null)
-                        handleTrackblazerTraining()
+                        val advanced = handleTrackblazerTraining()
                         bHasCheckedDateThisTurn = false
                         // This fast path skips super.executeAction, so rearm the base CareerState here (also covers the virtual RECOVER_MOOD -> TRAIN redispatch).
-                        armCareerStateForNewTurn()
+                        if (advanced) armCareerStateForNewTurn()
                         true
                     }
                 }
@@ -975,7 +983,8 @@ class Trackblazer(game: Game) : Campaign(game) {
                 }
             }
 
-        if (result && action != MainScreenAction.NONE) {
+        // A failed energy recovery did not prove the turn ended, so the megaphone and shop counters keep their turn.
+        if (result && action != MainScreenAction.NONE && !energyRecoveryFailedThisAction) {
             // Turn is over, decrement megaphone counter.
             if (trainee.megaphoneTurnCounter > 0) {
                 trainee.megaphoneTurnCounter--
@@ -1597,11 +1606,12 @@ class Trackblazer(game: Game) : Campaign(game) {
                     if (trainee.mood == Mood.AWFUL || (trainee.mood <= Mood.NORMAL && trainee.energy >= 20)) {
                         MessageLog.i(TAG, "[TRACKBLAZER] Mood is ${trainee.mood}. Attempting to recover mood.")
                         if (recoverMood()) decisionTracer?.recordRecoveryExecuted("RECOVER_MOOD", "No suitable training; mood ${trainee.mood}.")
+                        advanced = true
                     } else {
                         MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
-                        if (recoverEnergy()) decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "No suitable training; energy ${trainee.energy}%.")
+                        advanced = recoverEnergy()
+                        if (advanced) decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "No suitable training; energy ${trainee.energy}%.")
                     }
-                    advanced = true
                 }
             } else {
                 // Force a training (Wit if stat reductions are at risk, else Speed); 80 Energy suits Wit since post events may add energy.
@@ -1630,11 +1640,12 @@ class Trackblazer(game: Game) : Campaign(game) {
                         if (trainee.mood == Mood.AWFUL || (trainee.mood <= Mood.NORMAL && trainee.energy >= 20)) {
                             MessageLog.i(TAG, "[TRACKBLAZER] Mood is ${trainee.mood}. Attempting to recover mood.")
                             if (recoverMood()) decisionTracer?.recordRecoveryExecuted("RECOVER_MOOD", "Cannot force $forcedStat training ($reason).")
+                            advanced = true
                         } else {
                             MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
-                            if (recoverEnergy()) decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "Cannot force $forcedStat training ($reason).")
+                            advanced = recoverEnergy()
+                            if (advanced) decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "Cannot force $forcedStat training ($reason).")
                         }
-                        advanced = true
                     }
                 } else {
                     MessageLog.i(

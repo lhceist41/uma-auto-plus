@@ -312,6 +312,25 @@
             }
         },
         {
+            "name": "single run: breakpoint with its reason",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "totalRuns": 1,
+                "breakpointDetail": "Energy recovery did not move turn 30 after 2 tries, so the run stopped instead of looping. Rest once in the game, then press Start.",
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_BREAKPOINT_REACHED"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Run paused",
+                "reason": "The run stopped at a breakpoint: Energy recovery did not move turn 30 after 2 tries, so the run stopped instead of looping. Rest once in the game, then press Start.",
+                "nextAction": "Finish that screen in the game, then press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "single run: timed out",
             "report": {
                 "kind": "SINGLE_RUN_ENDED",

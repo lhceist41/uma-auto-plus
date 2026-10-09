@@ -79,6 +79,8 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
             when {
                 key == ONLY_OTHER_OUTFIT -> singleRunOutfitText(r)
                 lastForceEnded -> withFinalizeStop(ReportText("Career ended early", "The game ended the career early: a goal was missed.", null), r)
+                lastCode == "TASK_RESULT_BREAKPOINT_REACHED" && breakpointDetail(r) != null ->
+                    withFinalizeStop(ReportText("Run paused", "The run stopped at a breakpoint: ${breakpointDetail(r)}", "Finish that screen in the game, then press Start in UMA Auto+."), r)
                 else -> withFinalizeStop(singleRunText(lastCode), r)
             }
         SessionEnd.STOPPED_BY_USER ->
@@ -102,7 +104,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
                 ReportText("Queue stopped", "The bot was stopped with $done of ${runsPhrase(total)} done." + runNotes(r), null)
             }
         SessionEnd.BREAKPOINT -> {
-            val detail = r.optString("breakpointDetail").takeUnless { r.isNull("breakpointDetail") || it.isBlank() }
+            val detail = breakpointDetail(r)
             ReportText(
                 haltTitle(resumable),
                 "Run $reached stopped at a breakpoint" + (detail?.let { ": $it" } ?: "."),
@@ -171,6 +173,8 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         }
     }
 }
+
+private fun breakpointDetail(r: JSONObject): String? = r.optString("breakpointDetail").takeUnless { r.isNull("breakpointDetail") || it.isBlank() }
 
 private fun singleRunText(code: String?): ReportText =
     when (code) {

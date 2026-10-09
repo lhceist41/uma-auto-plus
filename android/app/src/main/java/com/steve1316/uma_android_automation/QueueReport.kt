@@ -564,7 +564,8 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
             careerInFlight = verdict.careerInFlight,
             resumable = verdict.resumable,
             reasonKey = if (verdict.end in ENDINGS_WITH_REASON_KEY) reasonKey else "",
-            breakpointDetail = if (verdict.end == SessionEnd.BREAKPOINT) breakpointDetail else null,
+            // A queue-off session ends as one run even when that run stopped at a breakpoint, so it keeps the breakpoint's own words too.
+            breakpointDetail = if (verdict.end == SessionEnd.BREAKPOINT || (verdict.end == SessionEnd.SINGLE_RUN_ENDED && haltEnd == SessionEnd.BREAKPOINT)) breakpointDetail else null,
             errorPosted = errorPosted,
             runs = runsJson(),
             recoveries = SessionTally.recoveriesJson(),

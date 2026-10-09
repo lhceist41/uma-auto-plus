@@ -411,6 +411,28 @@ class QueueReportTest {
         }
 
         @Test
+        fun `a queue-off run that stopped at a breakpoint keeps the breakpoint's words in its report and text`() {
+            val detail = "Energy recovery did not move turn 30 after 2 tries, so the run stopped instead of looping. Rest once in the game, then press Start."
+            val l =
+                ledger(queueEnabled = false).apply {
+                    haltEnd = SessionEnd.BREAKPOINT
+                    breakpointDetail = detail
+                }
+            l.addRun(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_BREAKPOINT_REACHED", null, null, null, null))
+            val report = l.report(classifySessionEnd(l.facts(stopRequested = false, stopByBot = false, serviceRunning = true, queueStateActive = false)), endedAt = 2_100L)
+            assertEquals(SessionEnd.SINGLE_RUN_ENDED, report.kind)
+            assertEquals(detail, report.toJson().getString("breakpointDetail"))
+            val text = queueReportText(report.toJson())
+            assertEquals("Run paused", text.title)
+            assertEquals("The run stopped at a breakpoint: $detail", text.reason)
+
+            val plain = ledger(queueEnabled = false).apply { breakpointDetail = "not a breakpoint ending" }
+            plain.addRun(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", null, null, null, null))
+            val finished = plain.report(classifySessionEnd(plain.facts(false, false, true, false)), endedAt = 2_100L).toJson()
+            assertTrue(finished.isNull("breakpointDetail"), "only a breakpoint halt keeps the detail")
+        }
+
+        @Test
         fun `the history line and the app's current report carry the identical record`() {
             val l = ledger(queueEnabled = true).apply { haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS }
             l.addRun(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", null, null, null, null))

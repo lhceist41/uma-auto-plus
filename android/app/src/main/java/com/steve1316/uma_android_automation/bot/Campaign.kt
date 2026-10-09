@@ -817,6 +817,10 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Backing out does not advance the game turn, so without this latch the decision loop would re-choose DATE and reopen the same dialog forever. */
     protected var recreationAttemptFailedThisTurn: Boolean = false
 
+    private val unmovedEnergyRecoveries = UnmovedEnergyRecoveries()
+
+    private var energyRecoveryLeftTurnOpen = false
+
     /** The turn number when the stop-at-date check first started. */
     protected var stopAtDateInitialTurnNumber: Int = -1
 
@@ -2263,52 +2267,94 @@ abstract class Campaign(game: Game) : Task(game) {
      * Attempts to recover the trainee's energy.
      *
      * @param sourceBitmap Optional pre-captured bitmap to analyze.
-     * @return True if energy was successfully recovered, false otherwise.
+     * @return False when the turn provably did not move; true when it moved or could not be confirmed either way (see [recoverEnergyAndConfirmTurn]).
      */
     open fun recoverEnergy(sourceBitmap: Bitmap? = null): Boolean {
         MessageLog.v(TAG, "\n[ENERGY] Now starting attempt to recover energy on $date.")
-        val sourceBitmap: Bitmap = sourceBitmap ?: game.imageUtils.getSourceBitmap()
+        var bitmap: Bitmap = sourceBitmap ?: game.imageUtils.getSourceBitmap()
+        val day = date.day
+        val energyBefore = game.imageUtils.analyzeEnergyBar()
+        var via = "rest"
+        var moved: Boolean? = null
 
-        // First, try to handle recreation date which also recovers energy if a date is available.
-        // Skip recreation date if it's already completed (will only be used for mood recovery).
-        if (
-            !recreationDateCompleted &&
-            IconRecreationDate.check(game.imageUtils, sourceBitmap = sourceBitmap) &&
-            // With an active dating schedule the chain is the scheduler's: recover on the trainee instead of consuming a scheduled outing.
-            handleRecreationDate(recoverMoodIfCompleted = false, doDateRecreation = !isScheduleActive())
-        ) {
-            MessageLog.v(TAG, "[ENERGY] Successfully recovered energy via recreation date.")
-            return true
-        }
-
-        // Otherwise, fall back to the regular energy recovery logic.
-        return when {
-            ButtonRest.click(game.imageUtils, sourceBitmap = sourceBitmap) -> {
-                ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
-                // Another OK tap for the possibility of a scheduled race warning popup.
-                game.wait(game.dialogWaitDelay)
-                ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
-                game.waitForLoading()
-                MessageLog.v(TAG, "[ENERGY] Successfully recovered energy via rest.")
-                true
-            }
-
-            ButtonRestAndRecreation.click(game.imageUtils, sourceBitmap = sourceBitmap) -> {
-                ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
-                // Another OK tap for the possibility of a scheduled race warning popup.
-                game.wait(game.dialogWaitDelay)
-                ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
-                game.waitForLoading()
-                MessageLog.v(TAG, "[ENERGY] Successfully recovered energy via Summer rest.")
-                true
-            }
-
-            else -> {
-                MessageLog.w(TAG, "[WARN] recoverEnergy:: Failed to recover energy. Moving on...")
-                false
-            }
-        }
+        val recovered =
+            recoverEnergyAndConfirmTurn(
+                day = day,
+                unmoved = unmovedEnergyRecoveries,
+                tryOuting = {
+                    // Skip recreation date if it's already completed (will only be used for mood recovery).
+                    if (recreationDateCompleted || !IconRecreationDate.check(game.imageUtils, sourceBitmap = bitmap)) {
+                        false
+                    } else if (
+                        // With an active dating schedule the chain is the scheduler's: recover on the trainee instead of consuming a scheduled outing.
+                        handleRecreationDate(recoverMoodIfCompleted = false, doDateRecreation = !isScheduleActive())
+                    ) {
+                        via = "recreation date"
+                        true
+                    } else {
+                        // The Recreation popup may have opened and been cancelled: a Rest tap during its close animation is dropped, and the capture
+                        // from before the popup is stale.
+                        game.waitForLoading()
+                        game.wait(game.dialogWaitDelay)
+                        bitmap = game.imageUtils.getSourceBitmap()
+                        false
+                    }
+                },
+                rest = {
+                    val button =
+                        when {
+                            ButtonRest.click(game.imageUtils, sourceBitmap = bitmap) -> "rest"
+                            ButtonRestAndRecreation.click(game.imageUtils, sourceBitmap = bitmap) -> "Summer rest"
+                            else -> null
+                        }
+                    if (button == null) {
+                        MessageLog.w(TAG, "[WARN] recoverEnergy:: No Rest button found.")
+                        false
+                    } else {
+                        via = button
+                        ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
+                        // Another OK tap for the possibility of a scheduled race warning popup.
+                        game.wait(game.dialogWaitDelay)
+                        ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
+                        game.waitForLoading()
+                        true
+                    }
+                },
+                turnMoved = { turnMovedSince(day, energyBefore).also { moved = it } },
+                warn = { MessageLog.w(TAG, "[WARN] recoverEnergy:: $it") },
+                stop = { reason ->
+                    game.notificationMessage = reason
+                    throw CampaignBreakpointException(reason)
+                },
+            )
+        if (moved == true) MessageLog.v(TAG, "[ENERGY] Successfully recovered energy via $via.")
+        // The turn goes on, so its decision report waits for the retry instead of closing without it.
+        if (!recovered) energyRecoveryLeftTurnOpen = true
+        return recovered
     }
+
+    /** A training spent the turn, so failed recoveries before it are no longer in a row. */
+    internal fun clearUnmovedEnergyRecoveries() = unmovedEnergyRecoveries.clear()
+
+    /** Reads the date into a scratch object so the turn-start date-change check still sees the change. */
+    private fun turnMovedSince(
+        day: Int,
+        energyBefore: Int?,
+    ): Boolean? =
+        confirmTurnMoved(
+            day,
+            energyBefore,
+            read = {
+                if (checkMainScreen()) {
+                    val probe = GameDate(day = day)
+                    val dateRead = probe.update(game.imageUtils, scenario = game.scenario, isOnMainScreen = true)
+                    TurnScreen(mainScreen = true, day = if (dateRead) probe.day else null, energy = game.imageUtils.analyzeEnergyBar())
+                } else {
+                    TurnScreen(mainScreen = false, trainingEvent = IconTrainingEventHorseshoe.check(game.imageUtils))
+                }
+            },
+            wait = { game.wait(1.0) },
+        )
 
     /**
      * Attempts to recover mood to maintain at least "Above Normal" status.
@@ -3146,7 +3192,7 @@ abstract class Campaign(game: Game) : Task(game) {
         // Reuse the cached value: nothing since performTurnStartUpdates() could have changed scheduled-race status.
         val actionExecuted = executeAction(action, cachedScheduledRaceDay)
         // Flushed after the action so selections recorded inside executeAction land in the block; emit() is idempotent per turn.
-        decisionTracer?.emit()
+        if (energyRecoveryLeftTurnOpen) energyRecoveryLeftTurnOpen = false else decisionTracer?.emit()
         return actionExecuted
     }
 
@@ -3647,11 +3693,11 @@ abstract class Campaign(game: Game) : Task(game) {
         // Force Wit Training if requested by the pre-summer logic.
         if (action == MainScreenAction.TRAIN && bForcedWitTraining) {
             MessageLog.i(TAG, "[INFO] Executing forced Wit training as requested by pre-summer logic.")
-            training.handleTraining(StatName.WIT)
+            val outcome = training.handleTrainingWithOutcome(StatName.WIT)
             bForcedWitTraining = false
             bHasCheckedDateThisTurn = false
             // Shadow-only: forced-Wit training advances to a new decision turn; rearm the CareerState build latch.
-            careerStateLatch.armForNewTurn()
+            careerStateLatch.armForNewTurnIf(outcome.turnAdvanced)
             return true
         }
 
@@ -3676,16 +3722,16 @@ abstract class Campaign(game: Game) : Task(game) {
 
             MainScreenAction.TRAIN -> {
                 MessageLog.i(TAG, "[INFO] Decision made to train.")
-                training.handleTraining()
+                val outcome = training.handleTrainingWithOutcome()
                 bHasCheckedDateThisTurn = false
-                careerStateLatch.armForNewTurn() // shadow-only: training advances the turn
+                careerStateLatch.armForNewTurnIf(outcome.turnAdvanced) // shadow-only: training advances the turn
             }
 
             MainScreenAction.REST -> {
                 // RACE/TRAIN (most turns) need no fresh screenshot here; capture only for REST/RECOVER_MOOD.
-                recoverEnergy(game.imageUtils.getSourceBitmap())
+                val rested = recoverEnergy(game.imageUtils.getSourceBitmap())
                 bHasCheckedDateThisTurn = false
-                careerStateLatch.armForNewTurn() // shadow-only: resting advances the turn
+                careerStateLatch.armForNewTurnIf(rested) // shadow-only: resting advances the turn
             }
 
             MainScreenAction.RECOVER_MOOD -> {
