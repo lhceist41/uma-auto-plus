@@ -166,6 +166,19 @@ object IconSkillTitleX : ComponentInterface {
     override val template = Template("components/icon/skill_title_x")
 }
 
+// The Umamusume Details Skills tab draws the tier glyphs at about 0.7x the Learn list size, too small for the skill_title templates.
+object IconDetailsSkillDoubleCircle : ComponentInterface {
+    override val template = Template("components/icon/details_skill_double_circle")
+}
+
+object IconDetailsSkillCircle : ComponentInterface {
+    override val template = Template("components/icon/details_skill_circle")
+}
+
+object IconDetailsSkillX : ComponentInterface {
+    override val template = Template("components/icon/details_skill_x")
+}
+
 object IconOneFreePerDayTooltip : ComponentInterface {
     override val template = Template("components/icon/one_free_per_day_tooltip", region = Region.middle)
 }

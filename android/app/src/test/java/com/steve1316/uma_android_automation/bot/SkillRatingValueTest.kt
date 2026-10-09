@@ -4,7 +4,9 @@ import com.steve1316.uma_android_automation.types.RunningStyle
 import com.steve1316.uma_android_automation.types.SkillListEntry
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
+import com.steve1316.uma_android_automation.types.oneTierPerFamily
 import com.steve1316.uma_android_automation.types.ownedSkillsWithoutUnique
+import com.steve1316.uma_android_automation.types.withPurchasedTiers
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -114,6 +116,52 @@ class SkillRatingValueTest {
     }
 
     @Nested
+    @DisplayName("withPurchasedTiers")
+    inner class PurchasedTiers {
+        @Test
+        fun `a verified double-circle buy lifts a single-circle read`() {
+            val read = listOf("Medium Corners ○", "Murmur", "End Closer Straightaways ○")
+            val bought = listOf("Medium Corners ○", "Medium Corners ◎", "End Closer Straightaways ○", "End Closer Straightaways ◎", "Murmur")
+            assertEquals(listOf("Medium Corners ◎", "Murmur", "End Closer Straightaways ◎"), withPurchasedTiers(read, bought))
+        }
+
+        @Test
+        fun `a read tier is never lowered by an older lower buy`() {
+            assertEquals(listOf("Mile Straightaways ◎"), withPurchasedTiers(listOf("Mile Straightaways ◎"), listOf("Mile Straightaways ○")))
+        }
+
+        @Test
+        fun `a negative read stays negative unless the family was bought`() {
+            assertEquals(listOf("Sapporo Racecourse ×"), withPurchasedTiers(listOf("Sapporo Racecourse ×"), listOf("Top Pick")))
+            assertEquals(listOf("Sapporo Racecourse ○"), withPurchasedTiers(listOf("Sapporo Racecourse ×"), listOf("Sapporo Racecourse ○")))
+        }
+
+        @Test
+        fun `buys add no skill the read did not show, and order is kept`() {
+            val read = listOf("Focus", "Firm Conditions ○")
+            assertEquals(read, withPurchasedTiers(read, listOf("Steadfast", "Focus", "Firm Conditions ○")))
+            assertEquals(read, withPurchasedTiers(read, emptyList()))
+        }
+
+        @Test
+        fun `two scroll passes reading one family at two tiers keep only the highest`() {
+            assertEquals(listOf("Mile Straightaways ◎", "Murmur"), oneTierPerFamily(listOf("Mile Straightaways ◎", "Murmur", "Mile Straightaways ○")))
+            assertEquals(listOf("Sapporo Racecourse ○"), oneTierPerFamily(listOf("Sapporo Racecourse ×", "Sapporo Racecourse ○")))
+        }
+
+        @Test
+        fun `distinct families stay apart`() {
+            val read = listOf("Mile Straightaways ○", "Mile Corners ○", "Medium Straightaways ◎")
+            assertEquals(read, oneTierPerFamily(read))
+        }
+
+        @Test
+        fun `a glyph-free name is its own family`() {
+            assertEquals(listOf("Corner Recovery ○"), withPurchasedTiers(listOf("Corner Recovery ○"), listOf("Corner Recovery")))
+        }
+    }
+
+    @Nested
     @DisplayName("wiring")
     inner class Wiring {
         private val entry by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/types/SkillListEntry.kt") }
@@ -140,8 +188,16 @@ class SkillRatingValueTest {
         @Test
         fun `the Details read takes the unique from the first cell of the first page`() {
             assertTrue(list.contains("if (pass == 0 && row == 0 && col == 0) uniqueName = name"))
-            assertTrue(list.contains("val skills = ownedSkillsWithoutUnique(ownedNames, uniqueName)"))
+            assertTrue(list.contains("val skills = ownedSkillsWithoutUnique(oneTierPerFamily(ownedNames), uniqueName)"))
             assertTrue(list.contains("return DetailsSkillsResult(skills, uniqueLevel, uniqueName)"))
+        }
+
+        @Test
+        fun `the Details cell takes its tier from the glyph, and the career end keeps the bought tiers`() {
+            assertTrue(list.contains("game.imageUtils.findBestTemplateMatch(crop, DETAILS_SKILL_GLYPHS,"))
+            val campaign = source("android/app/src/main/java/com/steve1316/uma_android_automation/bot/Campaign.kt")
+            val merge = campaign.indexOf("val owned = withPurchasedTiers(ownedSkills.skillNames, trainee.ownedSkillNames)")
+            assertTrue(merge in 0 until campaign.indexOf("trainee.ownedSkillNames.addAll(owned)"), "the merge reads the purchases before they are cleared")
         }
     }
 

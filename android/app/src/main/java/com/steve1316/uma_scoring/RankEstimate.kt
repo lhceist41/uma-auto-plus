@@ -13,7 +13,7 @@ import kotlin.math.floor
  *
  * Skill scoring is data-free: the bot supplies each owned skill's base evaluation points (`eval_pt` from our own skill database) and a `checkType` derived from the skill's
  * activation condition. UmaTools' per-skill values equal `base x {S/A 1.1, B/C 0.9, D/E/F 0.8, else 0.7}` for the vast majority of skills, so we apply that multiplier here
- * against the base rather than shipping a bundled dataset.
+ * against the base rather than shipping a bundled dataset. Turf/Dirt skills take no multiplier: UmaTools has no surface buckets, and game ratings confirm a flat score.
  */
 
 // Per-point stat-score rates for the 1-1200 range, in 50-value blocks. Ported verbatim from UmaTools rating-shared.js STAT_SCORES (R1).
@@ -42,7 +42,6 @@ private const val MULT_TERRIBLE = 0.7
 // Which aptitude group each affinity role belongs to. A multi-role skill takes the best multiplier per group, then multiplies the groups together.
 private val ROLE_GROUP =
     mapOf(
-        "turf" to "surface", "dirt" to "surface",
         "sprint" to "distance", "mile" to "distance", "medium" to "distance", "long" to "distance",
         "front" to "style", "pace" to "style", "late" to "style", "end" to "style",
     )
@@ -111,10 +110,8 @@ private val RANK_LABELS =
 private val STAT_SCORES = buildStatScores()
 
 /**
- * The trainee's aptitude letter grade (`G`..`S`) for each of the ten skill-affinity roles. Used to pick the bucket multiplier for an aptitude-linked skill.
+ * The trainee's aptitude letter grade (`G`..`S`) for each distance and style role. Used to pick the bucket multiplier for an aptitude-linked skill.
  *
- * @property turf Aptitude grade for turf-affinity skills.
- * @property dirt Aptitude grade for dirt-affinity skills.
  * @property sprint Aptitude grade for sprint-affinity skills.
  * @property mile Aptitude grade for mile-affinity skills.
  * @property medium Aptitude grade for medium-affinity skills.
@@ -125,8 +122,6 @@ private val STAT_SCORES = buildStatScores()
  * @property end Aptitude grade for end-closer-affinity skills.
  */
 data class RankAptitudes(
-    val turf: String,
-    val dirt: String,
     val sprint: String,
     val mile: String,
     val medium: String,
@@ -228,11 +223,9 @@ private fun gradeMultiplier(grade: String): Double =
         else -> MULT_TERRIBLE
     }
 
-/** Returns the trainee's aptitude grade for one affinity role, or null when the role is not one of the ten known roles. */
+/** Returns the trainee's aptitude grade for one affinity role, or null when the role takes no multiplier (Turf, Dirt, or unknown). */
 private fun gradeForRole(role: String, apt: RankAptitudes): String? =
     when (role) {
-        "turf" -> apt.turf
-        "dirt" -> apt.dirt
         "sprint" -> apt.sprint
         "mile" -> apt.mile
         "medium" -> apt.medium
@@ -296,9 +289,9 @@ fun scoreToRankLabel(totalScore: Int): String = RANK_LABELS[rankIndexForScore(to
 fun rankLabelToImageIndex(label: String): Int = RANK_LABELS.indexOf(label)
 
 /**
- * The evaluation-score contribution of one owned skill, following UmaTools `evaluateSkillScore`. A skill with no checkType scores its flat base. A single-role skill scores
- * `base x bucketMultiplier` for the trainee's aptitude grade in that role. A multi-role skill (e.g. "Medium/Long") takes the best multiplier per group (surface/distance/style)
- * and multiplies the groups together.
+ * The evaluation-score contribution of one owned skill, following UmaTools `evaluateSkillScore`. A skill with no checkType, or only a Turf/Dirt one, scores its flat base. A
+ * single-role skill scores `base x bucketMultiplier` for the trainee's aptitude grade in that role. A multi-role skill (e.g. "Medium/Long") takes the best multiplier per group
+ * (distance/style) and multiplies the groups together.
  *
  * @param baseEvalPt The skill's base evaluation points.
  * @param checkType The skill's affinity, e.g. "Late" or "Medium/Long", or "" for none.

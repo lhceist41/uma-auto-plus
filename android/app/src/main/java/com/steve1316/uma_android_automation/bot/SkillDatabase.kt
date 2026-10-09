@@ -59,6 +59,9 @@ class SkillDatabase(private val game: Game) {
             return (surface + distance + style).joinToString("/")
         }
 
+        /** The checkType the estimated rank scores a skill with. Inherited uniques rate a flat base in game whatever their condition branches name. */
+        fun rankCheckType(skill: SkillData): String = if (skill.bIsInheritedUnique) "" else deriveCheckType(skill.condition, skill.precondition)
+
         /** The name of the skills table in the database. */
         private const val TABLE_SKILLS = "skills"
 

@@ -91,8 +91,8 @@ import com.steve1316.uma_android_automation.types.RunningStyle
 import com.steve1316.uma_android_automation.types.SkillList
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.TrackDistance
-import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.types.Trainee
+import com.steve1316.uma_android_automation.types.withPurchasedTiers
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.InCareerSkipFix
 import com.steve1316.uma_android_automation.utils.PersistentSkipState
@@ -3162,8 +3162,6 @@ abstract class Campaign(game: Game) : Task(game) {
         if (!trainee.bHasUpdatedStats) return
         val aptitudes =
             RankAptitudes(
-                turf = trainee.trackSurfaceAptitudes[TrackSurface.TURF]?.name ?: "G",
-                dirt = trainee.trackSurfaceAptitudes[TrackSurface.DIRT]?.name ?: "G",
                 sprint = trainee.trackDistanceAptitudes[TrackDistance.SPRINT]?.name ?: "G",
                 mile = trainee.trackDistanceAptitudes[TrackDistance.MILE]?.name ?: "G",
                 medium = trainee.trackDistanceAptitudes[TrackDistance.MEDIUM]?.name ?: "G",
@@ -3176,7 +3174,7 @@ abstract class Campaign(game: Game) : Task(game) {
         val skillInputs =
             trainee.ownedSkillNames.toList().mapNotNull { skillName ->
                 val data = game.skillDatabase.getSkillData(skillName) ?: return@mapNotNull null
-                SkillScoreInput(data.evalPt, SkillDatabase.deriveCheckType(data.condition, data.precondition))
+                SkillScoreInput(data.evalPt, SkillDatabase.rankCheckType(data))
             }
         trainee.estimatedRank =
             estimateRank(
@@ -4072,8 +4070,12 @@ abstract class Campaign(game: Game) : Task(game) {
                     // The Skills tab always holds at least the unique skill, so an empty read is a failed read: keep the purchase-tracked set rather than
                     // dropping every skill the career bought.
                     if (ownedSkills.skillNames.isNotEmpty()) {
+                        val owned = withPurchasedTiers(ownedSkills.skillNames, trainee.ownedSkillNames)
+                        if (owned != ownedSkills.skillNames) {
+                            MessageLog.i(TAG, "[CAREER_END] Verified buys raise the Details read to: ${(owned - ownedSkills.skillNames.toSet()).joinToString(", ")}")
+                        }
                         trainee.ownedSkillNames.clear()
-                        trainee.ownedSkillNames.addAll(ownedSkills.skillNames)
+                        trainee.ownedSkillNames.addAll(owned)
                         trainee.uniqueSkillLevel = ownedSkills.uniqueLevel
                     }
                     // Dismiss directly: the dialog now shows the Skills tab, which the generic details handler must not read as stats. Same close idiom as the

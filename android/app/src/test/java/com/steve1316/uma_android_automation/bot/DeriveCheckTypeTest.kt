@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.SkillData
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -40,5 +41,14 @@ class DeriveCheckTypeTest {
         assertEquals("Dirt/Mile", SkillDatabase.deriveCheckType("ground_type==2&distance_type==2", ""))
         // Two styles collapse into a single ordered pair.
         assertEquals("Pace/Late", SkillDatabase.deriveCheckType("running_style==2|running_style==3", ""))
+    }
+
+    @Test
+    @DisplayName("An inherited unique scores flat even when one condition branch names a distance")
+    fun inheritedUniqueRanksFlat() {
+        val condition = "is_finalcorner==1&corner!=0&distance_diff_rate<=30&distance_type==4&lastspurt==2@is_finalcorner==1&corner!=0&distance_diff_rate<=30"
+        val duty = SkillData(100131, "The Duty of Dignity Calls", "", 20011, 200, 180, condition, "", true, null, null, null)
+        assertEquals("", SkillDatabase.rankCheckType(duty))
+        assertEquals("Long", SkillDatabase.rankCheckType(duty.copy(bIsInheritedUnique = false)))
     }
 }

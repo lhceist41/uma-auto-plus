@@ -11,8 +11,6 @@ class RankEstimateTest {
     // Aptitudes matching the reference trainee used to compute the expected values.
     private val referenceAptitudes =
         RankAptitudes(
-            turf = "A",
-            dirt = "G",
             sprint = "E",
             mile = "A",
             medium = "A",
@@ -101,8 +99,17 @@ class RankEstimateTest {
         assertEquals(140, evaluateSkillScore(200, "Late", referenceAptitudes.copy(late = "G")))
         // Multi-role in the same group takes the best multiplier (Medium A = 1.1 beats Long B = 0.9).
         assertEquals(220, evaluateSkillScore(200, "Medium/Long", referenceAptitudes))
-        // Multi-role across groups multiplies the best per group (Mile A 1.1 x Turf A 1.1 = 1.21).
-        assertEquals(242, evaluateSkillScore(200, "Mile/Turf", referenceAptitudes))
+        // Multi-role across groups multiplies the best per group (Mile A 1.1 x Late A 1.1 = 1.21).
+        assertEquals(242, evaluateSkillScore(200, "Mile/Late", referenceAptitudes))
+    }
+
+    @Test
+    fun surfaceSkillsScoreFlat() {
+        // A live Copano Rickey career at Dirt A reconciles only with Top Pick 217, Chance of Victory 508 and Solid Steps 174: no surface multiplier.
+        assertEquals(217, evaluateSkillScore(217, "Dirt", referenceAptitudes))
+        assertEquals(508, evaluateSkillScore(508, "Turf", referenceAptitudes))
+        // A surface role in a multi-role skill drops out; the other group still scales.
+        assertEquals(220, evaluateSkillScore(200, "Turf/Mile", referenceAptitudes))
     }
 
     @Test

@@ -27,6 +27,7 @@ import com.steve1316.uma_android_automation.utils.ScrollListEntry
 import org.opencv.core.Point
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 /** A callback that fires whenever we detect an entry in the skill list. */
 fun interface OnEntryDetectedCallback {
@@ -80,6 +81,28 @@ data class DetailsSkillsResult(val skillNames: List<String>, val uniqueLevel: In
 
 /** The unique scores through its level bonus, and its name matches its inherited version's row, so counting it as owned too scores it twice. */
 internal fun ownedSkillsWithoutUnique(names: Collection<String>, uniqueName: String?): List<String> = names.filter { it != uniqueName }
+
+private val TIER_GLYPHS = listOf(" ×", " ○", " ◎")
+
+private fun skillFamily(name: String): String = TIER_GLYPHS.fold(name) { n, g -> n.removeSuffix(g) }
+
+// A glyph-free name ranks with ○.
+private fun skillTier(name: String): Int = TIER_GLYPHS.indexOfFirst { name.endsWith(it) }.let { if (it < 0) 1 else it }
+
+/** A Details read can miss a skill's glyph, a verified buy cannot: each read skill takes the highest tier the bot bought in its family. */
+internal fun withPurchasedTiers(read: List<String>, purchased: Collection<String>): List<String> {
+    val bestBought = purchased.groupBy(::skillFamily).mapValues { (_, names) -> names.maxBy(::skillTier) }
+    return read.map { name -> bestBought[skillFamily(name)]?.takeIf { skillTier(it) > skillTier(name) } ?: name }
+}
+
+/** The game never shows two tiers of one family, so a glyph clipped in one scroll pass must not add a second, lower entry. */
+internal fun oneTierPerFamily(names: Collection<String>): List<String> = names.groupBy(::skillFamily).values.map { tiers -> tiers.maxBy(::skillTier) }
+
+/** Score floor for the Details tier glyphs: 0.797 was the lowest true glyph and 0.654 the highest glyph-free cell on the measured frames. */
+internal const val DETAILS_GLYPH_MIN_CONFIDENCE = 0.75
+
+private val DETAILS_SKILL_GLYPHS: Map<String, ComponentInterface> =
+    mapOf("◎" to IconDetailsSkillDoubleCircle, "○" to IconDetailsSkillCircle, "×" to IconDetailsSkillX)
 
 /** A row cropped from a frame captured before a verified buy still shows its (+), and the game never un-selects a skill mid-session. */
 internal fun ownedAfterScan(scanObtained: Boolean, name: String, ownedThisSession: Set<String>): Boolean = scanObtained || name in ownedThisSession
@@ -706,7 +729,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             scrollSkillsPanel()
         }
 
-        val skills = ownedSkillsWithoutUnique(ownedNames, uniqueName)
+        val skills = ownedSkillsWithoutUnique(oneTierPerFamily(ownedNames), uniqueName)
         MessageLog.i(TAG, "[INFO] Read ${skills.size} owned skills plus the unique \"${uniqueName ?: "unread"}\" (Lvl $uniqueLevel): ${skills.joinToString(", ")}")
         return DetailsSkillsResult(skills, uniqueLevel, uniqueName)
     }
@@ -751,9 +774,15 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         val base = stripTrailingGlyphNoise(text.replace(Regex("[○◎×]"), " ").trim())
         if (base.length < 2) return null
         var name = game.skillDatabase.checkSkillName(base, fuzzySearch = true) ?: return null
-        // The database stores +/-/upgraded variants as "<name> ○ / ◎ / ×". A skill on the Skills tab is positive unless it sits on a purple (negative) tile, so a non-purple
-        // tile must never resolve to the "×" (negative) variant just because the base fuzzy-matched it. Default the positive correction to the base "○" (upgraded "◎" is rarer).
-        if (name.trimEnd().endsWith("×") && !isNegativeSkillCell(bitmap, row, col)) {
+        // The fuzzy match ignores the tier, so the glyph beside the name decides it. Width-only normalization keeps the glyph's size on taller screens.
+        val glyph: String? =
+            game.imageUtils.findBestTemplateMatch(crop, DETAILS_SKILL_GLYPHS, x1 - x0, (crop.height * 1080.0 / w).roundToInt(), DETAILS_GLYPH_MIN_CONFIDENCE)
+        val tiered: String? = glyph?.let { game.skillDatabase.checkSkillName("${skillFamily(name)} $it") }
+        if (tiered != null) {
+            name = tiered
+        } else if (name.trimEnd().endsWith("×") && !isNegativeSkillCell(bitmap, row, col)) {
+            // The database stores +/-/upgraded variants as "<name> ○ / ◎ / ×". A skill on the Skills tab is positive unless it sits on a purple (negative) tile, so a non-purple
+            // tile must never resolve to the "×" (negative) variant just because the base fuzzy-matched it. Default the positive correction to the base "○" (upgraded "◎" is rarer).
             name = game.skillDatabase.checkSkillName("$base ○", fuzzySearch = true)
                 ?: game.skillDatabase.checkSkillName("$base ◎", fuzzySearch = true)
                 ?: name
