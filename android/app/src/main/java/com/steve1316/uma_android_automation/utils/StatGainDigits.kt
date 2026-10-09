@@ -1,5 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
+import org.opencv.core.Point
+
 /**
  * Pixel reader for one stat-gain row: "+N", or "^^+N" in gold once the stat would pass 1200.
  *
@@ -76,6 +78,16 @@ object StatGainDigits {
 
     /** A gold row's pixel read replaces the template read, which cannot see gold digits. */
     fun resolveRowValue(templateValue: Int, pixel: Row?): Int = if (pixel != null && pixel.gold) pixel.value ?: 0 else templateValue
+
+    // A gain's glyph centres lie within 7 px of each other; the trainee's outfit behind it passed for a "7" 15-21 px above (URA, 27 of 11,152 logged reads).
+    const val BASELINE_MAX_DY = 11
+
+    /** The matches on the gain's own line: within [maxDy] of the "+" when one was found, else of the leftmost match. */
+    fun onBaseline(matches: List<Pair<String, Point>>, maxDy: Double): List<Pair<String, Point>> {
+        if (matches.size < 2) return matches
+        val anchor = matches.firstOrNull { it.first.startsWith("+") } ?: matches.minBy { it.second.x }
+        return matches.filter { kotlin.math.abs(it.second.y - anchor.second.y) <= maxDy }
+    }
 
     /** One template hit in a gain row: template name, centre x in the row crop, and its pixel correlation. */
     class TemplateMatch(val template: String, val x: Double, val score: Double)

@@ -2198,9 +2198,15 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         allMatches.sortBy { it.second.x }
         Log.d(TAG, "[DEBUG] constructIntegerFromMatches:: Sorted matches$logSuffix: ${allMatches.map { "${it.first}@(${it.second.x}, ${it.second.y})" }}")
 
+        // Measured on template centres; YOLO reports top-left corners, which glyph heights move.
+        val onLine = if (useYolo) allMatches else StatGainDigits.onBaseline(allMatches, relHeight(StatGainDigits.BASELINE_MAX_DY).toDouble())
+        if (onLine.size < allMatches.size) {
+            Log.d(TAG, "[DEBUG] constructIntegerFromMatches:: Dropped ${(allMatches - onLine.toSet()).map { "${it.first}@(${it.second.x}, ${it.second.y})" }} off the digits' line$logSuffix.")
+        }
+
         // Construct the string representation by extracting the character part from template names (removing suffixes like "_mini").
         // Template names can be "+", "0"-"9" or "+_mini", "0_mini"-"9_mini", so we extract the first character.
-        val constructedString = allMatches.joinToString("") { it.first[0].toString() }
+        val constructedString = onLine.joinToString("") { it.first[0].toString() }
         Log.d(TAG, "[DEBUG] constructIntegerFromMatches:: Constructed string$logSuffix: \"$constructedString\".")
 
         // Extract the numeric part and convert to integer.
