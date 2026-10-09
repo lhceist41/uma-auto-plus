@@ -466,6 +466,13 @@ class GrandConcertScenarioTest {
         }
 
         @Test
+        fun `the tutorial log names the running scenario, not Unity Cup`() {
+            val event = source("bot/TrainingEvent.kt")
+            assertTrue(event.contains("Tutorial event detected for \${game.scenario}."))
+            assertFalse(event.contains("Tutorial event detected for Unity Cup"))
+        }
+
+        @Test
         fun `the campaign class claims no finale-win capture it cannot read`() {
             val campaign = source("bot/campaigns/GrandConcert.kt")
             assertTrue(campaign.contains("override val capturesFinaleWins: Boolean = false"))

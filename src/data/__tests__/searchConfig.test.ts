@@ -275,3 +275,14 @@ describe("Complete Career on Failure", () => {
         }
     })
 })
+
+describe("search result section names", () => {
+    const header = fs.readFileSync(path.join(__dirname, "..", "..", "components", "PageHeader", "index.tsx"), "utf8")
+    const start = header.indexOf("const pageNameMapping")
+    const mapped = new Set([...header.slice(start, header.indexOf("/**", start)).matchAll(/^\s+(\w+): "/gm)].map((m) => m[1]))
+
+    it("gives every searchable page a readable name, so no section header shows a raw page key", () => {
+        const missing = [...new Set(searchConfig.map((e) => e.page))].filter((page) => !mapped.has(page))
+        expect(missing).toEqual([])
+    })
+})

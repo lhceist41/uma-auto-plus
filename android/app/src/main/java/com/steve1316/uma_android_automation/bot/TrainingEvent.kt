@@ -782,7 +782,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             val tutorialOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
             tutorialOptionCount = tutorialOptionLocations.size
 
-            MessageLog.v(TAG, "[TRAINING_EVENT] Tutorial event detected for Unity Cup. Found $tutorialOptionCount option(s) on screen.")
+            MessageLog.v(TAG, "[TRAINING_EVENT] Tutorial event detected for ${game.scenario}. Found $tutorialOptionCount option(s) on screen.")
 
             when (tutorialOptionCount) {
                 2 -> {

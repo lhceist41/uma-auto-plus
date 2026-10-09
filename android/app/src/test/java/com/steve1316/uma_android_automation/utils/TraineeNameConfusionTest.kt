@@ -207,7 +207,7 @@ class TraineeNameConfusionTest {
 
     @Test
     fun `survey`() {
-        assumeTrue(System.getenv("NAMECHK_SURVEY") != null, "set NAMECHK_SURVEY to write build/namechk-survey.txt")
+        assumeTrue(System.getenv("TRAINEE_NAME_SURVEY") != null, "set TRAINEE_NAME_SURVEY to write build/trainee-name-survey.txt")
         val r = StringBuilder()
         r.appendLine("threshold=$threshold outfits=${outfits.size} (unreleased ${outfits.count { !it.released }}) characters=${outfits.map { it.character }.toSet().size} presetTargets=${presetTargets.size} (bare ${presetTargets.count { it.isBare }}) outfitTargets=${outfitTargets.size}")
         r.appendLine("lowest clean own score: " + fmt(allTargets.minOf { TraineeNameMatcher.score(it.inGameName, ownBanner(it)) }))
@@ -237,7 +237,7 @@ class TraineeNameConfusionTest {
         r.appendLine("trailing characters that can be cut before the own banner is lost (preset targets):")
         presetTargets.groupBy { t -> (0 until 20).takeWhile { accepts(t, ownBanner(t).dropLast(it + 1)) }.size }.toSortedMap()
             .forEach { (k, l) -> r.appendLine("  survives $k cut(s): ${l.size} ${if (k <= 3) l.map { it.inGameName } else ""}") }
-        File("build/namechk-survey.txt").also { it.parentFile.mkdirs() }.writeText(r.toString(), Charsets.UTF_8)
+        File("build/trainee-name-survey.txt").also { it.parentFile.mkdirs() }.writeText(r.toString(), Charsets.UTF_8)
     }
 
     private fun fmt(d: Double) = "%.3f".format(d)

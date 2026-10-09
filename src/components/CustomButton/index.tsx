@@ -54,10 +54,9 @@ const CustomButton: React.FC<CustomButtonProps> = ({
 }) => {
     const { colors, isDark } = useTheme()
 
+    // Disabled keeps the variant colors: Button already dims it to half, and a second opacity here left the label unreadable.
     /** Background color for the current variant and theme. */
     const getBackgroundColor = () => {
-        if (disabled) return { opacity: 0.5 }
-
         switch (variant) {
             case "destructive":
                 return { backgroundColor: colors.destructive }
@@ -86,8 +85,6 @@ const CustomButton: React.FC<CustomButtonProps> = ({
 
     /** Text color for the current variant and theme. */
     const getTextColor = () => {
-        if (disabled) return {}
-
         switch (variant) {
             case "destructive":
                 return { color: colors.destructiveForeground }

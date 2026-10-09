@@ -71,7 +71,9 @@ describe("whatsNewContent and the highlights data", () => {
             ["Fa", "ble"],
             ["Cla", "ude"],
         ].map((parts) => parts.join(""))
-        const internalLabel = new RegExp(`\\b(?:(?!G[123]\\b)[A-Z]\\d{1,2}[a-z]?|[A-Z]{3,}\\d+|Stage \\d|${toolNames.join("|")})\\b`)
+        const internalLabel = new RegExp(`\\b(?:(?!G[123]\\b)[A-Z]\\d{1,3}[a-z]?|[A-Z]{3,}\\d+|Stage \\d|${toolNames.join("|")})\\b`)
+        for (const label of ["V16", "V161", "G173", "A1b"]) expect(label).toMatch(internalLabel)
+        for (const plain of ["G1", "G2 races", "SS rank"]) expect(plain).not.toMatch(internalLabel)
         expect(Object.keys(whatsNewEntries).length).toBeGreaterThan(0)
         for (const [version, entry] of Object.entries(whatsNewEntries)) {
             expect(version).toMatch(/^\d+\.\d+\.\d+$/)
