@@ -24,6 +24,7 @@ import com.steve1316.uma_android_automation.utils.MAX_PROCESS_TIME_DEFAULT_MS
 import com.steve1316.uma_android_automation.utils.ScanTermination
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.ScrollListEntry
+import com.steve1316.uma_android_automation.utils.detailsCellText
 import org.opencv.core.Point
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -83,6 +84,12 @@ data class DetailsSkillsResult(val skillNames: List<String>, val uniqueLevel: In
 internal fun ownedSkillsWithoutUnique(names: Collection<String>, uniqueName: String?): List<String> = names.filter { it != uniqueName }
 
 private val TIER_GLYPHS = listOf(" ×", " ○", " ◎")
+
+/** The read is a strict prefix of a matched name 5+ characters longer: the cell's wrapped second line was clipped. */
+internal fun isTruncatedDetailsRead(
+    base: String,
+    matchedBase: String,
+): Boolean = base.length + 5 <= matchedBase.length && matchedBase.startsWith(base, ignoreCase = true)
 
 private fun skillFamily(name: String): String = TIER_GLYPHS.fold(name) { n, g -> n.removeSuffix(g) }
 
@@ -409,6 +416,9 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
     /** Raw text of the latest [detectSkillPoints] OCR, for the refused-purchase log: a misread balance is otherwise undiagnosable. */
     private var lastSkillPointsOcrText: String = ""
+
+    /** One multi-block Details cell is logged per read (the career end creates a fresh [SkillList]). */
+    private var loggedMultiBlockCell = false
 
     /**
      * Detects the current skill points from the Skill List screen.
@@ -768,8 +778,21 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         val crop = game.imageUtils.createSafeBitmap(bitmap, bbox, "detailsSkill_${row}_$col") ?: return null
         if (game.debugMode) game.imageUtils.saveBitmap(crop, "detailsSkill_${row}_$col")
 
+        val blocks =
+            try {
+                game.imageUtils.readAllTextBlocks(crop)
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (e: Exception) {
+                MessageLog.e(TAG, "[ERROR] readDetailsSkillCell:: Exception during text extraction: ${e.message}")
+                emptyList()
+            }
+        if (blocks.size > 1 && !loggedMultiBlockCell) {
+            loggedMultiBlockCell = true
+            MessageLog.i(TAG, "[SKILLS] A Details skill cell came back as ${blocks.size} text blocks (${blocks.joinToString(" | ") { it.text.replace("\n", " ") }}); reading the ones inside the cell together.")
+        }
         // Collapse the newline between wrapped lines into a single space so a two-line name matches its one-line database key.
-        val text = extractText(crop).trim().replace(Regex("\\s+"), " ").replace(Regex("\\bl\\b"), "I")
+        val text = detailsCellText(blocks, crop.height).replace(Regex("\\s+"), " ").replace(Regex("\\bl\\b"), "I")
         if (text.length < 2) return null
         val base = stripTrailingGlyphNoise(text.replace(Regex("[○◎×]"), " ").trim())
         if (base.length < 2) return null
@@ -791,7 +814,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // grabbed a shorter same-prefix skill (e.g. "Pace Chaser" -> "Pace Chaser Savvy"). Returning null lets a better-aligned scroll pass read the full name instead of locking in
         // the wrong one.
         val matchedBase = stripTrailingGlyphNoise(name.replace(Regex("[○◎×]"), " ").trim())
-        if (base.length + 5 <= matchedBase.length && matchedBase.startsWith(base, ignoreCase = true)) return null
+        if (isTruncatedDetailsRead(base, matchedBase)) return null
         return name
     }
 

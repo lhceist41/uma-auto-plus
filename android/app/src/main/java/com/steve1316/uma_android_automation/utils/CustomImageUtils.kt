@@ -60,6 +60,7 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.math.sqrt
@@ -103,6 +104,56 @@ internal fun <K> argMaxAboveFloor(scores: Map<K, Double>, floor: Double): K? {
 // Unscaled, the Details dialog stat read lost everything after a leading "1" in 34 of 152 live reads; the main screen reads the same digits at 2x and lost 0 of 727.
 internal const val DIALOG_STAT_READ_SCALE = 2.0
 internal const val DIALOG_STAT_REREAD_SCALE = 3.0
+
+/** One ML Kit text block: its bounding box in the read bitmap's pixels, and its text. */
+internal class OcrTextBlock(val top: Int, val bottom: Int, val left: Int, val text: String)
+
+/**
+ * All blocks' text in reading order, joined with spaces. Blocks that overlap vertically by at least half the shorter one form a line (separate blocks
+ * on one line can have slightly different tops), read left to right; lines read top to bottom.
+ */
+internal fun readingOrderText(blocks: List<OcrTextBlock>): String {
+    val lines = mutableListOf<MutableList<OcrTextBlock>>()
+    for (block in blocks.sortedBy { it.top }) {
+        val line = lines.lastOrNull()
+        if (line != null && onSameLine(line, block)) line.add(block) else lines.add(mutableListOf(block))
+    }
+    return lines.joinToString(" ") { line -> line.sortedBy { it.left }.joinToString(" ") { it.text.trim() } }.trim()
+}
+
+private fun onSameLine(line: List<OcrTextBlock>, block: OcrTextBlock): Boolean {
+    val top = line.minOf { it.top }
+    val bottom = line.maxOf { it.bottom }
+    val overlap = minOf(bottom, block.bottom) - maxOf(top, block.top)
+    return overlap * 2 >= minOf(bottom - top, block.bottom - block.top).coerceAtLeast(1)
+}
+
+/**
+ * Starts an asynchronous read and waits for its result, which arrives whole through `publish` (or not at all through `fail`). Null on timeout: a late
+ * result is ignored, never read half-added. An interrupt (a Stop or the watchdog) propagates.
+ */
+internal fun <T> awaitWholeResult(
+    timeoutMs: Long,
+    start: (publish: (List<T>) -> Unit, fail: () -> Unit) -> Unit,
+): List<T>? {
+    val result = AtomicReference<List<T>>(emptyList())
+    val latch = CountDownLatch(1)
+    start({
+        result.set(it)
+        latch.countDown()
+    }, { latch.countDown() })
+    return if (latch.await(timeoutMs, TimeUnit.MILLISECONDS)) result.get() else null
+}
+
+/** A block this close to a Details cell crop's top or bottom edge was cut by the crop. */
+internal const val DETAILS_CELL_EDGE_PX = 2
+
+/**
+ * A Details cell's text. With more than one block, a block touching the crop's top or bottom edge is a clipped line of the neighbouring row: joined
+ * in front of the cell's own name it leads the fuzzy match to a different skill, so only the blocks inside the crop are read.
+ */
+internal fun detailsCellText(blocks: List<OcrTextBlock>, height: Int): String =
+    readingOrderText(if (blocks.size <= 1) blocks else blocks.filter { it.top > DETAILS_CELL_EDGE_PX && it.bottom < height - DETAILS_CELL_EDGE_PX })
 
 /**
  * A scrollbar rail and its thumb are tall, narrow, vertical slivers, and nothing else in the scrollbar's column is. Hue and saturation are deliberately left unconstrained in
@@ -3159,6 +3210,61 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
         return result.trim()
     }
+
+    /**
+     * Reads a whole bitmap the way `performOCROnRegion(useThreshold = false, ocrEngine = "mlKit")` does (grayscale, scaled, Tesseract when ML Kit finds nothing),
+     * but keeps every ML Kit block: ML Kit can put the short second line of a wrapped name into its own block, and the library keeps only the last one.
+     *
+     * @param bitmap The image to read.
+     * @param scale Scale factor applied before OCR. Defaults to 2.0.
+     * @return The blocks found (in [bitmap]'s pixels), a single Tesseract block when ML Kit read nothing or timed out, or an empty list.
+     * @throws InterruptedException When the thread is interrupted while ML Kit reads.
+     */
+    internal fun readAllTextBlocks(bitmap: Bitmap, scale: Double = 2.0): List<OcrTextBlock> =
+        synchronized(ocrLock) {
+            val rgba = Mat()
+            val gray = Mat()
+            val grayBitmap =
+                try {
+                    Utils.bitmapToMat(bitmap, rgba)
+                    Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGB2GRAY)
+                    createBitmap(gray.cols(), gray.rows()).also { Utils.matToBitmap(gray, it) }
+                } finally {
+                    rgba.release()
+                    gray.release()
+                }
+            val input = if (scale != 1.0) grayBitmap.scale((grayBitmap.width * scale).toInt(), (grayBitmap.height * scale).toInt()) else grayBitmap
+
+            val read =
+                awaitWholeResult<OcrTextBlock>(5_000L) { publish, fail ->
+                    googleTextRecognizer.process(InputImage.fromBitmap(input, 0))
+                        .addOnSuccessListener { text ->
+                            publish(
+                                text.textBlocks.map { block ->
+                                    val box = block.boundingBox
+                                    OcrTextBlock(((box?.top ?: 0) / scale).toInt(), ((box?.bottom ?: 0) / scale).toInt(), ((box?.left ?: 0) / scale).toInt(), block.text)
+                                },
+                            )
+                        }.addOnFailureListener { exception ->
+                            Log.e(TAG, "[ERROR] readAllTextBlocks:: ML Kit failed: ${exception.message}")
+                            fail()
+                        }
+                } ?: emptyList<OcrTextBlock>().also { Log.e(TAG, "[ERROR] readAllTextBlocks:: ML Kit timed out.") }
+            if (read.isNotEmpty()) return@synchronized read
+
+            val text =
+                try {
+                    tessBaseAPI.setImage(input)
+                    tessBaseAPI.utF8Text ?: ""
+                } catch (e: Exception) {
+                    Log.e(TAG, "[ERROR] readAllTextBlocks:: Tesseract OCR failed: ${e.message}")
+                    ""
+                } finally {
+                    tessBaseAPI.stop()
+                    tessBaseAPI.clear()
+                }
+            if (text.isBlank()) emptyList() else listOf(OcrTextBlock(0, bitmap.height, 0, text))
+        }
 
     /**
      * Performs OCR on a specific region of a bitmap with optional preprocessing.
