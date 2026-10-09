@@ -116,7 +116,7 @@ const searchConfig: SearchOption[] = [
     {
         id: "settings-team-trials-opponent-pick",
         title: "Opponent To Pick",
-        description: "Which of the three listed Team Trials opponents to fight. They are listed strongest first, so Bottom is the safest.",
+        description: "Which of the three listed Team Trials opponents to fight. They are listed strongest first, so Bottom is the safest. Random picks one of the three at random each match.",
         page: "SettingsMain",
     },
     {

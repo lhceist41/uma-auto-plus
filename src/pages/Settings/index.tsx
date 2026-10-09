@@ -39,6 +39,7 @@ const TEAM_TRIALS_OPPONENT_PICKS = [
     { value: "TOP", label: "Top" },
     { value: "MIDDLE", label: "Middle" },
     { value: "BOTTOM", label: "Bottom" },
+    { value: "RANDOM", label: "Random" },
 ] as const
 
 /**
@@ -352,7 +353,7 @@ const Settings = () => {
                     }}
                     placeholder="Select opponent"
                     label="Opponent To Pick"
-                    description="Which of the three listed opponents to fight. They are listed strongest first, so Bottom is the safest and Top pays the most points."
+                    description="Which of the three listed opponents to fight. They are listed strongest first, so Bottom is the safest and Top pays the most points. Random picks one of the three at random each match, for variety."
                     style={{ marginTop: 16 }}
                 />
 

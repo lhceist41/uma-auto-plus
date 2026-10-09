@@ -165,7 +165,7 @@ export interface Settings {
 
     // Team Trials misc-task settings. TeamTrialsTask matches opponentPick case-insensitively.
     miscTeamTrials: {
-        opponentPick: "TOP" | "MIDDLE" | "BOTTOM"
+        opponentPick: "TOP" | "MIDDLE" | "BOTTOM" | "RANDOM"
         maxMatchesPerSession: number
     }
 
