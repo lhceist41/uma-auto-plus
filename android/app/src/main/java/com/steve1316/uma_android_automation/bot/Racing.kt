@@ -321,6 +321,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** The complete race database loaded at initialization. */
     private val raceData: Map<String, RaceData> = loadRaceData()
 
+    /** Every trainee's goal races by turn; the Grand Concert asset carries all of them, not only that scenario's. */
+    private val goalFacts: GrandConcertFanFacts? by lazy { GrandConcertFanFacts.loadFromAssets(game.myContext) }
+
+    /** The trainee's goal race names for [turn], empty when the trainee or the turn has none. */
+    private fun goalRaceNamesForTurn(turn: Int): Set<String> {
+        val match = goalFacts?.match(campaign.trainee.name) as? GrandConcertFanFacts.Match.Matched ?: return emptySet()
+        return goalRaceNames(match.facts.mandatoryGates, turn)
+    }
+
     /** The user's defined planned races loaded at initialization. */
     private val userPlannedRaces: List<PlannedRace> = loadUserPlannedRaces()
 
@@ -620,6 +629,61 @@ class Racing(private val game: Game, private val campaign: Campaign) {
          */
         internal fun canonicalizeRaceLabelForLookup(detectedName: String): String =
             DISTANCE_METER_TOKEN.replace(detectedName) { match -> match.value.replace('O', '0') }
+
+        /**
+         * Some turns run two races on one course (Oka Sho and Arlington Cup, the Derby and the Oaks), and the race list label is the course, so
+         * the lookup returns both. Keeps the trainee's goal for the turn when exactly one candidate is it; otherwise returns [matches] unchanged.
+         */
+        internal fun narrowToGoalRace(
+            matches: List<RaceData>,
+            goalRaceNames: Collection<String>,
+        ): List<RaceData> {
+            if (matches.size < 2) return matches
+            val goal = matches.filter { it.name in goalRaceNames }
+            return if (goal.size == 1) goal else matches
+        }
+
+        /** The race names of the goal gates due on [turn]. */
+        internal fun goalRaceNames(
+            gates: List<GrandConcertMandatoryGate>,
+            turn: Int,
+        ): Set<String> = gates.filter { it.turn == turn }.flatMap { gate -> gate.options.map { it.raceName } }.toSet()
+
+        /**
+         * Grades every grade consumer treats alike: the post-race event variant, the maiden-done flag, Trackblazer race items and the default
+         * shop check (G1, G2, G3), and the alarm clock. Every other grade stands alone.
+         */
+        private fun gradeBand(grade: RaceGrade): Int =
+            when (grade) {
+                RaceGrade.PRE_OP, RaceGrade.OP -> -1
+                RaceGrade.G3, RaceGrade.G2 -> -2
+                else -> grade.ordinal
+            }
+
+        /**
+         * The grade and fans every candidate shares: a shared course label must not pick one by row order. Grades in one [gradeBand] give
+         * the band's lowest grade; fans, read only for a G1, stay null when they differ.
+         */
+        internal fun sharedGradeAndFans(matches: List<RaceData>): Pair<RaceGrade?, Int?> {
+            val grades = matches.map { it.grade }.distinct()
+            val grade = if (grades.map { gradeBand(it) }.distinct().size == 1) grades.minByOrNull { it.ordinal } else null
+            return grade to matches.map { it.fans }.distinct().singleOrNull()
+        }
+
+        /** Log text for a lookup that stayed ambiguous after [narrowToGoalRace]. */
+        internal fun sharedCourseNote(
+            matches: List<RaceData>,
+            grade: RaceGrade?,
+        ): String {
+            val names = matches.joinToString(" / ") { "\"${it.name}\"" }
+            return if (grade != null && matches.map { it.grade }.distinct().size > 1) {
+                "[RACE] The race is one of $names (same course this turn). Their grades act alike, so grade $grade is used."
+            } else if (grade != null) {
+                "[RACE] The race is one of $names (same course this turn). Grade: $grade."
+            } else {
+                "[RACE] The race is one of $names (same course this turn) and their grades differ, so the grade stays unknown for this race."
+            }
+        }
 
         /** "GoalRaces" buys an Alarm Clock (10 carats) only to retry a lost goal race; an unknown policy never buys. */
         internal fun alarmClockPurchaseAllowed(
@@ -3107,14 +3171,18 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             val predictionAnchors = findPredictionAnchors(includeSingles = true)
             if (predictionAnchors.isNotEmpty()) {
                 val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
-                val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
+                val raceDataList = narrowToGoalRace(lookupRaceInDatabase(campaign.date.day, raceName), goalRaceNamesForTurn(campaign.date.day))
                 // Capture identity from the same lookup (turn-scoped) without copying its [0] grade flatten.
                 enteredRaceFact = enteredRaceFromLookup(EnteredRacePath.MANDATORY_GOAL, campaign.date.day, raceDataList)
                 if (raceDataList.isNotEmpty()) {
-                    val raceData = raceDataList[0]
-                    lastRaceGrade = raceData.grade
-                    if (lastRaceFans == 0) lastRaceFans = raceData.fans
-                    MessageLog.i(TAG, "[RACE] Detected mandatory race \"${raceData.name}\" (Grade: ${raceData.grade}).")
+                    val (grade, fans) = sharedGradeAndFans(raceDataList)
+                    lastRaceGrade = grade
+                    if (lastRaceFans == 0 && fans != null) lastRaceFans = fans
+                    if (raceDataList.size == 1) {
+                        MessageLog.i(TAG, "[RACE] Detected mandatory race \"${raceDataList[0].name}\" (Grade: $grade).")
+                    } else {
+                        MessageLog.i(TAG, sharedCourseNote(raceDataList, grade))
+                    }
                 } else {
                     MessageLog.w(TAG, "[RACE] Prediction icon found but race lookup failed (OCR read \"$raceName\"). Race grade stays unknown.")
                 }
@@ -3581,8 +3649,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
                     scheduledEntry = enteredRaceFromLookup(EnteredRacePath.SCHEDULED, campaign.date.day, raceDataList)
                     if (raceDataList.isNotEmpty()) {
-                        lastRaceGrade = raceDataList[0].grade
-                        lastRaceFans = raceDataList[0].fans
+                        val (grade, fans) = sharedGradeAndFans(raceDataList)
+                        lastRaceGrade = grade
+                        lastRaceFans = fans ?: 0
+                        if (raceDataList.size > 1) MessageLog.i(TAG, sharedCourseNote(raceDataList, grade))
                         MessageLog.i(TAG, "[RACE] Detected scheduled race grade: $lastRaceGrade.")
                     }
                 }
@@ -4229,8 +4299,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 game.imageUtils.extractRaceName(filteredLocations[index])
             }
         val raceDataList = lookupRaceInDatabase(campaign.date.day, selectedRaceName)
-        lastRaceGrade = raceDataList.firstOrNull()?.grade
-        lastRaceFans = raceDataList.firstOrNull()?.fans ?: 0
+        val (selectedGrade, selectedFans) = sharedGradeAndFans(raceDataList)
+        lastRaceGrade = selectedGrade
+        lastRaceFans = selectedFans ?: 0
+        if (raceDataList.size > 1) MessageLog.i(TAG, sharedCourseNote(raceDataList, selectedGrade))
 
         // Selects the determined race on screen.
         MessageLog.v(TAG, "[RACE] Selecting extra race at option #${index + 1}.")
