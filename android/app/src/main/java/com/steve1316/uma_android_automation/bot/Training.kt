@@ -10,16 +10,7 @@ import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonTraining
-import com.steve1316.uma_android_automation.components.ButtonTrainingGuts
-import com.steve1316.uma_android_automation.components.ButtonTrainingGutsGrandConcert
-import com.steve1316.uma_android_automation.components.ButtonTrainingPower
-import com.steve1316.uma_android_automation.components.ButtonTrainingPowerGrandConcert
-import com.steve1316.uma_android_automation.components.ButtonTrainingSpeed
-import com.steve1316.uma_android_automation.components.ButtonTrainingSpeedGrandConcert
-import com.steve1316.uma_android_automation.components.ButtonTrainingStamina
-import com.steve1316.uma_android_automation.components.ButtonTrainingStaminaGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonTrainingWit
-import com.steve1316.uma_android_automation.components.ButtonTrainingWitGrandConcert
 import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.IconStatSkillHint
 import com.steve1316.uma_android_automation.components.IconTrainingHeaderGuts
@@ -1394,6 +1385,46 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 StatName.WIT to IconTrainingHeaderWit,
             )
 
+        /** The training whose header [bitmap] shows; null when none matches. */
+        fun activeStatIn(bitmap: Bitmap): StatName? {
+            // Using threads here is slower only if the active tab is Speed.
+            // Stamina was about even, then each stat after that using threads gained an additional 100ms improvement.
+            val waitLatch = CountDownLatch(5)
+            val matchFound = AtomicBoolean(false)
+            val matchMap = ConcurrentHashMap<StatName, Boolean>()
+            for ((statName, header) in iconTrainingHeaders) {
+                Thread {
+                    try {
+                        if (!BotService.isRunning) {
+                            return@Thread
+                        }
+
+                        // Exit thread early if we already found a match.
+                        if (matchFound.get()) {
+                            return@Thread
+                        }
+                        // Return immediately if we get a match.
+                        val bIsFound = header.check(game.imageUtils, sourceBitmap = bitmap)
+                        matchMap[statName] = bIsFound
+                        if (bIsFound) {
+                            matchFound.set(true)
+                            return@Thread
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[ERROR] getActiveStat:: Error detecting stat header $statName: ${e.stackTraceToString()}")
+                        matchMap[statName] = false
+                    } finally {
+                        waitLatch.countDown()
+                    }
+                }.apply { isDaemon = true }.start()
+            }
+
+            // An interrupt (a Stop or a watchdog) propagates; a partial map must not decide a tap.
+            waitLatch.await(5, TimeUnit.SECONDS)
+
+            return matchMap.entries.firstOrNull { it.value }?.key
+        }
+
         /**
          * Detects the current active (selected) stat in the training screen.
          *
@@ -1403,52 +1434,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         fun getActiveStat(timeoutMs: Int = 5000): StatName? {
             val startTime = System.currentTimeMillis()
             while (System.currentTimeMillis() - startTime < timeoutMs) {
-                val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
-
-                // Using threads here is slower only if the active tab is Speed.
-                // Stamina was about even, then each stat after that using threads gained an additional 100ms improvement.
-                val waitLatch = CountDownLatch(5)
-                val matchFound = AtomicBoolean(false)
-                val matchMap = ConcurrentHashMap<StatName, Boolean>()
-                for ((statName, header) in iconTrainingHeaders) {
-                    Thread {
-                        try {
-                            if (!BotService.isRunning) {
-                                return@Thread
-                            }
-
-                            // Exit thread early if we already found a match.
-                            if (matchFound.get()) {
-                                return@Thread
-                            }
-                            // Return immediately if we get a match.
-                            val bIsFound = header.check(game.imageUtils, sourceBitmap = bitmap)
-                            matchMap[statName] = bIsFound
-                            if (bIsFound) {
-                                matchFound.set(true)
-                                return@Thread
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "[ERROR] getActiveStat:: Error detecting stat header $statName: ${e.stackTraceToString()}")
-                            matchMap[statName] = false
-                        } finally {
-                            waitLatch.countDown()
-                        }
-                    }.apply { isDaemon = true }.start()
-                }
-
-                // Collect our threads.
-                try {
-                    waitLatch.await(5, TimeUnit.SECONDS)
-                } catch (_: InterruptedException) {
-                    MessageLog.e(TAG, "[ERROR] getActiveStat:: Stat header detection threads timed out.")
-                }
-
-                // If we got a match, then return it. Otherwise, continue the loop.
-                val match = matchMap.entries.firstOrNull { it.value }
-                if (match != null) {
-                    return match.key
-                }
+                activeStatIn(game.imageUtils.getSourceBitmap())?.let { return it }
             }
 
             MessageLog.w(TAG, "[WARN] getActiveStat:: Timed out while trying to detect the active stat.")
@@ -1476,19 +1462,20 @@ class Training(private val game: Game, private val campaign: Campaign) {
             }
 
             // If this option isn't enabled, then we just do a fast lazy validation.
+            // A tap on the selected training executes it: re-tapping after a 0.2 s header check trained the wrong stat.
             if (!enableTrainingAnalysisValidation) {
-                for (i in 0..2) {
-                    button.click(game.imageUtils)
-
-                    // Wait for screen to finish updating before proceeding.
-                    game.wait(0.2, skipWaitingForLoading = true)
-                    if (header.check(game.imageUtils)) {
-                        return true
-                    }
-                }
-
-                MessageLog.w(TAG, "[WARN] goToStat:: Failed to go to $statName on training screen after 3 attempts.")
-                return false
+                val switched =
+                    switchTrainingTab(
+                        target = statName,
+                        activeTab = { activeStatIn(game.imageUtils.getSourceBitmap()) },
+                        targetHeaderShown = { header.check(game.imageUtils) },
+                        tap = { button.click(game.imageUtils) },
+                        nowMs = { System.currentTimeMillis() },
+                        pause = { game.wait(0.1, skipWaitingForLoading = true) },
+                        warn = { MessageLog.w(TAG, "[WARN] goToStat:: $it") },
+                    )
+                if (!switched) MessageLog.w(TAG, "[WARN] goToStat:: Failed to go to $statName on training screen.")
+                return switched
             }
 
             // Perform full validation.
@@ -3070,24 +3057,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
      * captures and verified at 1.00 on every facility in both button states. The header icons are
      * unchanged in Grand Concert (they match at 0.99+), so only the buttons swap.
      */
-    private fun trainingButtonsForScenario(): Map<StatName, ComponentInterface> =
-        if (GrandConcertScenario.matches(game.scenario)) {
-            mapOf(
-                StatName.SPEED to ButtonTrainingSpeedGrandConcert,
-                StatName.STAMINA to ButtonTrainingStaminaGrandConcert,
-                StatName.POWER to ButtonTrainingPowerGrandConcert,
-                StatName.GUTS to ButtonTrainingGutsGrandConcert,
-                StatName.WIT to ButtonTrainingWitGrandConcert,
-            )
-        } else {
-            mapOf(
-                StatName.SPEED to ButtonTrainingSpeed,
-                StatName.STAMINA to ButtonTrainingStamina,
-                StatName.POWER to ButtonTrainingPower,
-                StatName.GUTS to ButtonTrainingGuts,
-                StatName.WIT to ButtonTrainingWit,
-            )
-        }
+    private fun trainingButtonsForScenario(): Map<StatName, ComponentInterface> = trainingButtonsFor(GrandConcertScenario.matches(game.scenario))
 
     fun executeTraining(trainingSelected: StatName?) {
         StatusBoard.action("training", trainingSelected?.name)
