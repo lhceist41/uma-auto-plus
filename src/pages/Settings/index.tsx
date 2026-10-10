@@ -300,8 +300,8 @@ const Settings = () => {
                             miscDailyRace: { ...bsc.settings.miscDailyRace, ensureMultiRaceOn: checked },
                         })
                     }}
-                    label="Ensure Multi-Race Is On"
-                    description="Keeps multi-race enabled when running Daily Races, so every remaining ticket runs in one go. Turn this off to run the races one at a time."
+                    label="Turn Multi-Race On If Needed"
+                    description="Daily Races always run every ticket in one multi-race. When this is on and the game shows Multi-Race off, the bot switches it on. When it is off, the bot leaves the switch alone and skips Daily Races if Multi-Race is off."
                     className="mt-4"
                 />
 
@@ -317,7 +317,7 @@ const Settings = () => {
                     }}
                     placeholder="Select race"
                     label="Target Race"
-                    description="Which daily race to enter. If the chosen race is not in the current rotation, the bot stops cleanly instead of picking the other one."
+                    description="Which daily race to enter. If the chosen race is not in the current rotation, the bot returns to Home without racing and reports the run as an error, instead of picking the other one."
                     style={{ marginTop: 16 }}
                 />
 

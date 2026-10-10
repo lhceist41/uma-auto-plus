@@ -81,6 +81,7 @@ object ButtonConfirmExclamation : ButtonInterface {
     override val template = Template("components/button/confirm_exclamation", region = Region.bottomHalf)
 }
 
+/** The "Daily Races" label on its Daily Program tile. */
 object ButtonDailyRaces : ButtonInterface {
     override val template = Template("components/button/daily_races")
 }
@@ -683,9 +684,14 @@ object ButtonEventProgressChevron : ButtonInterface {
 // TP/RP recharge flows. See bot/misc/MiscTask.kt for the architecture.
 // -----------------------------------------------------------------------------
 
-/** The "Daily Program" tile on the Race tab (chibi character + trophy). */
+/** The "Daily Program" label on its Race tab tile; the tile art above it carries rotating badges. */
 object ButtonDailyProgramTile : ButtonInterface {
     override val template = Template("components/button/daily_program_tile", region = Region.bottomHalf)
+}
+
+/** "Complete" under each race of the Daily Races multi-race results. */
+object ButtonComplete : ButtonInterface {
+    override val template = Template("components/button/complete", region = Region.bottomHalf)
 }
 
 /** The big green "Race!" button on the Race Details confirmation screen. Distinct from the bottom-nav Race tab. */

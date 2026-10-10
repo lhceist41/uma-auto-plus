@@ -283,6 +283,11 @@ object LabelRaceDetails : ComponentInterface {
     override val template = Template("components/label/race_details_header", region = Region.topHalf)
 }
 
+/** "Race Results" header over each Daily Races result and the Total Rewards screen. */
+object LabelRaceResultsHeader : ComponentInterface {
+    override val template = Template("components/label/race_results_header", region = Region.topHalf)
+}
+
 /** "Daily Races" purple header banner visible at top of the Daily Races screen group (race-pick + difficulty-pick). */
 object LabelDailyRacesHeader : ComponentInterface {
     override val template = Template("components/label/daily_races_header", region = Region.topHalf)

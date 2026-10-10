@@ -97,8 +97,8 @@ const searchConfig: SearchOption[] = [
     },
     {
         id: "settings-daily-race-multi-race",
-        title: "Ensure Multi-Race Is On",
-        description: "Keeps multi-race enabled when running Daily Races, so every remaining ticket runs in one go.",
+        title: "Turn Multi-Race On If Needed",
+        description: "Daily Races always run every ticket in one multi-race. When this is on and the game shows Multi-Race off, the bot switches it on. When it is off, the bot leaves the switch alone and skips Daily Races if Multi-Race is off.",
         page: "SettingsMain",
     },
     {
