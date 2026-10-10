@@ -1616,11 +1616,16 @@ describe("event picks never take a hint for a style the preset does not race", (
         return card ? STYLE_BY_CODE[card.runningStyle] : (preset.settings as any).skills?.preferredRunningStyle
     }
 
-    /** True when the option text hints a skill that only works in another style than the preset races. */
+    /** Skill names an option text hints, including hints the game grants only on a random branch. */
+    function hintedSkills(text: string): string[] {
+        return [...text.matchAll(/^(?:\(random\) )?(.*) hint \+\d+$/gm)].map((hint) => hint[1])
+    }
+
+    /** True when the option text hints a skill that only works in other styles than the preset races. */
     function hasDeadHint(text: string, preset: (typeof characterPresets)[number]): boolean {
-        return [...text.matchAll(/^(.*) hint \+\d+$/gm)].some((hint) => {
-            const code = /running_style==(\d)/.exec((skills as any)[hint[1]]?.condition ?? "")
-            return code !== null && STYLE_BY_CODE[Number(code[1])] !== racedStyle(preset)
+        return hintedSkills(text).some((name) => {
+            const styles = [...String((skills as any)[name]?.condition ?? "").matchAll(/running_style==(\d)/g)].map((m) => STYLE_BY_CODE[Number(m[1])])
+            return styles.length > 0 && !styles.includes(racedStyle(preset))
         })
     }
 
@@ -1640,6 +1645,28 @@ describe("event picks never take a hint for a style the preset does not race", (
             }
         }
         return dead.sort()
+    }
+
+    /** Every event pick whose title, option or hinted skill is missing from the game data, which the dead-hint check would skip. */
+    function unresolvedEventPicks(): string[] {
+        const unresolved: string[] = []
+        const check = (preset: (typeof characterPresets)[number], key: string, option: number, options: string[] | undefined) => {
+            const text = options?.[option]
+            if (typeof text !== "string") unresolved.push(`${preset.name}|${preset.scenario}|${key} option ${option}`)
+            else for (const name of hintedSkills(text)) if (!(skills as any)[name]) unresolved.push(`${preset.name}|${preset.scenario}|${key} hint ${name}`)
+        }
+        for (const preset of characterPresets) {
+            const events = (preset.settings as any).trainingEvent ?? {}
+            for (const [key, option] of Object.entries((events.characterEventOverrides ?? {}) as Record<string, number>)) {
+                const [character, title] = key.split("|")
+                check(preset, key, option, (characters as any)[character]?.[title])
+            }
+            for (const [key, option] of Object.entries((events.scenarioEventOverrides ?? {}) as Record<string, number>)) {
+                const [scenario, title] = key.split("|")
+                check(preset, key, option, (scenarios as any)[scenario]?.[title])
+            }
+        }
+        return unresolved.sort()
     }
 
     // Left as shipped on purpose: the card's style and the preset's skill style disagree, so the pick
@@ -1699,6 +1726,10 @@ describe("event picks never take a hint for a style the preset does not race", (
 
     it("takes the stat option wherever the hint is dead, apart from the listed style conflicts", () => {
         expect(deadHintPicks()).toEqual(Object.keys(STYLE_CONFLICTS).sort())
+    })
+
+    it("resolves every event pick to an option and every hint in it to a skill", () => {
+        expect(unresolvedEventPicks()).toEqual([])
     })
 
     it("reads the hints and styles it judges from the game data", () => {

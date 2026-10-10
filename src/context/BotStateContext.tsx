@@ -586,8 +586,8 @@ export const defaultSettings: Settings = {
                 requiresConfirmation: false,
             },
             "Solid Showing": {
-                // Match every character preset's pick: Option 1 has a deterministic Energy -15 outcome,
-                // whereas Option 2's -5/-20 random branch can swing into a 20-energy hit. Aligns the
+                // Match every character preset's pick: Option 1 has a deterministic Energy -20 outcome,
+                // whereas Option 2's -10/-30 random branch can swing into a 30-energy hit. Aligns the
                 // no-preset default with what users get the moment they apply any character preset.
                 selectedOption: "Option 1: Energy -15 and random stat gain",
                 requiresConfirmation: false,

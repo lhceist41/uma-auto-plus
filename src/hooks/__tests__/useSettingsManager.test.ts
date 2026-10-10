@@ -218,6 +218,43 @@ describe("applyMigrations", () => {
         expect(migrated.scenarioOverrides).toEqual({ trackblazerEnergyThreshold: 40 })
         expect(anyMigrated).toBe(false)
     })
+
+    describe("the old Victory! Option 2 string", () => {
+        const OLD = "Option 2: Energy -5 and random stat gain"
+        const NEW = "Option 2: Energy -5/-20 and random stat gain"
+        const withOverrides = (overrides: Record<string, any>) =>
+            ({ general: { stopAtDates: [] }, trainingEvent: { ocrConfidence: 90, specialEventOverrides: overrides } }) as any
+
+        it("rewrites it to the value the select offers and asks for a save", () => {
+            const { settings: migrated, anyMigrated } = applyMigrations(withOverrides({ "Victory!": { selectedOption: OLD, requiresConfirmation: true } }))
+            expect(migrated.trainingEvent.specialEventOverrides["Victory!"]).toEqual({ selectedOption: NEW, requiresConfirmation: true })
+            expect(migrated.trainingEvent.ocrConfidence).toBe(90)
+            expect(anyMigrated).toBe(true)
+        })
+
+        it("is idempotent", () => {
+            const once = applyMigrations(withOverrides({ "Victory!": { selectedOption: OLD, requiresConfirmation: false } })).settings
+            const twice = applyMigrations(once)
+            expect(twice.settings.trainingEvent.specialEventOverrides["Victory!"].selectedOption).toBe(NEW)
+            expect(twice.anyMigrated).toBe(false)
+        })
+
+        it("leaves other picks and other events alone", () => {
+            const overrides = {
+                "Victory!": { selectedOption: "Option 1: Energy -15 and random stat gain", requiresConfirmation: false },
+                "Solid Showing": { selectedOption: "Option 2: Energy -5/-20 and random stat gain", requiresConfirmation: false },
+                Defeat: { selectedOption: OLD, requiresConfirmation: false },
+            }
+            const { settings: migrated, anyMigrated } = applyMigrations(withOverrides(JSON.parse(JSON.stringify(overrides))))
+            expect(migrated.trainingEvent.specialEventOverrides).toEqual(overrides)
+            expect(anyMigrated).toBe(false)
+        })
+
+        it("tolerates settings without event overrides", () => {
+            expect(applyMigrations({ general: { stopAtDates: [] } } as any).anyMigrated).toBe(false)
+            expect(applyMigrations({ general: { stopAtDates: [] }, trainingEvent: {} } as any).anyMigrated).toBe(false)
+        })
+    })
 })
 
 // ===========================================================================

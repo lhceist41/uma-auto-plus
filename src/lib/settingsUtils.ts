@@ -154,6 +154,14 @@ export const applyMigrations = (settings: any): { settings: any; anyMigrated: bo
         logWithTimestamp("[SettingsManager] Migrated stopAtDate to stopAtDates array.")
     }
 
+    // Older releases stored Victory! Option 2 under a label the select no longer offers, so it showed "ERROR".
+    const victory = (migratedSettings as any).trainingEvent?.specialEventOverrides?.["Victory!"]
+    if (victory?.selectedOption === "Option 2: Energy -5 and random stat gain") {
+        victory.selectedOption = "Option 2: Energy -5/-20 and random stat gain"
+        anyMigrated = true
+        logWithTimestamp("[SettingsManager] Migrated the Victory! Option 2 label.")
+    }
+
     // The removed Trackblazer race-retry settings leave stored rows nothing reads; drop them on load and Export without flagging a save.
     const overrides = (migratedSettings as any).scenarioOverrides
     if (overrides) {
