@@ -6,6 +6,13 @@ internal val TRAINEE_SKIP_REASON_KEYS: Set<String> = setOf("TRAINEE_IN_DECK", "T
 /** Launch stops refused on the Final Confirmation screen before Start Career: no career is in the slot. */
 internal val FINAL_CONFIRMATION_REFUSAL_KEYS: Set<String> = setOf("FINAL_CONFIRMATION_MODE_UNVERIFIED", "GRAND_CONCERT_SCREEN_UNSUPPORTED")
 
+/** Career setup screens: the game opens them only while its career slot is empty (a career in the slot shows Continue Career instead). */
+internal val CAREER_SETUP_SCREENS: Set<String> = setOf("SCENARIO_SELECT", "TRAINEE_SELECT_SCREEN", "LEGACY_SELECT_SCREEN", "SUPPORT_DECK_SCREEN", "PRE_RUN_CONFIRMATION")
+
+/** A failed launch navigation that stopped on a career setup screen leaves no career in the slot, whatever the queue expected. */
+internal fun navigationLeftCareer(careerExpected: Boolean, nav: NavigationResult): Boolean =
+    careerExpected && nav.lastDetectedState !in CAREER_SETUP_SCREENS && nav.reasonKey !in FINAL_CONFIRMATION_REFUSAL_KEYS
+
 internal enum class UnplayableRunStep {
     SKIP,
 

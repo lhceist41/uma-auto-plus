@@ -172,7 +172,7 @@ class RosterLivenessPolicyTest {
         fun `the three Start-Career identity backstops remain present`() {
             assertEquals(
                 3,
-                Regex("SingleRunTraineeGate\\.mustFailClosed\\(").findAll(nav).count(),
+                Regex("if \\(SingleRunTraineeGate\\.mustFailClosed\\(").findAll(nav).count(),
                 "Legacy Select, Support Deck, and Pre-Run Confirmation still fail closed on unverified identity",
             )
         }

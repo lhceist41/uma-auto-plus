@@ -178,6 +178,12 @@ internal fun borrowRowMatchesPreference(rowText: String, preference: String): Bo
 internal fun careerStillInSlotAfterFinish(followsFinishedCareer: Boolean, newCareerLaunched: Boolean, careerInSlot: () -> Boolean): Boolean =
     followsFinishedCareer && !newCareerLaunched && careerInSlot()
 
+/** Back presses from Support Formation, the furthest setup screen past Trainee Select, to Trainee Select. */
+internal const val TRAINEE_SELECT_MAX_BACKS = 2
+
+/** A launch that still owes its trainee pick on a later setup screen (Start pressed there, or a missed Trainee Select) goes Back to pick her, within [TRAINEE_SELECT_MAX_BACKS]. */
+internal fun backToTraineeSelect(traineeOwed: Boolean, backsPressed: Int): Boolean = traineeOwed && backsPressed < TRAINEE_SELECT_MAX_BACKS
+
 /**
  * Whether a launch latch starts a new career: only after this navigation saw Home, since the game's own
  * intro after a relaunch latches it before Home too. A finalize never launches one.
@@ -658,6 +664,9 @@ class CareerLaunchNavigator(private val context: Context) {
     // navigator would re-enter Legacy Select handling each iteration instead of clicking Next.
     private var legacyAutoSelectAlreadyDone: Boolean = false
 
+    // Back presses this navigation spent returning to Trainee Select from a later setup screen.
+    private var traineeSelectBacks = 0
+
     // Session-scoped flag: passive lineage capture has already run (or been attempted) on the
     // populated Legacy Select summary this launch. The post-Auto-Select branch re-enters each
     // iteration, so without this the capture would repeat; it must run at most once per launch.
@@ -955,6 +964,7 @@ class CareerLaunchNavigator(private val context: Context) {
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
+        traineeSelectBacks = 0
         lineageCaptureAttempted = false
         careerLaunchInitiated = false
         newCareerLaunched = false
@@ -4972,6 +4982,16 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun handleSupportDeckScreen(reuseLastLaunchSetup: Boolean, autoFillSupports: Boolean = false): TransitionResult {
         MessageLog.i(TAG, "[NAV] On support deck screen. autoFillSupports=$autoFillSupports")
+
+        // A Start on this screen comes before the trainee pick: Back reaches Legacy Select, which goes back once more.
+        if (backToTraineeSelectIfOwed("Support Formation")) return TransitionResult.Continue
+        if (rotationSwitchOwed()) {
+            return TransitionResult.Failed(
+                reason = "Trainee rotation required a switch this launch but Trainee Select was not handled before the Support Deck; the wrong trainee may be selected.",
+                transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                recommendedAction = "Select the trainee manually in-game and restart the queue.",
+            )
+        }
 
         // Identity fail-closed: this screen carries the Start Career button, so a targeted single-run
         // launch that reached here without roster-verifying the trainee (a missed Trainee Select
@@ -9098,16 +9118,31 @@ class CareerLaunchNavigator(private val context: Context) {
         OutcomeCorpus.append(context, record, OutcomeCorpus.BUILD_AWARE_LAUNCH_GATE_PATH)
     }
 
-    private fun handleLegacySelectScreen(): TransitionResult {
-        // Rotation backstop: a trainee switch was required this launch but we reached Legacy Select
-        // without handling Trainee Select (a missed detection tapped through it keeping the wrong
-        // trainee). Stop before the career starts rather than run the wrong trainee. Queue-managed
-        // launches only - a single run must not be failed by a stale pending flag an interrupted
-        // queue left behind; it has its own mirror check below.
-        if (singleRunTraineeTarget.isBlank() &&
+    /** The rotation switch this launch owes has not reached Trainee Select. Queue-managed launches only: a single run must not be failed by a stale pending flag an interrupted queue left behind. */
+    private fun rotationSwitchOwed(): Boolean =
+        singleRunTraineeTarget.isBlank() &&
             SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false) &&
             SettingsHelper.getStringSetting("queueState", "rotationSwitchPending") == "true"
-        ) {
+
+    /** Presses the game's Back toward Trainee Select when this launch still owes its trainee pick. False when it owes none, may not, or Back is not found. */
+    private fun backToTraineeSelectIfOwed(screen: String): Boolean {
+        val owed = rotationSwitchOwed() || SingleRunTraineeGate.mustFailClosed(singleRunTraineeTarget, singleRunTraineeSelectHandled)
+        if (!backToTraineeSelect(owed, traineeSelectBacks) || !ButtonBack.click(iu)) return false
+        traineeSelectBacks++
+        MessageLog.i(TAG, "[NAV] On $screen before this launch picked its trainee. Pressed Back to pick her on Trainee Select.")
+        waitSafe(2.0)
+        return true
+    }
+
+    private fun handleLegacySelectScreen(): TransitionResult {
+        // A Start on this screen, or a missed Trainee Select detection that tapped through the roster,
+        // reaches Legacy Select before the trainee pick: go back and pick her there.
+        if (backToTraineeSelectIfOwed("Legacy Select")) return TransitionResult.Continue
+
+        // Rotation backstop: a trainee switch was required this launch but Trainee Select was not
+        // handled, and Back did not reach it. Stop before the career starts rather than run the
+        // wrong trainee.
+        if (rotationSwitchOwed()) {
             return TransitionResult.Failed(
                 reason = "Trainee rotation required a switch this launch but Trainee Select was not handled before Legacy Select — the wrong trainee may be selected.",
                 transition = "LEGACY_SELECT_SCREEN -> SUPPORT_DECK_SCREEN",

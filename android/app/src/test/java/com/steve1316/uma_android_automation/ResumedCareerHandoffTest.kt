@@ -115,7 +115,7 @@ class ResumedCareerHandoffTest {
         @Test
         fun `a failed cold start that was resuming a career says a career is in flight`() {
             val failure = coldStart.substring(0, coldStart.indexOf("} else {"))
-            assertTrue(failure.contains("queueHaltCareerInFlight = resumeReEntersCareer || navResult.careerResumed"))
+            assertTrue(failure.contains("queueHaltCareerInFlight = navigationLeftCareer(resumeReEntersCareer || navResult.careerResumed, navResult)"))
             assertTrue(failure.indexOf("queueHaltCareerInFlight") > failure.indexOf("if (navResult.lastDetectedState != \"STOPPED\") {"))
         }
 
@@ -130,7 +130,7 @@ class ResumedCareerHandoffTest {
         @Test
         fun `a between-run Resume counts as a career left in the slot`() {
             assertTrue(betweenRuns.contains("if (navResult.careerResumed) previousRunLeftCareer = true"))
-            assertTrue(betweenRuns.contains("queueHaltCareerInFlight = (!careerFinished || navResult.careerResumed) && navResult.reasonKey !in FINAL_CONFIRMATION_REFUSAL_KEYS"))
+            assertTrue(betweenRuns.contains("queueHaltCareerInFlight = navigationLeftCareer(!careerFinished || navResult.careerResumed, navResult)"))
         }
     }
 

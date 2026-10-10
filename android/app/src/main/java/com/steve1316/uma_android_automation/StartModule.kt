@@ -2527,7 +2527,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 ledger.reasonRotation = navResult.reasonRotation
                                 queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                 queueHaltRun = startFromRun - 1
-                                queueHaltCareerInFlight = resumeReEntersCareer || navResult.careerResumed
+                                queueHaltCareerInFlight = navigationLeftCareer(resumeReEntersCareer || navResult.careerResumed, navResult)
                             }
                             queueStopRequested = true
                         } else {
@@ -2993,8 +2993,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     ledger.reasonRotation = navResult.reasonRotation
                                     queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                     queueHaltRun = i
-                                    // The game offers Final Confirmation only while its career slot is empty.
-                                    queueHaltCareerInFlight = (!careerFinished || navResult.careerResumed) && navResult.reasonKey !in FINAL_CONFIRMATION_REFUSAL_KEYS
+                                    queueHaltCareerInFlight = navigationLeftCareer(!careerFinished || navResult.careerResumed, navResult)
                                 }
                                 break
                             }

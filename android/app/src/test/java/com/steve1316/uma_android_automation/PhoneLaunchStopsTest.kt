@@ -151,9 +151,12 @@ class PhoneLaunchStopsTest {
         @DisplayName("a refusal before Start Career does not claim a career in the slot")
         fun noCareerClaimed() {
             assertEquals(setOf("FINAL_CONFIRMATION_MODE_UNVERIFIED", "GRAND_CONCERT_SCREEN_UNSUPPORTED"), FINAL_CONFIRMATION_REFUSAL_KEYS)
+            for (key in FINAL_CONFIRMATION_REFUSAL_KEYS) {
+                assertFalse(navigationLeftCareer(true, NavigationResult(success = false, lastDetectedState = "UNKNOWN", reasonKey = key)), key)
+            }
             assertTrue(
                 source("StartModule.kt").contains(
-                    "queueHaltCareerInFlight = (!careerFinished || navResult.careerResumed) && navResult.reasonKey !in FINAL_CONFIRMATION_REFUSAL_KEYS",
+                    "queueHaltCareerInFlight = navigationLeftCareer(!careerFinished || navResult.careerResumed, navResult)",
                 ),
             )
         }

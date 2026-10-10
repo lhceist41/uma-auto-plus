@@ -200,7 +200,7 @@ class SingleRunTraineeGateTest {
         fun `all three Start-Career-bearing screens fail closed through the gate`() {
             assertEquals(
                 3,
-                Regex("SingleRunTraineeGate\\.mustFailClosed\\(").findAll(nav).count(),
+                Regex("if \\(SingleRunTraineeGate\\.mustFailClosed\\(").findAll(nav).count(),
                 "Legacy Select, Support Deck, and Pre-Run Confirmation each carry the identity backstop",
             )
         }
