@@ -215,7 +215,7 @@ The Remote Log Viewer includes a dashboard: the run the queue is on, what the bo
 
 ## To view logs in real time
 
-The bot also writes a log file per career, which is the thing to attach to a bug report (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)). To watch live instead:
+To report a bug, tap **Share bug report** under the log on Home: it packs your newest logs into one file for the share sheet (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)). The bot also writes a log file per career, which you can pull from a PC. To watch live instead:
 
 1. Install `Android Studio` and open any project so the `Logcat` console appears at the bottom.
 2. Connect your device:

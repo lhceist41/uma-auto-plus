@@ -122,7 +122,9 @@ The dashboard is part of the Remote Log Viewer, which is off by default. It only
 
 ## Reporting a bug
 
-A useful report includes a **log file**. The bot writes one per career to:
+A useful report includes the bot's **logs**. The easiest way: on **Home**, tap **Share bug report** under the log. The app builds one zip file with the newest career logs, the current log, your settings (without your Discord token or ID), your app version and your device, then opens Android's share sheet. Choose Discord or any other app and add a line about what happened. The app sends nothing by itself.
+
+If you prefer to pull the log from a PC instead, the bot writes one file per career to:
 
 ```
 /storage/emulated/0/Android/data/com.lhceist41.uma_auto_plus/files/logs/

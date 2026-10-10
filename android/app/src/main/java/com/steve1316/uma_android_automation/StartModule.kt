@@ -18,7 +18,9 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.events.ExceptionEvent
 import com.steve1316.automation_library.events.JSEvent
 import com.steve1316.automation_library.events.StartEvent
@@ -39,6 +41,7 @@ import com.steve1316.uma_android_automation.bot.TaskResultCode
 import com.steve1316.uma_android_automation.bot.hasSecureSettingsGrant as secureSettingsGranted
 import com.steve1316.uma_android_automation.bot.shouldClearSparkTransactionForRunResult
 import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
+import com.steve1316.uma_android_automation.utils.BugReport
 import com.steve1316.uma_android_automation.utils.KeepScreenOn
 import com.steve1316.uma_android_automation.utils.LogStreamServer
 import com.steve1316.uma_android_automation.utils.ProgressNotification
@@ -1161,6 +1164,47 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         map.putBoolean("botRunning", BotService.isRunning)
         map.putBoolean("stopAfterCareer", stopAfterCareerRequested)
         promise.resolve(map)
+    }
+
+    /**
+     * Builds the bug report zip for the share sheet and resolves its path. [settingsJson] is already
+     * scrubbed by the caller; [secrets] are scrubbed from every text again here. Runs off the bridge thread.
+     */
+    @ReactMethod
+    fun createBugReport(settingsJson: String, contextLines: String, secrets: ReadableArray, promise: Promise) {
+        Thread {
+            try {
+                val secretValues = (0 until secrets.size()).mapNotNull { secrets.getString(it) }
+                val logsDir = File(context.getExternalFilesDir(null), "logs")
+                val reportDir = File(context.filesDir, "bug-report")
+                reportDir.listFiles()?.forEach { it.delete() }
+                val stamp = java.text.SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", java.util.Locale.US).format(java.util.Date())
+                val report =
+                    BugReport.deviceLines(
+                        BuildConfig.VERSION_NAME,
+                        BuildConfig.VERSION_CODE.toLong(),
+                        android.os.Build.VERSION.RELEASE,
+                        android.os.Build.VERSION.SDK_INT,
+                        android.os.Build.MANUFACTURER,
+                        android.os.Build.MODEL,
+                        SharedData.displayWidth,
+                        SharedData.displayHeight,
+                    ) + contextLines.split("\n").filter { it.isNotBlank() }
+                val zip =
+                    BugReport.build(
+                        File(reportDir, "uma-auto-plus-bug-report-$stamp.zip"),
+                        report,
+                        settingsJson,
+                        BugReport.newestCareerLogs(logsDir),
+                        MessageLog.getMessageLogCopy(),
+                        secretValues,
+                    )
+                promise.resolve(zip.absolutePath)
+            } catch (e: Throwable) {
+                Log.e(TAG, "createBugReport failed", e)
+                promise.reject("BUG_REPORT_FAILED", e.message ?: "The bug report could not be built.")
+            }
+        }.start()
     }
 
     /**
