@@ -194,6 +194,8 @@ class QueueReportTextTest {
                 if (kind.clearsQueueState || kind in neverResumed || kind.name.startsWith("REFUSED")) continue
                 val text = queueReportText(report)
                 assertEquals("Queue paused".takeIf { kind != SessionEnd.PROCESS_ENDED } ?: "App stopped unexpectedly", text.title)
+                // Continuing would stop on the same career again, so its fix is to start over.
+                if (kind == SessionEnd.STOPPED_BY_BOT && report.getString("reasonKey") == "CAREER_SCENARIO_MISMATCH") continue
                 assertTrue(text.nextAction!!.contains("within 24 hours, with Run Queue on and the same number of runs, to continue the queue"), "$kind: ${text.nextAction}")
             }
         }

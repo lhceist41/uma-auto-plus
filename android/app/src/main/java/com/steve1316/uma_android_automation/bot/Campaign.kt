@@ -1794,7 +1794,8 @@ abstract class Campaign(game: Game) : Task(game) {
      * snapshot is missing or the character holds several slots, where a wrong guess would apply the wrong preset); an unreadable or off-roster
      * name warns and continues. */
     private fun verifyRotationTrainee() {
-        if (!SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) return
+        // A single run never applies a rotation slot, so the rotation's last trainee is not its target.
+        if (!SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", true) || !SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) return
 
         val inCareer = trainee.name.trim()
         if (inCareer.isEmpty() || inCareer.equals("null", ignoreCase = true)) {

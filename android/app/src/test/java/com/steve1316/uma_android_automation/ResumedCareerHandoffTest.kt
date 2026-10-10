@@ -123,7 +123,8 @@ class ResumedCareerHandoffTest {
         fun `a cold start that resumed a career runs it as a career in flight`() {
             val success = coldStart.substring(coldStart.indexOf("} else {"))
             assertTrue(success.contains("if (navResult.careerResumed) resumeReEntersCareer = true"))
-            assertTrue(startModule.contains("nextRunCareerInFlight = (i == startFromRun && resumeReEntersCareer) || previousRunLeftCareer"))
+            val mark = "val runReEntersCareer = (i == startFromRun && resumeReEntersCareer) || previousRunLeftCareer\n                    nextRunCareerInFlight = runReEntersCareer"
+            assertTrue(startModule.contains(mark))
         }
 
         @Test

@@ -146,13 +146,17 @@ class BotStopResumeRecordTest {
         @Test
         fun `only a stop that ends a career run marks its career as left in the slot`() {
             assertEquals(1, Regex("stopLeftCareer = runScenario").findAll(startModule).count(), "set in one place")
-            assertFalse(Regex("stopLeftCareer = true").containsMatchIn(startModule))
+            // The other: a stop in the wait after a navigation that left a career in the slot (QueueStopResumeTest).
+            assertEquals(1, Regex("stopLeftCareer = true").findAll(startModule).count())
             val branch = startModule.substring(startModule.indexOf("TaskResultCode.TASK_RESULT_MANUALLY_STOPPED -> {"), startModule.indexOf("TaskResultCode.TASK_RESULT_COMPLETE -> {"))
             assertTrue(
-                branch.contains("stopLeftCareer = runScenario != \"Daily Races\" && runScenario != \"Team Trials\"\n                                break"),
-                "the stopped run's own branch, misc runs excluded",
+                branch.contains(
+                    "} else {\n                                    stopLeftCareer = runScenario != \"Daily Races\" && runScenario != \"Team Trials\"\n" +
+                        "                                }\n                                break",
+                ),
+                "the stopped run's own branch, misc runs and a stopped launch excluded",
             )
-            assertTrue(startModule.contains("keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer, launchStoppedByPlayer)"))
+            assertTrue(startModule.contains("keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer, launchStoppedByPlayer || runLaunchStopped)"))
         }
 
         @Test

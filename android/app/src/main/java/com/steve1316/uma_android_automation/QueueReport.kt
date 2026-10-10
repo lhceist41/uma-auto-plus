@@ -54,8 +54,8 @@ enum class SessionEnd(val clearsQueueState: Boolean = false) {
     /** The player stopped the queue. A stop in the middle of a career keeps the resume record; any other clears it. */
     STOPPED_BY_USER,
 
-    /** The bot stopped the queue itself (trainee mismatch, or a navigation that stopped responding). */
-    STOPPED_BY_BOT(clearsQueueState = true),
+    /** The bot stopped the queue itself (trainee mismatch, or a navigation that stopped responding). Its record is kept unless the last career had finished. */
+    STOPPED_BY_BOT,
 
     /** The bot service went away without the app asking it to (overlay Stop, capture stop, or an error). */
     SERVICE_ENDED(clearsQueueState = true),

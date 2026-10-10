@@ -283,6 +283,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         arrayOf("queueState", "completedRuns", completedRuns.toString()),
                     )
                 }
+                if (active) {
+                    db.execSQL(
+                        "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                        arrayOf("queueState", "rotationOffset", rotationCursorOffset.toString()),
+                    )
+                }
                 db.execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", "timestamp", System.currentTimeMillis().toString()),
@@ -310,6 +316,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          *           [PHASE_LAUNCHING] (`currentRun` done, launching `currentRun + 1`).
          * @property completedRuns Careers the queue had finished when this was saved, or null for a
          *           state saved before the count was persisted.
+         * @property rotationOffset The rotation resync offset in force when this was saved; 0 for a
+         *           state saved before the offset was persisted.
          */
         data class QueueState(
             val active: Boolean,
@@ -318,6 +326,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             val ageMs: Long,
             val phase: String,
             val completedRuns: Int? = null,
+            val rotationOffset: Int = 0,
         )
 
         /**
@@ -361,26 +370,31 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         raw[cursor.getString(0)] = cursor.getString(1)
                     }
                 }
-                val active = raw["active"] == "true"
-                if (!active) return null
-
-                val currentRun = raw["currentRun"]?.toIntOrNull() ?: return null
-                val totalRuns = raw["totalRuns"]?.toIntOrNull() ?: return null
-                if (currentRun <= 0 || totalRuns <= 0) return null
-
-                val timestamp = raw["timestamp"]?.toLongOrNull() ?: 0L
-                val ageMs = System.currentTimeMillis() - timestamp
-                if (ageMs < 0 || ageMs > QUEUE_STATE_STALE_MS) return null
-
-                // Pre-phase states (and the conservative default) read as CAREER: re-enter rather
-                // than skip. A redundant re-run is harmless; skipping the wrong way is the bug.
-                val phase = raw["phase"] ?: PHASE_CAREER
-
-                return QueueState(active, currentRun, totalRuns, ageMs, phase, raw["completedRuns"]?.toIntOrNull())
+                return queueStateFrom(raw, System.currentTimeMillis())
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load queue state: ${e.message}")
                 return null
             }
+        }
+
+        /** The resumable queue the stored `queueState` rows describe at [nowMs], or null; [loadQueueState] without the database. */
+        internal fun queueStateFrom(raw: Map<String, String>, nowMs: Long): QueueState? {
+            val active = raw["active"] == "true"
+            if (!active) return null
+
+            val currentRun = raw["currentRun"]?.toIntOrNull() ?: return null
+            val totalRuns = raw["totalRuns"]?.toIntOrNull() ?: return null
+            if (currentRun <= 0 || totalRuns <= 0) return null
+
+            val timestamp = raw["timestamp"]?.toLongOrNull() ?: 0L
+            val ageMs = nowMs - timestamp
+            if (ageMs < 0 || ageMs > QUEUE_STATE_STALE_MS) return null
+
+            // Pre-phase states (and the conservative default) read as CAREER: re-enter rather
+            // than skip. A redundant re-run is harmless; skipping the wrong way is the bug.
+            val phase = raw["phase"] ?: PHASE_CAREER
+
+            return QueueState(active, currentRun, totalRuns, ageMs, phase, raw["completedRuns"]?.toIntOrNull(), raw["rotationOffset"]?.toIntOrNull() ?: 0)
         }
 
         /**
@@ -518,6 +532,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         fun keepsResumeRecordAfterStop(queueStopRequested: Boolean, botStopReason: String?, lastCareerFinished: Boolean, stopLeftCareer: Boolean, launchStopped: Boolean = false): Boolean =
             queueStopRequested && !lastCareerFinished && (botStopReason != null || stopLeftCareer || launchStopped)
 
+        /** The player's stop ended a run inside its own launch navigation, which had not re-entered a career, so no career of this run is known to be in the slot. */
+        fun stopEndedRunLaunch(rawResult: TaskResult, careerInFlight: Boolean): Boolean =
+            !careerInFlight && rawResult is TaskResult.Error && rawResult.code == TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED
+
         /** A failed launch navigation ended by the player's Stop: the app's (the stop flag) or the overlay's ([isOverlayStop]), never a bot stop. */
         fun navigationStoppedByPlayer(stopRequested: Boolean, botRunning: Boolean, botStopReason: String?, runPostedException: Boolean): Boolean =
             botStopReason == null && (stopRequested || isOverlayStop(botRunning, botStopReason, runPostedException))
@@ -543,6 +561,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
         /** Retries a queue may spend per Start: enough to ride out a one-off error, too few to loop on a career that keeps failing. */
         const val RUN_RETRY_BUDGET = 2
+
+        /** Start re-enters the halted run, so a career finished by hand meanwhile is followed by a fresh one under that run. */
+        const val CAREER_NOT_FINISHED_NEXT =
+            "The career is still in progress in the game. Press Start in UMA Auto+ and the bot finishes it; finishing it by hand instead can make the queue play an extra career."
 
         /** Endings that leave the run's career unfinished in the game's slot after an error inside it. */
         private val RETRYABLE_RUN_RESULTS =
@@ -845,9 +867,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
 
         /**
-         * Cursor shift folded into every rotation slot lookup this session. Normally 0; set by
+         * Cursor shift folded into every rotation slot lookup. Normally 0; set by
          * [resyncRotationOntoCareer] so the run the mismatch guard resynced counts as the
-         * on-screen trainee's slot and later runs continue the cycle from her entry.
+         * on-screen trainee's slot and later runs continue the cycle from her entry, and restored
+         * from the queue record when a queue resumes.
          */
         @Volatile
         private var rotationCursorOffset: Int = 0
@@ -892,8 +915,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * and fast-forwards the cursor so this run counts as [index]'s slot and later runs continue
          * the cycle from it. The in-flight Campaign keeps whatever values it already read at
          * startup until this career ends; every later read (and every later run) sees the resynced
-         * trainee's settings. The offset is session-scoped by design: if the process dies after a
-         * resync, the next session's guard simply resyncs again.
+         * trainee's settings. The offset is saved with the queue record, so a resumed queue keeps
+         * the resynced slots.
          *
          * Refused when [index]'s snapshot runs a different scenario than the career in flight: the
          * running Game/Campaign were constructed for the current scenario and cannot switch
@@ -923,6 +946,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             // Already in-career: no trainee switch can happen for this run, so disarm the backstop.
             setRotationSwitchPending(context, false)
             rotationCursorOffset = rotation.resyncOffsetFor(queueCurrentRun, index)
+            // Saved with the queue: a resumed mixed-scenario rotation cannot resync again, because the resync refuses another scenario.
+            setQueueStateValue(context, "rotationOffset", rotationCursorOffset.toString())
             rotationResyncPrevIndex = index
             MessageLog.i(
                 TAG,
@@ -1512,14 +1537,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      * opt-in and best-effort: a failure here must never mask the halt itself, which is already on
      * the log above this call.
      */
-    private fun notifyQueueHalted(completedRuns: Int, totalRuns: Int, unrun: Int, reason: String, careerInFlight: Boolean) {
+    private fun notifyQueueHalted(completedRuns: Int, totalRuns: Int, unrun: Int, reason: String, careerInFlight: Boolean, finishLost: Boolean) {
         if (!DiscordUtils.enableDiscordNotifications) return
         try {
             DiscordUtils.queue.add(
                 "```diff\n- ${MessageLog.getSystemTimeString()} QUEUE HALTED after $completedRuns of ${runsPhrase(totalRuns)} " +
                     "($unrun not started).\n- Reason: $reason\n- " +
                     (
-                        if (careerInFlight) {
+                        if (finishLost) {
+                            CAREER_NOT_FINISHED_NEXT
+                        } else if (careerInFlight) {
                             "The career slot is occupied; no further run can start until this is handled in-game."
                         } else {
                             "No career is in flight; clear whatever screen the game is parked on, then restart to resume."
@@ -2000,6 +2027,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 )
             val verdict = classifySessionEnd(facts)
             if (verdict.end == SessionEnd.STOPPED_BY_BOT) ledger.reasonKey = queueStopKey.orEmpty()
+            if (verdict.end == SessionEnd.SINGLE_RUN_ENDED && facts.stopByBot && ledger.reasonKey.isEmpty()) ledger.reasonKey = queueStopKey.orEmpty()
             ledger.report(verdict, System.currentTimeMillis()).also { QueueLedger.finishSession(context, it) }.also { StatusBoard.sessionEnded(it) }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to write the queue report: ${e.message}")
@@ -2210,6 +2238,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // has a career in the slot, so the navigator may not treat it as a career-free Start.
                 var resumeReEntersCareer = false
                 var resumedQueue = false
+                var resumedRotationOffset = 0
 
                 val startFromRun: Int =
                     run {
@@ -2241,12 +2270,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.w(TAG, "[RESUME] Detected interrupted queue, last saved ${saved.ageMs / 60_000}m ago. $resumeLog")
                         sendQueueProgressEvent(next, totalRuns, "resuming", message = resumeNote)
                         resumedQueue = true
+                        resumedRotationOffset = saved.rotationOffset
                         next
                     }
 
                 // Seeded from the persisted state so a resumed queue counts the whole queue,
                 // not just what this process launch played.
                 var completedRuns = priorCompletedRuns
+                if (resumedQueue && rotation.enabled && resumedRotationOffset != 0) {
+                    rotationCursorOffset = resumedRotationOffset
+                    MessageLog.i(TAG, "[ROTATION] The resumed queue keeps its rotation resync (offset=$resumedRotationOffset).")
+                }
 
                 // The session is now open: a process death from here on is reported at the next
                 // app start, dated by the heartbeat or Android's exit record.
@@ -2291,6 +2325,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 var queueHaltFinishLost = false
                 // True when a stop ended a run mid-career: that career is still in the slot, so the saved run is kept for Start to re-enter.
                 var stopLeftCareer = false
+                // True when a stop ended a run's own launch and the record now points Start at that run's launch again.
+                var runLaunchStopped = false
                 // The run after which the player's stop after this career paused the queue, or null.
                 var stoppedAfterCareerRun: Int? = null
                 // True once a career is actually confirmed to exist: the cold-start probe below
@@ -2478,7 +2514,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // finished. Moving on instead would let the next run finish this career.
                     // A resumed in-flight career, a run played again, and a career the previous run
                     // left unfinished are all still in the slot.
-                    nextRunCareerInFlight = (i == startFromRun && resumeReEntersCareer) || previousRunLeftCareer
+                    val runReEntersCareer = (i == startFromRun && resumeReEntersCareer) || previousRunLeftCareer
+                    nextRunCareerInFlight = runReEntersCareer
                     previousRunLeftCareer = false
                     var result = runSingleGame()
                     val runScenario = SettingsHelper.getStringSetting("general", "scenario")
@@ -2586,7 +2623,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // queue; the reason makes the log honest about which one it actually was.
                             if (!queueSkipRequested) {
                                 MessageLog.i(TAG, "[QUEUE] ${queueStopReason?.trimEnd('.') ?: "User stopped the bot"}. Exiting queue.")
-                                stopLeftCareer = runScenario != "Daily Races" && runScenario != "Team Trials"
+                                if (enableRunQueue && stopEndedRunLaunch(result, runReEntersCareer || retried)) {
+                                    // Re-entering would run a fresh launch as a career in flight, so Start launches this run again instead.
+                                    runLaunchStopped = i > 1
+                                    if (runLaunchStopped) {
+                                        saveQueueState(context, active = true, currentRun = i - 1, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)
+                                    } else {
+                                        clearQueueState(context)
+                                    }
+                                } else {
+                                    stopLeftCareer = runScenario != "Daily Races" && runScenario != "Team Trials"
+                                }
                                 break
                             }
                         }
@@ -2870,6 +2917,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 queueHaltResultCode = TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION.name
                                 queueHaltRun = i
                                 queueHaltCareerInFlight = !isMiscQueue
+                            } else if (!isMiscQueue && navigationStoppedByPlayer(queueStopRequested, BotService.isRunning, queueStopReason, lastRunPostedException)) {
+                                // The saved run already says where Start picks up, including a career the navigation left in the slot.
+                                queueStopRequested = true
+                                stopLeftCareer = true
                             }
                             MessageLog.i(TAG, "[QUEUE] Between-run wait aborted. Exiting queue.")
                             break
@@ -2909,13 +2960,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.e(TAG, "\n[QUEUE] ========================================")
                         MessageLog.e(TAG, "[QUEUE] Queue HALTED after $doneRuns of ${runsPhrase(totalRuns)} ($unrun not started).")
                         MessageLog.e(TAG, "[QUEUE] Reason: $halt")
-                        if (queueHaltCareerInFlight) {
+                        if (queueHaltFinishLost) {
+                            MessageLog.e(TAG, "[QUEUE] $CAREER_NOT_FINISHED_NEXT")
+                        } else if (queueHaltCareerInFlight) {
                             MessageLog.e(TAG, "[QUEUE] A career is still occupying the game's single slot; no further run can start until it is finished or abandoned in-game.")
                         } else {
                             MessageLog.e(TAG, "[QUEUE] No career is in flight; the game is parked on whatever screen the queue stopped at. Clear that screen, then restart to resume.")
                         }
                         MessageLog.e(TAG, "[QUEUE] ========================================\n")
-                        notifyQueueHalted(doneRuns, totalRuns, unrun, halt, queueHaltCareerInFlight)
+                        notifyQueueHalted(doneRuns, totalRuns, unrun, halt, queueHaltCareerInFlight, queueHaltFinishLost)
                     } else if (pausedAfterRun != null) {
                         // Paused at the player's request after a finished career. Keep the resume
                         // record saved at the launch point: Start continues with the next run.
@@ -2927,7 +2980,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     } else {
                         // Clear persisted queue state since queue finished normally.
                         val stopReason = queueStopReason
-                        if (!keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer, launchStoppedByPlayer)) clearQueueState(context)
+                        if (!keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer, launchStoppedByPlayer || runLaunchStopped)) clearQueueState(context)
                         when {
                             queueStopRequested && stopReason != null -> {
                                 // A controlled internal stop rather than a user Stop or failure. stopReason is always

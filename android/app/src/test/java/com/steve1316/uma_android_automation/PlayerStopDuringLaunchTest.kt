@@ -111,7 +111,7 @@ class PlayerStopDuringLaunchTest {
             assertTrue(Regex("""if \(result\.success \|\|.* !navigationStoppedByPlayer\(""").containsMatchIn(note), "a success or anyone else's stop is returned unchanged")
             assertEquals(1, Regex("launchStoppedByPlayer = true").findAll(start).count(), "set only there")
             assertTrue(start.contains("accessibilityHaltKey = null\n                launchStoppedByPlayer = false"), "reset every session")
-            assertTrue(start.contains("keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer, launchStoppedByPlayer)"))
+            assertTrue(start.contains("keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished, stopLeftCareer, launchStoppedByPlayer || runLaunchStopped)"))
         }
 
         @Test

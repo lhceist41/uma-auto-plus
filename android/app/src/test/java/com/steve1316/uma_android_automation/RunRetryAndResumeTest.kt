@@ -146,7 +146,7 @@ class RunRetryAndResumeTest {
         @Test
         fun `launching is saved only after a finished career`() {
             // Only where no career of the saved run is in the slot.
-            assertEquals(3, Regex("phase = PHASE_LAUNCHING").findAll(startModule).count(), "the launch boundary, a skipped run and a run that could not start")
+            assertEquals(4, Regex("phase = PHASE_LAUNCHING").findAll(startModule).count(), "the launch boundary, a skipped run, a run that could not start and a stopped launch")
             val leave = startModule.substringAfter("private fun leaveSkippedRun(").substringBefore("\n    }\n")
             assertTrue(leave.contains("saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)"))
             val notStarted = loop.substringAfter("if (unplayable == UnplayableRunStep.HALT && launchStop != null) {").substringBefore("// Evaluate the result.")
@@ -206,7 +206,7 @@ class RunRetryAndResumeTest {
         @Test
         fun `every saved position carries the count, and a resume reads it back`() {
             assertTrue(loop.contains("saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_CAREER, completedRuns = completedRuns)"))
-            assertTrue(startModule.contains("QueueState(active, currentRun, totalRuns, ageMs, phase, raw[\"completedRuns\"]?.toIntOrNull())"))
+            assertTrue(startModule.contains("QueueState(active, currentRun, totalRuns, ageMs, phase, raw[\"completedRuns\"]?.toIntOrNull(), raw[\"rotationOffset\"]?.toIntOrNull() ?: 0)"))
             assertTrue(startModule.contains("val plan = resumePlanFor(saved.phase, saved.currentRun, saved.completedRuns)"))
             assertTrue(startModule.contains("val next = plan.startFromRun"))
             assertFalse(startModule.contains("rotation.enabled && saved.phase"), "the resume no longer depends on rotation")

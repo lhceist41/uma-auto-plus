@@ -147,7 +147,7 @@ class ResumeTrainingSelectionTest {
         @Test
         fun `the queue marks exactly the resumed in-flight run, a run played again and a run after an unfinished career`() {
             // Read once by the next run and cleared, so no later launch can inherit it.
-            val mark = "nextRunCareerInFlight = (i == startFromRun && resumeReEntersCareer) || previousRunLeftCareer\n"
+            val mark = "val runReEntersCareer = (i == startFromRun && resumeReEntersCareer) || previousRunLeftCareer\n                    nextRunCareerInFlight = runReEntersCareer\n"
             assertTrue(startModule.contains(mark + "                    previousRunLeftCareer = false\n                    var result = runSingleGame()"))
             // An unfinished career is the one the loop already treats as left in the slot.
             val careerFinished = startModule.indexOf("val careerFinished = effectiveResult.code == TaskResultCode.TASK_RESULT_COMPLETE\n")

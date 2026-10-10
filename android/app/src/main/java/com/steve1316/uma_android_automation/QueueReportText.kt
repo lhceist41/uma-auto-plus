@@ -78,6 +78,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.SINGLE_RUN_ENDED ->
             when {
                 key == ONLY_OTHER_OUTFIT -> singleRunOutfitText(r)
+                key.isNotEmpty() && lastCode == "TASK_RESULT_MANUALLY_STOPPED" -> keyText(key, r).let { ReportText("Run stopped", "The bot stopped the run: ${it.reason}", it.next(false)) }
                 lastForceEnded -> withFinalizeStop(ReportText("Career ended early", "The game ended the career early: a goal was missed.", null), r)
                 lastCode == "TASK_RESULT_BREAKPOINT_REACHED" && breakpointDetail(r) != null ->
                     withFinalizeStop(ReportText("Run paused", "The run stopped at a breakpoint: ${breakpointDetail(r)}", "Finish that screen in the game, then press Start in UMA Auto+."), r)
@@ -91,7 +92,9 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
             )
         SessionEnd.STOPPED_BY_BOT -> {
             val why = keyText(key, r)
-            ReportText("Queue stopped", "The bot stopped the queue with $done of ${runsPhrase(total)} done: ${why.reason}" + runNotes(r), why.next(false))
+            // Continuing replays the same scenario check, so that stop's fix starts over instead.
+            val continues = resumable && key != "CAREER_SCENARIO_MISMATCH"
+            ReportText(haltTitle(resumable), "The bot stopped the queue with $done of ${runsPhrase(total)} done: ${why.reason}" + runNotes(r), why.next(continues))
         }
         SessionEnd.SERVICE_ENDED ->
             if (r.optBoolean("errorPosted")) {

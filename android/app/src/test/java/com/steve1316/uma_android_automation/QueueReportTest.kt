@@ -135,7 +135,7 @@ class QueueReportTest {
         fun `every ending whose path clears the record is never resumable`() {
             val clearing = SessionEnd.entries.filter { it.clearsQueueState }.toSet()
             assertEquals(
-                setOf(SessionEnd.NOTHING_TO_RESUME, SessionEnd.STOPPED_BY_BOT, SessionEnd.SERVICE_ENDED, SessionEnd.COMPLETED),
+                setOf(SessionEnd.NOTHING_TO_RESUME, SessionEnd.SERVICE_ENDED, SessionEnd.COMPLETED),
                 clearing,
             )
             assertFalse(classifySessionEnd(queue.copy(serviceRunning = false, queueStateActive = true)).resumable)

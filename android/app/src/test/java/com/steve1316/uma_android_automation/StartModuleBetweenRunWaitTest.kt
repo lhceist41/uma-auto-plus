@@ -254,9 +254,14 @@ class StartModuleBetweenRunWaitTest {
         @Test
         fun `the abort path claims no stop of its own`() {
             // queueStopRequested lands in the classifier's non-halt branch, which clears the saved
-            // launch record before reporting; the halt branch keeps it for the next Start.
-            assertFalse(abortHandling.contains("queueStopRequested ="), "the abort must not fake a stop request")
+            // launch record before reporting unless a career is marked left in the slot; the halt
+            // branch keeps it for the next Start.
+            assertFalse(noEvidenceBranch.contains("queueStopRequested ="), "the abort must not fake a stop request")
             assertFalse(abortHandling.contains("queueStopReason ="), "the abort must not route through the stop-reason arm")
+            val playerStop = abortHandling.substringAfter(noEvidenceBranch)
+            val playerStopTest = " else if (!isMiscQueue && navigationStoppedByPlayer(queueStopRequested, BotService.isRunning, queueStopReason, lastRunPostedException)) {"
+            assertTrue(playerStop.startsWith(playerStopTest), "only a stop already visible is the player's")
+            assertTrue(playerStop.indexOf("queueStopRequested = true") in 0 until playerStop.indexOf("stopLeftCareer = true"), "and it keeps the record")
         }
     }
 

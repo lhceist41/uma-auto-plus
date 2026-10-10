@@ -169,7 +169,7 @@ class ResumedQueueReportTest {
         val start = source("android/app/src/main/java/com/steve1316/uma_android_automation/StartModule.kt")
         val seed = start.indexOf("if (resumedQueue) ledger.earlier = runCatching { earlierQueueFor(QueueLedger.lastReport(context)?.let { JSONObject(it) }, totalRuns, startFromRun) }.getOrNull()")
         assertTrue(seed in 0 until start.indexOf("QueueLedger.beginSession(context, ledger.sessionId, ledger.openJson())"), "before the open record is written")
-        assertTrue(start.contains("resumedQueue = true\n                        next\n"), "only a plan that resumes sets it")
+        assertTrue(start.contains("resumedQueue = true\n                        resumedRotationOffset = saved.rotationOffset\n                        next\n"), "only a plan that resumes sets it")
         val recorded = "if (finalizeResult.lastDetectedState != \"STOPPED\") ledger.finalizeStopKey = finalizeResult.reasonKey\n"
         assertTrue(start.contains("logNavigationFailure(finalizeResult)\n                            $recorded"))
         val ledgerSource = source("android/app/src/main/java/com/steve1316/uma_android_automation/QueueReport.kt")
