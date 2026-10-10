@@ -2,6 +2,7 @@ import races from "../races.json"
 import objectives from "../character_objectives.json"
 import outfitData from "../character_outfits.json"
 import skills from "../skills.json"
+import characters from "../characters.json"
 import scenarios from "../scenarios.json"
 import buildBudget from "../build_budget_data.json"
 import gcFanRuntime from "../../../android/app/src/main/assets/gc_fan_runtime.json"
@@ -1252,9 +1253,16 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
                 ...withoutPlans(s),
                 racing: { ...s.racing, juniorYearRaceStrategy: undefined, originalRaceStrategy: undefined },
                 skills: { ...s.skills, plans: undefined, preferredRunningStyle: undefined },
-                trainingEvent: { ...s.trainingEvent, scenarioEventOverrides: undefined },
+                trainingEvent: {
+                    ...s.trainingEvent,
+                    scenarioEventOverrides: undefined,
+                    characterEventOverrides: { ...s.trainingEvent.characterEventOverrides, "Special Week|To My Dear Mama": undefined },
+                },
             })
             expect(strip(p.settings)).toEqual(strip(base.settings))
+            // Its first option hints Fighter, a Late Surger skill: only this outfit takes it.
+            expect(p.settings.trainingEvent!.characterEventOverrides!["Special Week|To My Dear Mama"]).toBe(0)
+            expect(base.settings.trainingEvent!.characterEventOverrides!["Special Week|To My Dear Mama"]).toBe(1)
         }
         expect(find("Special Week (Ruler of Japan)", "Trackblazer").settings.trainingEvent!.scenarioEventOverrides).toEqual({ "Trackblazer|A Grandkid Get-Together": 0 })
     })
@@ -1581,7 +1589,7 @@ describe("Grand Concert derived presets", () => {
     })
 })
 
-describe("Trackblazer scenario-event picks never take a hint for a style the preset does not race", () => {
+describe("event picks never take a hint for a style the preset does not race", () => {
     // Codes of skills.json `running_style==N` and of build_budget_data's card `runningStyle`
     // (both master.mdb), as SkillDatabase.kt and raceSurvival/evidence.ts read them.
     const STYLE_BY_CODE: Record<number, string> = { 1: "front_runner", 2: "pace_chaser", 3: "late_surger", 4: "end_closer" }
@@ -1608,17 +1616,27 @@ describe("Trackblazer scenario-event picks never take a hint for a style the pre
         return card ? STYLE_BY_CODE[card.runningStyle] : (preset.settings as any).skills?.preferredRunningStyle
     }
 
-    /** Every pick whose option is a hint for a skill that only works in another style. */
+    /** True when the option text hints a skill that only works in another style than the preset races. */
+    function hasDeadHint(text: string, preset: (typeof characterPresets)[number]): boolean {
+        return [...text.matchAll(/^(.*) hint \+\d+$/gm)].some((hint) => {
+            const code = /running_style==(\d)/.exec((skills as any)[hint[1]]?.condition ?? "")
+            return code !== null && STYLE_BY_CODE[Number(code[1])] !== racedStyle(preset)
+        })
+    }
+
+    /** Every Trackblazer scenario-event pick and every character-event pick whose option is a dead hint. */
     function deadHintPicks(): string[] {
         const dead: string[] = []
-        for (const preset of characterPresets.filter((p) => p.scenario === "Trackblazer")) {
-            const picks = ((preset.settings as any).trainingEvent?.scenarioEventOverrides ?? {}) as Record<string, number>
-            for (const [key, option] of Object.entries(picks)) {
-                const text = trackblazer[key.split("|")[1]]?.[option] ?? ""
-                const hint = /^(.*) hint \+\d+$/m.exec(text)
-                const skill = hint ? (skills as any)[hint[1]] : undefined
-                const code = skill ? /running_style==(\d)/.exec(skill.condition ?? "") : null
-                if (code && STYLE_BY_CODE[Number(code[1])] !== racedStyle(preset)) dead.push(`${preset.name}|${key}`)
+        for (const preset of characterPresets) {
+            const events = (preset.settings as any).trainingEvent ?? {}
+            if (preset.scenario === "Trackblazer") {
+                for (const [key, option] of Object.entries((events.scenarioEventOverrides ?? {}) as Record<string, number>)) {
+                    if (hasDeadHint(trackblazer[key.split("|")[1]]?.[option] ?? "", preset)) dead.push(`${preset.name}|${key}`)
+                }
+            }
+            for (const [key, option] of Object.entries((events.characterEventOverrides ?? {}) as Record<string, number>)) {
+                const [character, title] = key.split("|")
+                if (hasDeadHint((characters as any)[character]?.[title]?.[option] ?? "", preset)) dead.push(`${preset.name}|${preset.scenario}|${key}`)
             }
         }
         return dead.sort()
@@ -1738,6 +1756,32 @@ describe("skill plans resolve against the skill database", () => {
         const pressure = skillList.filter((s) => s.name_en === "Pressure")
         expect(pressure.map((s) => s.id)).toEqual([201212])
         expect(knownIds.has(202542)).toBe(false)
+    })
+
+    it("plans no skill for a distance the preset neither builds for nor meets in its goal chain", () => {
+        // The bot buys planned skills without a distance check, so an off-distance one is spent SP.
+        const DISTANCE_CODE: Record<string, string> = { sprint: "1", mile: "2", medium: "3", long: "4" }
+        const conditionById = new Map((Object.values(skills as any) as { id: number; condition?: string }[]).map((s) => [s.id, s.condition ?? ""]))
+        // Objective keys drop the dots some names carry ("TM Opera O").
+        const goalsByCharacter = new Map(Object.entries(objectives as any).map(([name, entry]) => [name.replace(/\./g, ""), entry as any]))
+        const offDistance: string[] = []
+        for (const p of characterPresets) {
+            const goals = goalsByCharacter.get(presetCharacter(p.name).replace(/\./g, ""))?.mandatoryRaces ?? []
+            const raced = new Set<string>([
+                DISTANCE_CODE[String((p.settings as any).skills?.preferredTrackDistance ?? "").toLowerCase()],
+                ...goals.flatMap((race: any) => race.options.map((o: any) => DISTANCE_CODE[String(o.distanceType).toLowerCase()])),
+            ])
+            for (const [planKey, plan] of Object.entries((p.settings.skills?.plans ?? {}) as Record<string, { plan?: string }>)) {
+                for (const id of String(plan.plan ?? "")
+                    .split(",")
+                    .filter(Boolean)
+                    .map(Number)) {
+                    const codes = [...String(conditionById.get(id) ?? "").matchAll(/distance_type==(\d)/g)].map((m) => m[1])
+                    if (codes.length > 0 && !codes.some((c) => raced.has(c))) offDistance.push(`${p.name}|${p.scenario} ${planKey} ${id}`)
+                }
+            }
+        }
+        expect(offDistance).toEqual([])
     })
 })
 

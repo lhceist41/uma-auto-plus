@@ -160,9 +160,12 @@ Medium. She is also locked to Front Runner, because her unique needs a clear lea
 **A build that ignores the obvious running style.** Copano Rickey is a Pace Chaser: her unique and
 her whole innate kit read the back half of the field, so a front build never triggers them.
 
-**Stamina before Speed.** Trainees whose goal races are Long (Kikuka Sho, Tenno Sho Spring, and
-friends) train Stamina first. Training priority order, not the stat targets, is what governs early
-training, and a Long goal race reached short on stamina force-ends the career.
+**Stamina for Long goals.** A Long goal race (Kikuka Sho, Tenno Sho Spring, and friends) reached
+short on stamina force-ends the career. Training scores each stat by how far behind its target it
+sits, so the Stamina target does most of the work; the priority order adds weight mainly when stats
+are about equally far along. Most stayers therefore list Speed first with Stamina close behind.
+Trainees with the hardest Long chains, or that once reached a Long goal short on stamina, put
+Stamina first.
 
 **A curated race schedule instead of smart racing.** Most presets let the smart-racing scheduler
 fill fan gaps dynamically. A trainee gets a hand-built schedule instead when her viable race pool is

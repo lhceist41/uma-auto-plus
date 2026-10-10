@@ -103,9 +103,10 @@ const TrainingEventSettings = () => {
         { value: "Option 1: Energy -15 and random stat gain", label: "Option 1: Energy -15 and random stat gain" },
         { value: "Option 2: Energy -5 and random stat gain", label: "Option 2: Energy -5 and random stat gain" },
     ]
+    // Values are stored settings and preset entries, so only the labels carry the real energy costs.
     const solidShowingOptions = [
-        { value: "Option 1: Energy -15 and random stat gain", label: "Option 1: Energy -15 and random stat gain" },
-        { value: "Option 2: Energy -5/-20 and random stat gain", label: "Option 2: Energy -5/-20 and random stat gain" },
+        { value: "Option 1: Energy -15 and random stat gain", label: "Option 1: Energy -20 and random stat gain" },
+        { value: "Option 2: Energy -5/-20 and random stat gain", label: "Option 2: Energy -10/-30 and random stat gain" },
     ]
     const defeatOptions = [
         { value: "Option 1: Energy -25 and random stat gain", label: "Option 1: Energy -25 and random stat gain" },
