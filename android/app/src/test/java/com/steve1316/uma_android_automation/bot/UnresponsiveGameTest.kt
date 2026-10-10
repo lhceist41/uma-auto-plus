@@ -196,7 +196,7 @@ class UnresponsiveGameTest {
         @Test
         fun `the stuck-input stop probes first, restarts before it logs, and halts with the probed key`() {
             val stop = campaign.substringAfter("    private fun stopForStuckInput(").substringBefore("\n    }\n")
-            val probed = stop.indexOf("val ownInput = game.ownInputReachesScreen()")
+            val probed = stop.indexOf("val ownInput = probed ?: game.ownInputReachesScreen()")
             val key = stop.indexOf("val key = stuckInputKey(episode.stopKey(), ownInput)")
             val reopen = stop.indexOf("val reopen = game.reopenGame(attempt = 2)")
             assertTrue(probed in 0 until key && key < reopen, "probe, then key, then the closing restart")

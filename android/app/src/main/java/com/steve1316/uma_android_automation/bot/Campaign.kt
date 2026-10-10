@@ -94,6 +94,7 @@ import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.types.withPurchasedTiers
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
+import com.steve1316.uma_android_automation.utils.OwnInputProbeResult
 import com.steve1316.uma_android_automation.utils.InCareerSkipFix
 import com.steve1316.uma_android_automation.utils.PersistentSkipState
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
@@ -309,6 +310,9 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** Stop bound, ~75s at the observed tick rate. */
     private val maxConsecutiveMiscBackPresses: Int = 25
+
+    /** A Back streak on a frozen game reaches the bound without ever leaving the screen, so its frames are watched for a freeze. */
+    private val backStreak = BackStreakWatch()
 
     private var bMiscBackPressedThisTick: Boolean = false
 
@@ -2982,17 +2986,29 @@ abstract class Campaign(game: Game) : Task(game) {
             return true
         } else if (ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
             bMiscBackPressedThisTick = true
+            // The frame is from before this press, so it shows the presses so far; each tick sends exactly one.
+            backStreak.backPressed(game.frozenFrameGridOf(sourceBitmap), consecutiveMiscBackPresses.toLong(), System.currentTimeMillis())
             consecutiveMiscBackPresses++
             if (consecutiveMiscBackPresses == 2) {
                 // An open notification shade absorbs back-presses and can let a misc match tap the bot's own STOP BOT notification action; clear it.
                 dismissNotificationShade("misc back-press streak")
             }
-            if (consecutiveMiscBackPresses >= maxConsecutiveMiscBackPresses) {
-                game.imageUtils.saveBitmap(filename = "misc_backpress_stuck", fullRes = true)
-                throw InterruptedException(
-                    "Bot pressed Back $consecutiveMiscBackPresses consecutive times without reaching a known screen - the press is not changing anything. Stopping. " +
-                        "A screenshot was saved to the temp folder as misc_backpress_stuck.",
-                )
+            val probe = if (backStreak.probeNow(System.currentTimeMillis()) { game.otherAppInFront() }) game.ownInputReachesScreen() else null
+            when (backStreakStep(consecutiveMiscBackPresses, maxConsecutiveMiscBackPresses, probe)) {
+                BackStreakStep.REOPEN_FROZEN_GAME -> {
+                    // Returns after a reopen; with no reopen left (or no career seen yet) it halts as GAME_NOT_RESPONDING.
+                    stopForStuckInput(RebindEpisode(), "Bot pressed Back $consecutiveMiscBackPresses times on a screen that never changed. Stopping.", probe)
+                    consecutiveMiscBackPresses = 0
+                    return true
+                }
+                BackStreakStep.STOP -> {
+                    game.imageUtils.saveBitmap(filename = "misc_backpress_stuck", fullRes = true)
+                    throw InterruptedException(
+                        "Bot pressed Back $consecutiveMiscBackPresses consecutive times without reaching a known screen - the press is not changing anything. Stopping. " +
+                            "A screenshot was saved to the temp folder as misc_backpress_stuck.",
+                    )
+                }
+                BackStreakStep.CONTINUE -> {}
             }
             recordMiscNextOrBack(nextNow = false)
             MessageLog.i(TAG, "[MISC] Navigating back a screen since all the other misc checks have been completed. (consecutive back-presses: $consecutiveMiscBackPresses)")
@@ -3948,6 +3964,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 pagedHelpCloseTaps = 0
             }
             bMiscStepTakenLastTick = false
+            backStreak.startTick()
 
             // We always check for dialogs first.
             if (tryHandleAllDialogs()) {
@@ -4451,8 +4468,13 @@ abstract class Campaign(game: Game) : Task(game) {
      * stopped responding: it is restarted ([Game.reopenGame]) or, on Android 14+, brought to the front once ([unresponsiveReopensAfter]).
      * Otherwise, or when the run's tries are spent, the run stops with the truthful key.
      */
-    private fun stopForStuckInput(episode: RebindEpisode, message: String) {
-        val ownInput = game.ownInputReachesScreen()
+    private fun stopForStuckInput(
+        episode: RebindEpisode,
+        message: String,
+        probed: OwnInputProbeResult? = null,
+    ) {
+        // A caller that already probed passes its result, so one stuck episode probes once.
+        val ownInput = probed ?: game.ownInputReachesScreen()
         val key = stuckInputKey(episode.stopKey(), ownInput) ?: noGrantStuckKey(ownInput).takeUnless { StartModule.secureSettingsGrant }
         if (reopensUnresponsiveGame(key, careerScreenObservedThisTask, unresponsiveGameReopens)) {
             val reopen = game.reopenGame(attempt = 2)

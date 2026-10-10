@@ -46,6 +46,7 @@ import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkill
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.floatingButtonRect
+import com.steve1316.uma_android_automation.utils.screenTopInset
 import com.steve1316.uma_android_automation.utils.gameY
 import com.steve1316.uma_android_automation.utils.isMappedSurface
 import com.steve1316.uma_android_automation.utils.overlayKeepClearHits
@@ -884,6 +885,13 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             Log.w(TAG, "[RECOVERY] The window in front could not be read: ${e.javaClass.simpleName}")
             null
         }
+
+    /** The capture as [frozenFrameGrid] compares it, without the floating button and the status bar. */
+    internal fun frozenFrameGridOf(bitmap: Bitmap): IntArray =
+        frozenFrameGrid(bitmap.width, bitmap.height, runCatching { floatingButtonRect(myContext) }.getOrNull(), screenTopInset) { x, y -> bitmap.getPixel(x, y) }
+
+    /** Another app in front means a still frame says nothing about the game; an unreadable window does not block (a hung game may not answer). */
+    internal fun otherAppInFront(): Boolean = homeLeftGameByWindow(frontWindowPackage()) == true
 
     /** ARRIVED proves a game ignoring the bot's taps has stopped responding; LOST means the taps are dead. */
     internal fun ownInputReachesScreen(): OwnInputProbeResult =

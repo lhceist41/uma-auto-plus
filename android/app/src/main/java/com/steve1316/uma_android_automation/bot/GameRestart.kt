@@ -30,10 +30,10 @@ internal val GAME_KILL_SECONDS_AFTER_HOME = listOf(5.0, 15.0, 25.0, 35.0, 45.0, 
 
 internal const val GAME_LAUNCH_SECONDS_AFTER_HOME = 60.0
 
-private const val HOME_GRID_W = 32
-private const val HOME_GRID_H = 18
+internal const val HOME_GRID_W = 32
+internal const val HOME_GRID_H = 18
 
-private const val HOME_CELL_DELTA = 24
+internal const val HOME_CELL_DELTA = 24
 
 /** Home from the game changed 0.89 to 0.93 of the cells, a frozen game 0.00 to 0.01; the animated title changes 0.70 to 0.84, so [homeLanded] also needs a still screen. */
 internal const val HOME_LEFT_GAME_SHARE = 0.8
