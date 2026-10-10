@@ -484,6 +484,14 @@ describe("parseLogs", () => {
         expect(days[0].summary).toBe("Recover Energy (Outing)")
     })
 
+    it("reads an energy recovery proven by an outing's event", () => {
+        const content = [dateLine(1), "[ENERGY] Successfully recovered energy via outing event."].join("\n")
+        const result = parseLogs([file("a.txt", content)])
+        const days = dayRecords(result)
+        expect(days[0].summary).toMatch(/^Recover Energy \(/)
+        expect(days[0].summary.toLowerCase()).toContain("outing event")
+    })
+
     // -----------------------------------------------------------------------
     // Coverage: determineYear with Finale in dateText but day < 73 (line 255)
     // -----------------------------------------------------------------------

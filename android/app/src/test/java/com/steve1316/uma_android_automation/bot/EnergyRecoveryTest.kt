@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.Mood
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -18,6 +19,7 @@ class EnergyRecoveryTest {
         var outingStarts: Boolean = false,
         var restFound: Boolean = true,
         var turnMoves: Boolean? = false,
+        var raceDay: Boolean = false,
     ) {
         val calls = mutableListOf<String>()
         val warnings = mutableListOf<String>()
@@ -34,6 +36,7 @@ class EnergyRecoveryTest {
                     calls += "rest"
                     restFound
                 },
+                raceDay = { raceDay },
                 turnMoved = {
                     calls += "turnMoved"
                     turnMoves
@@ -78,12 +81,66 @@ class EnergyRecoveryTest {
         }
 
         @Test
-        fun `a missing Rest button counts as unmoved without a date read, and the second one stops`() {
+        fun `a missing Rest button on an unchanged screen counts as unmoved, and the second one stops`() {
             val screen = Screen(restFound = false)
             val unmoved = UnmovedEnergyRecoveries()
             assertFalse(screen.recover(30, unmoved))
-            assertFalse("turnMoved" in screen.calls)
+            assertEquals(listOf("outing", "rest", "turnMoved"), screen.calls)
             assertThrows(Stopped::class.java) { screen.recover(30, unmoved) }
+        }
+
+        @Test
+        fun `an outing that read as not started but opened its event is a move, not a missing Rest`() {
+            // Live t43, t52, t57: "Popup still open ... Treating the date as completed", no Rest button, then the Light Hello event.
+            val screen = Screen(outingStarts = false, restFound = false, turnMoves = true)
+            val unmoved = UnmovedEnergyRecoveries()
+            assertTrue(screen.recover(43, unmoved))
+            assertEquals(0, unmoved.on(43))
+            assertTrue(screen.warnings.isEmpty())
+        }
+
+        @Test
+        fun `a missing Rest button on a race day does not look at the turn, and a repeat on the same turn is bounded`() {
+            val screen = Screen(restFound = false, raceDay = true)
+            val unmoved = UnmovedEnergyRecoveries()
+            assertFalse(screen.recover(43, unmoved))
+            assertFalse("turnMoved" in screen.calls)
+            assertTrue(screen.warnings.first().contains("race day"))
+            // A ribbon the turn-start read keeps missing would send the bot back here; the third time stops instead of looping.
+            assertFalse(screen.recover(43, unmoved))
+            assertThrows(Stopped::class.java) { screen.recover(43, unmoved) }
+        }
+
+        @Test
+        fun `a declined outing keeps the energy proof, so a dropped Rest after it is proven unmoved, not unconfirmed`() {
+            val unmoved = UnmovedEnergyRecoveries()
+            var mainScreenChecked = false
+            val started = outingStarted(handlerStarted = false) {
+                mainScreenChecked = true
+                true
+            }
+            assertFalse(started)
+            assertTrue(mainScreenChecked)
+            val baseline = 20.takeUnless { started }
+            val moved =
+                recoverEnergyAndConfirmTurn(
+                    day = 12,
+                    unmoved = unmoved,
+                    tryOuting = { false },
+                    rest = { true },
+                    raceDay = { false },
+                    turnMoved = { confirmTurnMoved(12, baseline, Mood.NORMAL, read = { TurnScreen(mainScreen = true, day = 12, energy = 20) }, wait = {}) },
+                    warn = {},
+                    stop = { throw Stopped(it) },
+                )
+            assertFalse(moved, "proven unmoved returns false; with the baseline dropped it read as unconfirmed (true)")
+        }
+
+        @Test
+        fun `an outing counts as started when the handler says so or when its event hides the main screen`() {
+            assertTrue(outingStarted(handlerStarted = true) { error("not asked when the handler started it") })
+            assertTrue(outingStarted(handlerStarted = false) { false })
+            assertFalse(outingStarted(handlerStarted = false) { true })
         }
 
         @Test
@@ -156,50 +213,91 @@ class EnergyRecoveryTest {
             vararg screens: TurnScreen,
             day: Int = 30,
             energyBefore: Int? = 20,
+            moodBefore: Mood? = Mood.NORMAL,
         ): Pair<Boolean?, Int> {
             var reads = 0
             var waits = 0
-            val result = confirmTurnMoved(day, energyBefore, read = { screens[minOf(reads++, screens.size - 1)] }, wait = { waits++ })
+            val result = confirmTurnMoved(day, energyBefore, moodBefore, read = { screens[minOf(reads++, screens.size - 1)] }, wait = { waits++ })
             assertEquals(reads - 1, waits, "one wait between reads")
             return result to reads
         }
 
         private val unchanged = TurnScreen(mainScreen = true, day = 30, energy = 21)
-        private val dialog = TurnScreen(mainScreen = false)
+        private val transition = TurnScreen(mainScreen = false)
 
         @Test
         fun `a later date, a training event or risen energy is a moved turn`() {
             assertEquals(true to 1, check(TurnScreen(mainScreen = true, day = 31, energy = 20)))
             assertEquals(true to 1, check(TurnScreen(mainScreen = false, trainingEvent = true)))
             assertEquals(true to 1, check(TurnScreen(mainScreen = true, day = 30, energy = 50)))
-            assertEquals(true to 3, check(dialog, dialog, TurnScreen(mainScreen = true, day = 31)))
+            assertEquals(true to 3, check(transition, transition, TurnScreen(mainScreen = true, day = 31)))
         }
 
         @Test
         fun `energy that did not rise on every read is an unmoved turn, after every read`() {
-            assertEquals(false to TURN_CHECK_READS, check(unchanged))
+            assertEquals(false to TURN_CHECK_UNCHANGED_READS, check(unchanged))
             assertEquals(true to 2, check(unchanged, TurnScreen(mainScreen = true, day = 30, energy = 52)))
         }
 
         @Test
-        fun `a dialog left open is not proof the turn moved`() {
-            assertEquals(null to TURN_CHECK_READS, check(dialog))
+        fun `an event takes precedence over a dialog on the same read, and a dialog alone ends the poll`() {
+            assertEquals(true to 1, check(TurnScreen(mainScreen = false, eventScene = true, dialog = true)))
+            assertEquals(null to 1, check(TurnScreen(mainScreen = false, trainingEvent = false, eventScene = false, dialog = true)))
+        }
+
+        @Test
+        fun `without a pre-tap mood a mood read proves nothing`() {
+            val betterMood = TurnScreen(mainScreen = true, day = 12, energy = 20, mood = Mood.GREAT)
+            assertEquals(null to TURN_CHECK_MAX_READS, check(betterMood, day = 12, energyBefore = null, moodBefore = null))
+        }
+
+        @Test
+        fun `unchanged reads count only in a row on a settled main screen`() {
+            assertEquals(null to TURN_CHECK_MAX_READS, check(unchanged, transition, unchanged, transition, unchanged, transition))
+            assertEquals(false to 5, check(unchanged, transition, unchanged, unchanged, unchanged))
+            assertEquals(null to TURN_CHECK_MAX_READS, check(unchanged, unchanged, transition))
+        }
+
+        @Test
+        fun `a dialog left open is not proof the turn moved, and waiting longer cannot settle it`() {
+            assertEquals(null to 1, check(TurnScreen(mainScreen = false, dialog = true)))
+        }
+
+        @Test
+        fun `a transition is waited out until the screen settles`() {
+            // Live t18: a Rest's connection wait and result scene outlasted the old four reads.
+            val settled = check(transition, transition, transition, transition, transition, transition, TurnScreen(mainScreen = true, day = 31, energy = 96))
+            assertEquals(true to 7, settled)
+            assertEquals(null to TURN_CHECK_MAX_READS, check(transition))
+        }
+
+        @Test
+        fun `an event cutscene after the tap is a moved turn`() {
+            // Live t18, t22, t64: the Rest led to an event cutscene that only the main loop advances.
+            assertEquals(true to 3, check(transition, transition, TurnScreen(mainScreen = false, eventScene = true)))
+        }
+
+        @Test
+        fun `an outing is judged by mood, date or its event, never by energy`() {
+            val sameEnergy = TurnScreen(mainScreen = true, day = 12, energy = 20, mood = Mood.NORMAL)
+            assertEquals(null to TURN_CHECK_MAX_READS, check(sameEnergy, day = 12, energyBefore = null))
+            assertEquals(true to 1, check(TurnScreen(mainScreen = true, day = 12, energy = 20, mood = Mood.GOOD), day = 12, energyBefore = null))
         }
 
         @Test
         fun `the same date with an unreadable energy bar proves nothing either way`() {
-            assertEquals(null to TURN_CHECK_READS, check(TurnScreen(mainScreen = true, day = 30)))
-            assertEquals(null to TURN_CHECK_READS, check(unchanged, energyBefore = null))
-            assertEquals(null to TURN_CHECK_READS, check(unchanged, dialog))
+            assertEquals(null to TURN_CHECK_MAX_READS, check(TurnScreen(mainScreen = true, day = 30)))
+            assertEquals(null to TURN_CHECK_MAX_READS, check(unchanged, energyBefore = null))
+            assertEquals(null to TURN_CHECK_MAX_READS, check(unchanged, transition))
         }
 
         @Test
         fun `a backward date or a read fallback is not a move`() {
             // Turn 74 or 75 whose finale read fails comes back as 73.
-            assertEquals(false to TURN_CHECK_READS, check(TurnScreen(mainScreen = true, day = 73, energy = 20), day = 74))
+            assertEquals(false to TURN_CHECK_UNCHANGED_READS, check(TurnScreen(mainScreen = true, day = 73, energy = 20), day = 74))
             // A failed pre-debut turns-left read comes back as 12.
-            assertEquals(false to TURN_CHECK_READS, check(TurnScreen(mainScreen = true, day = 12, energy = 20), day = 5))
-            assertEquals(null to TURN_CHECK_READS, check(TurnScreen(mainScreen = true, day = 73), day = 72))
+            assertEquals(false to TURN_CHECK_UNCHANGED_READS, check(TurnScreen(mainScreen = true, day = 12, energy = 20), day = 5))
+            assertEquals(null to TURN_CHECK_MAX_READS, check(TurnScreen(mainScreen = true, day = 73), day = 72))
         }
     }
 
@@ -227,7 +325,8 @@ class EnergyRecoveryTest {
                         energy = (energy + restGain).coerceAtMost(100)
                         true
                     },
-                    turnMoved = { confirmTurnMoved(stuckDay, before, read = { TurnScreen(mainScreen = true, day = stuckDay, energy = energy) }, wait = {}) },
+                    raceDay = { false },
+                    turnMoved = { confirmTurnMoved(stuckDay, before, null, read = { TurnScreen(mainScreen = true, day = stuckDay, energy = energy) }, wait = {}) },
                     warn = {},
                     stop = { throw Stopped(it) },
                 )
@@ -292,8 +391,20 @@ class EnergyRecoveryTest {
         @Test
         fun `success goes through the turn check and the stop uses the campaign breakpoint`() {
             assertTrue(body.contains("recoverEnergyAndConfirmTurn("))
-            assertTrue(body.contains("turnMoved = { turnMovedSince(day, energyBefore).also { moved = it } }"))
+            assertTrue(body.contains("turnMoved = { turnMovedSince(day, energyBefore.takeUnless { outingOpened }, moodBefore).also { moved = it } }"))
+            // Only a started outing drops the energy proof; a declined one is decided by whether the main screen came back.
+            assertFalse(body.contains(".also { outingOpened = true }"))
+            assertTrue(body.contains("outingOpened = outingStarted(handlerStarted = false) { checkMainScreen() }"))
             assertTrue(body.contains("throw CampaignBreakpointException(reason)"))
+        }
+
+        @Test
+        fun `a pass whose date did not change still refreshes the energy the failure-chance check reads`() {
+            val campaign = sourceFile("bot/Campaign.kt").readText().replace("\r\n", "\n")
+            val gate = campaign.indexOf("if (dateChanged || !trainee.bHasUpdatedStats) {")
+            val hook = campaign.indexOf("onAfterTurnStartUpdates()\n            } else {", gate)
+            assertTrue(hook > gate, "the turn-start update block has an else branch")
+            assertTrue(campaign.indexOf("trainee.updateEnergy(game.imageUtils)", hook) in hook until campaign.indexOf("\n            }\n", hook + 40))
         }
 
         @Test

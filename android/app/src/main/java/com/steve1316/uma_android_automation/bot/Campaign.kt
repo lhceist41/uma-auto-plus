@@ -2276,8 +2276,10 @@ abstract class Campaign(game: Game) : Task(game) {
         var bitmap: Bitmap = sourceBitmap ?: game.imageUtils.getSourceBitmap()
         val day = date.day
         val energyBefore = game.imageUtils.analyzeEnergyBar()
+        val moodBefore = trainee.checkMood(game.imageUtils, bitmap)
         var via = "rest"
         var moved: Boolean? = null
+        var outingOpened = false
 
         val recovered =
             recoverEnergyAndConfirmTurn(
@@ -2292,6 +2294,7 @@ abstract class Campaign(game: Game) : Task(game) {
                         handleRecreationDate(recoverMoodIfCompleted = false, doDateRecreation = !isScheduleActive())
                     ) {
                         via = "recreation date"
+                        outingOpened = true
                         true
                     } else {
                         // The Recreation popup may have opened and been cancelled: a Rest tap during its close animation is dropped, and the capture
@@ -2299,6 +2302,7 @@ abstract class Campaign(game: Game) : Task(game) {
                         game.waitForLoading()
                         game.wait(game.dialogWaitDelay)
                         bitmap = game.imageUtils.getSourceBitmap()
+                        outingOpened = outingStarted(handlerStarted = false) { checkMainScreen() }
                         false
                     }
                 },
@@ -2311,6 +2315,8 @@ abstract class Campaign(game: Game) : Task(game) {
                         }
                     if (button == null) {
                         MessageLog.w(TAG, "[WARN] recoverEnergy:: No Rest button found.")
+                        // Nothing was tapped, so a move proven now is the outing's event.
+                        via = "outing event"
                         false
                     } else {
                         via = button
@@ -2322,7 +2328,8 @@ abstract class Campaign(game: Game) : Task(game) {
                         true
                     }
                 },
-                turnMoved = { turnMovedSince(day, energyBefore).also { moved = it } },
+                raceDay = { IconRaceDayRibbon.check(game.imageUtils) },
+                turnMoved = { turnMovedSince(day, energyBefore.takeUnless { outingOpened }, moodBefore).also { moved = it } },
                 warn = { MessageLog.w(TAG, "[WARN] recoverEnergy:: $it") },
                 stop = { reason ->
                     game.notificationMessage = reason
@@ -2340,17 +2347,26 @@ abstract class Campaign(game: Game) : Task(game) {
     private fun turnMovedSince(
         day: Int,
         energyBefore: Int?,
+        moodBefore: Mood?,
     ): Boolean? =
         confirmTurnMoved(
             day,
             energyBefore,
+            moodBefore,
             read = {
                 if (checkMainScreen()) {
                     val probe = GameDate(day = day)
                     val dateRead = probe.update(game.imageUtils, scenario = game.scenario, isOnMainScreen = true)
-                    TurnScreen(mainScreen = true, day = if (dateRead) probe.day else null, energy = game.imageUtils.analyzeEnergyBar())
+                    TurnScreen(
+                        mainScreen = true,
+                        day = if (dateRead) probe.day else null,
+                        energy = game.imageUtils.analyzeEnergyBar(),
+                        mood = trainee.checkMood(game.imageUtils, game.imageUtils.getSourceBitmap()),
+                    )
+                } else if (IconTrainingEventHorseshoe.check(game.imageUtils)) {
+                    TurnScreen(mainScreen = false, trainingEvent = true)
                 } else {
-                    TurnScreen(mainScreen = false, trainingEvent = IconTrainingEventHorseshoe.check(game.imageUtils))
+                    TurnScreen(mainScreen = false, eventScene = isEventCutsceneSkipPillVisible(), dialog = DialogUtils.check(game.imageUtils, sourceBitmap = game.imageUtils.getSourceBitmap()))
                 }
             },
             wait = { game.wait(1.0) },
@@ -3131,6 +3147,10 @@ abstract class Campaign(game: Game) : Task(game) {
 
                 // Scenario-specific post-update hook.
                 onAfterTurnStartUpdates()
+            } else {
+                // A date the reader cannot see change (Grand Concert pre-debut reads every turn as 12) skips the turn-start updates, which left the
+                // energy that the failure-chance cross-check reads at its first value.
+                trainee.updateEnergy(game.imageUtils)
             }
 
             // Since we're at the main screen, we don't need to worry about this
