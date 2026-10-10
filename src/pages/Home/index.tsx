@@ -119,7 +119,7 @@ const Home = () => {
     const { StartModule } = NativeModules
 
     const { colors } = useTheme()
-    const { shareBugReport, isPreparing: isPreparingBugReport } = useBugReport()
+    const { shareBugReport, saveBugReportToPhone, isPreparing: isPreparingBugReport } = useBugReport()
     // Truthful session state: `armed` (MediaProjectionService up -- Stop is meaningful) is kept
     // separate from `botRunning` (BotService actually executing), so a status derived from one
     // can never misrepresent the other. See src/lib/sessionState.ts.
@@ -1237,25 +1237,31 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
                 <MessageLog />
             </View>
 
-            <TouchableOpacity
-                onPress={shareBugReport}
-                disabled={isPreparingBugReport}
-                accessibilityRole="button"
-                accessibilityLabel="Share bug report"
-                style={{
-                    alignSelf: "center",
-                    minHeight: 44,
-                    justifyContent: "center",
-                    paddingHorizontal: 16,
-                    marginVertical: 4,
-                    backgroundColor: colors.muted,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    borderRadius: 6,
-                }}
-            >
-                <Text style={{ fontSize: 12, color: colors.foreground, fontWeight: "600" }}>{isPreparingBugReport ? "Preparing report..." : "Share bug report"}</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: 8, marginVertical: 4 }}>
+                {[
+                    { label: "Share bug report", onPress: shareBugReport },
+                    { label: "Save bug report to phone", onPress: saveBugReportToPhone },
+                ].map((button) => (
+                    <TouchableOpacity
+                        key={button.label}
+                        onPress={button.onPress}
+                        disabled={isPreparingBugReport}
+                        accessibilityRole="button"
+                        accessibilityLabel={button.label}
+                        style={{
+                            minHeight: 44,
+                            justifyContent: "center",
+                            paddingHorizontal: 16,
+                            backgroundColor: colors.muted,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            borderRadius: 6,
+                        }}
+                    >
+                        <Text style={{ fontSize: 12, color: colors.foreground, fontWeight: "600" }}>{isPreparingBugReport ? "Preparing report..." : button.label}</Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
 
             <WhatsNewDialog content={armed || botRunning ? null : whatsNew.content} onClose={whatsNew.dismiss} />
 

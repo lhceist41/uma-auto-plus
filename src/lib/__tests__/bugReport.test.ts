@@ -5,6 +5,9 @@ import {
     SECRET_KEY_PATTERN,
     bugReportContextLines,
     collectSecretValues,
+    isBugReportBusy,
+    onBugReportBusy,
+    runOneBugReport,
     scrubSettingsForReport,
     shareBugReport,
     type BugReportShareDeps,
@@ -157,5 +160,31 @@ describe("shareBugReport", () => {
         const missing = fakes({ canShare: jest.fn(async () => false) })
         expect(await shareBugReport(planted(), new Date(0), missing.deps)).toBe("share-failed")
         expect(missing.deps.share).not.toHaveBeenCalled()
+    })
+})
+
+describe("runOneBugReport", () => {
+    it("lets only one report run at a time across screens, and tells every screen", async () => {
+        const seen: boolean[] = []
+        const stop = onBugReportBusy((busy) => seen.push(busy))
+        let release: () => void = () => {}
+        const first = runOneBugReport(() => new Promise<void>((resolve) => (release = resolve)))
+        expect(isBugReportBusy()).toBe(true)
+        const second = jest.fn(async () => {})
+        await runOneBugReport(second)
+        expect(second).not.toHaveBeenCalled()
+        release()
+        await first
+        expect(isBugReportBusy()).toBe(false)
+        expect(seen).toEqual([true, false])
+        stop()
+    })
+
+    it("frees the slot when the action fails", async () => {
+        await expect(runOneBugReport(async () => Promise.reject(new Error("boom")))).rejects.toThrow("boom")
+        expect(isBugReportBusy()).toBe(false)
+        const again = jest.fn(async () => {})
+        await runOneBugReport(again)
+        expect(again).toHaveBeenCalled()
     })
 })

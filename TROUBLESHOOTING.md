@@ -101,7 +101,7 @@ Apply a **preset** for the trainee you're running: on **Home**, tap **Select Tra
 
 Older saved defaults can lack information the bot needs, causing it to ignore the whole plan. Newly generated defaults include that information, but saved and imported plans are not automatically repaired. The default still contains all races and can have scheduling conflicts.
 
-Before replacing an affected plan, use **Settings > Settings Management > Export Settings** and save a copy through the share dialog. Keep a record of the races and dates you want; importing the old export later will also restore its incomplete plan.
+Before replacing an affected plan, use **Settings > Settings Management > Export Settings** and save a copy through the share dialog, or use **Save to Phone** next to it to keep the file in a folder you choose. Keep a record of the races and dates you want; importing the old export later will also restore its incomplete plan.
 
 On **Racing Plan**, use **Clear** to remove the entire current selection, then pick the required races and dates again. Search, minimum fans, terrain, grade and distance filters limit the visible list; OP and Pre-OP races are excluded. If a wanted race is unavailable, keep your saved copy rather than substitute a different race. **Add All** replaces the entire plan with the currently filtered list, including new priorities; it does not append to your selection or restore the previous schedule. Review the resulting selections and plan check before use. Readable data can still have same-turn conflicts or consecutive-race warnings.
 
@@ -122,7 +122,7 @@ The dashboard is part of the Remote Log Viewer, which is off by default. It only
 
 ## Reporting a bug
 
-A useful report includes the bot's **logs**. The easiest way: on **Home**, tap **Share bug report** under the log. The app builds one zip file with the newest career logs, the current log, your settings (without your Discord token or ID), your app version and your device, then opens Android's share sheet. Choose Discord or any other app and add a line about what happened. The app sends nothing by itself.
+A useful report includes the bot's **logs**. The easiest way: on **Home**, tap **Share bug report** under the log. The app builds one zip file with the newest career logs, the current log, your settings (without your Discord token or ID), your app version and your device, then opens Android's share sheet. Choose Discord or any other app and add a line about what happened. To keep the file on your phone instead, tap **Save bug report to phone** and pick a folder such as Downloads. Both buttons are also at the top of the Settings page. The app sends nothing by itself.
 
 If you prefer to pull the log from a PC instead, the bot writes one file per career to:
 

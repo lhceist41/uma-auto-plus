@@ -1,5 +1,5 @@
-import { useState, useContext } from "react"
-import { Alert } from "react-native"
+import { useState, useContext, useRef } from "react"
+import { Alert, NativeModules } from "react-native"
 import * as DocumentPicker from "expo-document-picker"
 import * as Sharing from "expo-sharing"
 import * as FileSystem from "expo-file-system"
@@ -8,6 +8,7 @@ import { useSettings } from "../context/SettingsContext"
 import { BotStateContext, Settings, defaultSettings } from "../context/BotStateContext"
 import { logErrorWithTimestamp } from "../lib/logger"
 import { formatChange } from "../lib/settingsUtils"
+import { EXPORT_FAILED_MESSAGE, SAVE_FAILED_MESSAGE, saveToPhone } from "../lib/saveToPhone"
 
 /** Deep equality (recurses objects/arrays) so we detect real value changes, not reference identity. */
 const deepEqual = (a: any, b: any): boolean => {
@@ -180,9 +181,35 @@ export const useSettingsFileManager = () => {
         }
     }
 
+    const savingSettings = useRef(false)
+
+    /** Export the same file Share sends, but through the system "Save to" dialog. */
+    const handleSaveSettingsToPhone = async () => {
+        if (savingSettings.current) return
+        savingSettings.current = true
+        try {
+            const fileUri = await exportSettings()
+            if (!fileUri) {
+                Alert.alert("Could Not Save File", EXPORT_FAILED_MESSAGE)
+                return
+            }
+            await saveToPhone(fileUri, "application/json", {
+                save: (path, fileName, mimeType) => NativeModules.StartModule.saveFileToPhone(path, fileName, mimeType),
+                alert: (title, message) => Alert.alert(title, message),
+                log: (message, error) => logErrorWithTimestamp(message, error),
+            })
+        } catch (error) {
+            logErrorWithTimestamp("Error saving settings to the phone:", error)
+            Alert.alert("Could Not Save File", SAVE_FAILED_MESSAGE)
+        } finally {
+            savingSettings.current = false
+        }
+    }
+
     return {
         handleImportSettings,
         handleExportSettings,
+        handleSaveSettingsToPhone,
         showResetDialog,
         setShowResetDialog,
     }

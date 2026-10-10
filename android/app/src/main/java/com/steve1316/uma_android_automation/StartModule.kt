@@ -7,6 +7,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.DocumentsContract
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
@@ -46,6 +47,7 @@ import com.steve1316.uma_android_automation.utils.KeepScreenOn
 import com.steve1316.uma_android_automation.utils.LogStreamServer
 import com.steve1316.uma_android_automation.utils.ProgressNotification
 import com.steve1316.uma_android_automation.utils.ProgressTracker
+import com.steve1316.uma_android_automation.utils.SaveToPhone
 import com.steve1316.uma_android_automation.utils.StatusBoard
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
@@ -80,6 +82,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * error and spraying log files); only the first entry may run, the rest are ignored
          * until the session's finally releases the latch. */
         private val sessionActive = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        private const val SAVE_FILE_REQUEST = 4207
 
         internal fun isSessionActive(): Boolean = sessionActive.get()
 
@@ -981,6 +985,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == SAVE_FILE_REQUEST) {
+            finishSaveToPhone(resultCode, data?.data?.let { contentTarget(it) })
+            return
+        }
         if (requestCode == 100 && (resultCode != Activity.RESULT_OK || data == null)) {
             DebugTestGate.cancel()
             return
@@ -1189,6 +1197,97 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         map.putBoolean("botRunning", BotService.isRunning)
         map.putBoolean("stopAfterCareer", stopAfterCareerRequested)
         promise.resolve(map)
+    }
+
+    private var pendingSave: Pair<File, Promise>? = null
+
+    /** Where the chosen document is written and, if the copy fails, removed again; Android's content resolver is not available to JVM tests. */
+    internal interface SaveTarget {
+        fun open(): java.io.OutputStream?
+
+        fun delete()
+    }
+
+    /** Runs the copy off the main thread; tests run it inline. */
+    internal var saveRunner: (() -> Unit) -> Unit = { work -> Thread { work() }.start() }
+
+    /** Remembers the save in progress. False when another save dialog is still open. */
+    internal fun beginSave(source: File, promise: Promise): Boolean =
+        synchronized(this) {
+            if (pendingSave != null) {
+                false
+            } else {
+                pendingSave = source to promise
+                true
+            }
+        }
+
+    /**
+     * Opens Android's "Save to" dialog and copies an app file (the settings export or the bug report zip) to
+     * the place the player picks. Resolves "saved" or "cancelled"; rejects when the copy fails.
+     */
+    @ReactMethod
+    fun saveFileToPhone(path: String, fileName: String, mimeType: String, promise: Promise) {
+        try {
+            val activity = reactApplicationContext.currentActivity
+            val source = File(path)
+            if (activity == null || !SaveToPhone.isAppFile(source, context.filesDir)) {
+                promise.reject("SAVE_FAILED", "There is no file to save.")
+                return
+            }
+            if (!beginSave(source, promise)) {
+                promise.reject("SAVE_FAILED", "A save dialog is already open.")
+                return
+            }
+            try {
+                val intent =
+                    Intent(Intent.ACTION_CREATE_DOCUMENT)
+                        .addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType(mimeType)
+                        .putExtra(Intent.EXTRA_TITLE, fileName)
+                activity.startActivityForResult(intent, SAVE_FILE_REQUEST)
+            } catch (e: Throwable) {
+                synchronized(this) { pendingSave = null }
+                throw e
+            }
+        } catch (e: Throwable) {
+            promise.reject("SAVE_FAILED", e.message ?: "The save dialog could not be opened.")
+        }
+    }
+
+    private fun contentTarget(uri: android.net.Uri) =
+        object : SaveTarget {
+            override fun open() = context.contentResolver.openOutputStream(uri)
+
+            override fun delete() {
+                DocumentsContract.deleteDocument(context.contentResolver, uri)
+            }
+        }
+
+    internal fun finishSaveToPhone(resultCode: Int, target: SaveTarget?) {
+        val pending = synchronized(this) { pendingSave.also { pendingSave = null } }
+        if (pending == null) {
+            // The process was recreated while the dialog was open: the dialog already made the empty file, nobody will fill it.
+            if (resultCode == Activity.RESULT_OK) runCatching { target?.delete() }
+            return
+        }
+        val (source, promise) = pending
+        if (resultCode != Activity.RESULT_OK || target == null) {
+            promise.resolve("cancelled")
+            return
+        }
+        saveRunner {
+            try {
+                val output = target.open() ?: throw java.io.IOException("The chosen place cannot be written to.")
+                output.use { SaveToPhone.copy(source, it) }
+                promise.resolve("saved")
+            } catch (e: Throwable) {
+                Log.e(TAG, "saveFileToPhone failed", e)
+                // The dialog already created an empty file; do not leave it behind.
+                runCatching { target.delete() }.onFailure { Log.w(TAG, "The empty file could not be removed", it) }
+                promise.reject("SAVE_FAILED", e.message ?: "The file could not be saved.")
+            }
+        }
     }
 
     /**

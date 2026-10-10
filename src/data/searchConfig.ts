@@ -128,7 +128,7 @@ const searchConfig: SearchOption[] = [
     {
         id: "settings-management-title",
         title: "Settings Management",
-        description: "Import and export settings from JSON file or access the app's data directory.",
+        description: "Import, export or save your settings to a file, and share a bug report.",
         page: "SettingsMain",
     },
 

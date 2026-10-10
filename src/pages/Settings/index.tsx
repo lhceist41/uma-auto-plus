@@ -19,6 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import SearchableItem from "../../components/SearchableItem"
 import { useSettings } from "../../context/SettingsContext"
 import { useSettingsFileManager } from "../../hooks/useSettingsFileManager"
+import { useBugReport } from "../../hooks/useBugReport"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import { DATING_SCHEDULE_PRESETS } from "../../lib/datingSchedule"
 import { snackbarBackgroundColor, snackbarMessageFor } from "../../lib/settingsSnackbar"
@@ -64,7 +65,8 @@ const Settings = () => {
     const navigation = useNavigation()
 
     const { openDataDirectory, resetSettings } = useSettings()
-    const { handleImportSettings, handleExportSettings, showResetDialog, setShowResetDialog } = useSettingsFileManager()
+    const { handleImportSettings, handleExportSettings, handleSaveSettingsToPhone, showResetDialog, setShowResetDialog } = useSettingsFileManager()
+    const { shareBugReport, saveBugReportToPhone, isPreparing: isPreparingBugReport } = useBugReport()
 
     const styles = useMemo(
         () =>
@@ -199,6 +201,41 @@ const Settings = () => {
         },
         [bsc]
     )
+
+    const renderSettingsManagement = () => {
+        return (
+            <View style={{ marginBottom: 8 }}>
+                <CustomTitle searchId="settings-management-title" title="Settings Management" description="Import, export or save your settings to a file, and share a bug report." />
+
+                <View style={{ flexDirection: "row", gap: 12 }}>
+                    <View style={{ flex: 1, gap: 8 }}>
+                        <Text style={{ fontWeight: "bold", fontSize: 13, color: colors.foreground }}>Settings file</Text>
+                        <CustomButton onPress={handleImportSettings} variant="default" fontSize={12}>
+                            📥 Import Settings
+                        </CustomButton>
+                        <CustomButton onPress={handleExportSettings} variant="default" fontSize={12}>
+                            📤 Export Settings
+                        </CustomButton>
+                        <CustomButton onPress={handleSaveSettingsToPhone} variant="default" fontSize={12}>
+                            💾 Save to Phone
+                        </CustomButton>
+                    </View>
+
+                    <View style={{ flex: 1, gap: 8 }}>
+                        <Text style={{ fontWeight: "bold", fontSize: 13, color: colors.foreground }}>Bug report</Text>
+                        <CustomButton onPress={shareBugReport} disabled={isPreparingBugReport} variant="default" fontSize={12}>
+                            {isPreparingBugReport ? "Preparing report..." : "🐞 Share Bug Report"}
+                        </CustomButton>
+                        <CustomButton onPress={saveBugReportToPhone} disabled={isPreparingBugReport} variant="default" fontSize={12}>
+                            💾 Save to Phone
+                        </CustomButton>
+                    </View>
+                </View>
+
+                <Separator style={{ marginVertical: 16 }} />
+            </View>
+        )
+    }
 
     const renderTrainingLink = () => {
         return (
@@ -647,17 +684,7 @@ const Settings = () => {
 
                 <Separator style={{ marginVertical: 16 }} />
 
-                <CustomTitle searchId="settings-management-title" title="Settings Management" description="Import and export settings from JSON file or access the app's data directory." />
-
-                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-                    <CustomButton onPress={handleImportSettings} variant="default" style={{ flex: 1, maxWidth: 190 }} fontSize={12}>
-                        📥 Import Settings
-                    </CustomButton>
-
-                    <CustomButton onPress={handleExportSettings} variant="default" style={{ flex: 1, maxWidth: 190 }} fontSize={12}>
-                        📤 Export Settings
-                    </CustomButton>
-                </View>
+                <CustomTitle title="App Data" description="Open the app's data directory or reset every setting." />
 
                 <View style={{ flexDirection: "row", marginTop: 16, justifyContent: "space-between", gap: 12 }}>
                     <CustomButton onPress={openDataDirectory} variant="default" style={{ flex: 1, maxWidth: 190 }} fontSize={12}>
@@ -691,6 +718,7 @@ const Settings = () => {
             <SearchPageProvider page="SettingsMain" scrollViewRef={scrollViewRef}>
                 <ScrollView ref={scrollViewRef} nestedScrollEnabled={true} showsVerticalScrollIndicator={false} showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
                     <View className="m-1">
+                        {renderSettingsManagement()}
                         {renderTrainingLink()}
                         {renderTrainingEventLink()}
                         {renderRacingLink()}
