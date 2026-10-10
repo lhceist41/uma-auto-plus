@@ -144,8 +144,8 @@ class EnergyRecoveryTest {
             screen.calls.clear()
             assertFalse(screen.recover(31, unmoved))
             assertEquals(listOf("outing", "rest", "turnMoved"), screen.calls)
-            assertEquals(0, unmoved.on(30))
             assertEquals(1, unmoved.on(31))
+            assertEquals(1, unmoved.on(30), "an earlier date is not a new turn")
         }
     }
 
@@ -211,12 +211,13 @@ class EnergyRecoveryTest {
             stuckDay: Int,
             rests: Int,
             restGain: Int,
+            energyBeforeRest: Int = 5,
         ): List<Boolean> {
             val unmoved = UnmovedEnergyRecoveries()
             var energy = 0
             return (1..rests).map {
                 // Each real turn between the rests spends energy again (a low-energy turn is why the bot rests).
-                energy = 5
+                energy = energyBeforeRest
                 val before = energy
                 recoverEnergyAndConfirmTurn(
                     day = stuckDay,
@@ -247,6 +248,27 @@ class EnergyRecoveryTest {
         fun `on a stuck date, Rest taps that never land still stop`() {
             assertThrows(Stopped::class.java) { restsInARow(stuckDay = 12, rests = 2, restGain = 0) }
         }
+
+        @Test
+        fun `on a stuck date, two Rests that land on a nearly full bar do not stop`() {
+            // 95 to 100 cannot show the proof margin, so each Rest is unconfirmed (spent), never proven unmoved.
+            assertEquals(List(2) { true }, restsInARow(stuckDay = 12, rests = 2, restGain = 30, energyBeforeRest = 95))
+        }
+
+        @Test
+        fun `a read flipping to a fallback date and back does not reset the bound`() {
+            val screen = Screen(turnMoves = false)
+            val unmoved = UnmovedEnergyRecoveries()
+            assertFalse(screen.recover(5, unmoved))
+            assertEquals(1, unmoved.on(12), "a fallback 12 is not a later turn")
+            assertThrows(Stopped::class.java) { screen.recover(12, unmoved) }
+
+            val unconfirmed = Screen(turnMoves = null)
+            val bound = UnmovedEnergyRecoveries()
+            unconfirmed.recover(5, bound)
+            unconfirmed.recover(12, bound)
+            assertThrows(Stopped::class.java) { unconfirmed.recover(5, bound) }
+        }
     }
 
     @Nested
@@ -272,6 +294,22 @@ class EnergyRecoveryTest {
             assertTrue(body.contains("recoverEnergyAndConfirmTurn("))
             assertTrue(body.contains("turnMoved = { turnMovedSince(day, energyBefore).also { moved = it } }"))
             assertTrue(body.contains("throw CampaignBreakpointException(reason)"))
+        }
+
+        @Test
+        fun `the forced Finale Wit training clears the streak like an executed training`() {
+            val training = sourceFile("bot/Training.kt").readText().replace("\r\n", "\n")
+            val forced = training.indexOf("Successfully forced Wit training during the Finale")
+            val fallback = training.indexOf("Could not find Wit training button", forced)
+            assertTrue(training.indexOf("campaign.clearUnmovedEnergyRecoveries()", forced) in forced until fallback)
+        }
+
+        @Test
+        fun `every main-screen pass emits its decision report, so a stop cannot strand a deferred one`() {
+            val campaign = sourceFile("bot/Campaign.kt").readText().replace("\r\n", "\n")
+            assertFalse(campaign.contains("energyRecoveryLeftTurnOpen"))
+            val pass = campaign.substring(campaign.indexOf("val actionExecuted = executeAction(action, cachedScheduledRaceDay)"))
+            assertTrue(pass.substringBefore("return actionExecuted").trimEnd().endsWith("decisionTracer?.emit()"))
         }
     }
 

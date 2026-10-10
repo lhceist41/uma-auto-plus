@@ -1,7 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 /**
- * Counts consecutive energy recoveries that did not prove the turn moved. A new date, a proven move or an executed training starts the count again,
+ * Counts consecutive energy recoveries that did not prove the turn moved. A later date, a proven move or an executed training starts the count again,
  * because the date alone cannot: it reads the same across real turns where the game shows no date (Grand Concert pre-debut) or its read falls back.
  */
 internal class UnmovedEnergyRecoveries {
@@ -9,14 +9,17 @@ internal class UnmovedEnergyRecoveries {
     private var unmoved = 0
     private var unconfirmed = 0
 
-    fun on(day: Int): Int = if (day == this.day) unmoved + unconfirmed else 0
+    fun on(day: Int): Int = if (isLaterTurn(day)) 0 else unmoved + unconfirmed
+
+    /** The same rule [confirmTurnMoved] uses, so a stationary screen whose read flips to a fallback date and back cannot reset the bound. */
+    private fun isLaterTurn(day: Int): Boolean = day > this.day && day !in DATE_READ_FALLBACK_DAYS
 
     /** [provenUnmoved] is true when the main screen showed no change, false when the screen never settled. */
     fun record(
         day: Int,
         provenUnmoved: Boolean,
     ): Int {
-        if (day != this.day) {
+        if (isLaterTurn(day)) {
             this.day = day
             clear()
         }
@@ -93,8 +96,8 @@ internal const val ENERGY_RISE_PROOF = 10
 /**
  * Whether a recovery tap moved the turn, from up to [TURN_CHECK_READS] reads with a wait between them. True only on positive evidence: a training
  * event (only a spent turn opens one), a later date that is not a read fallback, or energy risen by [ENERGY_RISE_PROOF] over [energyBefore]. False
- * when the main screen showed energy that had not risen at least twice and nothing proved a move. Null otherwise: a dialog still open (a missed OK
- * or an outing's partner list), a long transition, or an energy bar that could not be read.
+ * when the main screen showed energy that had room to rise but did not, at least twice, and nothing proved a move. Null otherwise: a dialog still
+ * open (a missed OK or an outing's partner list), a long transition, or an energy bar that could not be read or was too full to show a rise.
  */
 internal fun confirmTurnMoved(
     day: Int,
@@ -111,7 +114,8 @@ internal fun confirmTurnMoved(
         if (screen.day != null && screen.day > day && screen.day !in DATE_READ_FALLBACK_DAYS) return true
         if (screen.energy != null && energyBefore != null) {
             if (screen.energy >= energyBefore + ENERGY_RISE_PROOF) return true
-            unchangedReads++
+            // A bar too full to rise by the proof margin cannot show that a Rest landed.
+            if (energyBefore + ENERGY_RISE_PROOF <= 100) unchangedReads++
         }
     }
     return if (unchangedReads >= 2) false else null

@@ -819,8 +819,6 @@ abstract class Campaign(game: Game) : Task(game) {
 
     private val unmovedEnergyRecoveries = UnmovedEnergyRecoveries()
 
-    private var energyRecoveryLeftTurnOpen = false
-
     /** The turn number when the stop-at-date check first started. */
     protected var stopAtDateInitialTurnNumber: Int = -1
 
@@ -2328,8 +2326,6 @@ abstract class Campaign(game: Game) : Task(game) {
                 },
             )
         if (moved == true) MessageLog.v(TAG, "[ENERGY] Successfully recovered energy via $via.")
-        // The turn goes on, so its decision report waits for the retry instead of closing without it.
-        if (!recovered) energyRecoveryLeftTurnOpen = true
         return recovered
     }
 
@@ -3192,7 +3188,7 @@ abstract class Campaign(game: Game) : Task(game) {
         // Reuse the cached value: nothing since performTurnStartUpdates() could have changed scheduled-race status.
         val actionExecuted = executeAction(action, cachedScheduledRaceDay)
         // Flushed after the action so selections recorded inside executeAction land in the block; emit() is idempotent per turn.
-        if (energyRecoveryLeftTurnOpen) energyRecoveryLeftTurnOpen = false else decisionTracer?.emit()
+        decisionTracer?.emit()
         return actionExecuted
     }
 

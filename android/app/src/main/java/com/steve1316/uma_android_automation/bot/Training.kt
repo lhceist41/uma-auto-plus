@@ -2952,6 +2952,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         MessageLog.v(TAG, "[TRAINING] Successfully forced Wit training during the Finale instead of recovering energy.")
                         firstTrainingCheck = false
                         advanced = true
+                        campaign.clearUnmovedEnergyRecoveries()
                         campaign.decisionTracer?.let { tracer ->
                             // recommendTraining() already recorded selected=null for this empty-map turn; record the authoritative WIT selection now that
                             // the forced tap succeeded, so lastOrNull() makes it the pick. Never runs on the failed-tap recovery branch, so a rest is never
