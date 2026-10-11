@@ -9,7 +9,7 @@ import java.io.File
 
 /**
  * Source guards for the Grand Concert facts-based fan-requirement activation. They pin the
- * architectural boundaries that keep the change safe: the review-gated deferral seam stays null,
+ * architectural boundaries that keep the change safe: the deferral seam fails closed first,
  * the deadline OCR standdown stays, the fan emergency is never fed from facts, activation is neither
  * a second mutable flag nor a second writer, the selector and scan planner are untouched, and the
  * facts value reaches `hasFanRequirement` through the single requirement-refresh writer.
@@ -30,14 +30,22 @@ class GrandConcertFanActivationGuardTest {
         throw IllegalStateException("could not locate the Kotlin source root from ${System.getProperty("user.dir")}")
     }
 
+    // Replaces the old always-null seam guard: deferral is now allowed, so the guard pins that every unknown is
+    // rejected before any slack arithmetic. The behaviour is tested in GrandConcertFanFactsTest.failsClosedOnUnknowns.
     @Test
-    @DisplayName("the review-gated deferral seam still returns null/null unconditionally")
-    fun deferralSeamStaysNull() {
-        assertTrue(
-            source("bot/GrandConcertFanPressure.kt")
-                .contains("fun reviewGatedPolicyInputs(snapshot: Snapshot): ReviewGatedPolicyInputs = ReviewGatedPolicyInputs(null, null)"),
-            "reviewGatedPolicyInputs must still return ReviewGatedPolicyInputs(null, null) unconditionally",
-        )
+    @DisplayName("the deferral seam rejects every unknown before it computes any slack")
+    fun deferralSeamFailsClosedFirst() {
+        val pressure = source("bot/GrandConcertFanPressure.kt")
+        val body = pressure.substring(pressure.indexOf("fun policyInputs("), pressure.indexOf("fun recentFanRacesPaidLow("))
+        val arithmetic = body.indexOf("var usable")
+        for (check in listOf(
+            "if (recentFanRacesPaidLow) return failClosed",
+            "snapshot.matchStatus != MatchStatus.EXACT && snapshot.matchStatus != MatchStatus.NORMALIZED",
+            "!snapshot.effectiveExact || snapshot.currentFans <= 1",
+            "if (turn <= snapshot.currentTurn) return failClosed",
+        )) {
+            assertTrue(body.indexOf(check) in 0 until arithmetic, "missing or late fail-closed check: $check")
+        }
     }
 
     @Test

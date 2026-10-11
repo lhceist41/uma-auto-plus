@@ -1,8 +1,8 @@
 package com.steve1316.uma_android_automation.bot
 
 /**
- * Which Grand Concert turns can host a fan-earning race. Not wired into a live deferral decision; exercised only
- * as [GC_FAN] telemetry. Source: `single_mode_turn.race_entry_type` (turn_set_id 3) in `master.mdb` marks turns
+ * Which Grand Concert turns can host a fan-earning race; the fan-race deferral counts them. Source:
+ * `single_mode_turn.race_entry_type` (turn_set_id 3) in `master.mdb` marks turns
  * 12..72 race-entry legal, Summer and concert turns included; pre-debut 1-11 and finale off-turns 73/75/77 are not.
  * This is base legality, not guaranteed free slack after mandatory actions.
  */

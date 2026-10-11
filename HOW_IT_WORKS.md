@@ -1047,7 +1047,7 @@ omitted otherwise. Offline, joining these
 records by `seq` reconstructs each color's income timeline against song demand across a cycle and lines
 them up with the decision streams for the same action.
 
-**Fan-vs-training deferral (wired and tested, not yet live).** Grand Concert also carries a
+**Fan-vs-training deferral (live, fail-closed).** Grand Concert also carries a
 fail-closed policy (`GrandConcertFanPolicy`) for the case where the game's fan requirement would
 otherwise force racing on turns whose training income the song economy needs. When a fan
 requirement is active, the campaign asks the policy whether this one turn can be safely deferred to
@@ -1064,24 +1064,23 @@ count for a mandatory gate now ends at the turn BEFORE the gated race, because t
 earn the fans needed to enter itself, while a fan goal's deadline turn is currently counted as usable
 -- an empirical assumption that a future activation must prove against the game's check timing, or
 conservatively drop. Those figures are
-logged every turn, but the two policy proof inputs stay null
-(`GrandConcertFanPressure.reviewGatedPolicyInputs`), so the policy still receives no deadline and
-always fails safe to racing. The goal-deadline OCR (`determineTurnsRemainingBeforeNextGoal`) remains
-stood down for the scenario (it returns -1) and is not consulted. Live fan deferral is therefore NOT
-active today, and not merely for want of review. The blocking gap is evidence: no authoritative data
-proves a deferral that is both safe and useful. Single-mode career fans come only from races (the
-payout curves); the Grand Concert concerts award songs, performance points, and master bonuses, but
-NO fans (the concert tables in `master.mdb` carry no fan reward), so there is no guaranteed non-race
-credit that could shrink a deficit while the bot trains. Per-race payout-curve minima are stronger
-guaranteed bounds than the global `ceil(deficit / universal-floor)` figure, but they do not rescue a
-deferral: even choosing the best guaranteed-minimum race on every available Junior turn yields only
-about 398 guaranteed fans against Copano's 3000-fan target. So no useful fail-closed deferral proof
-exists for the original over-racing failure. A bound strong enough would require a per-race
-expected-reward model, i.e. race-choice planning, which is out of scope, so the seam stays null until
-a guaranteed-fan or per-race conservative-reward data foundation exists.
+logged every turn in `[GC_FAN]` and reach the policy through `GrandConcertFanPressure.policyInputs`.
+The rule counts the free race turns before the requirement (the raceable window minus Summer turns,
+where the racing requirement is cleared so the bot never races for fans, and minus the trainee's own
+mandatory race turns) and defers only while they are at least ceil(1.5 x races needed) + 2,
+where races needed is the deficit divided by 400 fans, rounded up: 3rd place in the cheapest OP race
+with no Fan Bonus, while measured wins pay about 2300 or more. The 1.5 leaves room to avoid
+back-to-back race warnings and the +2 is margin. The rule runs while the nearest requirement is unmet,
+and the same check then also covers every later unmet requirement (a choice gate at its highest
+threshold), because the same races serve them all. Concerts do pay fans, but they are not counted,
+because one can come too late before a deadline. Everything unknown still races: a missing asset, an
+unmatched or ambiguous trainee, a choice gate without one shared threshold, a fan read of 0 or 1 (a
+restart), a requirement due now or overdue, and the case where the last two races forced by fan
+pressure each paid under 400 fans (measured from the fan count re-read on the next turn). The
+goal-deadline OCR (`determineTurnsRemainingBeforeNextGoal`) remains stood down for the scenario (it
+returns -1) and is not consulted.
 
-The data a safe deferral needs is only partly committed, and the native runtime reads and explains
-what exists, but the policy inputs are deliberately still null:
+The committed data the deferral reads:
 
 - **The fan-goal target and deadline.** The GameTora objective manifest carries no fan-count goal,
   but the game's own `master.mdb` does: `single_mode_route` maps a trainee to a route, and
@@ -1125,21 +1124,14 @@ The **raceable-slack calendar** (`GrandConcertRaceCalendar`) is corrected to the
 `single_mode_turn.race_entry_type` for the Grand Concert turn set: every career turn 12..72 is
 race-entry legal, Summer (37-40, 61-64) and concert turns included, so the raceable window is
 exactly 12..72. An earlier version wrongly excluded Summer; the game data disproves that. This is
-base race-entry legality, not guaranteed free slack after mandatory actions. The calendar is not yet
-wired into a decision; `GrandConcertFanPressure` consumes it for the future-race-slot term of the
-`[GC_FAN]` telemetry, applying the type-specific window (a fan-goal deadline turn is counted, a
-mandatory-gate turn is not). Live fan deferral remains fail-closed: the native runtime reads the
-committed `fanGoals` and mandatory gates and computes the deficit, future race slots, and a
-conservative race bound, but the policy still receives null deadline/races-needed and races, because
-no authoritative data proves a useful safe deferral (concerts award no fans, and even the stronger
-per-race guaranteed minima fall far short of the target). Data availability and readability do not
-activate runtime behaviour. Each turn
+base race-entry legality, not guaranteed free slack after mandatory actions, so the deferral leaves
+out Summer turns (no fan race then) and the trainee's mandatory race turns. `GrandConcertFanPressure` applies the type-specific
+window (a fan-goal deadline turn is counted, a mandatory-gate turn is not). Each turn
 the fan question is asked logs a `[GC_FAN]` line with the resolved facts, their provenance, and the
 decision. The generated `gc_fan_runtime.json` asset is guarded in CI: a root-data change that is not
 regenerated fails the build.
 
-**Fan-first forced-race choice (Grand Concert).** Deferral stays disabled, but when a fan race is
-already unavoidable the choice of WHICH race to enter can still clear the requirement in fewer turns.
+**Fan-first forced-race choice (Grand Concert).** When a fan race is unavoidable, the choice of WHICH race to enter can still clear the requirement in fewer turns.
 Pure Grand Concert fan pressure (no trophy or goal-race-points requirement active) takes a dedicated
 branch that does NOT use the row prediction star as a safety gate: a live GC race list draws no
 finish-prediction mark, and the yellow distance-aptitude star false-matches the single-star template,

@@ -16,8 +16,7 @@ object GrandConcertFanPolicy {
 
         FORCE_RACE,
 
-        /** Missing or insufficient deadline/deficit info: race now. The production caller passes null on purpose
-         * while the committed-facts inputs stay review-gated. */
+        /** Missing or insufficient deadline/deficit info: race now (see [GrandConcertFanPressure.policyInputs]). */
         FAIL_SAFE_FORCE_RACE,
     }
 

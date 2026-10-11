@@ -154,13 +154,12 @@ class GrandConcertFanRaceSelectorTest {
         assertTrue(line.contains("unknownFanFallback=false"))
     }
 
-    // ---- source guards: null seam untouched, one gated GC seam, no tier in the GC contract ----
+    // ---- source guards: selection independent of deferral, one gated GC seam, no tier in the GC contract ----
 
     @Test
-    @DisplayName("the fan-deferral null seam is untouched and GC selection is a single predicate-gated seam")
+    @DisplayName("GC selection is independent of the fan deferral and a single predicate-gated seam")
     fun sourceGuards() {
-        val pressure = source("bot/GrandConcertFanPressure.kt")
-        assertTrue(pressure.contains("ReviewGatedPolicyInputs(null, null)"), "the fan-deferral seam must stay null")
+        assertFalse(source("bot/GrandConcertFanRaceSelector.kt").contains("policyInputs"), "race selection must not depend on the deferral inputs")
         val racing = source("bot/Racing.kt")
         assertTrue(racing.contains("GrandConcertFanRaceSelector.appliesToForcedRace("), "GC selection must be predicate-gated")
         assertTrue(racing.contains("processGrandConcertForcedFanRace()"), "the dedicated pure-GC branch must exist")

@@ -115,6 +115,11 @@ class GrandConcert(game: Game) : Campaign(game) {
      */
     private var concertEscortAttempts = 0
 
+    /** Turn and fans of the last race forced by fan pressure, measured on the next turn once the fans are re-read. */
+    private var fanPressureRaceTurn: Int? = null
+    private var fansBeforeFanPressureRace = 0
+    private val fanPressureRacePayouts = ArrayDeque<Int>()
+
     /**
      * Cheapest unscheduled song with a readable cost, kept across turns so the training scorer can steer point income.
      */
@@ -658,22 +663,27 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * A fan requirement may yield to a training turn when [GrandConcertFanPolicy] proves enough slack. Fail-closed: the
-     * policy proof inputs stay null via [GrandConcertFanPressure.reviewGatedPolicyInputs], so it still resolves to a
-     * fail-safe race.
-     * Concerts award no fans and the guaranteed race minima (about 398 fans per Junior turn against a 3000 target) are
-     * far too weak to permit a defer; activation needs a guaranteed-fan data foundation that does not yet exist. Only
-     * the fan arm is eligible; [GC_FAN] logs the snapshot and decision every turn.
+     * A fan requirement may yield to a training turn when [GrandConcertFanPressure.policyInputs] shows the free race turns
+     * left before it still cover a conservative race count; anything unknown races. Concerts pay fans but are not
+     * counted. Only the fan arm is eligible; [GC_FAN] logs the snapshot and decision every turn.
      */
     override fun considerFanRaceDeferral(): Boolean {
         if (!racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement) return false
         val concertBehindPace = grandConcertPointContext(null)?.behindPace ?: false
 
-        val snapshot = GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
+        // A payout is read only on the next turn after a fan re-read: a later or stale read would mix in other races.
+        val raceTurn = fanPressureRaceTurn
+        if (raceTurn != null && date.day != raceTurn) {
+            if (date.day == raceTurn + 1 && !bNeedToCheckFans) {
+                fanPressureRacePayouts.addLast(trainee.fans - fansBeforeFanPressureRace)
+                if (fanPressureRacePayouts.size > 2) fanPressureRacePayouts.removeFirst()
+            }
+            fanPressureRaceTurn = null
+        }
+        val paidLow = GrandConcertFanPressure.recentFanRacesPaidLow(fanPressureRacePayouts)
 
-        // Policy proof inputs stay null even when the snapshot knows the deadline; only an independent review may
-        // replace them.
-        val policyInputs = GrandConcertFanPressure.reviewGatedPolicyInputs(snapshot)
+        val snapshot = GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
+        val policyInputs = GrandConcertFanPressure.policyInputs(snapshot, paidLow)
         val decision =
             GrandConcertFanPolicy.decide(
                 fanRequirementActive = true,
@@ -681,7 +691,11 @@ class GrandConcert(game: Game) : Campaign(game) {
                 racesStillNeeded = policyInputs.racesStillNeeded,
                 concertBehindPace = concertBehindPace,
             )
-        MessageLog.i(TAG, GrandConcertFanPressure.telemetryLine(snapshot, concertBehindPace, policyInputs, decision))
+        MessageLog.i(TAG, GrandConcertFanPressure.telemetryLine(snapshot, concertBehindPace, policyInputs, decision, paidLow))
+        if (GrandConcertFanPolicy.forcesRace(decision) && fanPressureRaceTurn == null) {
+            fanPressureRaceTurn = date.day
+            fansBeforeFanPressureRace = trainee.fans
+        }
         return decision == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
     }
 
