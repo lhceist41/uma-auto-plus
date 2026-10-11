@@ -389,6 +389,40 @@ class EnergyRecoveryTest {
         }
 
         @Test
+        fun `a recreation date that cannot start is closed and not reopened on the same turn`() {
+            val campaign = sourceFile("bot/Campaign.kt").readText().replace("\r\n", "\n")
+            val handler = campaign.indexOf("open fun handleRecreationDate(")
+            val failed = campaign.indexOf("Failed to find a way to start the recreation date", handler)
+            assertTrue(failed > handler)
+            // The open popup would take the next Rest tap as a backdrop tap.
+            val branch = campaign.substring(failed, campaign.indexOf("\n                }\n", failed))
+            assertTrue(branch.contains("if (!ButtonCancel.click("), "the branch closes the popup and knows when it could not")
+            assertTrue(branch.contains("MessageLog.w("), "a missing Cancel is named in the log")
+            assertTrue(branch.contains("recreationAttemptFailedThisTurn = true"), "the branch latches the failure for the turn")
+
+            fun body(function: String): String {
+                val start = campaign.indexOf(function)
+                return campaign.substring(start, campaign.indexOf("\n    }\n", start))
+            }
+
+            fun dateGuard(function: String): String = body(function).lines().single { it.contains("IconRecreationDate.check(") }
+            val energyGuard = dateGuard("open fun recoverEnergy(")
+            assertTrue(energyGuard.contains("|| recreationAttemptFailedThisTurn ||"), "energy recovery skips the failed date")
+            assertTrue(dateGuard("open fun recoverMood(").contains("!recreationAttemptFailedThisTurn"), "mood recovery skips the failed date")
+
+            // The same mood pass falls through to the trainee recreation instead of reporting a recovery after the Cancel.
+            val mood = body("open fun recoverMood(")
+            val traineeBranch = mood.indexOf("} else", mood.indexOf("Successfully recovered mood via recreation date"))
+            assertTrue(mood.substring(traineeBranch, mood.indexOf('\n', traineeBranch)).contains("recreationAttemptFailedThisTurn"))
+            // That tap waits out the popup's close and finds Recreation on a fresh capture, and the log does not call a failed date completed.
+            val recreationTap = mood.indexOf("ButtonRecreation.click(game.imageUtils")
+            assertTrue(mood.indexOf("game.wait(game.dialogWaitDelay)", traineeBranch) in traineeBranch until recreationTap, "it settles before the tap")
+            assertTrue(mood.indexOf("game.imageUtils.getSourceBitmap()", traineeBranch) in traineeBranch until recreationTap, "it taps on a fresh capture")
+            assertFalse(mood.substring(recreationTap, mood.indexOf('\n', recreationTap)).contains("sourceBitmap = sourceBitmap"))
+            assertTrue(mood.substring(traineeBranch).contains("could not be started"), "a failed date is named as such")
+        }
+
+        @Test
         fun `success goes through the turn check and the stop uses the campaign breakpoint`() {
             assertTrue(body.contains("recoverEnergyAndConfirmTurn("))
             assertTrue(body.contains("turnMoved = { turnMovedSince(day, energyBefore.takeUnless { outingOpened }, moodBefore).also { moved = it } }"))

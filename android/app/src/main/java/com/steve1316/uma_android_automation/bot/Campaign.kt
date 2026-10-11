@@ -2304,8 +2304,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 day = day,
                 unmoved = unmovedEnergyRecoveries,
                 tryOuting = {
-                    // Skip recreation date if it's already completed (will only be used for mood recovery).
-                    if (recreationDateCompleted || !IconRecreationDate.check(game.imageUtils, sourceBitmap = bitmap)) {
+                    // Skip recreation date if it's already completed (will only be used for mood recovery) or could not start this turn.
+                    if (recreationDateCompleted || recreationAttemptFailedThisTurn || !IconRecreationDate.check(game.imageUtils, sourceBitmap = bitmap)) {
                         false
                     } else if (
                         // With an active dating schedule the chain is the scheduler's: recover on the trainee instead of consuming a scheduled outing.
@@ -2426,21 +2426,29 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.v(TAG, "[MOOD] Current mood is not good (${trainee.mood}). Recovering mood now.")
 
             // Check if a date is available.
-            if (!recreationDateCompleted && IconRecreationDate.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
-                // With an active dating schedule the chain is the scheduler's: recover on the trainee instead of consuming a scheduled outing.
-                if (handleRecreationDate(recoverMoodIfCompleted = true, doDateRecreation = !isScheduleActive())) {
-                    MessageLog.v(TAG, "[MOOD] Successfully recovered mood via recreation date.")
-                }
-            } else {
-                // Otherwise, recover mood as normal.
+            val dateAvailable = !recreationDateCompleted && !recreationAttemptFailedThisTurn && IconRecreationDate.check(game.imageUtils, sourceBitmap = sourceBitmap)
+            // With an active dating schedule the chain is the scheduler's: recover on the trainee instead of consuming a scheduled outing.
+            if (dateAvailable && handleRecreationDate(recoverMoodIfCompleted = true, doDateRecreation = !isScheduleActive())) {
+                MessageLog.v(TAG, "[MOOD] Successfully recovered mood via recreation date.")
+            } else if (!dateAvailable || recreationAttemptFailedThisTurn) {
+                // Otherwise, recover mood as normal (also after a date that could not start, so this pass still recovers).
                 // Note that if a date was already completed, the Recreation popup will still show so it will require an additional step to recover mood.
                 // Do NOT speculatively set `recreationDateCompleted = true` here - `IconRecreationDate.check` may have
                 // returned false due to a transient OCR / timing miss rather than the date actually being consumed.
                 // Setting the flag here permanently disables recreation-date checking for the rest of the run; instead,
                 // we rely on the genuine "complete" detection at line ~1274 (LabelRecreationDateComplete.check) AND
                 // the daily reset in handleMainScreen so a fresh icon-check happens every turn.
-                if (!ButtonRecreation.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
-                    ButtonRestAndRecreation.click(game.imageUtils, sourceBitmap = sourceBitmap)
+                // A tap during the cancelled date popup's close animation is dropped, and the capture from before that popup is stale.
+                val recreationBitmap =
+                    if (dateAvailable) {
+                        game.waitForLoading()
+                        game.wait(game.dialogWaitDelay)
+                        game.imageUtils.getSourceBitmap()
+                    } else {
+                        sourceBitmap
+                    }
+                if (!ButtonRecreation.click(game.imageUtils, sourceBitmap = recreationBitmap)) {
+                    ButtonRestAndRecreation.click(game.imageUtils, sourceBitmap = recreationBitmap)
                 }
 
                 // Tap OK for the possibility of a scheduled race warning popup.
@@ -2451,7 +2459,8 @@ abstract class Campaign(game: Game) : Task(game) {
 
                 // The Recreation popup is now open so an additional step is required to recover mood.
                 if (LabelRecreationUmamusume.click(game.imageUtils)) {
-                    MessageLog.v(TAG, "[MOOD] Recreation date is already completed. Recovering mood with the Umamusume now...")
+                    val dateState = if (recreationAttemptFailedThisTurn) "could not be started this turn" else "is already completed"
+                    MessageLog.v(TAG, "[MOOD] Recreation date $dateState. Recovering mood with the Umamusume now...")
                     game.waitForLoading()
                 } else {
                     // Otherwise, dismiss the popup that says to confirm recreation if the user has not set it to skip the confirmation in their in-game settings.
@@ -2671,7 +2680,12 @@ abstract class Campaign(game: Game) : Task(game) {
                         true
                     }
                 } else {
-                    MessageLog.e(TAG, "[ERROR] handleRecreationDate:: Failed to find a way to start the recreation date.")
+                    MessageLog.e(TAG, "[ERROR] handleRecreationDate:: Failed to find a way to start the recreation date. Backing out.")
+                    // Left open, the popup eats the next Rest tap as a backdrop tap and the same date is retried all turn.
+                    recreationAttemptFailedThisTurn = true
+                    if (!ButtonCancel.click(game.imageUtils)) {
+                        MessageLog.w(TAG, "[WARN] handleRecreationDate:: No Cancel button found. The Recreation popup may still be open.")
+                    }
                     game.waitForLoading()
                     false
                 }
