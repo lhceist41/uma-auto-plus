@@ -9,7 +9,7 @@ import java.util.zip.Inflater
  * android.jar, which carries neither java.awt nor javax.imageio, so the fixtures are decoded
  * here with nothing beyond java.util.zip: chunk walk, one Inflater pass over the IDAT stream,
  * and the five standard scanline filters. Deliberately supports exactly what the fixture set
- * is (8-bit RGBA, non-interlaced, 1080x1920) and fails loudly on anything else - a fixture
+ * is (8-bit RGBA or RGB, non-interlaced) and fails loudly on anything else - a fixture
  * that stops matching this shape should break the suite, not decode wrongly.
  *
  * Correctness is cross-pinned by the fixture tests themselves: the probe expectations were
@@ -21,8 +21,6 @@ class FixturePng private constructor(val width: Int, val height: Int, private va
     fun getRGB(x: Int, y: Int): Int = pixels[y * width + x]
 
     companion object {
-        private const val BYTES_PER_PIXEL = 4
-
         fun read(stream: InputStream): FixturePng {
             val input = DataInputStream(stream)
             val signature = ByteArray(8)
@@ -32,6 +30,7 @@ class FixturePng private constructor(val width: Int, val height: Int, private va
             var width = 0
             var height = 0
             var idat = ByteArray(0)
+            var bytesPerPixel = 4
             while (true) {
                 val length = input.readInt()
                 val type = ByteArray(4).also { input.readFully(it) }.toString(Charsets.US_ASCII)
@@ -44,9 +43,10 @@ class FixturePng private constructor(val width: Int, val height: Int, private va
                         val bitDepth = data[8].toInt()
                         val colorType = data[9].toInt()
                         val interlace = data[12].toInt()
-                        require(bitDepth == 8 && colorType == 6 && interlace == 0) {
-                            "fixture must be 8-bit RGBA non-interlaced, got depth=$bitDepth type=$colorType interlace=$interlace"
+                        require(bitDepth == 8 && (colorType == 6 || colorType == 2) && interlace == 0) {
+                            "fixture must be 8-bit RGBA or RGB non-interlaced, got depth=$bitDepth type=$colorType interlace=$interlace"
                         }
+                        bytesPerPixel = if (colorType == 6) 4 else 3
                     }
                     "IDAT" -> idat += data
                     "IEND" -> break
@@ -54,7 +54,7 @@ class FixturePng private constructor(val width: Int, val height: Int, private va
             }
             require(width > 0 && height > 0) { "IHDR missing" }
 
-            val stride = width * BYTES_PER_PIXEL
+            val stride = width * bytesPerPixel
             val raw = ByteArray((stride + 1) * height)
             val inflater = Inflater()
             inflater.setInput(idat)
@@ -73,17 +73,17 @@ class FixturePng private constructor(val width: Int, val height: Int, private va
             for (y in 0 until height) {
                 val filter = raw[y * (stride + 1)].toInt() and 0xFF
                 System.arraycopy(raw, y * (stride + 1) + 1, current, 0, stride)
-                unfilter(filter, current, previous, stride)
+                unfilter(filter, current, previous, stride, bytesPerPixel)
                 var x = 0
                 var i = 0
                 while (x < width) {
                     val r = current[i].toInt() and 0xFF
                     val g = current[i + 1].toInt() and 0xFF
                     val b = current[i + 2].toInt() and 0xFF
-                    val a = current[i + 3].toInt() and 0xFF
+                    val a = if (bytesPerPixel == 4) current[i + 3].toInt() and 0xFF else 0xFF
                     pixels[y * width + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
                     x++
-                    i += BYTES_PER_PIXEL
+                    i += bytesPerPixel
                 }
                 System.arraycopy(current, 0, previous, 0, stride)
             }
@@ -96,12 +96,12 @@ class FixturePng private constructor(val width: Int, val height: Int, private va
                 ((data[at + 2].toInt() and 0xFF) shl 8) or
                 (data[at + 3].toInt() and 0xFF)
 
-        private fun unfilter(filter: Int, current: ByteArray, previous: ByteArray, stride: Int) {
+        private fun unfilter(filter: Int, current: ByteArray, previous: ByteArray, stride: Int, bytesPerPixel: Int) {
             when (filter) {
                 0 -> Unit
                 1 ->
-                    for (i in BYTES_PER_PIXEL until stride) {
-                        current[i] = (current[i] + current[i - BYTES_PER_PIXEL]).toByte()
+                    for (i in bytesPerPixel until stride) {
+                        current[i] = (current[i] + current[i - bytesPerPixel]).toByte()
                     }
                 2 ->
                     for (i in 0 until stride) {
@@ -109,15 +109,15 @@ class FixturePng private constructor(val width: Int, val height: Int, private va
                     }
                 3 ->
                     for (i in 0 until stride) {
-                        val left = if (i >= BYTES_PER_PIXEL) current[i - BYTES_PER_PIXEL].toInt() and 0xFF else 0
+                        val left = if (i >= bytesPerPixel) current[i - bytesPerPixel].toInt() and 0xFF else 0
                         val up = previous[i].toInt() and 0xFF
                         current[i] = (current[i] + ((left + up) / 2)).toByte()
                     }
                 4 ->
                     for (i in 0 until stride) {
-                        val left = if (i >= BYTES_PER_PIXEL) current[i - BYTES_PER_PIXEL].toInt() and 0xFF else 0
+                        val left = if (i >= bytesPerPixel) current[i - bytesPerPixel].toInt() and 0xFF else 0
                         val up = previous[i].toInt() and 0xFF
-                        val upLeft = if (i >= BYTES_PER_PIXEL) previous[i - BYTES_PER_PIXEL].toInt() and 0xFF else 0
+                        val upLeft = if (i >= bytesPerPixel) previous[i - bytesPerPixel].toInt() and 0xFF else 0
                         current[i] = (current[i] + paeth(left, up, upLeft)).toByte()
                     }
                 else -> throw IllegalArgumentException("unsupported PNG filter $filter")

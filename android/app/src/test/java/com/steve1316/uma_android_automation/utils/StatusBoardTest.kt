@@ -401,7 +401,7 @@ class StatusBoardTest {
         val injury = campaign.substringAfter("open fun checkInjury(").substringBefore("\n    }\n").lines()
         val published = injury.indices.filter { injury[it].contains("StatusBoard.action(\"infirmary\", null)") }
         assertEquals(2, published.size, "the forced attempt and the ordinary heal")
-        for (i in published) assertTrue(injury[i + 1].contains("if (ButtonInfirmary.click("), "published right before the tap")
+        for (i in published) assertTrue(injury[i + 1].contains("if (infirmary.click("), "published right before the tap")
         val trackblazer = kotlinSource("bot/campaigns/Trackblazer.kt")
         assertTrue(trackblazer.substringAfter("fun openShop(").substringBefore("\n    }\n").contains("StatusBoard.action(\"shop\", null)"))
         val fastPath = trackblazer.substringAfter("override fun executeAction(action: MainScreenAction").substringBefore("\n    }\n")

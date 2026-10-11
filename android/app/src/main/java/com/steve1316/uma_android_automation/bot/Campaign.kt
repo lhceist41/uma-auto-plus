@@ -36,6 +36,7 @@ import com.steve1316.uma_android_automation.components.ButtonEventProgressChevro
 import com.steve1316.uma_android_automation.components.ButtonHomeFansInfo
 import com.steve1316.uma_android_automation.components.ButtonHomeFullStats
 import com.steve1316.uma_android_automation.components.ButtonInfirmary
+import com.steve1316.uma_android_automation.components.ButtonInfirmaryGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonInheritance
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextRaceEnd
@@ -203,6 +204,9 @@ internal fun rotationSlotForCheck(names: List<String>, slotScenario: (Int) -> St
     val slots = names.indices.filter { names[it] == target }
     return slots.firstOrNull { !rotationSlotScenarioMismatch(slotScenario(it), runningScenario) } ?: slots.firstOrNull() ?: -1
 }
+
+/** An Infirmary read that allows a tap: only an explicit enabled read. A null (button not found on this frame) or a disabled read means no tap. */
+internal fun infirmaryReadsEnabled(disabledRead: Boolean?): Boolean = disabledRead == false
 
 /**
  * The other scenario a career screen proves it plays, from the scenario buttons two fresh captures show: one scenario seen on both, and
@@ -2131,6 +2135,16 @@ abstract class Campaign(game: Game) : Task(game) {
     private var turnsWithPersistentNegativeStatus = 0
     private var bForcedInfirmaryAttempted = false
 
+    /** Whether the last [checkInjury] tap opened and accepted the Infirmary confirmation, which is what uses the turn; a tap on a disabled pill opens none. */
+    private var bInfirmaryVisitUsedTurn = false
+
+    /**
+     * Infirmary buttons for the active scenario's career screen, first match wins. Grand Concert draws a smaller pill that only its own template finds,
+     * while its summer camp shows the standard-size one, so the stock template stays as the fallback. Resolved per access because the scenario is live game state.
+     */
+    private val infirmaryButtons: List<ButtonInterface>
+        get() = if (GrandConcertScenario.matches(game.scenario)) listOf(ButtonInfirmaryGrandConcert, ButtonInfirmary) else listOf(ButtonInfirmary)
+
     /**
      * Checks if the trainee has an injury and attempts to heal it.
      *
@@ -2139,9 +2153,12 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun checkInjury(sourceBitmap: Bitmap? = null): Boolean {
         MessageLog.i(TAG, "\n[INJURY] Checking if there is an injury that needs healing on $date.")
+        bInfirmaryVisitUsedTurn = false
         val sourceBitmap = sourceBitmap ?: game.imageUtils.getSourceBitmap()
 
-        return when (ButtonInfirmary.checkDisabled(game.imageUtils, sourceBitmap)) {
+        val found = infirmaryButtons.firstNotNullOfOrNull { button -> button.checkDisabled(game.imageUtils, sourceBitmap)?.let { button to it } }
+        val infirmary = found?.first ?: ButtonInfirmary
+        return when (found?.second) {
             true -> {
                 val statuses = trainee.currentNegativeStatuses
                 if (statuses.isEmpty()) {
@@ -2159,9 +2176,9 @@ abstract class Campaign(game: Game) : Task(game) {
                                 "$turnsWithPersistentNegativeStatus turns. Forcing one infirmary attempt in case the disabled read is wrong.",
                         )
                         StatusBoard.action("infirmary", null)
-                        if (ButtonInfirmary.click(game.imageUtils)) {
+                        if (infirmary.click(game.imageUtils)) {
                             game.wait(game.dialogWaitDelay)
-                            ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
+                            bInfirmaryVisitUsedTurn = ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
                             game.wait(game.dialogWaitDelay)
                             MessageLog.i(TAG, "[INJURY] Forced infirmary attempt clicked through. If the status persists next turn, the infirmary cannot cure it.")
                             true
@@ -2183,11 +2200,22 @@ abstract class Campaign(game: Game) : Task(game) {
             }
 
             false -> {
+                // Grand Concert's turn-start "Concert in N turns" banner washes the screen white, which lifts a disabled pill to the template's luminance.
+                // Confirm on fresh captures before tapping; the phone captures saw the banner gone 5.4 s after a washed frame.
+                val confirmed =
+                    (1..2).all {
+                        game.wait(3.0)
+                        infirmaryReadsEnabled(infirmary.checkDisabled(game.imageUtils))
+                    }
+                if (!confirmed) {
+                    MessageLog.i(TAG, "[INJURY] The Infirmary read enabled on one frame but not on a fresh capture (a turn-start banner or a transition). Not tapping it.")
+                    return false
+                }
                 MessageLog.v(TAG, "[INJURY] Injury detected. Attempting to heal...")
                 StatusBoard.action("infirmary", null)
-                if (ButtonInfirmary.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
+                if (infirmary.click(game.imageUtils)) {
                     game.wait(game.dialogWaitDelay)
-                    ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
+                    bInfirmaryVisitUsedTurn = ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
                     game.wait(game.dialogWaitDelay)
 
                     // The click already fired the heal server-side; the event-header match is only a best-effort visual confirmation, so a miss (template drift,
@@ -3715,7 +3743,10 @@ abstract class Campaign(game: Game) : Task(game) {
             }
 
         if (hasInjury) {
-            // Injury handled internally in checkInjury, but returning NONE as turn is likely over or needs re-evaluation.
+            // The next pass must re-read the date, stats and race-day flags like every executed action; without this it ran on the previous turn's date.
+            // CareerState is rearmed only when the visit used the turn, so a forced tap on a disabled pill cannot yield a duplicate same-turn snapshot.
+            bHasCheckedDateThisTurn = false
+            careerStateLatch.armForNewTurnIf(bInfirmaryVisitUsedTurn)
             return choose(MainScreenAction.NONE, "injury handled; re-evaluating next tick")
         }
 

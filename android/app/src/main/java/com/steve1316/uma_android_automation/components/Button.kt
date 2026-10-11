@@ -531,6 +531,13 @@ object ButtonInfirmary : ButtonInterface {
     override val template = Template("components/button/infirmary", region = Region.bottomHalf)
 }
 
+// Grand Concert draws the career screen's Infirmary pill at about 80 percent of the standard size, so the stock
+// label scores 0.51-0.53 on it and never finds it. This is the stock label shrunk to 0.805, which keeps its
+// enabled luminance so a disabled pill reads darker than the template.
+object ButtonInfirmaryGrandConcert : ButtonInterface {
+    override val template = Template("components/button/infirmary_grandconcert", region = Region.bottomHalf)
+}
+
 object ButtonRecreation : ButtonInterface {
     override val template = Template("components/button/recreation", region = Region.bottomHalf)
 }

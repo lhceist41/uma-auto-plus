@@ -211,6 +211,23 @@ RGB, 1080x1920. No trainer name or ID is on screen.
 It pins `pagedHelpDialogPresent` and the Close tap position. It is the only capture of a paged help
 dialog: the earlier pages (Next in the centre) and other scenarios' help dialogs are not covered.
 
+## Eleventh capture set: the Infirmary pill under the turn-start banner (2026-10-07 phone, 2026-10-08 emulator)
+
+Three 1080x200 crops of the career screen's second button row (Infirmary, Recreation, Lessons, Races), cut from
+`adb screencap` frames, straight RGB. Only the four action pills and the top of the bottom bar are in frame: no
+trainer name, rank, ID or friend code. They pin the disabled read of the Grand Concert Infirmary pill and the
+one case that fools it.
+
+| Fixture | Source | Shows |
+|---|---|---|
+| infirmary_pill_banner_washed.png | phone 1080x2316, rows 2040-2239, during the "Concert in 5 turns" turn-start banner | The whole row washed white: the DISABLED Infirmary pill is lifted to the enabled template's luminance (0.726 vs 0.730) and reads enabled |
+| infirmary_pill_banner_clear.png | the same screen 5.4 s later (next capture, banner gone) | The same disabled pill at its normal darkness (0.451): reads disabled |
+| infirmary_pill_lit.png | emulator 1080x1920, rows 1640-1839, a trainee with a Migraine | The ENABLED (lit) Infirmary pill, 0.718, over a green stage effect |
+
+The washed and clear pair came from consecutive hand captures 5.4 s apart; the frame before the washed one
+(9 s earlier) was clear too. So these captures saw the banner gone 5.4 s after a washed frame and lasting under
+14 s in total; they do not bound how long it can stay after an arbitrary first read.
+
 ## Screens still needed before further automation
 
 1. The lesson list immediately after a successful LEARN (the refresh; we have only after-schedule)
