@@ -10,6 +10,8 @@ import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.components.ButtonAgenda
 import com.steve1316.uma_android_automation.components.ButtonBack
+import com.steve1316.uma_android_automation.components.ButtonCareerHomeTextActive
+import com.steve1316.uma_android_automation.components.ButtonCareerHomeTextEvent
 import com.steve1316.uma_android_automation.components.ButtonChangeRunningStyle
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonInterface
@@ -1894,6 +1896,20 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
+     * The game dropped from the race to its Home screen with this career still in the slot (the daily reset reloads it there), or the
+     * career screen is already back. Blind taps move neither toward the race; the career loop's lobby re-entry resumes the career.
+     */
+    private fun raceLeftForCareerScreen(bitmap: Bitmap): Boolean {
+        fun homeShowsCareerInProgress(frame: Bitmap) =
+            ButtonCareerHomeTextActive.check(game.imageUtils, sourceBitmap = frame) || ButtonCareerHomeTextEvent.check(game.imageUtils, sourceBitmap = frame)
+        if (homeShowsCareerInProgress(bitmap)) {
+            game.wait(1.0, skipWaitingForLoading = true)
+            if (homeShowsCareerInProgress(game.imageUtils.getSourceBitmap())) return true
+        }
+        return campaign.checkMainScreen()
+    }
+
+    /**
      * Executes the race with retry logic.
      *
      * @return True if the bot completed the race; otherwise false.
@@ -2005,6 +2021,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
                 // Tap to reveal and dismiss the auto-hiding playback overlay (no buttons exist while a first-time race animates, since Skip is locked), then wait a beat. A single tap, not three, avoids toggling it back off.
                 else -> {
+                    if (raceLeftForCareerScreen(bitmap)) {
+                        MessageLog.w(TAG, "[RACE] The game left the race for its Home screen or the career screen. Handing back to the career loop, which resumes the career.")
+                        return false
+                    }
                     if (!game.holdBlindInputForOwnUi()) {
                         Log.d(TAG, "[DEBUG] runRaceWithRetries:: No components detected. Tapping to progress...")
                         game.tap(350.0, 450.0, taps = 1)

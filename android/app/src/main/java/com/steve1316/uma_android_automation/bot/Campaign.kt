@@ -1445,6 +1445,23 @@ abstract class Campaign(game: Game) : Task(game) {
                 result.dialog.close(game.imageUtils)
             }
 
+            "continue_career" -> {
+                // The game fell back to its Home screen mid-career (the daily reset) and its Career button opened this. Resume re-enters this
+                // career and never starts a new one; it shares the lobby re-entry's gate and budget, so a Resume that never lands ends as unhandled.
+                if (!careerScreenObservedThisTask || lobbyReentryAttempts >= maxLobbyReentryAttempts) {
+                    Log.w(TAG, "[WARN] handleDialogs:: Continue Career left open: no career screen seen this run, or the re-entry budget is spent.")
+                    return DialogHandlerResult.Unhandled(result.dialog)
+                }
+                lobbyReentryAttempts++
+                if (result.dialog.ok(game.imageUtils)) {
+                    SessionTally.lobbyReentries.incrementAndGet()
+                    MessageLog.w(TAG, "[RECOVERY] Continue Career dialog mid-career: pressed Resume to re-enter this career (attempt $lobbyReentryAttempts/$maxLobbyReentryAttempts).")
+                    game.waitForLoading()
+                } else {
+                    MessageLog.w(TAG, "[RECOVERY] Continue Career dialog mid-career: Resume was not found (attempt $lobbyReentryAttempts/$maxLobbyReentryAttempts).")
+                }
+            }
+
             else -> {
                 Log.w(TAG, "[WARN] handleDialogs:: Unknown dialog \"${result.dialog.name}\" detected so it will not be handled.")
                 return DialogHandlerResult.Unhandled(result.dialog)
