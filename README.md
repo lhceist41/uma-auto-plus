@@ -2,7 +2,6 @@
 
 [![Latest release](https://img.shields.io/github/v/release/lhceist41/uma-auto-plus?label=latest%20release&color=blue)](https://github.com/lhceist41/uma-auto-plus/releases/latest)
 [![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-informational)](CHANGELOG.md)
-[![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/JNhCDs4MSF)
 
 <p align="center">
   <img src="docs/assets/uma-auto-plus-readme-loop.gif" alt="One Unity Cup career played by the bot, sped up: the turn counter and stats climb to the game's own S rating, followed by a screen from each of the four scenarios." width="800">
@@ -18,8 +17,6 @@ A hands-off distribution of [steve1316/uma-android-automation](https://github.co
 - Free and open source under the GPL v3.
 
 **Get started:** download the [latest release](https://github.com/lhceist41/uma-auto-plus/releases/latest), then follow the [setup steps](#instructions). Use at your own risk: read the [disclaimer](#disclaimer).
-
-Questions, help and career results: join the [UMA Auto+ Discord](https://discord.gg/JNhCDs4MSF).
 
 > [!IMPORTANT]
 > **This is a personal fork.** All original credit goes to **steve1316** and the contributors of the upstream project. The core bot engine -- the screen reading, the training/racing/event logic, and the app itself -- is their work. This fork adds features and decision logic on top of it. If you are looking for the original project, please visit the [upstream repository](https://github.com/steve1316/uma-android-automation).
@@ -56,7 +53,6 @@ Upstream improvements are merged in as they land. This fork extends that engine'
 |---|---|
 | **Original repo** | [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation) |
 | **Original author** | [steve1316](https://github.com/steve1316) |
-| **Original Discord** | https://discord.gg/5Yv4kqjAbm |
 | **Fork base version** | v5.4.8 |
 
 # Disclaimer
