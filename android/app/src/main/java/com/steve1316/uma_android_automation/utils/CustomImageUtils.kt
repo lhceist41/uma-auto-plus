@@ -2043,6 +2043,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Create binary mask for non-transparent pixels.
         val validPixels = Mat()
         Core.compare(alphaMask, Scalar(0.0), validPixels, Core.CMP_GT)
+        val alphaPixels = ByteArray(alphaMask.total().toInt()).also { alphaMask.get(0, 0, it) }
 
         // Check transparency ratio.
         val nonZeroPixels = Core.countNonZero(alphaMask)
@@ -2098,8 +2099,8 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                         // For the first test, compare pixel-by-pixel equality between the matched region and template to calculate match ratio.
                         val templateComparison = Mat()
                         Core.compare(matchedRegion, templateGray, templateComparison, Core.CMP_EQ)
-                        val matchingPixels = Core.countNonZero(templateComparison)
-                        val pixelMatchRatio = matchingPixels.toDouble() / (w * h)
+                        val equalPixels = ByteArray(templateComparison.total().toInt()).also { templateComparison.get(0, 0, it) }
+                        val pixelMatchRatio = StatGainDigits.equalRatio(templateName, equalPixels, alphaPixels)
                         if (pixelMatchRatio < minPixelMatchRatio) {
                             failedPixelMatchRatio = true
                         }

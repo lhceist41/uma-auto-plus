@@ -89,6 +89,24 @@ object StatGainDigits {
         return matches.filter { kotlin.math.abs(it.second.y - anchor.second.y) <= maxDy }
     }
 
+    /**
+     * Share of a template box whose gray equals the screen ([equal] non-zero where equal, row-major like [alpha]). Single-row (URA) templates
+     * count only opaque pixels: their premultiplied soft edge never equals the screen, which kept URA's narrow "+" and "1" under the 0.1 gate.
+     */
+    fun equalRatio(templateName: String, equal: ByteArray, alpha: ByteArray): Double {
+        if ("_mini" in templateName) return equal.count { it.toInt() != 0 }.toDouble() / equal.size
+        var opaque = 0
+        var hits = 0
+        for (i in alpha.indices) {
+            if (alpha[i] != OPAQUE) continue
+            opaque++
+            if (equal[i].toInt() != 0) hits++
+        }
+        return if (opaque == 0) 0.0 else hits.toDouble() / opaque
+    }
+
+    private const val OPAQUE = 0xFF.toByte()
+
     /** One template hit in a gain row: template name, centre x in the row crop, and its pixel correlation. */
     class TemplateMatch(val template: String, val x: Double, val score: Double)
 
