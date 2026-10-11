@@ -1259,12 +1259,14 @@ abstract class Campaign(game: Game) : Task(game) {
             "goal_not_reached" -> {
                 // We are handling the logic for when to race on our own. Thus, we just close this warning.
                 racing.encounteredRacingPopup = true
+                racing.racingPopupNote = "the game showed its goal-not-reached popup"
                 result.dialog.close(game.imageUtils)
             }
 
             "insufficient_fans" -> {
                 // We are handling the logic for when to race on our own. Thus, we just close this warning.
                 racing.encounteredRacingPopup = true
+                racing.racingPopupNote = "the game showed its insufficient-fans popup"
                 result.dialog.close(game.imageUtils)
             }
 
@@ -3002,6 +3004,7 @@ abstract class Campaign(game: Game) : Task(game) {
         } else if (IconRaceNotEnoughFans.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             MessageLog.i(TAG, "[MISC] There was a popup about insufficient fans.")
             racing.encounteredRacingPopup = true
+            racing.racingPopupNote = "the game showed its insufficient-fans popup"
             ButtonCancel.click(game.imageUtils, sourceBitmap = sourceBitmap)
             return true
         } else if (LabelUmamusumeClassFans.check(game.imageUtils, sourceBitmap = sourceBitmap) && ButtonClose.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
@@ -3634,6 +3637,7 @@ abstract class Campaign(game: Game) : Task(game) {
             // Consume the flag at decision time so a failed race attempt does not spin on RACE turn after turn over a popup from two turns ago. Sits
             // above DATE: an open popup must be consumed before any Recreation tap can land.
             racing.encounteredRacingPopup = false
+            racing.popupForcedTurn = date.day
             return choose(MainScreenAction.RACE, "a racing popup was encountered")
         }
 

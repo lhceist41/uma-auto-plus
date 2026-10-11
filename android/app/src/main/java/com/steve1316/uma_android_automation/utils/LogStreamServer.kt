@@ -804,7 +804,7 @@ object LogStreamServer {
      * @param text The log message text to check.
      * @return A [JSONObject] containing the date and turn if detected, otherwise null.
      */
-    private fun parseDateInfo(text: String): JSONObject? {
+    internal fun parseDateInfo(text: String): JSONObject? {
         // Priority 1: Main bot date update log.
         val newDateMatcher = dateNewPattern.matcher(text)
         if (newDateMatcher.find()) {

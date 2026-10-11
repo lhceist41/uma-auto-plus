@@ -687,6 +687,7 @@ class Trackblazer(game: Game) : Campaign(game) {
 
                 racing.lastRaceGrade = raceData.grade
                 tbSelectedEnteredRace = suitableRaceResult.enteredRace
+                racing.stageTrackblazerRaceLine(raceData, consecutiveRaceCount)
                 game.tap(suitableRaceLocation.x, suitableRaceLocation.y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
                 game.wait(0.5)
             } else {

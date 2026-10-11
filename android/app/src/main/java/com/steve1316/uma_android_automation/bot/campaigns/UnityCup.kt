@@ -233,6 +233,7 @@ class UnityCup(game: Game) : Campaign(game) {
 
                 // Go to opponent selection screen.
                 ButtonUnityCupRace.click(game.imageUtils, sourceBitmap = sourceBitmap) -> {
+                    racing.logPlainRace("the Unity Cup showdown", null, 0, "the Unity Cup scenario schedules this team showdown")
                     selectedOpponentIndex = 0
                     bOverrideOpponentSelection = false
                     bestPredictionScore = -1
@@ -242,6 +243,7 @@ class UnityCup(game: Game) : Campaign(game) {
 
                 ButtonUnityCupRaceFinal.click(game.imageUtils, sourceBitmap = sourceBitmap) -> {
                     MessageLog.i(TAG, "[UNITY_CUP] Final race detected with Team Zenith.")
+                    racing.logPlainRace("the Unity Cup final against Team Zenith", null, 0, "the Unity Cup scenario schedules this final")
                     bIsFinals = true
                     game.waitForLoading()
                 }

@@ -51,6 +51,7 @@ import com.steve1316.uma_android_automation.components.LabelThereAreNoRacesToCom
 import com.steve1316.uma_android_automation.types.Aptitude
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.types.DateYear
+import com.steve1316.uma_android_automation.types.GameDate
 import com.steve1316.uma_android_automation.types.PredictionTier
 import com.steve1316.uma_android_automation.types.RaceGrade
 import com.steve1316.uma_android_automation.types.RunningStyle
@@ -64,6 +65,7 @@ import net.ricecode.similarity.StringSimilarityServiceImpl
 import org.json.JSONArray
 import org.json.JSONObject
 import org.opencv.core.Point
+import java.util.Locale
 import kotlin.math.abs
 
 /**
@@ -294,6 +296,59 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
     /** The race the extra-race selection committed to this attempt, read at the completion tail; null yields an `unresolved` fact. Cleared at the top of [handleExtraRace]. */
     private var stagedExtraRaceEntry: EnteredRace? = null
+
+    /** The plain "which race and why" line staged where a race is selected and logged once when the bot confirms it; cleared once logged. */
+    private var pendingRaceLine: String? = null
+
+    /** The Grand Concert fan requirement the route facts last reported as active, for the reason line; null when none is. */
+    private var scenarioFanActive: GrandConcertFanRequirement.Result.Active? = null
+
+    /** The fan count the goal text named at the last eligibility check, for the reason line; null when it named none. */
+    private var goalFanTargetRead: Int? = null
+
+    /** What the game's racing popup said when the bot last saw one, and the turn that popup forced a race decision on; the note counts only on that turn. */
+    var racingPopupNote: String? = null
+    var popupForcedTurn: Int? = null
+
+    private val requirementActive: Boolean
+        get() = hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement || bFanEmergencyActive
+
+    /** Why a race is being entered when no race-specific reason applies, from the requirement flags and settings as they stand now. */
+    private fun requirementReason(): String =
+        plainRequirementReason(
+            scenarioFan = scenarioFanActive,
+            hasFanRequirement = hasFanRequirement,
+            fanEmergency = bFanEmergencyActive,
+            fanGoalTarget = goalFanTargetRead,
+            turnsToGoal = goalDeadlineTurnsRemaining.takeIf { it != Int.MAX_VALUE },
+            fans = campaign.trainee.fans,
+            hasResultPtsRequirement = hasInsufficientGoalRacePtsRequirement,
+            trophyCriteria = if (hasTrophyRequirement) goalCriteriaDescription else null,
+            popupNote = racingPopupNote.takeIf { popupForcedTurn == campaign.date.day },
+            forceRacing = enableForceRacing,
+            farmingInterval = daysToRunExtraRaces.takeIf { enableFarmingFans && !enableRacingPlan },
+        )
+
+    private fun stageRaceLine(name: String?, grade: RaceGrade?, fans: Int, reason: String) {
+        pendingRaceLine = plainRaceLine(name, grade, fans, reason)
+    }
+
+    /** Logs the staged line once; without one, [fallbackReason] names an unread race, and a null fallback logs nothing. */
+    private fun logPendingRaceLine(fallbackReason: String?) {
+        val line = pendingRaceLine ?: fallbackReason?.let { plainRaceLine(null, lastRaceGrade, lastRaceFans, it) }
+        pendingRaceLine = null
+        if (line != null) MessageLog.i(TAG, line)
+    }
+
+    /** Stages the line for a Trackblazer pick that [handleSelectedRace] then confirms. */
+    fun stageTrackblazerRaceLine(race: RaceData, consecutiveRaces: Int) {
+        stageRaceLine(race.name, race.grade, race.fans, plainTrackblazerReason(race.isRival, consecutiveRaces, if (requirementActive) requirementReason() else null))
+    }
+
+    /** Logs the line for a race the bot enters without going through [handleRaceEvents], such as a Unity Cup showdown. */
+    fun logPlainRace(name: String?, grade: RaceGrade?, fans: Int, reason: String) {
+        MessageLog.i(TAG, plainRaceLine(name, grade, fans, reason))
+    }
 
     /** Builds an [EnteredRace] fact from one turn-scoped lookup; an ambiguous set is never flattened to the first row. Call immediately after the lookup. */
     private fun enteredRaceFromLookup(path: EnteredRacePath, turn: Int, matches: List<RaceData>): EnteredRace =
@@ -686,6 +741,97 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 "[RACE] The race is one of $names (same course this turn) and their grades differ, so the grade stays unknown for this race."
             }
         }
+
+        private fun groupedCount(count: Int): String = String.format(Locale.US, "%,d", count)
+
+        private fun plainGradeLabel(grade: RaceGrade): String =
+            when (grade) {
+                RaceGrade.PRE_OP -> "Pre-OP"
+                RaceGrade.G1, RaceGrade.G2, RaceGrade.G3, RaceGrade.OP, RaceGrade.EX -> grade.name
+                else -> grade.name.lowercase().replaceFirstChar { it.uppercase() }
+            }
+
+        /** The one line a player reads for a committed race: which race and why. An unread name or grade is left out or called unread, never guessed. */
+        internal fun plainRaceLine(name: String?, grade: RaceGrade?, fans: Int, reason: String): String {
+            val facts = listOfNotNull(grade?.let { plainGradeLabel(it) }, if (fans > 0) "${groupedCount(fans)} fans" else null)
+            return "[RACE] Racing ${name ?: "an unread race"}${if (facts.isEmpty()) "" else " (${facts.joinToString(", ")})"}: $reason."
+        }
+
+        /**
+         * A future turn as "turn 56 (SENIOR YEAR LATE APRIL)". The "(Turn N)" form is how the log viewer reads the current turn,
+         * and a deadline is not the current turn.
+         */
+        internal fun plainDeadlineLabel(turn: Int): String {
+            val date = GameDate(turn)
+            return if (date.bIsFinaleSeason) "turn $turn" else "turn $turn (${date.year.longName} ${date.phase} ${date.month})"
+        }
+
+        /** A fan requirement with the numbers the bot has: the target and its turn (or turns left) when known, and the current fans. */
+        internal fun plainFanReason(who: String, target: Int?, turn: Int?, turnsLeft: Int?, fans: Int, fansWhenChecked: Int? = null): String {
+            val need = target?.let { "${groupedCount(it)} fans" } ?: "more fans"
+            val due =
+                when {
+                    turn != null -> " by ${plainDeadlineLabel(turn)}"
+                    turnsLeft != null && turnsLeft >= 0 -> ", due in $turnsLeft turn(s)"
+                    else -> ""
+                }
+            val have =
+                when {
+                    fans <= 0 -> "your fan count is unread"
+                    fansWhenChecked != null && fansWhenChecked != fans -> "you had ${groupedCount(fansWhenChecked)} when this was checked and have ${groupedCount(fans)} now"
+                    else -> "you have ${groupedCount(fans)}"
+                }
+            return "$who needs $need$due; $have"
+        }
+
+        /** Why a race was entered when no race-specific reason applies: the active goal first, then the game's own popup, Force Racing, then the fan-farming interval. */
+        internal fun plainRequirementReason(
+            scenarioFan: GrandConcertFanRequirement.Result.Active?,
+            hasFanRequirement: Boolean,
+            fanEmergency: Boolean,
+            fanGoalTarget: Int?,
+            turnsToGoal: Int?,
+            fans: Int,
+            hasResultPtsRequirement: Boolean,
+            trophyCriteria: String?,
+            popupNote: String?,
+            forceRacing: Boolean,
+            farmingInterval: Int?,
+        ): String =
+            when {
+                scenarioFan != null && hasFanRequirement -> {
+                    val who = if (scenarioFan.type == GrandConcertFanRequirement.Type.MANDATORY_GATE) "Grand Concert" else "the career fan goal"
+                    plainFanReason(who, scenarioFan.targetFans, scenarioFan.requirementTurn, null, fans, scenarioFan.targetFans - scenarioFan.deficit)
+                }
+                hasFanRequirement || fanEmergency -> plainFanReason("the career fan goal", fanGoalTarget, null, turnsToGoal, fans)
+                hasResultPtsRequirement ->
+                    "the career goal still needs Result Points${turnsToGoal?.takeIf { it >= 0 }?.let { ", due in $it turn(s)" } ?: ""}"
+                trophyCriteria != null -> "the career goal needs a win ($trophyCriteria)"
+                popupNote != null -> popupNote
+                forceRacing -> "Force Racing is on, so the bot races whenever a race is open"
+                farmingInterval != null -> "fan farming is on and this turn falls on your racing interval (every $farmingInterval turn(s))"
+                else -> "your racing settings allow a race this turn"
+            }
+
+        /** The race name a lookup resolved; a lookup that stayed ambiguous names every candidate, and an empty one names none. */
+        internal fun plainRaceNames(matches: List<RaceData>): String? = matches.map { it.name }.distinct().joinToString(" or ").ifEmpty { null }
+
+        internal fun plainGoalRaceReason(turn: Int): String = "it is the mandatory career goal race on ${GameDate(turn)}"
+
+        internal fun plainAgendaReason(turn: Int): String = "it is a scheduled race (from your in-game race agenda or a career goal) on ${GameDate(turn)}"
+
+        internal fun plainPlannedReason(turn: Int): String = "your racing plan lists it for ${GameDate(turn)}"
+
+        internal fun plainSmartReason(score: String, candidates: Int): String = "smart racing scored it highest of $candidates candidate(s), with a score of $score"
+
+        /** A goal or popup that forces the race is the reason; otherwise Trackblazer's own pick order (Rival, prediction stars, grade, fans). */
+        internal fun plainTrackblazerReason(isRival: Boolean, consecutiveRaces: Int, requirement: String?): String =
+            (requirement ?: if (isRival) "Trackblazer picks a Rival race first" else "Trackblazer races whenever it can and picks by Rival, then prediction stars, then grade, then fans") +
+                " ($consecutiveRaces race(s) in a row so far)"
+
+        internal const val PLAIN_MAIDEN_REASON = "your trainee has not won a maiden race yet"
+
+        internal const val PLAIN_OPEN_RACE_REASON = "the game was already showing a race screen"
 
         /** "GoalRaces" buys an Alarm Clock (10 carats) only to retry a lost goal race; an unknown policy never buys. */
         internal fun alarmClockPurchaseAllowed(
@@ -1389,6 +1535,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
     /** Logs one [GC_FAN_REQ] provenance line per refresh when the scenario supplied a facts signal; silent otherwise. */
     private fun logScenarioFanRequirement(result: GrandConcertFanRequirement.Result) {
+        scenarioFanActive = result as? GrandConcertFanRequirement.Result.Active
         val fans = campaign.trainee.fans
         val turn = campaign.date.day
         when (result) {
@@ -1452,6 +1599,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val goalFanTarget: Int? =
             Regex("([0-9][0-9,]*)\\s*fans", RegexOption.IGNORE_CASE)
                 .find(goalTextNearDeadline)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()
+        goalFanTargetRead = goalFanTarget
         val bFanGoalAlreadyMet: Boolean =
             goalFanTarget != null && campaign.trainee.fans > 0 && campaign.trainee.fans >= goalFanTarget
         if (bFanGoalAlreadyMet) {
@@ -2981,6 +3129,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             bAlarmClockPolicySkippedThisRace = false
             retriesThisRace = 0
             bRetryingLostGoalRace = false
+            pendingRaceLine = null
         }
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Racing process on ${campaign.date}.")
@@ -3067,6 +3216,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     fun handleStandaloneRace(): Boolean {
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Standalone Racing process...")
+        logPlainRace(null, null, 0, PLAIN_OPEN_RACE_REASON)
 
         // Skip the race if possible, otherwise run it manually.
         val raceCompleted = runRaceWithRetries()
@@ -3096,6 +3246,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      */
     private fun handleSelectedRace(): Boolean {
         MessageLog.v(TAG, "[RACE] Starting process for a race that is already selected.")
+        logPendingRaceLine(PLAIN_OPEN_RACE_REASON)
 
         // Confirm the selection and the resultant popup and then wait for the game to load.
         ButtonRace.click(game.imageUtils, tries = 30)
@@ -3152,6 +3303,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Strongest identity resolved for this mandatory race; null until the lookup resolves something.
         var enteredRaceFact: EnteredRace? = null
+        var mandatoryRaceName: String? = null
 
         if (enableStopOnMandatoryRace) {
             MessageLog.v(TAG, "********************")
@@ -3194,6 +3346,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 val raceDataList = narrowToGoalRace(lookupRaceInDatabase(campaign.date.day, raceName), goalRaceNamesForTurn(campaign.date.day))
                 // Capture identity from the same lookup (turn-scoped) without copying its [0] grade flatten.
                 enteredRaceFact = enteredRaceFromLookup(EnteredRacePath.MANDATORY_GOAL, campaign.date.day, raceDataList)
+                mandatoryRaceName = plainRaceNames(raceDataList)
                 if (raceDataList.isNotEmpty()) {
                     val (grade, fans) = sharedGradeAndFans(raceDataList)
                     lastRaceGrade = grade
@@ -3213,6 +3366,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Let the campaign handle any pre-race logic (e.g. using race items in Trackblazer).
         campaign.onScheduledRacePrepScreen()
+
+        logPlainRace(mandatoryRaceName, lastRaceGrade, lastRaceFans, plainGoalRaceReason(campaign.date.day))
 
         // If there is a popup warning about racing too many times, confirm the popup to continue as this is a mandatory race.
         if (ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)) {
@@ -3498,6 +3653,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
         game.wait(2.0)
+        logPlainRace(null, lastRaceGrade ?: RaceGrade.MAIDEN, lastRaceFans, PLAIN_MAIDEN_REASON)
 
         // Skip the race if possible, otherwise run it manually.
         val raceCompleted = runRaceWithRetries()
@@ -3535,7 +3691,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Drop any target the previous extra-race attempt staged; only this attempt's selection counts.
         stagedExtraRaceEntry = null
+        pendingRaceLine = null
         var scheduledEntry: EnteredRace? = null
+        var scheduledRaceName: String? = null
 
         // If there is a scheduled race pending, proceed to run it immediately.
         if (!isScheduledRace) {
@@ -3668,6 +3826,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
                     val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
                     scheduledEntry = enteredRaceFromLookup(EnteredRacePath.SCHEDULED, campaign.date.day, raceDataList)
+                    scheduledRaceName = plainRaceNames(raceDataList)
                     if (raceDataList.isNotEmpty()) {
                         val (grade, fans) = sharedGradeAndFans(raceDataList)
                         lastRaceGrade = grade
@@ -3681,12 +3840,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Let the campaign handle any necessary logic on the scheduled race's Race Prep screen (e.g. using race items).
             campaign.onScheduledRacePrepScreen()
 
+            logPlainRace(scheduledRaceName, lastRaceGrade, lastRaceFans, plainAgendaReason(campaign.date.day))
             MessageLog.v(TAG, "[RACE] Confirming the scheduled race dialog...")
             ButtonRace.click(game.imageUtils, tries = 30)
             game.wait(game.dialogWaitDelay)
         }
 
         // Confirm the selection and the resultant popup and then wait for the game to load.
+        if (!isScheduledRace) logPendingRaceLine(requirementReason())
         ButtonRace.click(game.imageUtils, tries = 30)
         game.wait(1.0)
         ButtonRace.click(game.imageUtils, tries = 10)
@@ -3793,6 +3954,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Stage the planned race's identity from the plan name and the current turn; a not-found abort below never reaches the completion tail.
             stagedExtraRaceEntry =
                 EnteredRace(campaign.date.day, EnteredRaceResolution.EXACT, EnteredRacePath.PLANNED_MANDATORY, name = mandatoryExtraRaceData.name, matchCount = 1)
+            stageRaceLine(mandatoryExtraRaceData.name, mandatoryExtraRaceData.grade, mandatoryExtraRaceData.fans, plainPlannedReason(campaign.date.day))
 
             // Check if there are multiple races with the same formatted name but different fan counts.
             val raceVariants = currentRaces.filter { it.nameFormatted == mandatoryExtraRaceData.nameFormatted }
@@ -4101,6 +4263,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         game.tap(targetRaceLocation.x, targetRaceLocation.y, winnerTemplatePath, ignoreWaiting = true)
         lastRaceGrade = bestRace.raceData.grade
         lastRaceFans = bestRace.raceData.fans
+        val smartReason =
+            if (requirementActive) {
+                requirementReason()
+            } else {
+                plainSmartReason(game.decimalFormat.format(bestRace.score), scoredRaces.size)
+            }
+        stageRaceLine(bestRace.raceData.name, bestRace.raceData.grade, bestRace.raceData.fans, smartReason)
 
         return true
     }
@@ -4214,6 +4383,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
                 if (raceDataList.any { countsForGoalGrade(it.grade, minimumGrade) }) {
                     MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and it's $label. Selecting it.")
+                    stageRaceLine(plainRaceNames(raceDataList), raceDataList.map { it.grade }.distinct().singleOrNull(), raceDataList.map { it.fans }.distinct().singleOrNull() ?: 0, requirementReason())
                     game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                     return true
                 } else {
@@ -4226,6 +4396,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 } else {
                     MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}). Selecting it.")
                 }
+                stageRaceLine(null, null, 0, requirementReason())
                 game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                 return true
             }
@@ -4323,6 +4494,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         lastRaceGrade = selectedGrade
         lastRaceFans = selectedFans ?: 0
         if (raceDataList.size > 1) MessageLog.i(TAG, sharedCourseNote(raceDataList, selectedGrade))
+        stageRaceLine(plainRaceNames(raceDataList), selectedGrade, selectedFans ?: 0, requirementReason())
 
         // Selects the determined race on screen.
         MessageLog.v(TAG, "[RACE] Selecting extra race at option #${index + 1}.")
@@ -4362,6 +4534,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val candidates = ArrayList<GrandConcertFanRaceSelector.Candidate>()
         val resolvedGrades = ArrayList<RaceGrade?>()
         val resolvedFans = ArrayList<Int>()
+        val resolvedNames = ArrayList<String?>()
         for (anchor in anchors) {
             val detectedName = game.imageUtils.extractRaceName(anchor.location)
             val matches = lookupRaceInDatabase(turn, detectedName)
@@ -4373,6 +4546,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             candidates.add(GrandConcertFanRaceSelector.Candidate(fans, aptitude, isRival))
             resolvedGrades.add(if (trusted) matches[0].grade else matches.firstOrNull()?.grade)
             resolvedFans.add(if (trusted) matches[0].fans else 0)
+            resolvedNames.add(plainRaceNames(matches))
         }
 
         val selection = GrandConcertFanRaceSelector.select(candidates)
@@ -4388,6 +4562,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         lastRaceGrade = resolvedGrades[selection.index]
         lastRaceFans = resolvedFans[selection.index]
+        stageRaceLine(resolvedNames[selection.index], lastRaceGrade, lastRaceFans, requirementReason())
 
         val winner = anchors[selection.index]
         MessageLog.i(
