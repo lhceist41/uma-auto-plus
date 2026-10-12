@@ -7,7 +7,7 @@ v1.7.4 - Daily Races and Team Trials sessions, frozen-game restarts, Grand Conce
 
 - New: Daily Races and Team Trials play a whole session on their own, and Share bug report on Home and Save to Phone in Settings make bug reports easy.
 - Changed: a frozen game is restarted in careers, Team Trials and Daily Races (on Android 14 and newer the bot can only bring it to the front). A Recreation date the bot cannot start is closed and it rests instead (not seen live yet). Grand Concert uses the Infirmary, and when the concerts are behind schedule it trains instead of racing while enough race turns are left for the next fan goal (tests only so far). Careers log one plain line per race saying which race and why.
-- Fixed: fewer false energy stops, one tap per training tab, better gain, stat and score reads, Oka Sho keeps its G1 grade, a stopped run queue resumes on the right slot, Start works on Legacy Select and Support Formation, the trainee scan reads the last roster row on tall phones (not checked on a phone yet), and a race the 17:00 reset sends back to Home is left cleanly.
+- Fixed: fewer false energy stops, one tap per training tab, better gain, stat and score reads, Oka Sho keeps its G1 grade, a stopped run queue resumes on the right slot, Start works on Legacy Select and Support Formation, the trainee scan reads the last roster row on tall phones, and a race the 17:00 reset sends back to Home is left cleanly.
 
     </releaseNotes>
   </update>

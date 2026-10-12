@@ -18,10 +18,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **A frozen game is restarted** in careers, Team Trials and Daily Races. On Android 14 and newer the bot can only bring it back to the front.
 - **Grand Concert** uses the Infirmary now (two real heals in our tests). When the concerts are behind schedule it trains instead of racing while enough race turns are left to earn the next fan goal (tests only so far).
 - **A Recreation date the bot cannot start is closed and it rests instead,** so low energy no longer repeats the same turn. Not seen in a live career yet.
-- **Careers log one plain line per race** saying which race and why ("unread" when the name was not read). Its Grand Concert fan wording (the fan goal or gate behind a race, and a later one when that forced the race) was fixed after our live tests and is not seen live again yet.
+- **Careers log one plain line per race** saying which race and why ("unread" when the name was not read). Its Grand Concert fan wording (the fan goal or gate behind a race, and a later one when that forced the race) was fixed after our live tests.
 - **Fewer false stops and better reads:** healthy rests and outings no longer stop a run, a training tab is tapped once, gains and stats keep their digits, the score estimate reads skill tiers like the game, and Oka Sho keeps its G1 grade.
 - **Run queue and bug reports:** a stopped queue resumes on the right slot and run, and Start works from Legacy Select or Support Formation. **Share bug report** on Home zips logs, a device report and your settings without secrets, and **Save to Phone** in Settings keeps a file in a folder you pick.
-- **Also:** the trainee scan reads the last roster row on tall phones (not checked on a phone yet), Zenno Rob Roy's URA Finale preset is validated, a few event and preset picks are fixed, and a race the 17:00 game reset sends back to Home is left cleanly.
+- **Also:** the trainee scan reads the last roster row on tall phones, Zenno Rob Roy's URA Finale preset is validated, a few event and preset picks are fixed, and a race the 17:00 game reset sends back to Home is left cleanly.
 
 ## [1.7.3] - 2026-10-09
 
