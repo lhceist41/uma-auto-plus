@@ -461,6 +461,7 @@ object DialogObjects {
             DialogMenu,
             DialogMoodEffect,
             DialogMyAgendas,
+            DialogNewScenario,
             DialogNoRetries,
             DialogNotices,
             DialogOpenSoon,
@@ -1193,6 +1194,18 @@ object DialogNoRetries : DialogInterface {
     override val buttons: List<BaseComponentInterface> =
         listOf(
             ButtonEndCareer,
+        )
+}
+
+/** Scenario Select, the first time an account opens a scenario: "A new scenario has been added!" with Close only. */
+object DialogNewScenario : DialogInterface {
+    override val name: String = "new_scenario"
+    override val title: String = "New Scenario"
+    override val closeButton = null
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> =
+        listOf(
+            ButtonClose,
         )
 }
 

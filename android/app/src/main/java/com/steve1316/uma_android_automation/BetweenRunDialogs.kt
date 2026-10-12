@@ -28,6 +28,7 @@ internal enum class BetweenRunDialog(val title: String) {
     SESSION_ERROR("Session Error"),
     PURCHASE_CARATS("Purchase Carats"),
     AGE_CONFIRMATION("Age Confirmation"),
+    NEW_SCENARIO("New Scenario"),
     ;
 
     companion object {
@@ -63,6 +64,8 @@ internal sealed class BetweenRunDialogStep(val taps: List<ButtonInterface>) {
     data object CloseNotices : BetweenRunDialogStep(listOf(ButtonCloseWide, ButtonClose))
 
     data object ConfirmDateChanged : BetweenRunDialogStep(listOf(ButtonOk))
+
+    data object CloseNewScenario : BetweenRunDialogStep(listOf(ButtonClose))
 
     /** OK only, never Cancel: the game downloads its data (no spend), waited out by [BetweenRunRecovery.acceptedDataDownload]. */
     data object AcceptDataDownload : BetweenRunDialogStep(listOf(ButtonOk))
@@ -107,6 +110,7 @@ internal fun planBetweenRunDialog(
     when (dialog) {
         BetweenRunDialog.NOTICES -> BetweenRunDialogStep.CloseNotices
         BetweenRunDialog.DATE_CHANGED -> BetweenRunDialogStep.ConfirmDateChanged
+        BetweenRunDialog.NEW_SCENARIO -> BetweenRunDialogStep.CloseNewScenario
         BetweenRunDialog.FOLLOW_TRAINER -> BetweenRunDialogStep.DismissFollowTrainer
         BetweenRunDialog.CONNECTION_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "CONNECTION_LOST")
         BetweenRunDialog.DOWNLOAD_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "DOWNLOAD_FAILED")

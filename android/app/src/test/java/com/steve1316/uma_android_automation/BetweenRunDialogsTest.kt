@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation
 
+import com.steve1316.automation_library.utils.TextUtils
 import com.steve1316.uma_android_automation.bot.ConnectionOutageBudget
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.ButtonCancel
@@ -16,7 +17,9 @@ import com.steve1316.uma_android_automation.components.DialogDataDownload
 import com.steve1316.uma_android_automation.components.DialogDateChanged
 import com.steve1316.uma_android_automation.components.DialogDownloadError
 import com.steve1316.uma_android_automation.components.DialogFollowTrainer
+import com.steve1316.uma_android_automation.components.DialogNewScenario
 import com.steve1316.uma_android_automation.components.DialogNotices
+import com.steve1316.uma_android_automation.components.DialogObjects
 import com.steve1316.uma_android_automation.components.DialogPurchaseCarats
 import com.steve1316.uma_android_automation.components.DialogSessionError
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -62,7 +65,7 @@ class BetweenRunDialogsTest {
 
     private fun plan(dialog: BetweenRunDialog) = planBetweenRunDialog(dialog, nothing, StartModule.NAV_DEADLINE_MS)
 
-    private val closing = listOf(BetweenRunDialog.NOTICES, BetweenRunDialog.DATE_CHANGED, BetweenRunDialog.FOLLOW_TRAINER)
+    private val closing = listOf(BetweenRunDialog.NOTICES, BetweenRunDialog.DATE_CHANGED, BetweenRunDialog.FOLLOW_TRAINER, BetweenRunDialog.NEW_SCENARIO)
     private val failing = listOf(BetweenRunDialog.SESSION_ERROR, BetweenRunDialog.PURCHASE_CARATS, BetweenRunDialog.AGE_CONFIRMATION)
 
     @Nested
@@ -81,6 +84,7 @@ class BetweenRunDialogsTest {
                     BetweenRunDialog.SESSION_ERROR to DialogSessionError.title,
                     BetweenRunDialog.PURCHASE_CARATS to DialogPurchaseCarats.title,
                     BetweenRunDialog.AGE_CONFIRMATION to DialogAgeConfirmation.title,
+                    BetweenRunDialog.NEW_SCENARIO to DialogNewScenario.title,
                 )
             assertEquals(BetweenRunDialog.entries.toSet(), objects.keys)
             for ((dialog, title) in objects) {
@@ -95,6 +99,19 @@ class BetweenRunDialogsTest {
                 assertNull(readBetweenRunDialog(false, { true }, { title }), "$title")
             }
             assertNull(readBetweenRunDialog(false, { true }, { throw IllegalStateException("capture died") }))
+        }
+
+        @Test
+        fun `the New Scenario title reads as its own dialog, and no other dialog title reads as it`() {
+            val titles = DialogObjects.items.map { it.title }
+            // "New Scenario" is what ML Kit read from the popup's banner on a live run.
+            for (read in listOf("New Scenario", "New Scenaro", "NewScenario", "New Scenario.")) {
+                assertEquals(DialogNewScenario.title, TextUtils.matchStringInList(read, titles), read)
+            }
+            for (title in titles - DialogNewScenario.title) {
+                assertTrue(TextUtils.matchStringInList(title, titles) != DialogNewScenario.title, title)
+            }
+            assertEquals(DialogNewScenario, DialogObjects.map["new_scenario"])
         }
 
         @Test
@@ -127,13 +144,15 @@ class BetweenRunDialogsTest {
     @DisplayName("what each dialog does")
     inner class Steps {
         @Test
-        fun `Notices, Date Changed and Follow Trainer are dismissed with their own button`() {
+        fun `Notices, Date Changed, Follow Trainer and New Scenario are dismissed with their own button`() {
             assertEquals(BetweenRunDialogStep.CloseNotices, plan(BetweenRunDialog.NOTICES))
             assertEquals(listOf(ButtonCloseWide, ButtonClose), BetweenRunDialogStep.CloseNotices.taps)
             assertEquals(BetweenRunDialogStep.ConfirmDateChanged, plan(BetweenRunDialog.DATE_CHANGED))
             assertEquals(listOf(ButtonOk), BetweenRunDialogStep.ConfirmDateChanged.taps)
             assertEquals(BetweenRunDialogStep.DismissFollowTrainer, plan(BetweenRunDialog.FOLLOW_TRAINER))
             assertEquals(listOf(ButtonCancel, ButtonClose), BetweenRunDialogStep.DismissFollowTrainer.taps)
+            assertEquals(BetweenRunDialogStep.CloseNewScenario, plan(BetweenRunDialog.NEW_SCENARIO))
+            assertEquals(listOf(ButtonClose), BetweenRunDialogStep.CloseNewScenario.taps)
         }
 
         @Test

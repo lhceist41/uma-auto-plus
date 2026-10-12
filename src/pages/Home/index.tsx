@@ -36,6 +36,7 @@ import { confirmStopAfterCareer, sendStopAfterCareer } from "../../lib/stopAfter
 import { interruptedBannerReport, interruptedQueueTitle, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
 import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightItem } from "../../lib/preflightWarnings"
 import { accessibilityRepairStatus } from "../../lib/accessibilityRepairStatus"
+import { unsupportedDisplayReason } from "../../lib/displaySupport"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -609,13 +610,7 @@ const Home = () => {
             const metrics = await StartModule.getDeviceDimensions()
             setDeviceMetrics(metrics)
 
-            const { width, height } = metrics
-
-            if (width === 1080 && height >= 1920) {
-                setUnsupportedReason(null)
-            } else {
-                setUnsupportedReason("an unsupported screen size")
-            }
+            setUnsupportedReason(unsupportedDisplayReason(metrics.width, metrics.height, metrics.dpi))
         } catch (error) {
             logErrorWithTimestamp("[Home] Failed to fetch device dimensions:", error)
         }
@@ -870,11 +865,11 @@ const Home = () => {
 
     /** Returns a status indicator based on the device state. */
     const renderStatus = (): React.ReactElement | null => {
-        const warningText = `Current Display: ${deviceMetrics?.width}x${deviceMetrics?.height}.
+        const warningText = `Current Display: ${deviceMetrics?.width}x${deviceMetrics?.height} at ${deviceMetrics?.dpi} DPI.
 
 Warning: Performance may be degraded due to ${unsupportedReason}.
 
-Supported screens are 1080 pixels wide and at least 1920 tall.
+Supported screens are 1080 pixels wide and at least 1920 tall. A 1080x1920 screen also needs 240 DPI, set in the emulator's display settings.
 
 If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offers it (for example on Samsung: Settings > Display > Screen resolution).`
 
