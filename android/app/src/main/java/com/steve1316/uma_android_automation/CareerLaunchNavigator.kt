@@ -6833,6 +6833,82 @@ class CareerLaunchNavigator(private val context: Context) {
         // earns a second pass and has to reach the failure message: "not owned" and "could not be
         // read" are different answers and the operator cannot act on the wrong one.
         var failedReads = 0
+        var newCells = 0
+        // Names read in the current pass. The no-new-page bottom check counts against this, not `seen`: a second pass
+        // re-reads only names `seen` already holds, so counting against `seen` stopped it on page 1, short of the end.
+        val passNames = HashSet<String>()
+
+        // Reads and scores one roster cell; non-null when the handler is done (matched and advanced, or stopped).
+        fun readAndScoreCell(bitmap: Bitmap, page: Int, col: Int, row: Int, y: Double? = null): TransitionResult? {
+            if (!BotService.isRunning || StartModule.queueStopRequested) {
+                return TransitionResult.Failed(
+                    reason = "Queue stopped during trainee selection.",
+                    transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                    isRecoverable = false,
+                )
+            }
+            val preview = readRosterCell(bitmap, page, col, row, y)
+            val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
+            if (norm.isEmpty()) {
+                failedReads++
+                return null
+            }
+            val excluded = excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }
+            if (passNames.add(norm) && !excluded) newCells++
+            if (!seen.add(norm)) return null // already scored on an earlier (overlapping) page.
+            // Remember every trainee read on the way, not just the target: the next
+            // queue's different target then jumps directly instead of scanning.
+            discoveredCells[norm] = "$page,$col,$row"
+            // Skip a sibling-outfit banner: a bare base-name target is outfit-insensitive and
+            // would otherwise match an owned outfit ("[Kukulkan Warrior] El Condor Pasa").
+            if (excluded) {
+                MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' is an excluded sibling outfit; skipping.")
+                noteExcluded(preview)
+                return null
+            }
+            val score = TraineeNameMatcher.score(target, preview)
+            MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' score=${"%.3f".format(score)}")
+            if (score > bestScore) {
+                bestScore = score
+                bestLabel = preview
+            }
+            // Nearest cell by plain similarity, tracked separately: score() answers "is
+            // this her" and answers 0.0 when it is not, so it cannot name a near miss.
+            val sim = TraineeNameMatcher.similarity(target, preview)
+            if (sim > nearestSim) {
+                nearestSim = sim
+                nearestLabel = preview
+                nearestCell = "page $page cell ($col,$row)"
+            }
+            if (score >= traineeMatchThreshold) {
+                MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
+                // Remember where she was found (plus everyone read on the way) so the
+                // next switch jumps directly instead of re-scanning cell by cell.
+                discoveredCells[posKey] = "$page,$col,$row"
+                if (TraineePositionStore.putAll(context, discoveredCells)) {
+                    MessageLog.i(
+                        TAG,
+                        "[ROTATION] Saved position page=$page cell=($col,$row) for '$target' " +
+                            "(plus ${discoveredCells.size - 1} other trainee position(s) from the scan).",
+                    )
+                } else {
+                    MessageLog.w(TAG, "[ROTATION] Could not save the grid position for '$target' (file write failed).")
+                }
+                waitSafe(0.5)
+                if (ButtonNext.click(iu)) {
+                    markSingleRunTraineeVerified()
+                    waitSafe(2.0)
+                    return TransitionResult.Continue
+                }
+                return TransitionResult.Failed(
+                    reason = "Matched trainee '$preview' but the Next click failed.",
+                    transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                    recommendedAction = "Manually press Next and restart the queue.",
+                )
+            }
+            return null
+        }
+
         for (pass in 0..1) {
             if (pass == 1) {
                 if (!RosterScanPolicy.needsSecondPass(failedReads, passIndex = 0)) break
@@ -6846,81 +6922,21 @@ class CareerLaunchNavigator(private val context: Context) {
                 anchorTraineeGridTop(::isTargetAnchorRead)?.let { return it }
                 scanBitmap = iu.getSourceBitmap()
                 failedReads = 0
+                passNames.clear()
             }
+            var lastPage = 0
             // Every page scans from row 0: the swipe moves about 1.2 rows (235px) while the tap rows are 190px apart, so a measured advance cannot prove a lower row was read. Name dedup absorbs the re-reads.
             val startRow = 0
             for (page in 0..traineeMaxSwipes) {
+                lastPage = page
                 val bitmap = scanBitmap
-                var newThisPage = 0
+                val newBefore = newCells
                 for (row in startRow until traineeGridRows) {
                     for (col in traineeColFractions.indices) {
-                        if (!BotService.isRunning || StartModule.queueStopRequested) {
-                            return TransitionResult.Failed(
-                                reason = "Queue stopped during trainee selection.",
-                                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
-                                isRecoverable = false,
-                            )
-                        }
-                        val preview = readRosterCell(bitmap, page, col, row)
-                        val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
-                        if (norm.isEmpty()) {
-                            failedReads++
-                            continue
-                        }
-                        if (!seen.add(norm)) continue // already scored on an earlier (overlapping) page.
-                    // Remember every trainee read on the way, not just the target: the next
-                    // queue's different target then jumps directly instead of scanning.
-                    discoveredCells[norm] = "$page,$col,$row"
-                    // Skip a sibling-outfit banner: a bare base-name target is outfit-insensitive and
-                    // would otherwise match an owned outfit ("[Kukulkan Warrior] El Condor Pasa").
-                        if (excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }) {
-                            MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' is an excluded sibling outfit; skipping.")
-                            noteExcluded(preview)
-                            continue
-                        }
-                        newThisPage++
-                        val score = TraineeNameMatcher.score(target, preview)
-                        MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' score=${"%.3f".format(score)}")
-                        if (score > bestScore) {
-                            bestScore = score
-                            bestLabel = preview
-                        }
-                        // Nearest cell by plain similarity, tracked separately: score() answers "is
-                        // this her" and answers 0.0 when it is not, so it cannot name a near miss.
-                        val sim = TraineeNameMatcher.similarity(target, preview)
-                        if (sim > nearestSim) {
-                            nearestSim = sim
-                            nearestLabel = preview
-                            nearestCell = "page $page cell ($col,$row)"
-                        }
-                        if (score >= traineeMatchThreshold) {
-                            MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
-                            // Remember where she was found (plus everyone read on the way) so the
-                            // next switch jumps directly instead of re-scanning cell by cell.
-                            discoveredCells[posKey] = "$page,$col,$row"
-                            if (TraineePositionStore.putAll(context, discoveredCells)) {
-                                MessageLog.i(
-                                    TAG,
-                                    "[ROTATION] Saved position page=$page cell=($col,$row) for '$target' " +
-                                        "(plus ${discoveredCells.size - 1} other trainee position(s) from the scan).",
-                                )
-                            } else {
-                                MessageLog.w(TAG, "[ROTATION] Could not save the grid position for '$target' (file write failed).")
-                            }
-                            waitSafe(0.5)
-                            if (ButtonNext.click(iu)) {
-                                markSingleRunTraineeVerified()
-                                waitSafe(2.0)
-                                return TransitionResult.Continue
-                            }
-                            return TransitionResult.Failed(
-                                reason = "Matched trainee '$preview' but the Next click failed.",
-                                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
-                                recommendedAction = "Manually press Next and restart the queue.",
-                            )
-                        }
+                        readAndScoreCell(bitmap, page, col, row)?.let { return it }
                     }
                 }
+                val newThisPage = newCells - newBefore
                 // No new trainees on this page = bottom reached (or the list won't scroll). Stop paging.
                 if (page > 0 && newThisPage == 0 && startRow < traineeGridRows) break
                 if (page < traineeMaxSwipes) {
@@ -6942,6 +6958,15 @@ class CareerLaunchNavigator(private val context: Context) {
                                 "band); some rows were skipped and the scan may need a second pass to find the target.",
                         )
                     }
+                }
+            }
+            // On screens taller than 1080x1920 the list parks its last row below both scan rows, where no page reaches it.
+            val lowestScanRowY =
+                gameY((1920 * (traineeRow0Fraction + (traineeGridRows - 1) * traineeRowStepFraction)).toDouble(), ScreenBand.MIDDLE, scanBitmap.width, scanBitmap.height)
+            TraineeGridScroll.parkedLastRowTapY(scanBitmap.width, scanBitmap.height, lowestScanRowY)?.let { parkedY ->
+                MessageLog.i(TAG, "[ROTATION] Reading the parked last roster row at y=${parkedY.toInt()}.")
+                for (col in traineeColFractions.indices) {
+                    readAndScoreCell(scanBitmap, lastPage, col, traineeGridRows, parkedY)?.let { return it }
                 }
             }
         }
@@ -6984,13 +7009,13 @@ class CareerLaunchNavigator(private val context: Context) {
                         "INCOMPLETE and does not prove the trainee is unowned." +
                         (if (ownedOutfit != null) " Her '$excludedBannerSeen' outfit was read and skipped because it has its own preset." else "")
                 nearestSim >= NEAR_NAME_SIMILARITY ->
-                    " Every cell read, and the closest was $nearestCell '$nearestLabel' at ${"%.3f".format(nearestSim)} similarity, " +
+                    " Every tapped cell read, and the closest was $nearestCell '$nearestLabel' at ${"%.3f".format(nearestSim)} similarity, " +
                         "below the $traineeMatchThreshold match threshold. That is a NAME-MATCHING miss, not proof she is unowned: " +
                         "check that cell's text against the rotation's inGameName before changing the roster." +
                         (if (ownedOutfit != null) " Her '$excludedBannerSeen' outfit was read and skipped because it has its own preset." else "")
                 else ->
-                    " Every cell read and nothing on the roster resembles her (closest was '$nearestLabel' at " +
-                        "${"%.3f".format(nearestSim)}), so she is genuinely not in the roster."
+                    " Every tapped cell read and nothing on the roster resembles her (closest was '$nearestLabel' at " +
+                        "${"%.3f".format(nearestSim)}), so she is most likely not in the roster."
             }
         return TransitionResult.Failed(
             reason = "Trainee '$target' not found after scanning ${seen.size} unique roster trainee(s); best was '$bestLabel' @ ${"%.3f".format(
@@ -7019,15 +7044,16 @@ class CareerLaunchNavigator(private val context: Context) {
      * way to find them afterwards was a 12-second gap between timestamps. Every failure is logged
      * with its cell coordinate now, because that is not a diagnostic path anyone should need twice.
      *
+     * @param y the tap Y; null taps scan row [row] on the middle band.
      * @return the preview name, or "" when it still would not read.
      */
-    private fun readRosterCell(bitmap: Bitmap, page: Int, col: Int, row: Int): String {
+    private fun readRosterCell(bitmap: Bitmap, page: Int, col: Int, row: Int, y: Double? = null): String {
         var attempt = 0
         while (true) {
             CoordinateTap.tap(
                 gestureUtils,
                 (bitmap.width * traineeColFractions[col]).toDouble(),
-                gameY((1920 * (traineeRow0Fraction + row * traineeRowStepFraction)).toDouble(), ScreenBand.MIDDLE, bitmap.width, bitmap.height),
+                y ?: gameY((1920 * (traineeRow0Fraction + row * traineeRowStepFraction)).toDouble(), ScreenBand.MIDDLE, bitmap.width, bitmap.height),
                 "trainee_grid_c${col}_r$row",
             )
             waitSafe(1.0)

@@ -14,3 +14,17 @@ the list, so a sampling band that reaches it (the old bottom at y 1536) cannot m
 band change, regenerate the strip from the captures rather than editing it.
 
 The frames show only game portraits and UI; no personally identifying information is present.
+
+## Parked last row strips
+
+Three column-0 strips (x 70 to 209, unchanged pixels, saved as RGBA) of Trainee Select with Filters OFF, cut from `screencap`
+captures. They pin where the game parks the last roster row at the end of the list.
+
+| Fixture | Source capture | Strip rows (screen y) | Shows |
+|---|---|---|---|
+| `tall_bottom_col0.png` | Samsung SM-S918B, 1080x2316, inset 94, 2026-10-11, Stars Desc, 37 trainees, list at its end | 1150 to 1959 | Clipped row, a full row, and the parked last row at y 1621 to 1823 |
+| `tall_top_col0.png` | Same phone, 2026-10-06, list at its top | 1150 to 1959 | Rows at y 1241 to 1442 and 1476 to 1677, a third row reaching below the Filters bar |
+| `mumu_bottom_col0.png` | MuMu, 1080x1920, 2026-10-01, Name Asc, 36 trainees, list at its end (the last frame of the swipe strip above) | 950 to 1559 | Rows at y 990 to 1192 and the parked last row at y 1225 to 1427 |
+
+The Filters bar starts at y 1458 on 1080x1920 and 1854 on the phone: both it and the parked row move by the full extra height (the
+bottom band). The strips show only portraits, stars and the grid background; no trainer name, ID or currency is in frame.

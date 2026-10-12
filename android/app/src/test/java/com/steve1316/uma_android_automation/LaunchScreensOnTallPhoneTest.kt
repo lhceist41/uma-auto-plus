@@ -94,7 +94,8 @@ class LaunchScreensOnTallPhoneTest {
         fun sitesUseTheirBands() {
             assertTrue(nav.contains("gameY((1920 * traineeHeaderRegion[1]).toDouble(), ScreenBand.TOP, bitmap.width, bitmap.height).toInt(),"))
             assertTrue(nav.contains("gameY((1920 * traineePreviewRegion[1]).toDouble(), ScreenBand.MIDDLE, bitmap.width, bitmap.height).toInt(),"))
-            assertEquals(3, Regex("gameY\\(\\(1920 \\* \\(?traineeRow0Fraction").findAll(nav).count(), "remembered, scanned and anchor grid taps")
+            assertEquals(4, Regex("gameY\\(\\(1920 \\* \\(?traineeRow0Fraction").findAll(nav).count(), "remembered, scanned and anchor grid taps, lowest scan row")
+            assertEquals(4, Regex("gameY\\(\\(1920 \\* \\(?traineeRow0Fraction[^\\n]*ScreenBand\\.MIDDLE").findAll(nav).count(), "grid rows on the middle band")
             assertTrue(nav.contains("gameY((1920 * detailsTitleRegion[1]).toDouble(), ScreenBand.MIDDLE, bitmap.width, bitmap.height).toInt(),"))
             assertTrue(nav.contains("gameY(1920 * 0.80, ScreenBand.BOTTOM, bitmap.width, bitmap.height).toInt(),"))
             assertTrue(nav.contains("val tapY = gameY(1920 * 0.86, ScreenBand.BOTTOM, bitmap.width, bitmap.height)"))

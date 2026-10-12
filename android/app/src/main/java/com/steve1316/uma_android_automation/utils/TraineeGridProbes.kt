@@ -52,6 +52,23 @@ object TraineeGridScroll {
      * too little texture to measure against: every offset matches everything. */
     const val MIN_BAND_TEXTURE = 6.0
 
+    /** Centre of the last roster row once the list stops at its end, measured on 1080x1920. The game parks
+     * it on the bottom band, just above the Filters bar, while the scan rows follow the middle band. */
+    const val PARKED_LAST_ROW_Y_1920 = 1326.0
+
+    /** A scan row closer than this to the parked row's centre already lands inside its 202px card. */
+    const val PARKED_ROW_MIN_GAP_PX = 50.0
+
+    /**
+     * Where to read the parked last roster row, or null when the lowest scan row already reaches it
+     * (1080x1920) or the surface is not mapped. On taller screens the parked row sits below every scan row.
+     */
+    fun parkedLastRowTapY(width: Int, height: Int, lowestScanRowY: Double, topInset: Int = screenTopInset): Double? {
+        if (!isMappedSurface(width, height)) return null
+        val y = gameY(PARKED_LAST_ROW_Y_1920, ScreenBand.BOTTOM, width, height, topInset)
+        return if (y - lowestScanRowY > PARKED_ROW_MIN_GAP_PX) y else null
+    }
+
     private fun luma(argb: Int): Int {
         val r = (argb shr 16) and 0xFF
         val g = (argb shr 8) and 0xFF
