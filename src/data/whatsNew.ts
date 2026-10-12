@@ -10,6 +10,18 @@ export const RELEASE_NOTES_BASE_URL = "https://github.com/lhceist41/uma-auto-plu
  * no dialog. To announce a new release, add its entry here.
  */
 export const whatsNewEntries: Record<string, WhatsNewEntry> = {
+    "1.7.4": {
+        highlights: [
+            "Daily Races spends all your tickets in one multi-race, and Team Trials plays matches until your Race Points run out or your Max Matches Per Session is reached. Opponent To Pick has a Random choice.",
+            "A frozen game is restarted in careers, Team Trials and Daily Races. On Android 14 and newer the bot can only bring the game back to the front.",
+            "Grand Concert uses the Infirmary now, and when the concerts are behind schedule it trains instead of racing while enough race turns are left to earn the fans for the next goal.",
+            "A Recreation date the bot cannot start is closed and it rests instead, so low energy no longer repeats the same turn.",
+            "Careers log one plain line per race saying which race and why.",
+            "Fewer false stops on healthy rests and outings, one tap per training tab, and better gain, stat and score reads.",
+            "A stopped run queue resumes on the right slot and run, and Start works from Legacy Select or Support Formation. Share bug report on Home and Save to Phone in Settings make bug reports easy.",
+            "The trainee scan reads the last roster row on tall phones. Zenno Rob Roy's URA Finale preset is validated, and several event and preset fixes are in.",
+        ],
+    },
     "1.7.3": {
         highlights: [
             "Zenno Rob Roy has presets for URA Finale, Unity Cup, Trackblazer and Grand Concert. They are research-based: no full career with her has been played yet.",

@@ -1,13 +1,13 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.7.3</latestVersion>
+    <latestVersion>1.7.4</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.7.3 - Zenno Rob Roy presets, and safer trainee picks
+v1.7.4 - Daily Races and Team Trials sessions, frozen-game restarts, Grand Concert fixes
 
-- New: Zenno Rob Roy has presets for URA Finale, Unity Cup, Trackblazer and Grand Concert. They are research-based: no full career with her has been played yet.
-- Changed: more training events are recognized (Daiwa Scarlet's and Vodka's newest outfits, the [Are You Merry?] Air Groove and [Glad Tidings] Narita Brian support cards, and Sakura Laurel's support cards). Before, the bot took the first option for them. Not seen in a live career yet.
-- Fixed: the bot no longer takes a trainee's other outfit when the game's name banner is read with a small slip. If you own only that other outfit, the run stops before Start Career and tells you which preset to pick.
+- New: Daily Races and Team Trials play a whole session on their own, and Share bug report on Home and Save to Phone in Settings make bug reports easy.
+- Changed: a frozen game is restarted in careers, Team Trials and Daily Races (on Android 14 and newer the bot can only bring it to the front). A Recreation date the bot cannot start is closed and it rests instead (not seen live yet). Grand Concert uses the Infirmary, and when the concerts are behind schedule it trains instead of racing while enough race turns are left for the next fan goal (tests only so far). Careers log one plain line per race saying which race and why.
+- Fixed: fewer false energy stops, one tap per training tab, better gain, stat and score reads, Oka Sho keeps its G1 grade, a stopped run queue resumes on the right slot, Start works on Legacy Select and Support Formation, the trainee scan reads the last roster row on tall phones (not checked on a phone yet), and a race the 17:00 reset sends back to Home is left cleanly.
 
     </releaseNotes>
   </update>
