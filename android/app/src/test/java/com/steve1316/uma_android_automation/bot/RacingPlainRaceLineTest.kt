@@ -5,6 +5,7 @@ import com.steve1316.uma_android_automation.bot.Racing.Companion.PLAIN_OPEN_RACE
 import com.steve1316.uma_android_automation.bot.Racing.Companion.plainAgendaReason
 import com.steve1316.uma_android_automation.bot.Racing.Companion.plainDeadlineLabel
 import com.steve1316.uma_android_automation.bot.Racing.Companion.plainFanReason
+import com.steve1316.uma_android_automation.bot.Racing.Companion.plainFanSnapshotReason
 import com.steve1316.uma_android_automation.bot.Racing.Companion.plainGoalRaceReason
 import com.steve1316.uma_android_automation.bot.Racing.Companion.plainPlannedReason
 import com.steve1316.uma_android_automation.bot.Racing.Companion.plainRaceLine
@@ -19,14 +20,16 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import java.io.File
 
 /** The one plain line a player reads for each committed race: which race and why. */
 @DisplayName("Racing Plain Race Line Tests")
 class RacingPlainRaceLineTest {
     private fun requirementReason(
-        scenarioFan: GrandConcertFanRequirement.Result.Active? = null,
+        scenarioFanReason: String? = null,
         hasFanRequirement: Boolean = false,
         fanEmergency: Boolean = false,
         fanGoalTarget: Int? = null,
@@ -38,7 +41,7 @@ class RacingPlainRaceLineTest {
         forceRacing: Boolean = false,
         farmingInterval: Int? = null,
     ) = plainRequirementReason(
-        scenarioFan,
+        scenarioFanReason,
         hasFanRequirement,
         fanEmergency,
         fanGoalTarget,
@@ -51,15 +54,40 @@ class RacingPlainRaceLineTest {
         farmingInterval,
     )
 
-    private fun scenarioFan(type: GrandConcertFanRequirement.Type, target: Int = 20000, turn: Int = 56, deficit: Int = 4876) =
-        GrandConcertFanRequirement.Result.Active(type, target, turn, deficit, GrandConcertFanRequirement.MatchKind.EXACT, goalUnmet = false, gateUnmet = true)
+    private fun shippedFacts(): GrandConcertFanFacts {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".")
+        repeat(5) {
+            val assets = File(dir, "src/main/assets")
+            if (assets.isDirectory) return GrandConcertFanFacts.parse(File(assets, "gc_fan_runtime.json").readText()) ?: error("shipped asset should parse")
+            dir = dir?.parentFile
+        }
+        error("could not locate the assets root")
+    }
+
+    /** The fan check's snapshot for Hishi Amazon, read from the shipped route facts. */
+    private fun hishi(turn: Int, fans: Int) = GrandConcertFanPressure.evaluate(shippedFacts(), "Hishi Amazon", turn, fans)
+
+    private fun snapshotReason(
+        type: GrandConcertFanPressure.RequirementType,
+        target: Int = 20000,
+        turn: Int = 56,
+    ) = plainFanSnapshotReason(
+        hishi(24, 15124).copy(
+            effectiveType = type,
+            effectiveTarget = target,
+            effectiveTurn = turn,
+            effectiveExact = true,
+            tightestLaterUsableTurns = null,
+            tightestLaterDeficit = null,
+        ),
+    )
 
     private fun race(name: String, grade: String = "G3") = RaceData(name, grade, 3800, name, "Turf", "Mile", 25)
 
     @Test
     @DisplayName("Grand Concert fan gate names the target, the turn with its date, and the current fans")
     fun grandConcertGateLine() {
-        val line = plainRaceLine("Keisei Hai", RaceGrade.G3, 3800, requirementReason(scenarioFan(GrandConcertFanRequirement.Type.MANDATORY_GATE), hasFanRequirement = true))
+        val line = plainRaceLine("Keisei Hai", RaceGrade.G3, 3800, requirementReason(snapshotReason(GrandConcertFanPressure.RequirementType.MANDATORY_GATE), hasFanRequirement = true))
         assertEquals(
             "[RACE] Racing Keisei Hai (G3, 3,800 fans): Grand Concert needs 20,000 fans by turn 56 (SENIOR YEAR LATE APRIL); you have 15,124.",
             line,
@@ -71,7 +99,7 @@ class RacingPlainRaceLineTest {
     fun grandConcertGoalLine() {
         assertEquals(
             "the career fan goal needs 20,000 fans by turn 56 (SENIOR YEAR LATE APRIL); you have 15,124",
-            requirementReason(scenarioFan(GrandConcertFanRequirement.Type.FAN_GOAL), hasFanRequirement = true),
+            requirementReason(snapshotReason(GrandConcertFanPressure.RequirementType.FAN_GOAL), hasFanRequirement = true),
         )
     }
 
@@ -130,19 +158,128 @@ class RacingPlainRaceLineTest {
     fun deadlineHasNoTurnToken() {
         assertEquals("turn 56 (SENIOR YEAR LATE APRIL)", plainDeadlineLabel(56))
         assertEquals("turn 73", plainDeadlineLabel(73))
-        val line = plainRaceLine("Keisei Hai", RaceGrade.G3, 3800, requirementReason(scenarioFan(GrandConcertFanRequirement.Type.MANDATORY_GATE), hasFanRequirement = true))
+        val line = plainRaceLine("Keisei Hai", RaceGrade.G3, 3800, requirementReason(snapshotReason(GrandConcertFanPressure.RequirementType.MANDATORY_GATE), hasFanRequirement = true))
         assertFalse(line.contains("(Turn"), line)
         assertNull(LogStreamServer.parseDateInfo(line), "the dashboard turn parser must ignore the race line")
         assertNotNull(LogStreamServer.parseDateInfo("Detected something (Turn 56)"), "control: the parser does read a (Turn N) token")
     }
 
     @Test
-    @DisplayName("A requirement armed on an older fan count says so instead of contradicting itself")
-    fun staleRequirementCount() {
-        val armed = scenarioFan(GrandConcertFanRequirement.Type.MANDATORY_GATE, target = 4500, turn = 31, deficit = 3386)
+    @DisplayName("Turn 24 with 11,258 fans names the live 25,000-by-turn-48 gate, not the 4,500 gate met long before")
+    fun liveGateAtTurn24() {
+        val atTurn24 = hishi(24, 11258)
+        assertEquals(25000, atTurn24.effectiveTarget)
+        assertEquals(48, atTurn24.effectiveTurn)
         assertEquals(
-            "Grand Concert needs 4,500 fans by turn 31 (CLASSIC YEAR EARLY APRIL); you had 1,114 when this was checked and have 15,124 now",
-            requirementReason(armed, hasFanRequirement = true),
+            "Grand Concert needs 25,000 fans by turn 48 (CLASSIC YEAR LATE DECEMBER); you have 11,258",
+            plainFanSnapshotReason(atTurn24),
+        )
+        assertEquals(plainFanSnapshotReason(atTurn24), requirementReason(plainFanSnapshotReason(atTurn24), hasFanRequirement = true, fans = 11258))
+    }
+
+    @Test
+    @DisplayName("The Grand Concert campaign records the fan check's snapshot and falls back to a fresh one on a turn that skipped the check")
+    fun campaignHandsOffTheSnapshot() {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".")
+        var source: String? = null
+        repeat(5) {
+            val file = File(dir, "src/main/java/com/steve1316/uma_android_automation/bot/campaigns/GrandConcert.kt")
+            if (source == null && file.isFile) source = file.readText().replace("\r\n", "\n")
+            dir = dir?.parentFile
+        }
+        val gc = source ?: error("could not locate GrandConcert.kt")
+        val deferral = gc.substring(gc.indexOf("override fun considerFanRaceDeferral"))
+        assertTrue(deferral.indexOf("lastFanSnapshot = snapshot") in 0 until deferral.indexOf("GrandConcertFanPolicy.decide("), "the snapshot is kept before the decision")
+        val handoff = gc.substring(gc.indexOf("override fun fanRaceReasonForLine"))
+        assertTrue(handoff.contains("it.currentTurn == date.day"), "only this turn's snapshot is reused")
+        assertTrue(handoff.contains("GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans)"), "a turn without the check evaluates fresh")
+    }
+
+    @Test
+    @DisplayName("When the later goal is the one that forced the race, the line adds it with the numbers the fan check used")
+    fun laterGoalBinds() {
+        val hishiTurn14 = hishi(14, 1801)
+        assertEquals(23199, hishiTurn14.tightestLaterDeficit)
+        val later = GrandConcertFanPressure.bindingLaterRequirement(hishiTurn14)
+        assertEquals(23199, later?.first)
+        val inputs = GrandConcertFanPressure.policyInputs(hishiTurn14, recentFanRacesPaidLow = false)
+        assertEquals(later?.second?.minus(1), inputs.turnsUntilDeadline)
+        assertEquals(
+            GrandConcertFanPolicy.FanRaceDecision.FORCE_RACE,
+            GrandConcertFanPolicy.decide(true, inputs.turnsUntilDeadline, inputs.racesStillNeeded, concertBehindPace = true),
+        )
+        assertEquals(
+            "Grand Concert needs 4,500 fans by turn 31 (CLASSIC YEAR EARLY APRIL); you have 1,801; a later fan requirement may need up to 23,199 more fans with ${later?.second} free race turns left",
+            plainFanSnapshotReason(hishiTurn14),
+        )
+    }
+
+    @Test
+    @DisplayName("A later choice gate is worded as an upper bound: Mejiro Ardan at turn 14 needs 5,699 more for Kikuka Sho, not 18,199")
+    fun laterChoiceGateIsAnUpperBound() {
+        val ardan = GrandConcertFanPressure.evaluate(shippedFacts(), "Mejiro Ardan", 14, 1801)
+        assertEquals(6000, ardan.effectiveTarget)
+        assertEquals(30, ardan.effectiveTurn)
+        assertEquals(18199, ardan.tightestLaterDeficit)
+        assertEquals(18199, GrandConcertFanPressure.bindingLaterRequirement(ardan)?.first)
+        assertEquals(
+            "the career fan goal needs 6,000 fans by turn 30 (CLASSIC YEAR LATE MARCH); you have 1,801; a later fan requirement may need up to 18,199 more fans with ${ardan.tightestLaterUsableTurns} free race turns left",
+            plainFanSnapshotReason(ardan),
+        )
+    }
+
+    @Test
+    @DisplayName("After two low-paying fan races the policy weighs neither goal, so the line adds no later goal")
+    fun lowPayoutsAddNoLaterGoal() {
+        val hishiTurn14 = hishi(14, 1801)
+        assertNull(GrandConcertFanPressure.bindingLaterRequirement(hishiTurn14, recentFanRacesPaidLow = true))
+        assertEquals(null, GrandConcertFanPressure.policyInputs(hishiTurn14, recentFanRacesPaidLow = true).turnsUntilDeadline)
+        assertEquals(
+            "Grand Concert needs 4,500 fans by turn 31 (CLASSIC YEAR EARLY APRIL); you have 1,801",
+            plainFanSnapshotReason(hishiTurn14, recentFanRacesPaidLow = true),
+        )
+    }
+
+    @Test
+    @DisplayName("When the effective requirement binds, or no later one exists, the line stays as it was")
+    fun effectiveGoalBinds() {
+        val hishiTurn14 = hishi(14, 1801)
+        val roomy = hishiTurn14.copy(tightestLaterUsableTurns = 500)
+        assertNull(GrandConcertFanPressure.bindingLaterRequirement(roomy))
+        val roomyInputs = GrandConcertFanPressure.policyInputs(roomy, recentFanRacesPaidLow = false)
+        assertEquals(roomy.usableRaceTurnsInWindow?.minus(1), roomyInputs.turnsUntilDeadline)
+        assertEquals("Grand Concert needs 4,500 fans by turn 31 (CLASSIC YEAR EARLY APRIL); you have 1,801", plainFanSnapshotReason(roomy))
+        val none = hishiTurn14.copy(tightestLaterUsableTurns = null, tightestLaterDeficit = null)
+        assertNull(GrandConcertFanPressure.bindingLaterRequirement(none))
+        assertEquals("Grand Concert needs 4,500 fans by turn 31 (CLASSIC YEAR EARLY APRIL); you have 1,801", plainFanSnapshotReason(none))
+    }
+
+    @Test
+    @DisplayName("The 1 fan sentinel before the first fan read is said to be unread")
+    fun fanSentinelIsUnread() {
+        assertEquals(
+            "Grand Concert needs 4,500 fans by turn 31 (CLASSIC YEAR EARLY APRIL); your fan count is unread",
+            plainFanSnapshotReason(hishi(14, 1801).copy(currentFans = 1, tightestLaterUsableTurns = null, tightestLaterDeficit = null)),
+        )
+    }
+
+    @Test
+    @DisplayName("A requirement with no exact target, or none left, says so instead of naming an old one")
+    fun failClosedFanReasons() {
+        val base = hishi(24, 11258)
+        val choiceGate = GrandConcertFanPressure.evaluate(shippedFacts(), "Mejiro Ardan", 36, 7000)
+        assertEquals(false, choiceGate.effectiveExact)
+        assertEquals(
+            "Grand Concert needs at least 7,500 fans by turn 44 (CLASSIC YEAR LATE OCTOBER) (the exact figure is not known); you have 7,000",
+            plainFanSnapshotReason(choiceGate),
+        )
+        assertEquals(
+            "a fan requirement armed earlier no longer applies at your current fans; you have 11,258",
+            plainFanSnapshotReason(base.copy(effectiveType = GrandConcertFanPressure.RequirementType.NONE, effectiveTarget = null, effectiveTurn = null)),
+        )
+        assertEquals(
+            "Grand Concert's fan requirement could not be worked out, so the bot races to be safe; you have 11,258",
+            plainFanSnapshotReason(GrandConcertFanPressure.evaluate(shippedFacts(), "No Such Trainee", 24, 11258)),
         )
     }
 

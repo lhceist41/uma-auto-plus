@@ -2255,6 +2255,9 @@ abstract class Campaign(game: Game) : Task(game) {
      * eligible: trophy and goal-points requirements always race. */
     open fun considerFanRaceDeferral(): Boolean = false
 
+    /** The scenario's plain reason for the fan requirement a race is entered for, or null when it has none; the base has none. */
+    open fun fanRaceReasonForLine(): String? = null
+
     /** The base returns the no-scenario-facts sentinel, keeping the legacy template-driven requirement; Grand Concert overrides it because its
      * `race_criteria_fans` template is dead. Pure. */
     open fun currentFanRequirementFromScenarioFacts(): GrandConcertFanRequirement.Result =

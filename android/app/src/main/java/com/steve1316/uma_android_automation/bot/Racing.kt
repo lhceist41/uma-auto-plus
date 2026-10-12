@@ -300,9 +300,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** The plain "which race and why" line staged where a race is selected and logged once when the bot confirms it; cleared once logged. */
     private var pendingRaceLine: String? = null
 
-    /** The Grand Concert fan requirement the route facts last reported as active, for the reason line; null when none is. */
-    private var scenarioFanActive: GrandConcertFanRequirement.Result.Active? = null
-
     /** The fan count the goal text named at the last eligibility check, for the reason line; null when it named none. */
     private var goalFanTargetRead: Int? = null
 
@@ -316,7 +313,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Why a race is being entered when no race-specific reason applies, from the requirement flags and settings as they stand now. */
     private fun requirementReason(): String =
         plainRequirementReason(
-            scenarioFan = scenarioFanActive,
+            scenarioFanReason = campaign.fanRaceReasonForLine(),
             hasFanRequirement = hasFanRequirement,
             fanEmergency = bFanEmergencyActive,
             fanGoalTarget = goalFanTargetRead,
@@ -767,7 +764,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
 
         /** A fan requirement with the numbers the bot has: the target and its turn (or turns left) when known, and the current fans. */
-        internal fun plainFanReason(who: String, target: Int?, turn: Int?, turnsLeft: Int?, fans: Int, fansWhenChecked: Int? = null): String {
+        internal fun plainFanReason(who: String, target: Int?, turn: Int?, turnsLeft: Int?, fans: Int, unreadAtOrBelow: Int = 0): String {
             val need = target?.let { "${groupedCount(it)} fans" } ?: "more fans"
             val due =
                 when {
@@ -775,18 +772,38 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     turnsLeft != null && turnsLeft >= 0 -> ", due in $turnsLeft turn(s)"
                     else -> ""
                 }
-            val have =
-                when {
-                    fans <= 0 -> "your fan count is unread"
-                    fansWhenChecked != null && fansWhenChecked != fans -> "you had ${groupedCount(fansWhenChecked)} when this was checked and have ${groupedCount(fans)} now"
-                    else -> "you have ${groupedCount(fans)}"
-                }
-            return "$who needs $need$due; $have"
+            return "$who needs $need$due; ${plainFansHave(fans, unreadAtOrBelow)}"
+        }
+
+        private fun plainFansHave(fans: Int, unreadAtOrBelow: Int = 0): String =
+            if (fans > unreadAtOrBelow) "you have ${groupedCount(fans)}" else "your fan count is unread"
+
+        /**
+         * The Grand Concert fan requirement as the same-turn fan check saw it: its effective target, turn and current fans, plus the later
+         * requirement when that one decided the race (as an upper bound: a choice gate is measured at its highest option). A requirement with no exact target says so instead of naming an older one. The game's
+         * 1 fan sentinel before the first read counts as unread, as the fan check treats it.
+         */
+        internal fun plainFanSnapshotReason(snapshot: GrandConcertFanPressure.Snapshot, recentFanRacesPaidLow: Boolean = false): String {
+            val who = if (snapshot.effectiveType == GrandConcertFanPressure.RequirementType.FAN_GOAL) "the career fan goal" else "Grand Concert"
+            val target = snapshot.effectiveTarget
+            val turn = snapshot.effectiveTurn
+            val minimum = snapshot.gateMinThreshold
+            val gateTurn = snapshot.gateTurn
+            return when {
+                snapshot.effectiveType == GrandConcertFanPressure.RequirementType.NONE ->
+                    "a fan requirement armed earlier no longer applies at your current fans; ${plainFansHave(snapshot.currentFans, 1)}"
+                snapshot.effectiveExact && target != null && turn != null ->
+                    plainFanReason(who, target, turn, null, snapshot.currentFans, unreadAtOrBelow = 1) +
+                        (GrandConcertFanPressure.bindingLaterRequirement(snapshot, recentFanRacesPaidLow)?.let { (deficit, usable) -> "; a later fan requirement may need up to ${groupedCount(deficit)} more fans with $usable free race turns left" } ?: "")
+                snapshot.effectiveType == GrandConcertFanPressure.RequirementType.MANDATORY_GATE && minimum != null && gateTurn != null ->
+                    "Grand Concert needs at least ${groupedCount(minimum)} fans by ${plainDeadlineLabel(gateTurn)} (the exact figure is not known); ${plainFansHave(snapshot.currentFans, 1)}"
+                else -> "Grand Concert's fan requirement could not be worked out, so the bot races to be safe; ${plainFansHave(snapshot.currentFans, 1)}"
+            }
         }
 
         /** Why a race was entered when no race-specific reason applies: the active goal first, then the game's own popup, Force Racing, then the fan-farming interval. */
         internal fun plainRequirementReason(
-            scenarioFan: GrandConcertFanRequirement.Result.Active?,
+            scenarioFanReason: String?,
             hasFanRequirement: Boolean,
             fanEmergency: Boolean,
             fanGoalTarget: Int?,
@@ -799,10 +816,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             farmingInterval: Int?,
         ): String =
             when {
-                scenarioFan != null && hasFanRequirement -> {
-                    val who = if (scenarioFan.type == GrandConcertFanRequirement.Type.MANDATORY_GATE) "Grand Concert" else "the career fan goal"
-                    plainFanReason(who, scenarioFan.targetFans, scenarioFan.requirementTurn, null, fans, scenarioFan.targetFans - scenarioFan.deficit)
-                }
+                scenarioFanReason != null && hasFanRequirement -> scenarioFanReason
                 hasFanRequirement || fanEmergency -> plainFanReason("the career fan goal", fanGoalTarget, null, turnsToGoal, fans)
                 hasResultPtsRequirement ->
                     "the career goal still needs Result Points${turnsToGoal?.takeIf { it >= 0 }?.let { ", due in $it turn(s)" } ?: ""}"
@@ -1535,7 +1549,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
     /** Logs one [GC_FAN_REQ] provenance line per refresh when the scenario supplied a facts signal; silent otherwise. */
     private fun logScenarioFanRequirement(result: GrandConcertFanRequirement.Result) {
-        scenarioFanActive = result as? GrandConcertFanRequirement.Result.Active
         val fans = campaign.trainee.fans
         val turn = campaign.date.day
         when (result) {

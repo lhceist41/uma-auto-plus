@@ -87,6 +87,23 @@ object GrandConcertFanPressure {
         return PolicyInputs(turnsUntilDeadline = usable - 1, racesStillNeeded = racesWithMargin(deficit))
     }
 
+    /**
+     * The later requirement's (fans still needed, free race turns left) when [policyInputs] weighs it above the effective one, so the
+     * race line can say why the bot raced; null when the effective requirement binds or the inputs are unknown. Read-only.
+     */
+    fun bindingLaterRequirement(snapshot: Snapshot, recentFanRacesPaidLow: Boolean = false): Pair<Int, Int>? {
+        if (recentFanRacesPaidLow) return null
+        if (snapshot.matchStatus != MatchStatus.EXACT && snapshot.matchStatus != MatchStatus.NORMALIZED) return null
+        if (!snapshot.effectiveExact || snapshot.currentFans <= 1) return null
+        val turn = snapshot.effectiveTurn ?: return null
+        if (turn <= snapshot.currentTurn) return null
+        val deficit = snapshot.deficit ?: return null
+        val usable = snapshot.usableRaceTurnsInWindow ?: return null
+        val laterUsable = snapshot.tightestLaterUsableTurns ?: return null
+        val laterDeficit = snapshot.tightestLaterDeficit ?: return null
+        return if (laterUsable - racesWithMargin(laterDeficit) < usable - racesWithMargin(deficit)) laterDeficit to laterUsable else null
+    }
+
     private fun racesWithMargin(deficit: Int): Int = ceilDiv(ceilDiv(deficit, CONSERVATIVE_FANS_PER_RACE) * 3, 2)
 
     /** The racing requirement is cleared in Summer, so no fan race happens there although the turns are race-entry legal. */

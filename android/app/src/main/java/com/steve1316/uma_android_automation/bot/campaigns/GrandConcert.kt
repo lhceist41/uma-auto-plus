@@ -28,6 +28,7 @@ import com.steve1316.uma_android_automation.bot.LessonListCard
 import com.steve1316.uma_android_automation.bot.LessonScoreContext
 import com.steve1316.uma_android_automation.bot.PerformancePointType
 import com.steve1316.uma_android_automation.bot.PerformancePointVector
+import com.steve1316.uma_android_automation.bot.Racing
 import com.steve1316.uma_android_automation.bot.ScenarioState
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
@@ -683,6 +684,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         val paidLow = GrandConcertFanPressure.recentFanRacesPaidLow(fanPressureRacePayouts)
 
         val snapshot = GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
+        lastFanSnapshot = snapshot
         val policyInputs = GrandConcertFanPressure.policyInputs(snapshot, paidLow)
         val decision =
             GrandConcertFanPolicy.decide(
@@ -698,6 +700,16 @@ class GrandConcert(game: Game) : Campaign(game) {
         }
         return decision == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
     }
+
+    /** The fan snapshot the last [considerFanRaceDeferral] decided on, kept so the race line names that turn's target and not an older one. */
+    private var lastFanSnapshot: GrandConcertFanPressure.Snapshot? = null
+
+    /** A turn that raced without the fan check (a popup or Force Racing) reads the same pure snapshot from the facts now. */
+    override fun fanRaceReasonForLine(): String =
+        Racing.plainFanSnapshotReason(
+            lastFanSnapshot?.takeIf { it.currentTurn == date.day } ?: GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans),
+            GrandConcertFanPressure.recentFanRacesPaidLow(fanPressureRacePayouts),
+        )
 
     /**
      * Fan requirement from the committed route facts, not the dead race_criteria_fans template: the earliest
