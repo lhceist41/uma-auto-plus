@@ -310,6 +310,45 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         /** The rank fill spends leftovers by ratio, so it skips negatives (their toggle owns them) and skills that add no rating. */
         fun rankFillAllows(isNegative: Boolean, evaluationPoints: Int): Boolean = !isNegative && evaluationPoints > 0
 
+        /** Grand Concert's event golds (508 to 633 rating). A rank plan that spends its whole budget on planned and fill skills never saves up for one. */
+        internal val GRAND_CONCERT_RESERVED_GOLDS: List<String> = listOf("See Ya Later!", "I Wanna Win with You", "Come What May")
+
+        /**
+         * Rank objective in Grand Concert, high-water and pre-finals sessions only: offered golds that fit claim the budget before anything else
+         * (highest rating first), and the live cost of each one that does not fit is held back from the rest of the session. That cost exceeds what
+         * is left, so the session then plans nothing else and the SP carries. Returns the golds to plan first and the SP held back (none and 0 elsewhere).
+         */
+        internal fun reserveForScenarioGolds(
+            scenario: String,
+            objective: SkillSpendObjective,
+            trigger: SkillCheckTrigger?,
+            available: List<SkillCandidate>,
+            skillPoints: Int,
+        ): Pair<List<Pair<String, Int>>, Int> {
+            val applies =
+                objective == SkillSpendObjective.RANK &&
+                    GrandConcertScenario.matches(scenario) &&
+                    (trigger == SkillCheckTrigger.HIGH_WATER || trigger == SkillCheckTrigger.SCENARIO_FINALS)
+            if (!applies) return emptyList<Pair<String, Int>>() to 0
+
+            val buyFirst = mutableListOf<Pair<String, Int>>()
+            var remaining = skillPoints
+            var reserved = 0
+            val offered =
+                available
+                    .filter { it.name in GRAND_CONCERT_RESERVED_GOLDS && it.price > 0 }
+                    .sortedWith(compareByDescending<SkillCandidate> { it.evaluationPoints }.thenBy { it.price }.thenBy { it.name })
+            for (gold in offered) {
+                if (gold.price <= remaining) {
+                    buyFirst.add(gold.name to gold.price)
+                    remaining -= gold.price
+                } else {
+                    reserved += gold.price
+                }
+            }
+            return buyFirst to reserved
+        }
+
         /**
          * Pure calculation function that determines which skills to buy using the Optimize Rank strategy.
          *
@@ -1397,13 +1436,36 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
         val result: MutableMap<String, Int> = mutableMapOf()
 
+        // Live row prices: a gold's row price already includes its unowned base skill.
+        val (goldsFirst, reservedSkillPoints) =
+            reserveForScenarioGolds(
+                scenario = game.scenario,
+                objective = campaign.skillSpendObjective,
+                trigger = sessionEffectiveTrigger,
+                available =
+                    skillList.getAvailableSkills().values
+                        .filter { it.name !in skillList.deadTapSkills }
+                        .map { SkillCandidate(name = it.name, price = it.screenPrice, evaluationPoints = it.evaluationPoints) },
+                skillPoints = availableSkillPoints,
+            )
+        for ((name, price) in goldsFirst) {
+            val entry: SkillListEntry = skillList.getAvailableSkills()[name] ?: continue
+            entry.buy()
+            result[name] = price
+            MessageLog.i(TAG, "[SKILLS] Planning the Grand Concert gold \"$name\" ($price SP) before the rest of the plan.")
+        }
+        if (reservedSkillPoints > 0) {
+            MessageLog.i(TAG, "[SKILLS] Holding $reservedSkillPoints SP for an offered Grand Concert gold that does not fit yet; nothing else is bought this session.")
+        }
+        val planSkillPoints: Int = availableSkillPoints - reservedSkillPoints
+
         // Execute common skill checks first.
         result +=
             getSkillsToBuyCommon(
                 skillPlanSettings = skillPlanSettings,
                 skillList = skillList,
                 skillsToBuy = result.keys.toList(),
-                availableSkillPoints = availableSkillPoints - result.values.sum(),
+                availableSkillPoints = planSkillPoints - result.values.sum(),
             )
 
         // Adaptive + sparks skips the strategy tail so leftover budget is not drained into spark-diluting filler;
@@ -1439,7 +1501,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                             skillPlanSettings = skillPlanSettings,
                             skillList = skillList,
                             skillsToBuy = result.keys.toList(),
-                            availableSkillPoints = availableSkillPoints - result.values.sum(),
+                            availableSkillPoints = planSkillPoints - result.values.sum(),
                         )
                     }
 
@@ -1448,7 +1510,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                             skillPlanSettings = skillPlanSettings,
                             skillList = skillList,
                             skillsToBuy = result.keys.toList(),
-                            availableSkillPoints = availableSkillPoints - result.values.sum(),
+                            availableSkillPoints = planSkillPoints - result.values.sum(),
                         )
                     }
 
@@ -1457,7 +1519,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                             skillPlanSettings = skillPlanSettings,
                             skillList = skillList,
                             skillsToBuy = result.keys.toList(),
-                            availableSkillPoints = availableSkillPoints - result.values.sum(),
+                            availableSkillPoints = planSkillPoints - result.values.sum(),
                         )
                     }
 
@@ -1466,7 +1528,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                             skillPlanSettings = skillPlanSettings,
                             skillList = skillList,
                             skillsToBuy = result.keys.toList(),
-                            availableSkillPoints = availableSkillPoints - result.values.sum(),
+                            availableSkillPoints = planSkillPoints - result.values.sum(),
                         )
                     }
                 }
@@ -1476,7 +1538,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 getSkillsToBuyCareerEndFallback(
                     skillList = skillList,
                     skillsToBuy = result.keys.toList(),
-                    availableSkillPoints = availableSkillPoints - result.values.sum(),
+                    availableSkillPoints = planSkillPoints - result.values.sum(),
                 )
         }
 
