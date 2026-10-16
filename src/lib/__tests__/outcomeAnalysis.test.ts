@@ -527,6 +527,16 @@ describe("parseCorpus", () => {
         expect(outcomes[0].source).toBe("jsonl")
     })
 
+    it("ignores a type=gc_skill_econ record beside its career row", () => {
+        const career = careerJson({ trainee: "Test Uma", scenario: "Grand_Concert" })
+        const econ = JSON.stringify({ type: "gc_skill_econ", v: 1, ts: 1, trainee: "Test_Uma", skills: [{ name: "Changing Gears", tier: "gold", source: "bought", sp: 200 }], songs: { boughtAtTurn69: null }, unknown: ["uniqueLevel"] })
+        const parsed = parseCorpus([career, econ, careerJson({ trainee: "B" })].join("\n"))
+        expect(parsed.outcomes.map((o) => o.lineNumber)).toEqual([0, 2])
+        expect(parsed.sparks).toHaveLength(0)
+        expect(parsed.skillSpends).toHaveLength(0)
+        expect(parseJsonl(econ)).toHaveLength(0)
+    })
+
     it("parses a valid type=sparks record into a SparkRecord with normalized trainee", () => {
         const { outcomes, sparks } = parseCorpus(sparkJson("original", "El_Condor_Pasa", [["Speed", 2, "stat"], ["Long", 1, "aptitude"]]), "c.jsonl")
         expect(outcomes).toHaveLength(0)

@@ -156,6 +156,10 @@ class Trainee {
     /** The trainee's current pool of skill points. */
     var skillPoints: Int = 120
 
+    /** Successful turn-start Skill Points OCR reads so far; telemetry uses it to tell a read value from the initial default or a copied one. */
+    @Volatile
+    var skillPointsReads: Int = 0
+
     /** The trainee's current total fan count. */
     var fans: Int = 1
 
@@ -703,6 +707,7 @@ class Trainee {
         val res = imageUtils.determineSkillPoints(sourceBitmap, skillPointsLocation)
         if (res != -1) {
             skillPoints = res
+            skillPointsReads++
         }
 
         bHasUpdatedSkillPoints = skillPoints != -1

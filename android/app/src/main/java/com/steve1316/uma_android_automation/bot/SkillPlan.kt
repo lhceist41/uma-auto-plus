@@ -1599,19 +1599,23 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     entry.getUpgradeNames().filter { it in skillsToBuy }
 
             for (name in namesToBuy) {
+                val spBeforeBuy: Int = skillList.skillPoints
                 val purchaseResult: SkillListEntry? = skillList.buySkill(name, point)
                 if (purchaseResult != null) {
                     MessageLog.i(TAG, "[INFO] Buying \"${purchaseResult.name}\" for ${purchaseResult.price} pts")
                     campaign.trainee.ownedSkillNames.add(purchaseResult.name)
                     sessionVerifiedBuys.add(purchaseResult.name)
+                    campaign.onSkillBought(purchaseResult.name, spBeforeBuy - skillList.skillPoints, purchaseResult.skillData.bIsGold)
                 }
             }
         } else {
+            val spBeforeBuy: Int = skillList.skillPoints
             val purchaseResult: SkillListEntry? = skillList.buySkill(entry.name, point)
             if (purchaseResult != null) {
                 MessageLog.i(TAG, "[INFO] Buying \"${purchaseResult.name}\" for ${purchaseResult.price} pts")
                 campaign.trainee.ownedSkillNames.add(purchaseResult.name)
                 sessionVerifiedBuys.add(purchaseResult.name)
+                campaign.onSkillBought(purchaseResult.name, spBeforeBuy - skillList.skillPoints, purchaseResult.skillData.bIsGold)
             }
         }
 
@@ -1748,6 +1752,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // Screen-confirmed ownership: the post-planning reset must not clear it or upgrade-chain pricing and
         // ownership reads corrupt.
         val ownedAtParse: Set<String> = skillList.getObtainedSkills().keys
+        skillList.getAllSkills().values.forEach {
+            if (!it.bIsObtained && !it.bIsVirtual) campaign.onSkillOffered(it.name, it.screenPrice, Math.round(it.discount * 100).toInt(), sessionPlanningScanComplete == true)
+        }
 
         // Calculate the list of skills to purchase based on settings and points.
         var skillsToPurchase: Map<String, Int> =

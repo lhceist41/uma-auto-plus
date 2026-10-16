@@ -1519,6 +1519,16 @@ abstract class Campaign(game: Game) : Task(game) {
         return
     }
 
+    /** Observation hooks for a scenario's end-of-career record; none changes a decision. */
+    open fun onSkillBought(name: String, spPaid: Int, gold: Boolean) {}
+
+    open fun onSkillOffered(name: String, price: Int, discountPct: Int, scanComplete: Boolean) {}
+
+    open fun onTrainingEventResolved(title: String, owner: String, option: Int, rewardLines: List<String>) {}
+
+    /** Appended to the outcome corpus right after the career-end record; null for scenarios that keep none. */
+    open fun scenarioCareerEndRecord(fp: String, trainee: String, scenario: String, outcome: String): JSONObject? = null
+
     /**
      * Executes logic at the very beginning of [handleMainScreen].
      */
@@ -3971,6 +3981,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 put("cfg", JSONObject(outcomeConfigSnapshot as Map<*, *>))
             }
         OutcomeCorpus.append(game.myContext, record)
+        runCatching {
+            scenarioCareerEndRecord(careerEndFp, resolvedName, scenarioToken, outcome)?.let { OutcomeCorpus.append(game.myContext, it) }
+        }.onFailure { MessageLog.w(TAG, "[OUTCOME] Failed to append the scenario career-end record: $it") }
 
         return buildString {
             append("[CAREER_END] result=").append(careerLedgerResult(result.code, StartModule.queueStopReason))

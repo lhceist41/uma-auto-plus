@@ -853,7 +853,8 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         }
 
         // Guard against acting on a sub-threshold fuzzy match (mis-read title or un-imported support card returns the wrong event's rewards); below the floor, fall through to the safe first-option default.
-        if (shouldActOnEventMatch(eventRewards, specialEventHandled, confidence, trainingEventRecognizer.minimumConfidence)) {
+        val matchAccepted = shouldActOnEventMatch(eventRewards, specialEventHandled, confidence, trainingEventRecognizer.minimumConfidence)
+        if (matchAccepted) {
             if (!specialEventHandled) {
                 // Check for character, support, or scenario event overrides.
                 val characterOverride = checkCharacterEventOverride(characterOrSupportName, eventTitle)
@@ -1223,6 +1224,14 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
             if (selectedLocation != null) {
                 game.tap(selectedLocation.x + game.imageUtils.relWidth(100), selectedLocation.y, IconTrainingEventHorseshoe.template.path)
+                if (matchAccepted && tapPlan.action == OptionTapAction.USE_ROW) {
+                    campaign.onTrainingEventResolved(
+                        eventTitle.replace("\n", " "),
+                        characterOrSupportName,
+                        tapPlan.rowIndex + 1,
+                        eventRewards.getOrNull(tapPlan.rowIndex)?.split("\n").orEmpty(),
+                    )
+                }
 
                 // Remember a five-row Acupuncture choice so the two-row gate it opens is recognized next pass. Only the full choice screen
                 // qualifies: the gate, an untrusted row count and a clamped tap all fail to show that a treatment was chosen.

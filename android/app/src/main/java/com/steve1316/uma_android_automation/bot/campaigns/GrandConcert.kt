@@ -1,5 +1,7 @@
 package com.steve1316.uma_android_automation.bot.campaigns
 
+import android.graphics.Bitmap
+import com.steve1316.uma_android_automation.BuildConfig
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
@@ -19,6 +21,8 @@ import com.steve1316.uma_android_automation.bot.GrandConcertPointContext
 import com.steve1316.uma_android_automation.bot.GrandConcertPointDemand
 import com.steve1316.uma_android_automation.bot.GrandConcertPolicy
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
+import com.steve1316.uma_android_automation.bot.GrandConcertSkillEconomy
+import com.steve1316.uma_android_automation.bot.LaunchTransactionGate
 import com.steve1316.uma_android_automation.bot.GrandConcertSongCatalog
 import com.steve1316.uma_android_automation.bot.GrandConcertState
 import com.steve1316.uma_android_automation.bot.HypeTier
@@ -60,6 +64,7 @@ import com.steve1316.uma_android_automation.utils.grandConcertPlaybackMenuButton
 import com.steve1316.uma_android_automation.utils.grandConcertPlaybackMenuSkipPresent
 import com.steve1316.uma_android_automation.utils.grandConcertPlaybackSkipPresent
 import com.steve1316.uma_android_automation.utils.grandConcertResultNextPresent
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -138,6 +143,21 @@ class GrandConcert(game: Game) : Campaign(game) {
     private val purchasedSongTitles = mutableSetOf<String>()
 
     private var careerEndDrainDone = false
+
+    private val skillEconomy = GrandConcertSkillEconomy()
+
+    /** Successful Skill Points reads when the pending concert began: a later count proves the turn-start update read a fresh value. */
+    private var skillPointsReadsAtConcert = 0
+
+    /** Telemetry never changes a turn: any failure is dropped, but an interrupt (stop or watchdog) must still reach the loop. */
+    private inline fun observe(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+        }
+    }
 
     fun announceSupportLevelOnce() {
         if (announcedSupportLevel) return
@@ -226,6 +246,17 @@ class GrandConcert(game: Game) : Campaign(game) {
         if (grandConcertConcertPendingScreenPresent(sampler, bitmap.width, bitmap.height)) {
             stopBeforeUnmeasuredFinale(bitmap.width, bitmap.height)
             concertEscortAttempts++
+            if (concertEscortAttempts == 1) {
+                observe {
+                    skillPointsReadsAtConcert = trainee.skillPointsReads
+                    skillEconomy.noteConcertStart(
+                        date.day.takeIf { date.dayObserved },
+                        songsBoughtThisCycle,
+                        songsBoughtThisCareer,
+                        trainee.skillPoints.takeIf { trainee.skillPointsReads > 0 },
+                    )
+                }
+            }
             MessageLog.i(
                 TAG,
                 "[GRAND_CONCERT] [CONCERT] Concert-pending screen detected; running the concert escort " +
@@ -519,6 +550,53 @@ class GrandConcert(game: Game) : Campaign(game) {
             ).purchases
         exitLessonShop()
         return spent
+    }
+
+    override fun performTurnStartUpdates(sourceBitmap: Bitmap) {
+        super.performTurnStartUpdates(sourceBitmap)
+        observe {
+            // The base update keeps the previous value when its read fails; only a read counted since the concert began is trusted.
+            skillEconomy.closeConcert { if (trainee.skillPointsReads > skillPointsReadsAtConcert) trainee.skillPoints else -1 }
+            if (date.dayObserved) {
+                skillEconomy.noteTurn(date.day)
+                skillEconomy.noteSongTotal(date.day, songsBoughtThisCareer)
+            }
+        }
+    }
+
+    override fun onSkillBought(name: String, spPaid: Int, gold: Boolean) {
+        observe { skillEconomy.noteBuy(name, spPaid, date.day.takeIf { date.dayObserved }, gold) }
+    }
+
+    override fun onSkillOffered(name: String, price: Int, discountPct: Int, scanComplete: Boolean) {
+        observe { skillEconomy.noteSkillOffered(name, price, discountPct, date.day.takeIf { date.dayObserved }, scanComplete) }
+    }
+
+    override fun onTrainingEventResolved(title: String, owner: String, option: Int, rewardLines: List<String>) {
+        observe { skillEconomy.noteEvent(date.day.takeIf { date.dayObserved }, title, owner, option, rewardLines) }
+    }
+
+    /** One `gc_skill_econ` record per career plus its log line. The final skill list is the Details read; its unique level proves that read landed. */
+    override fun scenarioCareerEndRecord(fp: String, trainee: String, scenario: String, outcome: String): JSONObject? {
+        val detailsRead = this.trainee.uniqueSkillLevel > 0 && this.trainee.ownedSkillNames.isNotEmpty()
+        val record =
+            skillEconomy.buildRecord(
+                timestamp = System.currentTimeMillis(),
+                app = BuildConfig.VERSION_NAME,
+                fp = fp,
+                trainee = trainee,
+                scenario = scenario,
+                outcome = outcome,
+                turn = date.day.takeIf { date.dayObserved },
+                launchTransactionId = LaunchTransactionGate.active?.id,
+                finalSkills = if (detailsRead) this.trainee.ownedSkillNames.toList() else null,
+                uniqueLevel = this.trainee.uniqueSkillLevel,
+                skillPtsEnd = this.trainee.skillPoints.takeIf { this.trainee.skillPointsReads > 0 },
+                isGold = { game.skillDatabase.getSkillData(it)?.bIsGold == true },
+                chainOf = { game.skillDatabase.skillUpgradeChains[it].orEmpty() },
+            )
+        MessageLog.i(TAG, GrandConcertSkillEconomy.logLine(record))
+        return record
     }
 
     /**
@@ -884,6 +962,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             return false
         }
         MessageLog.i(TAG, "[GRAND_CONCERT] [LESSON_BUY] Learned \"${intended.title}\".")
+        observe { skillEconomy.noteLesson(date.day.takeIf { date.dayObserved }, intended.title.orEmpty(), intended.kind.name) }
         return true
     }
 
