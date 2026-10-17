@@ -1,10 +1,10 @@
 # Daily Races fixture provenance
 
-Full-resolution (1080x2316) `adb exec-out screencap -p` captures from a Samsung SM-S918B on Android 16,
+The phone fixtures are full-resolution (1080x2316) `adb exec-out screencap -p` captures from a Samsung SM-S918B on Android 16,
 taken on 2026-10-08 while one Daily Races multi-race (6 tickets, an event doubled them) was played by hand.
 The window cutout inset on this phone is 94 px, so `utils/ScreenBands.kt` puts TOP at +94, DIALOG at +198,
 MIDDLE at +245 and BOTTOM at +396 from the 1080x1920 coordinates. These frames pin the templates and places
-in `DailyRaceProbesFixtureTest`. No MuMu capture of these screens exists yet.
+in `DailyRaceProbesFixtureTest`. The one MuMu capture, `mumu_counter_0of6.png`, is described at the end.
 
 | Fixture | Shows |
 |---|---|
@@ -20,11 +20,12 @@ in `DailyRaceProbesFixtureTest`. No MuMu capture of these screens exists yet.
 | race_result.png | Race Results, race 1 with Complete |
 | total_rewards.png | Race Results header over Total Rewards with Close |
 | daily_sale.png | Daily Sale dialog (Cancel / Shop) |
+| mumu_counter_0of6.png | MuMu Daily Races race pick, counter 0/6 (brown 0, orange 6) |
 
 ## Source and colour
 
 `adb screencap` writes the device colours as they are, so no red/blue swap was needed. The files are
-8-bit RGBA at the full 1080x2316 size. Only the areas the tests read are kept, the same on every fixture:
+8-bit RGBA at the full 1080x2316 size (all fixtures but `mumu_counter_0of6.png`). Only the areas the tests read are kept, the same on every phone fixture:
 the Daily Program label (x 132-502, y 1950-2086), the Daily Races tile label (x 152-482, y 1836-1962),
 the dialog header (x 378-702, y 228-354), Complete (x 400-678, y 1906-2044), the Multi-Race pill
 (x 380-800, y 1800-1936), the ticket counter (x 880-1070, y 90-180), the popup Race! (x 540-1020,
@@ -33,3 +34,8 @@ No trainer name, ID or club name is in a kept area.
 
 The five new templates (`button/daily_program_tile`, `button/daily_races`, `button/complete`,
 `label/race_details_header`, `label/race_results_header`) are tight crops of the same captures.
+
+`mumu_counter_0of6.png` is a 1080x1920 `screencap` of the MuMu emulator taken on 2026-10-10 during a live Daily
+Races run, where ML Kit read this counter as "9/0". Only the ticket counter area (x 880-1070,
+y 0-80) is kept, everything else is opaque black; MuMu needs no colour swap here. No trainer name, ID or
+club name is in the kept area.

@@ -209,6 +209,44 @@ class DailyRaceProbesFixtureTest {
             assertNull(parseTicketCount("100/6"))
             assertNull(parseTicketCount("6/120"))
         }
+
+        @Test
+        fun `on the MuMu 0 of 6 frame both digits sit in the OCR region and stay dark through the OCR threshold`() {
+            val img = javaClass.getResourceAsStream("/fixtures/dailyraces/mumu_counter_0of6.png")!!.use { FixturePng.read(it) }
+            assertEquals(1080 to 1920, img.width to img.height)
+            val x0 = DailyRaceGeometry.TICKET_OCR_X
+            val y0 = gameY(DailyRaceGeometry.TICKET_OCR_Y.toDouble(), ScreenBand.TOP, img.width, img.height).roundToInt()
+            var inside = 0
+            for (y in 0 until 80) {
+                for (x in 880 until 1070) {
+                    val argb = img.getRGB(x, y)
+                    if (!isDigit(argb)) continue
+                    assertTrue(x in x0 until x0 + DailyRaceGeometry.TICKET_OCR_W && y in y0 until y0 + DailyRaceGeometry.TICKET_OCR_H, "digit pixel ($x, $y) outside the OCR region")
+                    // The OCR crop is RGB-ordered (COLOR_RGB2GRAY) and thresholded at the default ocrThreshold 230: a digit must come out black.
+                    val luma = 0.299 * ((argb shr 16) and 0xFF) + 0.587 * ((argb shr 8) and 0xFF) + 0.114 * (argb and 0xFF)
+                    assertTrue(luma < 230, "digit pixel ($x, $y) would turn white")
+                    inside++
+                }
+            }
+            assertTrue(inside > 150, "$inside digit pixels")
+        }
+
+        @Test
+        fun `a counter read upside down gives an empty count, and nothing else`() {
+            // Seen on MuMu: ML Kit read the 0/6 counter as "9/0" on every look.
+            assertEquals(0 to 6, parseTicketCount("9/0"))
+            assertEquals(0 to 6, parseTicketCount(" 9 / 0 "))
+            assertNull(parseTicketCount("21/0"), "a turned 0/12 has no 6 or 9 to show the turn, so it stays unreadable")
+            assertNull(parseTicketCount("9/1"), "a held ticket is never taken from a turned read")
+            assertNull(parseTicketCount("6/1"))
+            assertNull(parseTicketCount("1/0"), "no 6 or 9, so nothing shows the read was turned")
+            assertNull(parseTicketCount("7/6"))
+            assertNull(parseTicketCount("9/6"), "a turned read never gives a positive count")
+            assertNull(parseTicketCount("6/0"), "a turned 0/9 has no real ticket max, so a misread 6/6 cannot pass as no tickets")
+            assertNull(parseTicketCount("60/00"))
+            assertEquals(6 to 6, parseTicketCount("6/6"))
+            assertEquals(3 to 6, parseTicketCount("3/6"))
+        }
     }
 
     @Test

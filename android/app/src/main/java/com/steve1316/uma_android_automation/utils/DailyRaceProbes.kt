@@ -51,7 +51,28 @@ fun difficultyRowTapY(
 fun parseTicketCount(raw: String): Pair<Int, Int>? {
     val text = raw.replace(" ", "").replace('O', '0').replace('o', '0')
     val m = Regex("(?<!\\d)(\\d{1,2})/(\\d{1,2})(?!\\d)").find(text) ?: return null
-    val held = m.groupValues[1].toInt()
-    val max = m.groupValues[2].toInt()
+    return wholeCount(m.value) ?: emptyCountReadUpsideDown(m.value)
+}
+
+private fun wholeCount(count: String): Pair<Int, Int>? {
+    val (held, max) = count.split('/').map { it.toInt() }
     return if (max in 1..12 && held <= max) held to max else null
+}
+
+/**
+ * ML Kit can read the small counter half a turn rotated: "0/6" came back as "9/0" on MuMu. A 6 or 9 shows the turn; only an
+ * empty count with a real ticket max (6, or 12 with an event) is taken from such a read, so a wrong one can only stop the races, never start one.
+ */
+private fun emptyCountReadUpsideDown(count: String): Pair<Int, Int>? {
+    if (count.none { it == '6' || it == '9' }) return null
+    val turned =
+        count.reversed().map {
+            when (it) {
+                '6' -> '9'
+                '9' -> '6'
+                '0', '1', '8', '/' -> it
+                else -> return null
+            }
+        }.joinToString("")
+    return wholeCount(turned)?.takeIf { it.first == 0 && it.second in listOf(6, 12) }
 }
