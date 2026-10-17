@@ -36,6 +36,7 @@ import com.steve1316.uma_android_automation.utils.gameY
 import com.steve1316.uma_android_automation.utils.parseRpCount
 import com.steve1316.uma_android_automation.utils.quickModePillOn
 import com.steve1316.uma_android_automation.utils.readRpPips
+import com.steve1316.uma_android_automation.utils.teamTrialsHighScoreBanner
 import kotlin.random.Random
 
 /**
@@ -67,6 +68,8 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         RESULT_REVEAL,
 
         POST_MATCH_RESULTS,
+
+        HIGH_SCORE_BANNER,
 
         UNKNOWN,
     }
@@ -137,7 +140,8 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         val ownDialog =
             currentState == TeamTrialsScreenState.ITEMS_SELECTED_POPUP ||
                 currentState == TeamTrialsScreenState.RESTORE_RP_PROMPT ||
-                currentState == TeamTrialsScreenState.DAILY_SALE_POPUP
+                currentState == TeamTrialsScreenState.DAILY_SALE_POPUP ||
+                currentState == TeamTrialsScreenState.HIGH_SCORE_BANNER
         if (!ownDialog && handleIncidentalPopups()) {
             return null
         }
@@ -195,6 +199,11 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
                 null
             }
 
+            TeamTrialsScreenState.HIGH_SCORE_BANNER -> {
+                handleHighScoreBanner(sourceBitmap)
+                null
+            }
+
             TeamTrialsScreenState.UNKNOWN -> {
                 handleUnknown(sourceBitmap)
                 null
@@ -205,6 +214,11 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
     private fun sampler(bitmap: Bitmap): SparkPixelSampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
     private fun detectScreenState(sourceBitmap: Bitmap): TeamTrialsScreenState {
+        // It covers the results screens, whose header and Next can still match under it.
+        if (matchInProgress && teamTrialsHighScoreBanner(sampler(sourceBitmap), sourceBitmap.width, sourceBitmap.height)) {
+            return TeamTrialsScreenState.HIGH_SCORE_BANNER
+        }
+
         if (LabelDailySale.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             return TeamTrialsScreenState.DAILY_SALE_POPUP
         }
@@ -490,6 +504,14 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         }
 
         MessageLog.w(TAG, "[WARN] handlePostMatchResults:: no advance button found; waiting.")
+        game.wait(2.0)
+    }
+
+    /** The weekly high score banner advances to the results on a tap, as its "TAP" prompt asks. */
+    private fun handleHighScoreBanner(bitmap: Bitmap) {
+        MessageLog.i(TAG, "[TEAM_TRIALS] New weekly high score banner; tapping past it.")
+        val y = gameY(TeamTrialsGeometry.HIGH_SCORE_TAP_Y.toDouble(), ScreenBand.BOTTOM, bitmap.width, bitmap.height)
+        CoordinateTap.tap(game.gestureUtils, TeamTrialsGeometry.HIGH_SCORE_TAP_X.toDouble(), y, "high_score_banner_tap")
         game.wait(2.0)
     }
 

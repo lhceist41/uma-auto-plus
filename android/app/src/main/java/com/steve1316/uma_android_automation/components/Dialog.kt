@@ -265,7 +265,7 @@ object DialogUtils {
         }
 
         // Perform fuzzy matching against known dialog titles.
-        val match: String? = TextUtils.matchStringInList(text, DialogObjects.items.map { it.title })
+        val match: String? = matchDialogTitle(text)
 
         // Attempt to find known titles with different fonts if detection fails.
         if (match == null) {
@@ -295,6 +295,14 @@ object DialogUtils {
             return null
         }
 
+        return match
+    }
+
+    /** The known dialog title [text] reads as, or null. */
+    internal fun matchDialogTitle(text: String): String? {
+        val match = TextUtils.matchStringInList(text, DialogObjects.items.map { it.title }) ?: return null
+        // Jaro-Winkler's prefix boost carries any "Event ..." title to Event Home (0.81 to 0.90), so it needs a closer read.
+        if (match == DialogEventHome.title) return TextUtils.matchStringInList(text, listOf(match), threshold = 0.95)
         return match
     }
 
@@ -443,6 +451,7 @@ object DialogObjects {
             DialogDownloadError,
             DialogEpithet,
             DialogEpithets,
+            DialogEventHome,
             DialogExchangeComplete,
             DialogExternalLink,
             DialogFans,
@@ -949,6 +958,21 @@ object DialogEpithets : DialogInterface {
     override val buttons: List<BaseComponentInterface> =
         listOf(
             ButtonClose,
+        )
+}
+
+/**
+ * Home, while a story event runs: "Return to the event home screen?" with Cancel and Event Home.
+ * Cancel is its only listed button, so close and ok never leave for the event screen.
+ */
+object DialogEventHome : DialogInterface {
+    override val name: String = "event_home"
+    override val title: String = "Event Home"
+    override val closeButton = null
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> =
+        listOf(
+            ButtonCancel,
         )
 }
 

@@ -190,6 +190,10 @@ open class DialogHandler(val game: Game) {
                 dialog.ok(game.imageUtils)
             }
 
+            "event_home" -> {
+                dialog.close(game.imageUtils)
+            }
+
             "session_error" -> {
                 throw InterruptedException("Session error. Stopping bot...")
             }

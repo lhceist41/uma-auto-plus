@@ -29,6 +29,7 @@ internal enum class BetweenRunDialog(val title: String) {
     PURCHASE_CARATS("Purchase Carats"),
     AGE_CONFIRMATION("Age Confirmation"),
     NEW_SCENARIO("New Scenario"),
+    EVENT_HOME("Event Home"),
     ;
 
     companion object {
@@ -66,6 +67,9 @@ internal sealed class BetweenRunDialogStep(val taps: List<ButtonInterface>) {
     data object ConfirmDateChanged : BetweenRunDialogStep(listOf(ButtonOk))
 
     data object CloseNewScenario : BetweenRunDialogStep(listOf(ButtonClose))
+
+    /** Cancel only, never Event Home: that leaves for the story event's own screens. */
+    data object CancelEventHome : BetweenRunDialogStep(listOf(ButtonCancel))
 
     /** OK only, never Cancel: the game downloads its data (no spend), waited out by [BetweenRunRecovery.acceptedDataDownload]. */
     data object AcceptDataDownload : BetweenRunDialogStep(listOf(ButtonOk))
@@ -111,6 +115,7 @@ internal fun planBetweenRunDialog(
         BetweenRunDialog.NOTICES -> BetweenRunDialogStep.CloseNotices
         BetweenRunDialog.DATE_CHANGED -> BetweenRunDialogStep.ConfirmDateChanged
         BetweenRunDialog.NEW_SCENARIO -> BetweenRunDialogStep.CloseNewScenario
+        BetweenRunDialog.EVENT_HOME -> BetweenRunDialogStep.CancelEventHome
         BetweenRunDialog.FOLLOW_TRAINER -> BetweenRunDialogStep.DismissFollowTrainer
         BetweenRunDialog.CONNECTION_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "CONNECTION_LOST")
         BetweenRunDialog.DOWNLOAD_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "DOWNLOAD_FAILED")

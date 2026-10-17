@@ -37,6 +37,21 @@ object TeamTrialsGeometry {
     /** "TAP" prompt on the WIN/LOSE splash, BOTTOM band: phone (540, 1980). */
     const val SPLASH_TAP_X = 540
     const val SPLASH_TAP_Y = 1584
+
+    /**
+     * "NEW HIGH SCORE!" banner, measured on MuMu 1080x1920 frames (DIALOG band; no phone capture confirms it):
+     * white rows clear of the rank and points, the green stripe rows above and below, and the title's lime fill.
+     */
+    val HIGH_SCORE_WHITE_YS = intArrayOf(710, 740, 890, 920)
+    val HIGH_SCORE_STRIPE_YS = intArrayOf(460, 480, 1170, 1190)
+    const val HIGH_SCORE_TITLE_Y0 = 660
+    const val HIGH_SCORE_TITLE_Y1 = 680
+    const val HIGH_SCORE_TITLE_X0 = 150
+    const val HIGH_SCORE_TITLE_X1 = 930
+
+    /** Its blinking "TAP" prompt, BOTTOM band: MuMu y 1596-1683. */
+    const val HIGH_SCORE_TAP_X = 540
+    const val HIGH_SCORE_TAP_Y = 1640
 }
 
 private fun red(argb: Int): Int = (argb shr 16) and 0xFF
@@ -162,4 +177,44 @@ fun quickModePillOn(
         }
     }
     return hits.toDouble() / total >= 0.5
+}
+
+private fun isBannerLime(argb: Int): Boolean = red(argb) >= 150 && green(argb) >= 225 && blue(argb) <= 120
+
+private fun isBannerEmerald(argb: Int): Boolean = red(argb) <= 110 && green(argb) in 180..225 && blue(argb) in 90..160
+
+private fun rowShare(
+    sampler: SparkPixelSampler,
+    y: Int,
+    x0: Int,
+    x1: Int,
+    step: Int,
+    hit: (Int) -> Boolean,
+): Double {
+    var hits = 0
+    var total = 0
+    for (x in x0 until x1 step step) {
+        if (hit(sampler.argb(x, y))) hits++
+        total++
+    }
+    return hits.toDouble() / total
+}
+
+/**
+ * Whether the full-screen "NEW HIGH SCORE!" banner is up, shown after a match that sets a weekly high score.
+ * Measured on the banner: white rows 0.96 and up, stripe rows 0.68 and up, title 0.24. Other screens reach 0.22 stripes or
+ * 0.41 title on their own, so only all three together name the banner.
+ */
+fun teamTrialsHighScoreBanner(
+    sampler: SparkPixelSampler,
+    width: Int,
+    height: Int,
+): Boolean {
+    if (!isMappedSurface(width, height)) return false
+    val mapped = sampler.onScreen(ScreenBand.DIALOG, width, height)
+    if (TeamTrialsGeometry.HIGH_SCORE_WHITE_YS.any { y -> rowShare(mapped, y, 0, 1080, 6) { minOf(red(it), green(it), blue(it)) >= 235 } < 0.9 }) return false
+    if (TeamTrialsGeometry.HIGH_SCORE_STRIPE_YS.any { y -> rowShare(mapped, y, 0, 1080, 6) { isBannerLime(it) || isBannerEmerald(it) } < 0.4 }) return false
+    val titleRows = TeamTrialsGeometry.HIGH_SCORE_TITLE_Y0..TeamTrialsGeometry.HIGH_SCORE_TITLE_Y1 step 4
+    val title = titleRows.map { y -> rowShare(mapped, y, TeamTrialsGeometry.HIGH_SCORE_TITLE_X0, TeamTrialsGeometry.HIGH_SCORE_TITLE_X1, 3, ::isBannerLime) }.average()
+    return title >= 0.12
 }

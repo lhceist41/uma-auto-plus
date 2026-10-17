@@ -16,6 +16,7 @@ import com.steve1316.uma_android_automation.components.DialogConnectionError
 import com.steve1316.uma_android_automation.components.DialogDataDownload
 import com.steve1316.uma_android_automation.components.DialogDateChanged
 import com.steve1316.uma_android_automation.components.DialogDownloadError
+import com.steve1316.uma_android_automation.components.DialogEventHome
 import com.steve1316.uma_android_automation.components.DialogFollowTrainer
 import com.steve1316.uma_android_automation.components.DialogNewScenario
 import com.steve1316.uma_android_automation.components.DialogNotices
@@ -65,7 +66,7 @@ class BetweenRunDialogsTest {
 
     private fun plan(dialog: BetweenRunDialog) = planBetweenRunDialog(dialog, nothing, StartModule.NAV_DEADLINE_MS)
 
-    private val closing = listOf(BetweenRunDialog.NOTICES, BetweenRunDialog.DATE_CHANGED, BetweenRunDialog.FOLLOW_TRAINER, BetweenRunDialog.NEW_SCENARIO)
+    private val closing = listOf(BetweenRunDialog.NOTICES, BetweenRunDialog.DATE_CHANGED, BetweenRunDialog.FOLLOW_TRAINER, BetweenRunDialog.NEW_SCENARIO, BetweenRunDialog.EVENT_HOME)
     private val failing = listOf(BetweenRunDialog.SESSION_ERROR, BetweenRunDialog.PURCHASE_CARATS, BetweenRunDialog.AGE_CONFIRMATION)
 
     @Nested
@@ -85,6 +86,7 @@ class BetweenRunDialogsTest {
                     BetweenRunDialog.PURCHASE_CARATS to DialogPurchaseCarats.title,
                     BetweenRunDialog.AGE_CONFIRMATION to DialogAgeConfirmation.title,
                     BetweenRunDialog.NEW_SCENARIO to DialogNewScenario.title,
+                    BetweenRunDialog.EVENT_HOME to DialogEventHome.title,
                 )
             assertEquals(BetweenRunDialog.entries.toSet(), objects.keys)
             for ((dialog, title) in objects) {
