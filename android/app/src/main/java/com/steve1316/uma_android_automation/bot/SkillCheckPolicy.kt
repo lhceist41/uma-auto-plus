@@ -78,6 +78,18 @@ fun decideSkillCheck(
     return SkillCheckDecision.none
 }
 
+/**
+ * A session that held SP for a scenario gold spends nothing, so SP never falls below the threshold that normally re-arms high water.
+ * Re-arm once SP covers the held gold's live cost. Requiring growth since the hold bounds re-opens when the Main-screen and Learn-screen
+ * reads disagree.
+ */
+fun shouldRearmHighWater(
+    alreadyHandledHighWater: Boolean,
+    heldGoldCost: Int?,
+    heldAtSkillPoints: Int,
+    skillPoints: Int,
+): Boolean = alreadyHandledHighWater && heldGoldCost != null && skillPoints >= heldGoldCost && skillPoints > heldAtSkillPoints
+
 const val PRE_FINALS_DAY: Int = 72
 
 const val PLAN_SKILL_POINT_CHECK: String = "skillPointCheck"

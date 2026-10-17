@@ -50,6 +50,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     /** The trigger [start] resolved; the career-end fallback fires only on CAREER_COMPLETE. */
     private var sessionEffectiveTrigger: SkillCheckTrigger? = null
 
+    /** Live cost of the cheapest Grand Concert gold this session held SP for; null when nothing was held. Campaign re-arms high water on it. */
+    var sessionHeldGoldCost: Int? = null
+        private set
+
     /** True only when the constrained career-end fallback ran; null otherwise so the telemetry field is omitted. */
     private var sessionCareerEndFallback: Boolean? = null
 
@@ -348,6 +352,12 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             }
             return buyFirst to reserved
         }
+
+        /** Live cost of the cheapest offered gold [reserveForScenarioGolds] held back instead of planning; at that SP a session can buy one. */
+        internal fun cheapestHeldGold(available: List<SkillCandidate>, plannedGolds: List<Pair<String, Int>>): Int? =
+            available
+                .filter { it.name in GRAND_CONCERT_RESERVED_GOLDS && it.price > 0 && plannedGolds.none { (name, _) -> name == it.name } }
+                .minOfOrNull { it.price }
 
         /**
          * Pure calculation function that determines which skills to buy using the Optimize Rank strategy.
@@ -1437,17 +1447,19 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         val result: MutableMap<String, Int> = mutableMapOf()
 
         // Live row prices: a gold's row price already includes its unowned base skill.
+        val goldCandidates: List<SkillCandidate> =
+            skillList.getAvailableSkills().values
+                .filter { it.name !in skillList.deadTapSkills }
+                .map { SkillCandidate(name = it.name, price = it.screenPrice, evaluationPoints = it.evaluationPoints) }
         val (goldsFirst, reservedSkillPoints) =
             reserveForScenarioGolds(
                 scenario = game.scenario,
                 objective = campaign.skillSpendObjective,
                 trigger = sessionEffectiveTrigger,
-                available =
-                    skillList.getAvailableSkills().values
-                        .filter { it.name !in skillList.deadTapSkills }
-                        .map { SkillCandidate(name = it.name, price = it.screenPrice, evaluationPoints = it.evaluationPoints) },
+                available = goldCandidates,
                 skillPoints = availableSkillPoints,
             )
+        sessionHeldGoldCost = if (reservedSkillPoints > 0) cheapestHeldGold(goldCandidates, goldsFirst) else null
         for ((name, price) in goldsFirst) {
             val entry: SkillListEntry = skillList.getAvailableSkills()[name] ?: continue
             entry.buy()
@@ -1645,6 +1657,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         sessionStrategyTailAllowed = null
         sessionCareerEndFallback = null
         sessionEffectiveTrigger = null
+        sessionHeldGoldCost = null
         sessionPlanningScanComplete = null
         sessionRecoveryRuleActive = null
         sessionRecoveryRequired = null

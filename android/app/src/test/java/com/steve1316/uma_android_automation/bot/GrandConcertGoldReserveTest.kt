@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.SkillCandidate
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateSkillPurchases
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.cheapestHeldGold
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.reserveForScenarioGolds
 import com.steve1316.uma_android_automation.bot.SkillPlan.SkillPlanSettings
 import com.steve1316.uma_android_automation.bot.SkillPlan.SpendingStrategy
@@ -158,5 +159,94 @@ class GrandConcertGoldReserveTest {
         assertTrue(body.contains("price = it.screenPrice"))
         assertEquals(6, Regex("availableSkillPoints = planSkillPoints - result.values.sum\\(\\)").findAll(body).count())
         assertFalse(body.contains("availableSkillPoints = availableSkillPoints - result.values.sum()"))
+    }
+
+    private val iWannaWin400 = SkillCandidate("I Wanna Win with You", price = 400, evaluationPoints = 633)
+
+    /** What getSkillsToBuy leaves for Campaign: the held gold's cost, or null when nothing was held. */
+    private fun heldCost(candidates: List<SkillCandidate>, skillPoints: Int, scenario: String = gc): Int? {
+        val (golds, reserved) = reserveForScenarioGolds(scenario, SkillSpendObjective.RANK, SkillCheckTrigger.HIGH_WATER, candidates, skillPoints)
+        return if (reserved > 0) cheapestHeldGold(candidates, golds) else null
+    }
+
+    private fun highWater(skillPoints: Int, handled: Boolean, day: Int = 65) =
+        decideSkillCheck(
+            skillPoints = skillPoints,
+            highWaterThreshold = 350,
+            enableSkillPointCheck = true,
+            highWaterPlanEnabled = true,
+            alreadyHandledHighWater = handled,
+            day = day,
+            preFinalsPlanEnabled = true,
+            alreadyHandledPreFinals = false,
+        )
+
+    @Test
+    fun `a gold held at 350 SP is bought by a re-armed high-water session once SP reaches its cost`() {
+        val screen = milesOnScreen + iWannaWin400
+        assertTrue(session(screen, skillPoints = 350).isEmpty())
+        val held = heldCost(screen, 350)
+        assertEquals(400, held)
+
+        // The held session spent nothing, so SP stays above the threshold and the old flag alone never re-arms.
+        assertEquals(SkillCheckAction.NONE, highWater(skillPoints = 410, handled = true).action)
+        assertFalse(shouldRearmHighWater(true, held, heldAtSkillPoints = 350, skillPoints = 390))
+        assertTrue(shouldRearmHighWater(true, held, heldAtSkillPoints = 350, skillPoints = 410))
+
+        val rearmed = highWater(skillPoints = 410, handled = false)
+        assertEquals(SkillCheckAction.RUN_PLAN, rearmed.action)
+        assertEquals(SkillCheckTrigger.HIGH_WATER, rearmed.trigger)
+        assertEquals("I Wanna Win with You" to 400, session(screen, skillPoints = 410).first())
+    }
+
+    @Test
+    fun `two held golds re-arm at the cheaper one`() {
+        val screen = milesOnScreen + seeYaLater + iWannaWin400
+        assertTrue(session(screen, skillPoints = 300).isEmpty())
+        assertEquals(304, heldCost(screen, 300))
+        // A gold planned in the same session is not held: only the one that did not fit counts.
+        assertEquals(400, heldCost(screen, 350))
+    }
+
+    @Test
+    fun `no held gold leaves high water as it was`() {
+        assertEquals(null, heldCost(milesOnScreen, 350))
+        assertEquals(null, heldCost(milesOnScreen + iWannaWin400, 350, scenario = "URA Finale"))
+        for (sp in listOf(0, 349, 350, 410, 1000)) {
+            assertFalse(shouldRearmHighWater(true, null, heldAtSkillPoints = 0, skillPoints = sp))
+            assertFalse(shouldRearmHighWater(false, null, heldAtSkillPoints = 0, skillPoints = sp))
+        }
+    }
+
+    @Test
+    fun `a bought or withdrawn gold, or a hold at the same SP, cannot loop the re-arm`() {
+        // The re-armed session at 410 plans the gold, so nothing is held afterwards.
+        assertEquals(null, heldCost(milesOnScreen + iWannaWin400, 410))
+        // Withdrawn: the next session sees no gold and holds nothing.
+        assertEquals(null, heldCost(milesOnScreen, 410))
+        // Held again because the Learn screen read less SP than the Main screen: no re-open until SP grows past the new hold.
+        assertFalse(shouldRearmHighWater(true, 400, heldAtSkillPoints = 410, skillPoints = 410))
+        assertFalse(shouldRearmHighWater(false, 400, heldAtSkillPoints = 350, skillPoints = 410))
+    }
+
+    @Test
+    fun `Campaign re-arms from the held cost and records it after high-water and pre-finals sessions`() {
+        fun source(rel: String): String {
+            var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+            while (dir != null && !java.io.File(dir, rel).isFile) dir = dir.parentFile
+            return java.io.File(dir ?: throw AssertionError("$rel not found"), rel).readText()
+        }
+        val base = "android/app/src/main/java/com/steve1316/uma_android_automation/bot/"
+        val campaign = source(base + "Campaign.kt")
+        val start = campaign.indexOf("    open fun performGlobalChecks(")
+        val body = campaign.substring(start, campaign.indexOf("\n    }", start))
+        val rearm = body.indexOf("if (shouldRearmHighWater(bHasHandledSkillPointCheck, heldGoldCost, heldGoldAtSkillPoints, trainee.skillPoints))")
+        assertTrue(rearm in 0 until body.indexOf("decideSkillCheck("))
+        assertEquals(2, Regex("heldGoldCost = skillPlan.sessionHeldGoldCost").findAll(body).count())
+
+        val plan = source(base + "SkillPlan.kt")
+        assertTrue(plan.contains("sessionHeldGoldCost = if (reservedSkillPoints > 0) cheapestHeldGold(goldCandidates, goldsFirst) else null"))
+        val startBody = plan.substring(plan.indexOf("    fun start("), plan.indexOf("val bitmap: Bitmap", plan.indexOf("    fun start(")))
+        assertTrue(startBody.contains("sessionHeldGoldCost = null"))
     }
 }

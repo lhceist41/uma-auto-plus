@@ -853,6 +853,11 @@ abstract class Campaign(game: Game) : Task(game) {
 
     protected val skillPointCheckMaxAttempts: Int = 3
 
+    /** Set by a completed high-water or pre-finals session that held SP for a Grand Concert gold; see [shouldRearmHighWater]. */
+    protected var heldGoldCost: Int? = null
+
+    protected var heldGoldAtSkillPoints: Int = 0
+
     /** Flag indicating if the pre-finals check has been handled. */
     protected var bHasHandledPreFinalsCheck: Boolean = false
 
@@ -3442,6 +3447,12 @@ abstract class Campaign(game: Game) : Task(game) {
         if (trainee.skillPoints < skillPointsRequired) {
             bHasHandledSkillPointCheck = false
             skillPointCheckAttempts = 0
+            heldGoldCost = null
+        }
+        if (shouldRearmHighWater(bHasHandledSkillPointCheck, heldGoldCost, heldGoldAtSkillPoints, trainee.skillPoints)) {
+            MessageLog.i(TAG, "[SKILLS] Skill Points ${trainee.skillPoints} now cover the held Grand Concert gold ($heldGoldCost SP). Re-arming the skill point check.")
+            bHasHandledSkillPointCheck = false
+            heldGoldCost = null
         }
 
         // The two adaptive-only trigger inputs. Everything defaults inert (manual mode, rank objective, disabled plan, OCR failure, finals adjacency).
@@ -3521,6 +3532,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
         // Now check if we need to handle skills before finals.
         if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.SCENARIO_FINALS) {
+            val skillPointsBeforeSession: Int = trainee.skillPoints
             ButtonSkills.click(game.imageUtils)
             game.wait(1.0)
             // Plan name stays null so start() resolves it from the screen; only the trigger is threaded through, for telemetry.
@@ -3542,6 +3554,8 @@ abstract class Campaign(game: Game) : Task(game) {
             }
             bHasHandledPreFinalsCheck = true
             preFinalsCheckAttempts = 0
+            heldGoldCost = skillPlan.sessionHeldGoldCost
+            heldGoldAtSkillPoints = skillPointsBeforeSession
             return true
         }
 
@@ -3554,6 +3568,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 // If not, we skip the skill purchase for now and retry on the next turn.
                 if (checkMainScreen()) {
                     MessageLog.i(TAG, "[SKILLS] Beginning process to purchase skills...")
+                    val skillPointsBeforeSession: Int = trainee.skillPoints
                     ButtonSkills.click(game.imageUtils)
                     game.wait(1.0)
                     if (!handleSkillListScreen(PLAN_SKILL_POINT_CHECK, SkillCheckTrigger.HIGH_WATER)) {
@@ -3574,6 +3589,8 @@ abstract class Campaign(game: Game) : Task(game) {
                     }
                     bHasHandledSkillPointCheck = true
                     skillPointCheckAttempts = 0
+                    heldGoldCost = skillPlan.sessionHeldGoldCost
+                    heldGoldAtSkillPoints = skillPointsBeforeSession
                     return true
                 } else {
                     MessageLog.i(TAG, "[SKILLS] Skipping skill purchase check for now since we are not confirmed to be sitting on the Main screen.")
