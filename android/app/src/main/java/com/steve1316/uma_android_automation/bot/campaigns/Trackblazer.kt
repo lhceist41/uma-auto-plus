@@ -390,8 +390,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 if (result.dialog.ok(game.imageUtils)) {
                     game.wait(game.dialogWaitDelay)
 
-                    // ButtonTrainingItems also matches Main's quick-access button, so ButtonHomeFullStats (Main only) rules that out.
-                    val enteredShop = ButtonTrainingItems.check(game.imageUtils, tries = 5) && !ButtonHomeFullStats.check(game.imageUtils)
+                    val enteredShop = isInShop()
                     val flags = shopFlagsAfterDialogTap(enteredShop, shopCheckCounter, bInitialShopCheckPerformed)
                     bShouldCheckShop = flags.first
                     shopCheckCounter = flags.second
@@ -1022,6 +1021,23 @@ class Trackblazer(game: Game) : Campaign(game) {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
+     * Checks whether the Shop screen is open, retrying while the screen is still sliding in.
+     *
+     * @param tries The number of frames to check, 0.5 seconds apart.
+     * @return True if the Shop screen is open, false otherwise.
+     */
+    private fun isInShop(tries: Int = 5): Boolean =
+        awaitShopOpen(
+            tries,
+            {
+                // ButtonTrainingItems also matches Main's quick-access button, so ButtonHomeFullStats (Main only) rules that out on the same frame.
+                val sourceBitmap = game.imageUtils.getSourceBitmap()
+                ButtonTrainingItems.check(game.imageUtils, sourceBitmap = sourceBitmap) && !ButtonHomeFullStats.check(game.imageUtils, sourceBitmap = sourceBitmap)
+            },
+            { game.wait(0.5) },
+        )
+
+    /**
      * Opens the Shop UI.
      *
      * @param tries The number of scan attempts to perform to find the shop button.
@@ -1046,7 +1062,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 }
             }
 
-            if (ButtonTrainingItems.check(game.imageUtils, tries = 5) && !ButtonHomeFullStats.check(game.imageUtils)) {
+            if (isInShop()) {
                 return true
             }
 
@@ -1059,7 +1075,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             MessageLog.i(TAG, "[TRACKBLAZER] Shop dialog detected while trying to open the shop. Entering via dialog...")
             if (detectedDialog.ok(game.imageUtils)) {
                 game.wait(game.dialogWaitDelay)
-                return ButtonTrainingItems.check(game.imageUtils, tries = 5) && !ButtonHomeFullStats.check(game.imageUtils)
+                return isInShop()
             }
         }
 
@@ -2492,6 +2508,15 @@ class Trackblazer(game: Game) : Campaign(game) {
         // If currentGain was one of the picked items, use it.
         return pickedEnergyItems.contains(currentGain)
     }
+}
+
+/** Polls [onShopFrame] up to [tries] times, calling [pause] between frames, so a shop still sliding in is not mistaken for a failed entry. */
+internal fun awaitShopOpen(tries: Int, onShopFrame: () -> Boolean, pause: () -> Unit): Boolean {
+    repeat(tries) { attempt ->
+        if (onShopFrame()) return true
+        if (attempt < tries - 1) pause()
+    }
+    return false
 }
 
 /** Shop check state after tapping the Shop dialog button: (shouldCheckShop, shopCheckCounter, initialShopCheckPerformed). A tap that never opened the shop keeps the check pending. */
