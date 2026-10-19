@@ -1692,7 +1692,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             Thread {
                 try {
                     val entryPoint = Game(context, selection, careerInFlight, careerLaunched)
-                    taskResult = entryPoint.start()
+                    entryPoint.memoryLog.gameStart()
+                    try {
+                        taskResult = entryPoint.start()
+                    } finally {
+                        entryPoint.memoryLog.gameEnd()
+                    }
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
                     lastRunPostedException = isCrash(e)

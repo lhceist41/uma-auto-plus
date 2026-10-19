@@ -4118,6 +4118,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 consecutiveUnknownScreenCount = 0
                 careerScreenObservedThisTask = true
                 endDataDownloadWait()
+                onTurnBoundary()
                 return null
             }
 
@@ -4477,6 +4478,27 @@ abstract class Campaign(game: Game) : Task(game) {
         val acceptedAt = game.dataDownloadAcceptedAtMs ?: return
         game.dataDownloadAcceptedAtMs = null
         MessageLog.i(TAG, "[DIALOG] The game data download finished after ${(SystemClock.elapsedRealtime() - acceptedAt) / 1000}s.")
+    }
+
+    /** After a main-screen tick, whose analysis threads are done: the turn's "[MEM]" line and, when due, the Tesseract re-creation test. */
+    private fun onTurnBoundary() {
+        val phase = if (date.bIsFinaleSeason) "FINALE" else "${date.year.name}_${date.phase.name}_${date.month.name}"
+        if (!game.memoryLog.turnEnd(date.day, phase, StatusBoard.snapshot().career?.actionKind)) return
+        if (!game.tesseractReinit.turnEnded()) return
+        try {
+            if (game.imageUtils.reinitTesseractWhenIdle()) {
+                game.tesseractReinit.reinitDone()
+                MessageLog.i(TAG, "[MEM] Re-created both Tesseract engines after turn ${date.day}.")
+            } else {
+                MessageLog.i(TAG, "[MEM] Tesseract re-creation waits: OCR was busy after turn ${date.day}.")
+            }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (t: Throwable) {
+            // The old engines are back in place; a test arm must not keep retrying on a run whose re-creation failed once.
+            game.tesseractReinit.stop()
+            MessageLog.w(TAG, "[MEM] Tesseract re-creation failed after turn ${date.day} (${t.javaClass.simpleName}: ${t.message}). Kept the old engines; no more re-creations this run.")
+        }
     }
 
     /** The escalation replaces a single unbounded blind tap at (350, 450) that wedged the bot forever on an unrecognized overlay (notably an open

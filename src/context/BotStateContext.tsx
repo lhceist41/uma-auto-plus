@@ -336,6 +336,9 @@ export interface Settings {
         recordingResolutionScale: number
         enableRemoteLogViewer: boolean
         remoteLogViewerPort: number
+        // Memory diagnostic, off by default: re-creates both Tesseract engines every tesseractReinitTurns turns to show whether their native memory grows with use.
+        enableTesseractReinit: boolean
+        tesseractReinitTurns: number
     }
 
     // Discord settings
@@ -875,6 +878,8 @@ export const defaultSettings: Settings = {
         recordingResolutionScale: 1.0,
         enableRemoteLogViewer: false,
         remoteLogViewerPort: 9000,
+        enableTesseractReinit: false,
+        tesseractReinitTurns: 10,
     },
     discord: {
         enableDiscordNotifications: false,

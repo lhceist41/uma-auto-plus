@@ -567,6 +567,57 @@ const DebugSettings = () => {
                             <Separator style={{ marginVertical: 16 }} />
 
                             <CustomTitle
+                                title="Memory Diagnostics"
+                                description="Every career turn writes a [MEM] line with the bot's memory use to the log. The option below is a test for long queues."
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-tesseract-reinit"
+                                checked={bsc.settings.debug.enableTesseractReinit}
+                                onCheckedChange={(checked) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, enableTesseractReinit: checked },
+                                    })
+                                }}
+                                label="Re-create Tesseract Every Few Turns"
+                                description="Off by default. Between career turns, while no text is being read, the bot replaces its two Tesseract text readers with fresh ones. Compare the [MEM] lines of a queue with this on and one with it off to see whether the readers keep growing in memory."
+                            />
+
+                            <View style={bsc.settings.debug.enableTesseractReinit ? {} : { display: "none" }}>
+                                <CustomSlider
+                                    searchId="debug-tesseract-reinit-turns"
+                                    searchCondition={bsc.settings.debug.enableTesseractReinit}
+                                    parentId="debug-tesseract-reinit"
+                                    value={bsc.settings.debug.tesseractReinitTurns}
+                                    placeholder={bsc.defaultSettings.debug.tesseractReinitTurns}
+                                    onValueChange={(value) => {
+                                        bsc.setSettings({
+                                            ...bsc.settings,
+                                            debug: { ...bsc.settings.debug, tesseractReinitTurns: value },
+                                        })
+                                    }}
+                                    onSlidingComplete={(value) => {
+                                        bsc.setSettings({
+                                            ...bsc.settings,
+                                            debug: { ...bsc.settings.debug, tesseractReinitTurns: value },
+                                        })
+                                    }}
+                                    min={1}
+                                    max={50}
+                                    step={1}
+                                    label="Turns Between Tesseract Re-creations"
+                                    labelUnit=" turns"
+                                    showValue={true}
+                                    showLabels={true}
+                                    description="How many career turns pass between two re-creations."
+                                    style={{ marginTop: 10 }}
+                                />
+                            </View>
+
+                            <Separator style={{ marginVertical: 16 }} />
+
+                            <CustomTitle
                                 searchId="debug-accessibility-service-check"
                                 title="Accessibility Service Check"
                                 description="The Accessibility Service allows the bot to perform clicks and gestures on your behalf."

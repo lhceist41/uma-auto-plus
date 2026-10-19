@@ -859,6 +859,19 @@ const searchConfig: SearchOption[] = [
         parentId: "settings-enable-remote-log-viewer",
     },
     {
+        id: "debug-tesseract-reinit",
+        title: "Re-create Tesseract Every Few Turns",
+        description: "Memory test, off by default. Re-creates the Tesseract text readers between career turns to check whether they keep growing in memory over a long queue.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-tesseract-reinit-turns",
+        title: "Turns Between Tesseract Re-creations",
+        description: "How many career turns pass between two Tesseract re-creations.",
+        page: "DebugSettings",
+        parentId: "debug-tesseract-reinit",
+    },
+    {
         id: "debug-accessibility-service-check",
         title: "Accessibility Service Check",
         description: "The Accessibility Service allows the bot to perform clicks and gestures on your behalf. Check the current registration and initialization status here.",

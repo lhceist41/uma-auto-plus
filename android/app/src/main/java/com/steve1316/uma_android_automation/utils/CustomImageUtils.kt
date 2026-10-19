@@ -60,6 +60,7 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.collections.component1
 import kotlin.collections.component2
@@ -346,6 +347,56 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
          */
         private val ocrLock = Any()
 
+        /** Tesseract calls running or waiting for [ocrLock]; a re-creation waits for zero. */
+        private val ocrCallsInFlight = AtomicInteger(0)
+
+        private inline fun <T> withOcrLock(block: () -> T): T = runOcrCall(ocrLock, ocrCallsInFlight, block)
+
+        /** Runs one Tesseract call under [lock], counted in [inFlight] from before it waits for the lock until it leaves. */
+        internal inline fun <T> runOcrCall(lock: Any, inFlight: AtomicInteger, block: () -> T): T {
+            inFlight.incrementAndGet()
+            try {
+                return synchronized(lock) { block() }
+            } finally {
+                inFlight.decrementAndGet()
+            }
+        }
+
+        /**
+         * Runs [swap] under [lock] only when no Tesseract call is running or waiting; otherwise returns false without waiting.
+         * Every engine access reads the engine fields inside the same lock, so a call that starts after the swap uses the new engines.
+         */
+        internal fun reinitWhenOcrIdle(lock: Any, inFlight: AtomicInteger, swap: () -> Unit): Boolean {
+            if (inFlight.get() > 0) return false
+            synchronized(lock) {
+                if (inFlight.get() > 0) return false
+                swap()
+                return true
+            }
+        }
+
+        /**
+         * Runs [init], which replaces the engine pair in place, and keeps the new pair only when [ready] accepts both. Otherwise, or
+         * when anything is thrown (an OutOfMemoryError included), it frees whatever [init] built, puts the old pair back and throws.
+         * The old pair is freed only after the new one passed.
+         */
+        internal fun <E : Any> replaceEngines(read: () -> Pair<E, E>, write: (Pair<E, E>) -> Unit, init: () -> Unit, ready: (E) -> Boolean, recycle: (E) -> Unit) {
+            val old = read()
+            try {
+                init()
+                val fresh = read()
+                check(ready(fresh.first) && ready(fresh.second)) { "the new Tesseract engines did not initialise" }
+            } catch (t: Throwable) {
+                val built = read()
+                if (built.first !== old.first) runCatching { recycle(built.first) }
+                if (built.second !== old.second) runCatching { recycle(built.second) }
+                write(old)
+                throw t
+            }
+            recycle(old.first)
+            recycle(old.second)
+        }
+
         /**
          * Pure retry-ladder logic behind [retryOcrOnMisread], extracted here so JUnit can exercise the
          * bounds without a Context. Runs [attempt] once at increment 0, then re-runs with +5 increments
@@ -444,6 +495,25 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         externalTemp.mkdirs()
         matchFilePath = externalTemp.absolutePath
     }
+
+    /**
+     * Replaces both Tesseract engines with fresh ones and frees the old ones, only while no Tesseract call is running or
+     * waiting. Returns false when OCR was busy. Throws when the new engines failed; the old ones are back in place then.
+     */
+    fun reinitTesseractWhenIdle(): Boolean =
+        reinitWhenOcrIdle(ocrLock, ocrCallsInFlight) {
+            replaceEngines(
+                read = { tessBaseAPI to tessDigitsBaseAPI },
+                write = { (text, digits) ->
+                    tessBaseAPI = text
+                    tessDigitsBaseAPI = digits
+                },
+                // The library's initTesseract ignores init()'s result; an engine whose native init failed reports no language.
+                init = { initTesseract("eng.traineddata") },
+                ready = { it.initLanguagesAsString == "eng" },
+                recycle = { it.recycle() },
+            )
+        }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -677,7 +747,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         val resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
         Utils.matToBitmap(bwImage, resultBitmap)
         var result = ""
-        synchronized(ocrLock) {
+        withOcrLock {
             tessBaseAPI.setImage(resultBitmap)
             try {
                 // Finally, detect text on the cropped region.
@@ -2581,7 +2651,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
         Utils.matToBitmap(bwImage, resultBitmap)
         var result = "empty!"
-        synchronized(ocrLock) {
+        withOcrLock {
             tessDigitsBaseAPI.setImage(resultBitmap)
             try {
                 // Finally, detect text on the cropped region.
@@ -3018,7 +3088,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
             Utils.matToBitmap(bwImage, resultBitmap)
             var result = ""
-            synchronized(ocrLock) {
+            withOcrLock {
                 tessDigitsBaseAPI.setImage(resultBitmap)
                 try {
                     // Finally, detect text on the cropped region.
@@ -3187,7 +3257,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Fallback to Tesseract if ML Kit failed.
         if (mlKitFailed || result.isEmpty()) {
             Log.d(TAG, "[DEBUG] findTextByColor:: Falling back to Tesseract.")
-            synchronized(ocrLock) {
+            withOcrLock {
                 tessBaseAPI.setImage(finalBitmap)
                 try {
                     result = tessBaseAPI.utF8Text
@@ -3222,7 +3292,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @throws InterruptedException When the thread is interrupted while ML Kit reads.
      */
     internal fun readAllTextBlocks(bitmap: Bitmap, scale: Double = 2.0): List<OcrTextBlock> =
-        synchronized(ocrLock) {
+        withOcrLock {
             val rgba = Mat()
             val gray = Mat()
             val grayBitmap =
@@ -3251,7 +3321,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                             fail()
                         }
                 } ?: emptyList<OcrTextBlock>().also { Log.e(TAG, "[ERROR] readAllTextBlocks:: ML Kit timed out.") }
-            if (read.isNotEmpty()) return@synchronized read
+            if (read.isNotEmpty()) return@withOcrLock read
 
             val text =
                 try {
@@ -3320,7 +3390,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Perform OCR using findText() from ImageUtils. Serialized via ocrLock: findText drives the
         // shared, non-thread-safe Tesseract engine and this runs from parallel training-analysis
         // threads, so unsynchronized concurrent calls double-free the Leptonica Pix (native SIGABRT).
-        return synchronized(ocrLock) {
+        return withOcrLock {
             findText(
                 cropRegion = intArrayOf(x, y, width, height),
                 grayscale = useGrayscale,

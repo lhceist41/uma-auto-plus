@@ -44,6 +44,8 @@ import com.steve1316.uma_android_automation.components.LabelNowLoading
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPoints
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.MemoryLog
+import com.steve1316.uma_android_automation.utils.TesseractReinitSchedule
 import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.floatingButtonRect
 import com.steve1316.uma_android_automation.utils.screenTopInset
@@ -109,6 +111,12 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
     /** Whether debug mode is enabled for additional logging and saving debugging images to storage. */
     val debugMode: Boolean = SettingsHelper.getBooleanSetting("debug", "enableDebugMode")
+
+    /** Writes this run's "[MEM]" lines. */
+    val memoryLog = MemoryLog(MemoryLog.nextGameId(), scenario)
+
+    /** The off-by-default memory test that re-creates the Tesseract engines every few turns. */
+    val tesseractReinit = TesseractReinitSchedule(SettingsHelper.getBooleanSetting("debug", "enableTesseractReinit", false), SettingsHelper.getIntSetting("debug", "tesseractReinitTurns", 10))
 
     /** Whether to check for certain popups to stop at during execution. */
     val enablePopupCheck: Boolean = SettingsHelper.getBooleanSetting("general", "enablePopupCheck")
