@@ -50,9 +50,11 @@ import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.floatingButtonRect
 import com.steve1316.uma_android_automation.utils.screenTopInset
 import com.steve1316.uma_android_automation.utils.gameY
+import com.steve1316.uma_android_automation.utils.captureSizeMismatchWarning
 import com.steve1316.uma_android_automation.utils.isMappedSurface
 import com.steve1316.uma_android_automation.utils.overlayKeepClearHits
 import com.steve1316.uma_android_automation.utils.rememberScreenTopInset
+import com.steve1316.uma_android_automation.utils.screenSize
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.TitleScreenProbe
@@ -954,6 +956,9 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         val topInset = rememberScreenTopInset(myContext)
         val bandOffsets = ScreenBand.entries.joinToString { "${it.name.lowercase()} +${gameY(0.0, it, SharedData.displayWidth, SharedData.displayHeight).toInt()}" }
         MessageLog.i(TAG, "[LAYOUT] Top cutout inset $topInset px; offsets from 1080x1920: $bandOffsets.")
+        screenSize(myContext)?.let { (screenWidth, screenHeight) ->
+            captureSizeMismatchWarning(SharedData.displayWidth, SharedData.displayHeight, screenWidth, screenHeight)?.let { MessageLog.w(TAG, it) }
+        }
         if (!isMappedSurface(SharedData.displayWidth, SharedData.displayHeight)) {
             MessageLog.w(
                 TAG,

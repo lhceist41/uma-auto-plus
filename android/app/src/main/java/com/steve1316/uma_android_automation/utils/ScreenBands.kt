@@ -44,6 +44,39 @@ fun capturePaddedPastScreen(
     screenWidth: Int,
 ): Boolean = screenWidth > 0 && captureWidth > screenWidth
 
+/** The window manager's maximum size, or null when it cannot be read. */
+fun screenSize(context: Context): Pair<Int, Int>? =
+    runCatching {
+        val display = context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds =
+                context
+                    .createDisplayContext(display)
+                    .createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null)
+                    .getSystemService(WindowManager::class.java)
+                    .maximumWindowMetrics.bounds
+            Pair(bounds.width(), bounds.height())
+        } else {
+            val size = android.graphics.Point()
+
+            @Suppress("DEPRECATION")
+            display.getRealSize(size)
+            Pair(size.x, size.y)
+        }
+    }.getOrNull()
+
+/** A warning when the capture size differs from the screen size (a rotated screen is the same size), else null. A capture smaller than the screen lowers the tap and read accuracy. */
+fun captureSizeMismatchWarning(
+    captureWidth: Int,
+    captureHeight: Int,
+    screenWidth: Int,
+    screenHeight: Int,
+): String? {
+    if (minOf(captureWidth, captureHeight) == minOf(screenWidth, screenHeight) && maxOf(captureWidth, captureHeight) == maxOf(screenWidth, screenHeight)) return null
+    return "[LAYOUT] The bot captures ${captureWidth}x$captureHeight but the screen is ${screenWidth}x$screenHeight. Taps and screen reads can be off by the difference. " +
+        "If the bot misses buttons, tap Share bug report on Home and include this line."
+}
+
 /** Other widths would also need template scales that are not measured yet. */
 fun isMappedSurface(
     width: Int,

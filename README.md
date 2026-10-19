@@ -95,7 +95,7 @@ This project is purely for educational purposes to learn about Android automatio
 > Run it from a PC with `adb`, or on-device with aShell You and Shizuku (the same tools as the resolution steps below). On MuMu, if `adb` is not recognized, use MuMu's own copy in front of the command, for example `"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe" -s 127.0.0.1:16384 shell pm grant ...` (the folder name can differ by MuMu version; the port is in MuMu's settings).
 
 5. Tapping `Start` then asks for screen-capture access (select `Entire screen` if prompted). A floating overlay button appears that you can drag around the screen.
-6. Follow the guidance overlay while dragging, so the button ends up somewhere it will not cover important UI.
+6. Drag the button to the top right corner, above the goal banner, so it does not cover important UI.
 
 > [!CAUTION]
 > Placing the overlay button over important UI elements will interfere with the bot's ability to read the screen.

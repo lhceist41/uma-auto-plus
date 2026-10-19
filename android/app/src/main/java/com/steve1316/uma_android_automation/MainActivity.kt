@@ -53,11 +53,7 @@ class MainActivity : ReactActivity() {
         }
 
         // Setup the guidance regions for the floating overlay button.
-        SharedData.guidanceRegions =
-            arrayOf(
-                intArrayOf(520, 0, 280, 110),
-                intArrayOf(200, 2215, 300, 120),
-            )
+        SharedData.guidanceRegions = arrayOf(intArrayOf(520, 0, 280, 110))
     }
 
     override fun onResume() {
