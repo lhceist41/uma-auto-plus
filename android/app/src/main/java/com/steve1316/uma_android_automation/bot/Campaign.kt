@@ -3958,6 +3958,8 @@ abstract class Campaign(game: Game) : Task(game) {
         StartModule.lastCareerEndSeq++
         if (outcome != "INCOMPLETE") ProgressTracker.noteProgress(ProgressEvent.CAREER_END)
         val quality = classifyCareerQuality(outcome, finaleRaces, finaleRaces1st)
+        // The deck this career's launch read, claimed by launch id only: a resumed or restarted career records "not observed".
+        val launchDeck = LaunchDeckObservation.forCareer(LaunchTransactionGate.active?.id)
 
         // Same fields as the ledger line, appended to the on-device corpus; the write swallows its own failures, so the ledger line always logs.
         val record =
@@ -3995,6 +3997,7 @@ abstract class Campaign(game: Game) : Task(game) {
                     StartModule.queueStopReason?.let { put("stopReason", it) }
                     StartModule.queueStopKey?.let { put("stopKey", it) }
                 }
+                put("deck", launchDeckJson(launchDeck))
                 put("cfg", JSONObject(outcomeConfigSnapshot as Map<*, *>))
             }
         OutcomeCorpus.append(game.myContext, record)
@@ -4025,6 +4028,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 append(" estRank=").append(it.rankLabel)
                 append(" estScore=").append(it.totalScore)
             }
+            append(launchDeckLedgerTokens(launchDeck))
             if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
                 StartModule.queueStopReason?.let { append(" stopReason=\"").append(it).append('"') }
                 StartModule.queueStopKey?.let { append(" stopKey=").append(it) }

@@ -25,7 +25,10 @@ import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.LaunchDeckObservation
 import com.steve1316.uma_android_automation.bot.LaunchTransactionGate
+import com.steve1316.uma_android_automation.bot.launchBorrowFromTap
+import com.steve1316.uma_android_automation.bot.launchDeckLogLine
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.SPARK_UNREADABLE_NAME
 import com.steve1316.uma_android_automation.bot.SparkChooserProfile
@@ -764,6 +767,10 @@ class CareerLaunchNavigator(private val context: Context) {
     private var borrowDuplicateReplacements: Int = 0
     private val borrowExcludedCharacters = mutableSetOf<String>()
     private var lastBorrowPickEntry: String? = null
+
+    // The last borrow row tap this launch sent (identity text, action name), for the career's deck record; a replacement overwrites it.
+    private var launchBorrowTap: Pair<String, String>? = null
+    private var borrowPickerOpenedThisLaunch: Boolean = false
     private var borrowPreTapValidationGate = BorrowPreTapValidationGate()
     private var borrowPostSelectionValidationGate = BorrowPostSelectionValidationGate()
     private var borrowPostSelectionAuthority = BorrowPostSelectionAuthority.PRODUCTION_LAUNCH
@@ -971,6 +978,8 @@ class CareerLaunchNavigator(private val context: Context) {
         borrowDuplicateReplacements = 0
         borrowExcludedCharacters.clear()
         lastBorrowPickEntry = null
+        launchBorrowTap = null
+        borrowPickerOpenedThisLaunch = false
         borrowPreTapValidationGate =
             BorrowPreTapValidationGate(
                 SettingsHelper.getBooleanSetting("debug", BORROW_PRETAP_VALIDATION_SETTING, false),
@@ -5405,8 +5414,10 @@ class CareerLaunchNavigator(private val context: Context) {
             borrowPostSelectionValidationGate.recordTap(result, borrowPostSelectionTpRawAtStart)
         }
         when (result.status) {
-            BorrowTapStatus.TAPPED ->
+            BorrowTapStatus.TAPPED -> {
+                launchBorrowTap = identity to actionName
                 MessageLog.i(TAG, "[NAV] [BORROW] TAPPED accepted row \"${borrowLogText(identity)}\" at (540, ${centerY.toInt()}).")
+            }
             BorrowTapStatus.LOCATED_VALIDATED_TAP_SUPPRESSED ->
                 MessageLog.i(
                     TAG,
@@ -5519,6 +5530,7 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         }
         friendSlotFillAttempts++
+        borrowPickerOpenedThisLaunch = true
         MessageLog.i(TAG, "[NAV] Friend slot is empty. Opening the Borrow Card picker (attempt $friendSlotFillAttempts)...")
         IconFriendSlotEmpty.click(iu, sourceBitmap = bitmap)
         waitSafe(2.0)
@@ -6586,11 +6598,11 @@ class CareerLaunchNavigator(private val context: Context) {
      * concentration, so the count is informational there (the Race-Bonus gate is a separate check).
      * Unity Cup gets extra non-rainbow growth from team mechanics, so its floor is one lower.
      */
-    private fun checkDeckConcentration() {
+    private fun checkDeckConcentration(): IntArray? {
         try {
-            if (!SettingsHelper.getBooleanSetting("training", "enableDeckConcentrationCheck", false)) return
+            if (!SettingsHelper.getBooleanSetting("training", "enableDeckConcentrationCheck", false)) return null
             val scenario = SettingsHelper.getStringSetting("general", "scenario")
-            if (scenario == "Daily Races" || scenario == "Team Trials") return // No support deck in misc modes.
+            if (scenario == "Daily Races" || scenario == "Team Trials") return null // No support deck in misc modes.
 
             val counts = readDeckTypeCounts(iu.getSourceBitmap())
             val breakdown = deckStatLabels.indices.joinToString(", ") { "${deckStatLabels[it]}=${counts[it]}" }
@@ -6600,7 +6612,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     TAG,
                     "[DECK] Support deck: $breakdown. Trackblazer is Race-Bonus-driven, not rainbow-concentration-driven, so the count is informational here (the Race Bonus check is separate).",
                 )
-                return
+                return counts
             }
 
             // Resolve the build's core stat from the preset (spark focus first, then top priority).
@@ -6610,7 +6622,7 @@ class CareerLaunchNavigator(private val context: Context) {
             val coreIndex = core?.let { c -> deckStatLabels.indexOfFirst { it.equals(c, ignoreCase = true) } } ?: -1
             if (coreIndex < 0) {
                 MessageLog.i(TAG, "[DECK] Support deck: $breakdown. Build core stat unresolved (no focusOnSparkStatTarget/statPrioritization); skipping the concentration warning.")
-                return
+                return counts
             }
 
             val baseFloor = SettingsHelper.getIntSetting("training", "deckConcentrationCardFloor", 4)
@@ -6627,11 +6639,64 @@ class CareerLaunchNavigator(private val context: Context) {
             } else {
                 MessageLog.i(TAG, "[DECK] Deck concentration OK for a $coreLabel build: $coreCount $coreLabel card(s) (floor $floor for $scenario). Full deck: $breakdown.")
             }
+            return counts
         } catch (e: InterruptedException) {
             throw e
         } catch (e: Exception) {
             MessageLog.w(TAG, "[DECK] Concentration check skipped (read failed: ${e.message}). The run continues normally.")
+            return null
         }
+    }
+
+    /**
+     * What this launch read of its deck, for the career that adopts this launch id ([LaunchDeckObservation.forCareer]).
+     * Nothing new is read: the deck slot is the required deck the formation gate verified before and after the borrow,
+     * [typeCounts] is the concentration check's read when that check is on, and the borrow is the last row tap sent.
+     */
+    private fun buildLaunchDeckObservation(typeCounts: IntArray?): LaunchDeckObservation? {
+        val launchTxId = LaunchTransactionGate.pending?.id ?: return null
+        val requiredDeck = requestedSupportDeckIndex
+        val postBorrowVerified = supportDeckPostBorrowVerified || (requiredDeck != null && lastBuildAwareLaunchResult?.deckNumberAtEnd == requiredDeck)
+        val slot = requiredDeck?.takeIf { supportDeckPreBorrowVerified && postBorrowVerified }
+        val slotReason =
+            when {
+                requiredDeck == null -> "not read: Required Support Deck is off"
+                slot == null -> "Deck $requiredDeck was not verified on both sides of the borrow"
+                else -> null
+            }
+        val typeCountsReason =
+            when {
+                typeCounts != null -> null
+                !SettingsHelper.getBooleanSetting("training", "enableDeckConcentrationCheck", false) -> "not read: Deck Concentration Check is off"
+                else -> "read failed"
+            }
+        val pinnedName = SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim().takeIf { it.isNotEmpty() }
+        val borrow = launchBorrowTap?.let { (identity, action) -> launchBorrowFromTap(identity, action, listOfNotNull(pinnedName) + SmartBorrowList.priority) }
+        val borrowReason =
+            when {
+                borrow != null -> null
+                !borrowPickerOpenedThisLaunch -> "not tapped: the Friends slot was already filled"
+                else -> "not tapped: the picker opened but no row tap was recorded"
+            }
+        return LaunchDeckObservation(
+            launchTransactionId = launchTxId,
+            slot = slot,
+            slotReason = slotReason,
+            typeCounts = typeCounts?.toList(),
+            typeCountsReason = typeCountsReason,
+            borrow = borrow,
+            borrowReason = borrowReason,
+        )
+    }
+
+    /**
+     * Only after the Start Career click was sent: a launch that failed or was stopped before it leaves nothing, so a career the
+     * player then starts by hand (which adopts the still pending launch id) records "not observed" rather than this deck.
+     */
+    private fun publishLaunchDeckObservation(observation: LaunchDeckObservation?) {
+        if (observation == null) return
+        LaunchDeckObservation.latest = observation
+        MessageLog.i(TAG, launchDeckLogLine(observation))
     }
 
     /**
@@ -9456,11 +9521,12 @@ class CareerLaunchNavigator(private val context: Context) {
 
         // Read the support-deck composition off this screen and warn if it looks too spread for the
         // build. Read-only and fully guarded — it never blocks the Start Career tap below.
-        checkDeckConcentration()
+        val launchDeck = buildLaunchDeckObservation(checkDeckConcentration())
 
         MessageLog.i(TAG, "[NAV] Clicking 'Start Career!'...")
 
         if (ButtonStartCareer.click(iu) || ButtonStartCareerOffset.click(iu) || ButtonStartCareerRight.click(iu)) {
+            publishLaunchDeckObservation(launchDeck)
             waitSafe(3.0)
             // Check for a second "Start Career!" confirmation screen.
             if (ButtonStartCareer.check(iu) || ButtonStartCareerOffset.check(iu) || ButtonStartCareerRight.check(iu)) {

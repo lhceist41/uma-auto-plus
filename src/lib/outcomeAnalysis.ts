@@ -50,10 +50,44 @@ export interface OutcomeRecord {
     /** Career-quality label: WIN / FINALE_LOST / COMPLETED / FORCE_END / INCOMPLETE (undefined on old records). */
     quality?: string
     cfg?: Record<string, string>
+    /** The deck the career's launch read (JSONL only; undefined on records predating the feature). */
+    deck?: CareerDeckRecord
     source: "jsonl" | "log"
     file?: string
     /** 0-based line index within `file` (JSONL only); anchors the positional spark association. */
     lineNumber?: number
+}
+
+/** The borrowed Friends-slot card as the launch read it; every field the launch could not read is undefined. */
+export interface CareerDeckBorrow {
+    /** The Smart Borrow entry (pinned or curated) the tapped row matched, as the list spells it. */
+    entry?: string
+    character?: string
+    outfit?: string
+    limitBreak?: number
+    /** smart, default, preferred_template or build_aware. */
+    source?: string
+}
+
+/**
+ * What the launch read of the deck a career started on. `observed` is false when the bot did not drive that launch
+ * (a resumed, restarted or hand-started career); then every value is null and `reason` says so. An observed launch
+ * still nulls each value it did not read, beside its own reason.
+ */
+export interface CareerDeckRecord {
+    observed: boolean
+    reason?: string
+    /** Saved deck number (1..10) the launch verified, or null. */
+    slot: number | null
+    slotReason?: string
+    /** Support card counts per type off the deck badges, or null. */
+    types: { spd: number; sta: number; pwr: number; grt: number; wit: number } | null
+    typesReason?: string
+    borrow: CareerDeckBorrow | null
+    borrowReason?: string
+    /** The six own cards' identity: never read today, always null. */
+    cards: null
+    cardsReason?: string
 }
 
 /**
@@ -270,6 +304,49 @@ export interface ParsedCorpus {
 
 const SPARK_KINDS = new Set(["stat", "aptitude", "unique", "skill"])
 
+function optionalString(value: unknown): string | undefined {
+    return typeof value === "string" ? value : undefined
+}
+
+function finiteNumber(value: unknown): number | undefined {
+    return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+/** Parses a record's `deck` field; anything that is not an object (old records, manual edits) is undefined, never fatal. */
+export function parseDeckField(raw: unknown): CareerDeckRecord | undefined {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined
+    const obj = raw as Record<string, unknown>
+    const typesRaw = obj.types
+    let types: CareerDeckRecord["types"] = null
+    if (typeof typesRaw === "object" && typesRaw !== null && !Array.isArray(typesRaw)) {
+        const t = typesRaw as Record<string, unknown>
+        const spd = finiteNumber(t.spd)
+        const sta = finiteNumber(t.sta)
+        const pwr = finiteNumber(t.pwr)
+        const grt = finiteNumber(t.grt)
+        const wit = finiteNumber(t.wit)
+        if (spd !== undefined && sta !== undefined && pwr !== undefined && grt !== undefined && wit !== undefined) types = { spd, sta, pwr, grt, wit }
+    }
+    const borrowRaw = obj.borrow
+    let borrow: CareerDeckBorrow | null = null
+    if (typeof borrowRaw === "object" && borrowRaw !== null && !Array.isArray(borrowRaw)) {
+        const b = borrowRaw as Record<string, unknown>
+        borrow = { entry: optionalString(b.entry), character: optionalString(b.character), outfit: optionalString(b.outfit), limitBreak: finiteNumber(b.limitBreak), source: optionalString(b.source) }
+    }
+    return {
+        observed: obj.observed === true,
+        reason: optionalString(obj.reason),
+        slot: finiteNumber(obj.slot) ?? null,
+        slotReason: optionalString(obj.slotReason),
+        types,
+        typesReason: optionalString(obj.typesReason),
+        borrow,
+        borrowReason: optionalString(obj.borrowReason),
+        cards: null,
+        cardsReason: optionalString(obj.cardsReason),
+    }
+}
+
 /** Validates+coerces one spark row; null when the row is malformed (unusable kind or star count). */
 function parseSparkRow(raw: unknown): SparkRowRecord | null {
     if (typeof raw !== "object" || raw === null) return null
@@ -404,6 +481,7 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
             finaleWins: obj.finaleWins !== undefined ? Number(obj.finaleWins) : undefined,
             quality: obj.quality !== undefined ? String(obj.quality) : undefined,
             cfg: obj.cfg,
+            deck: parseDeckField(obj.deck),
             source: "jsonl",
             file,
             lineNumber: i,

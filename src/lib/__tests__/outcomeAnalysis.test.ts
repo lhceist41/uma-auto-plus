@@ -420,8 +420,9 @@ describe("renderMarkdown", () => {
 
 // ---- Spark Farm Analyzer -------------------------------------------------
 
-function careerJson(o: Partial<{ trainee: string; scenario: string; turn: number; outcome: string; result: string; spd: number; sta: number; pwr: number; grt: number; wit: number; app: string; fp: string; fans: number }> = {}): string {
+function careerJson(o: Partial<{ trainee: string; scenario: string; turn: number; outcome: string; result: string; spd: number; sta: number; pwr: number; grt: number; wit: number; app: string; fp: string; fans: number; deck: unknown }> = {}): string {
     return JSON.stringify({
+        deck: o.deck,
         result: o.result ?? "COMPLETE",
         outcome: o.outcome ?? "COMPLETED",
         trainee: o.trainee ?? "Test Uma",
@@ -525,6 +526,47 @@ describe("parseCorpus", () => {
         expect(outcomes).toHaveLength(1)
         expect(outcomes[0].trainee).toBe("Test Uma")
         expect(outcomes[0].source).toBe("jsonl")
+    })
+
+    it("parses the launch deck record and leaves it undefined on records without one", () => {
+        const deck = {
+            observed: true,
+            slot: 3,
+            types: { spd: 4, sta: 1, pwr: 0, grt: 0, wit: 1 },
+            borrow: { entry: "[Fire at My Heels] Kitasan Black", character: "Kitasan Black", outfit: "Fire at My Heels", limitBreak: null, source: "smart" },
+            cards: null,
+            cardsReason: "not read: the launch reads no per-card identity",
+        }
+        const unread = { observed: true, slot: null, slotReason: "not read: Required Support Deck is off", types: null, typesReason: "not read: Deck Concentration Check is off", borrow: null, borrowReason: "not tapped: the Friends slot was already filled", cards: null }
+        const resumed = { observed: false, reason: "launch not observed by this process (resumed, restarted or hand-started career)", slot: null, types: null, borrow: null, cards: null }
+        const { outcomes } = parseCorpus([careerJson({ deck }), careerJson({ deck: unread }), careerJson({ deck: resumed }), careerJson(), careerJson({ deck: "Deck 3" })].join("\n"))
+        expect(outcomes).toHaveLength(5)
+        expect(outcomes[0].deck).toEqual({
+            observed: true,
+            reason: undefined,
+            slot: 3,
+            slotReason: undefined,
+            types: { spd: 4, sta: 1, pwr: 0, grt: 0, wit: 1 },
+            typesReason: undefined,
+            borrow: { entry: "[Fire at My Heels] Kitasan Black", character: "Kitasan Black", outfit: "Fire at My Heels", limitBreak: undefined, source: "smart" },
+            borrowReason: undefined,
+            cards: null,
+            cardsReason: "not read: the launch reads no per-card identity",
+        })
+        expect(outcomes[1].deck).toMatchObject({ observed: true, slot: null, slotReason: "not read: Required Support Deck is off", types: null, borrow: null, borrowReason: "not tapped: the Friends slot was already filled" })
+        expect(outcomes[2].deck).toMatchObject({ observed: false, reason: resumed.reason, slot: null, types: null, borrow: null })
+        expect(outcomes[3].deck).toBeUndefined()
+        expect(outcomes[4].deck).toBeUndefined()
+        expect(outcomes[3].spd).toBe(900)
+    })
+
+    it("ignores deck and borrow tokens on a ledger line", () => {
+        const line = "[CAREER_END] result=COMPLETE outcome=COMPLETED trainee=Test_Uma scenario=URA_Finale turn=75 fans=100000 spd=900 sta=700 pwr=700 grt=700 wit=700 skillPts=5 finaleRaces=3 finaleWins=3 quality=WIN deck=3 borrow=\"[Fire at My Heels] Kitasan Black\""
+        const record = parseLedgerLine(line)
+        expect(record?.trainee).toBe("Test Uma")
+        expect(record?.quality).toBe("WIN")
+        expect(record?.skillPts).toBe(5)
+        expect(record?.deck).toBeUndefined()
     })
 
     it("ignores a type=gc_skill_econ record beside its career row", () => {
