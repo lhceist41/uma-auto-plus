@@ -43,6 +43,48 @@ const TEAM_TRIALS_OPPONENT_PICKS = [
     { value: "RANDOM", label: "Random" },
 ] as const
 
+// The Club item picker offers only shoes and Winner's Sashes. The bot matches these names against the picker rows.
+const CLUB_REQUEST_ITEMS = [
+    "Lowest held Winner's Sash",
+    ...["Sprint", "Mile", "Medium", "Long", "Dirt"].map((kind) => `${kind} Racing Shoes`),
+    ...[
+        "February S.",
+        "Takamatsunomiya Kinen",
+        "Osaka Hai",
+        "Oka Sho",
+        "Satsuki Sho",
+        "Tenno Sho (Spring)",
+        "NHK Mile C.",
+        "Victoria Mile",
+        "Japanese Oaks",
+        "Japanese Derby",
+        "Yasuda Kinen",
+        "Takarazuka Kinen",
+        "Sprinters S.",
+        "Shuka Sho",
+        "Kikuka Sho",
+        "Tenno Sho (Autumn)",
+        "Mile Ch.",
+        "Queen Elizabeth II Cup",
+        "Japan Cup",
+        "Champions Cup",
+        "Hanshin J.F.",
+        "Asahi Hai F.S.",
+        "Arima Kinen",
+        "Hopeful S.",
+        "Japan Dirt Derby",
+        "JBC Sprint",
+        "JBC Classic",
+        "JBC Ladies' Classic",
+        "Teio Sho",
+        "Tokyo Daishoten",
+        "Kawasaki Kinen",
+        "Zen-Nippon Junior Yushun",
+        "Kashiwa Kinen",
+        "M.C. Nambu Hai",
+    ].map((race) => `${race} Winner's Sash`),
+]
+
 /**
  * The main Settings page of the application.
  * Provides navigation links to sub-settings pages, misc bot configuration options, and settings
@@ -411,6 +453,48 @@ const Settings = () => {
                     showValue={true}
                     showLabels={true}
                     description="Stops after this many matches even if Race Points remain. A full Race Point pool is 5 matches, so 5 lets the run finish on the game's own limit."
+                />
+
+                <Separator style={{ marginVertical: 16 }} />
+
+                <CustomTitle title="Rewards and Club" description="Runs on Home after Daily Races or Team Trials finish. It never donates items and never spends anything." />
+
+                <CustomCheckbox
+                    searchId="settings-collect-daily-rewards"
+                    checked={bsc.settings.misc.collectDailyRewards}
+                    onCheckedChange={(checked) => {
+                        bsc.setSettings({ ...bsc.settings, misc: { ...bsc.settings.misc, collectDailyRewards: checked } })
+                    }}
+                    label="Collect Missions and Presents"
+                    description="Taps Collect All in the present box and on the Missions tab that opens, then returns to Home."
+                    className="mt-4"
+                />
+
+                <CustomCheckbox
+                    searchId="settings-club-item-request"
+                    checked={bsc.settings.misc.enableClubItemRequest}
+                    onCheckedChange={(checked) => {
+                        bsc.setSettings({ ...bsc.settings, misc: { ...bsc.settings.misc, enableClubItemRequest: checked } })
+                    }}
+                    label="Make the Club Item Request"
+                    description="Opens the Club and asks members for the item below. A finished request is closed first. While a request is still running, nothing new is asked for."
+                    className="mt-4"
+                />
+
+                <CustomSelect
+                    searchId="settings-club-request-item"
+                    value={bsc.settings.misc.clubRequestItem}
+                    options={CLUB_REQUEST_ITEMS.map((item) => ({ label: item, value: item }))}
+                    onValueChange={(value) => {
+                        const item = CLUB_REQUEST_ITEMS.find((option) => option === value)
+                        if (item) {
+                            bsc.setSettings({ ...bsc.settings, misc: { ...bsc.settings.misc, clubRequestItem: item } })
+                        }
+                    }}
+                    placeholder="Select item"
+                    label="Item To Request"
+                    description="Lowest held reads every Winner's Sash count and asks for the one you hold fewest of. If any count cannot be read, nothing is requested on that run."
+                    style={{ marginTop: 16 }}
                 />
             </View>
         )

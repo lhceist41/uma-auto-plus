@@ -126,6 +126,24 @@ const searchConfig: SearchOption[] = [
         page: "SettingsMain",
     },
     {
+        id: "settings-collect-daily-rewards",
+        title: "Collect Missions and Presents",
+        description: "After Daily Races or Team Trials, taps Collect All in the present box and on the Missions tab that opens.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-club-item-request",
+        title: "Make the Club Item Request",
+        description: "After Daily Races or Team Trials, asks Club members for an item. Never donates.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-club-request-item",
+        title: "Item To Request",
+        description: "Which shoes or Winner's Sash to ask the Club for, or the Winner's Sash you hold fewest of.",
+        page: "SettingsMain",
+    },
+    {
         id: "settings-management-title",
         title: "Settings Management",
         description: "Import, export or save your settings to a file, and share a bug report.",

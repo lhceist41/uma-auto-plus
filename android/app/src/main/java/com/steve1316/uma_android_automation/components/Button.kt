@@ -735,3 +735,22 @@ object ButtonRefreshOpponents : ButtonInterface {
 object ButtonSeeAllRaceResults : ButtonInterface {
     override val template = Template("components/button/see_all_race_results", region = Region.bottomHalf)
 }
+
+/** The Club button on Home. */
+object ButtonHomeClub : ButtonInterface {
+    override val template = Template("components/button/home_club", region = Region.bottomHalf)
+}
+
+/** The round Item Request button under the Club chat. */
+object ButtonClubItemRequest : ButtonInterface {
+    override val template = Template("components/button/club_item_request", region = Region.bottomHalf, confidence = 0.9)
+}
+
+/** Item Request picker tabs, captured unselected. 0.9 because each also scores about 0.82 on picker rows and the ended-request card. */
+object ButtonItemRequestShoesTab : ButtonInterface {
+    override val template = Template("components/button/item_request_shoes_tab", region = Region.topQuarter, confidence = 0.9)
+}
+
+object ButtonItemRequestSashTab : ButtonInterface {
+    override val template = Template("components/button/item_request_sash_tab", region = Region.topQuarter, confidence = 0.9)
+}

@@ -153,6 +153,12 @@ export interface Settings {
         // Records lightweight, on-device per-turn decision data so a career can be analyzed and improved later.
         // Local only, no upload. Independent of Debug Mode: the heavy debug diagnostics stay off when this is on.
         recordDecisionData: boolean
+        // After Daily Races or Team Trials ends on Home: collect Daily Missions and the present box.
+        collectDailyRewards: boolean
+        // After Daily Races or Team Trials ends on Home: make the Club item request (never donates).
+        enableClubItemRequest: boolean
+        // An exact item name from CLUB_REQUEST_ITEMS, or "Lowest held Winner's Sash".
+        clubRequestItem: string
     }
 
     // Daily Races misc-task settings. DailyRaceTask compares the persisted strings directly
@@ -726,6 +732,10 @@ export const defaultSettings: Settings = {
         messageLogFontSize: 8,
         overlayButtonSizeDP: 40,
         recordDecisionData: true,
+        collectDailyRewards: false,
+        enableClubItemRequest: false,
+        // The sash the account holds fewest of is the Potential Level item it lacks most.
+        clubRequestItem: "Lowest held Winner's Sash",
     },
     miscDailyRace: {
         ensureMultiRaceOn: true,

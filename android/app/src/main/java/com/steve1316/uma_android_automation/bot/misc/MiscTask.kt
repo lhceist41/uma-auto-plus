@@ -45,6 +45,21 @@ abstract class MiscTask(game: Game) : Task(game) {
 
     private var actedIterations: Long = 0
 
+    /** After a mode finished on Home, collects Missions and Presents and makes the Club item request when those are turned on. */
+    override fun start(maxRuntimeMinutes: Int): TaskResult {
+        val result = super.start(maxRuntimeMinutes)
+        if (result !is TaskResult.Success) return result
+        try {
+            GameExtrasDevice.runFromSettings(game)?.let { MessageLog.i(TAG, "[DAILY_EXTRAS] ${it.joinToString("; ")}.") }
+        } catch (e: InterruptedException) {
+            MessageLog.w(TAG, "[DAILY_EXTRAS] Stopped: ${e.message}")
+        } catch (e: Exception) {
+            // The mode's own result stands; the extras are a follow-up.
+            MessageLog.w(TAG, "[DAILY_EXTRAS] Failed: ${e.message}")
+        }
+        return result
+    }
+
     /** Dismisses incidental popups (login bonus, gift, announcement) that can interrupt any misc flow; subclasses may override. */
     protected open fun handleIncidentalPopups(): Boolean {
         return try {

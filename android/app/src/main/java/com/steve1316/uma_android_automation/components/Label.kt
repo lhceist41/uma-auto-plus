@@ -333,3 +333,50 @@ object LabelTeamTrials : ComponentInterface {
 object LabelItemsSelected : ComponentInterface {
     override val template = Template("components/label/items_selected", region = Region.middle, confidence = 0.9)
 }
+
+/** The "Club Menu" button at the top right of the Club screen. */
+object LabelClubMenu : ComponentInterface {
+    override val template = Template("components/label/club_menu", region = Region.topQuarter)
+}
+
+/** "Item Request" dialog title. 0.9 because the Confirm Request title scores 0.85 against it. */
+object LabelItemRequestHeader : ComponentInterface {
+    override val template = Template("components/label/item_request_header", region = Region.topQuarter, confidence = 0.9)
+}
+
+/** "The item request has expired." on the result of the account's own finished request. */
+object LabelItemRequestExpired : ComponentInterface {
+    override val template = Template("components/label/item_request_expired", region = Region.bottomHalf)
+}
+
+/** "...ended because it reached max donations." on the result of a request that filled up. */
+object LabelItemRequestMaxDonations : ComponentInterface {
+    override val template = Template("components/label/item_request_max_donations", region = Region.bottomHalf)
+}
+
+/** "Select an item to request." under the item picker. */
+object LabelItemRequestSelectPrompt : ComponentInterface {
+    override val template = Template("components/label/item_request_select_prompt", region = Region.bottomHalf)
+}
+
+/** The "Held" pill of each item picker row. 0.9 because the Club chat scores 0.79 against it. */
+object LabelItemRequestHeld : ComponentInterface {
+    override val template = Template("components/label/item_request_held", confidence = 0.9)
+}
+
+object LabelConfirmRequestHeader : ComponentInterface {
+    override val template = Template("components/label/confirm_request_header", region = Region.middle, confidence = 0.9)
+}
+
+/** "Rewards Collected" title, shown after Collect All in Missions and Presents. */
+object LabelRewardsCollectedHeader : ComponentInterface {
+    override val template = Template("components/label/rewards_collected_header", region = Region.topQuarter, confidence = 0.9)
+}
+
+object LabelPresentsHeader : ComponentInterface {
+    override val template = Template("components/label/presents_header", region = Region.topQuarter, confidence = 0.9)
+}
+
+object LabelMissionsHeader : ComponentInterface {
+    override val template = Template("components/label/missions_header", region = Region.topQuarter)
+}
