@@ -1039,8 +1039,8 @@ class GrandConcert(game: Game) : Campaign(game) {
          */
         private val CONCERT_TURNS = listOf(24, 36, 48, 60, 72)
 
-        /** Final career turn for the runway estimate: GameDate runs 1-72 plus the 73-75 finale season. */
-        private const val CAREER_END_TURN = 75
+        /** Final career turn (runway estimate, last-turn skill spend): GameDate runs 1-72 plus the 73-75 finale season. */
+        internal const val CAREER_END_TURN = 75
 
         /** How many times a lesson-list read is retried while the trio is still incomplete. */
         private const val LESSON_LIST_READ_ATTEMPTS = 3

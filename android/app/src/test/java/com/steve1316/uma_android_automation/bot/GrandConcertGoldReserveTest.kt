@@ -44,8 +44,9 @@ class GrandConcertGoldReserveTest {
         scenario: String = gc,
         objective: SkillSpendObjective = SkillSpendObjective.RANK,
         trigger: SkillCheckTrigger? = SkillCheckTrigger.HIGH_WATER,
+        turn: Int? = null,
     ): List<Pair<String, Int>> {
-        val (golds, reserved) = reserveForScenarioGolds(scenario, objective, trigger, candidates, skillPoints)
+        val (golds, reserved) = reserveForScenarioGolds(scenario, objective, trigger, candidates, skillPoints, turn)
         val goldNames = golds.map { it.first }
         val rest = calculateSkillPurchases(candidates.filter { it.name !in goldNames }, skillPoints - reserved - golds.sumOf { it.second }, settings)
         return golds + rest
@@ -58,6 +59,46 @@ class GrandConcertGoldReserveTest {
         assertTrue(plan.isEmpty(), "bought $plan")
         // Without the reserve the same screen spends on the ◎ upgrades.
         assertTrue(calculateSkillPurchases(milesOnScreen + seeYaLater, 285, skillsPlan).any { it.first.endsWith("◎") })
+    }
+
+    @Test
+    fun `on the last turn an offered gold that does not fit holds nothing and the usual plan runs`() {
+        val iWannaWin = SkillCandidate("I Wanna Win with You", price = 380, evaluationPoints = 633)
+        assertEquals(
+            emptyList<Pair<String, Int>>() to 0,
+            reserveForScenarioGolds(gc, SkillSpendObjective.RANK, SkillCheckTrigger.HIGH_WATER, milesOnScreen + iWannaWin, 375, turn = 75),
+        )
+        val plan = session(milesOnScreen + iWannaWin, skillPoints = 375, turn = 75)
+        assertTrue(plan.isNotEmpty())
+        assertFalse(plan.any { it.first == "I Wanna Win with You" })
+        assertTrue(plan.sumOf { it.second } <= 375)
+    }
+
+    @Test
+    fun `before the last turn the same gold still holds the SP`() {
+        val iWannaWin = SkillCandidate("I Wanna Win with You", price = 380, evaluationPoints = 633)
+        for (turn in listOf(74, 73, 60)) {
+            assertEquals(
+                emptyList<Pair<String, Int>>() to 380,
+                reserveForScenarioGolds(gc, SkillSpendObjective.RANK, SkillCheckTrigger.HIGH_WATER, milesOnScreen + iWannaWin, 375, turn = turn),
+            )
+            assertTrue(session(milesOnScreen + iWannaWin, skillPoints = 375, turn = turn).isEmpty())
+        }
+    }
+
+    @Test
+    fun `on the last turn a gold that fits is still planned first`() {
+        val plan = session(milesOnScreen + seeYaLater, skillPoints = 378, turn = 75)
+        assertEquals("See Ya Later!" to 304, plan.first())
+    }
+
+    @Test
+    fun `the last-turn rule leaves other scenarios and objectives as they were`() {
+        val iWannaWin = SkillCandidate("I Wanna Win with You", price = 380, evaluationPoints = 633)
+        val none = emptyList<Pair<String, Int>>() to 0
+        assertEquals(none, reserveForScenarioGolds("URA Finale", SkillSpendObjective.RANK, SkillCheckTrigger.HIGH_WATER, milesOnScreen + iWannaWin, 375, turn = 75))
+        assertEquals(none, reserveForScenarioGolds(gc, SkillSpendObjective.SPARKS, SkillCheckTrigger.HIGH_WATER, milesOnScreen + iWannaWin, 375, turn = 75))
+        assertEquals(none, reserveForScenarioGolds(gc, SkillSpendObjective.RANK, SkillCheckTrigger.CAREER_COMPLETE, milesOnScreen + iWannaWin, 569, turn = 75))
     }
 
     @Test

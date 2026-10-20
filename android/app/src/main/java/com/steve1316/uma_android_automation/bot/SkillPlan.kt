@@ -5,6 +5,7 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.Campaign
+import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
 import com.steve1316.uma_android_automation.types.RunningStyle
 import com.steve1316.uma_android_automation.types.SkillData
 import com.steve1316.uma_android_automation.types.SkillList
@@ -321,6 +322,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
          * Rank objective in Grand Concert, high-water and pre-finals sessions only: offered golds that fit claim the budget before anything else
          * (highest rating first), and the live cost of each one that does not fit is held back from the rest of the session. That cost exceeds what
          * is left, so the session then plans nothing else and the SP carries. Returns the golds to plan first and the SP held back (none and 0 elsewhere).
+         * On the last turn [turn] nothing is held: only the career-end spend follows, which never reserves, so a hold would only keep skills out of the Finals.
          */
         internal fun reserveForScenarioGolds(
             scenario: String,
@@ -328,6 +330,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             trigger: SkillCheckTrigger?,
             available: List<SkillCandidate>,
             skillPoints: Int,
+            turn: Int? = null,
         ): Pair<List<Pair<String, Int>>, Int> {
             val applies =
                 objective == SkillSpendObjective.RANK &&
@@ -335,6 +338,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     (trigger == SkillCheckTrigger.HIGH_WATER || trigger == SkillCheckTrigger.SCENARIO_FINALS)
             if (!applies) return emptyList<Pair<String, Int>>() to 0
 
+            val holds = turn == null || turn < GrandConcert.CAREER_END_TURN
             val buyFirst = mutableListOf<Pair<String, Int>>()
             var remaining = skillPoints
             var reserved = 0
@@ -346,7 +350,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 if (gold.price <= remaining) {
                     buyFirst.add(gold.name to gold.price)
                     remaining -= gold.price
-                } else {
+                } else if (holds) {
                     reserved += gold.price
                 }
             }
@@ -1458,6 +1462,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 trigger = sessionEffectiveTrigger,
                 available = goldCandidates,
                 skillPoints = availableSkillPoints,
+                turn = campaign.date.day,
             )
         sessionHeldGoldCost = if (reservedSkillPoints > 0) cheapestHeldGold(goldCandidates, goldsFirst) else null
         for ((name, price) in goldsFirst) {
