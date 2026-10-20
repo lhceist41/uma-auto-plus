@@ -518,6 +518,37 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
+    private val textScaleFallback = TextScaleFallback()
+
+    /**
+     * The library's match, then for a [TextScaleFallback.LABELS] template that missed at 1.0 the same frame at the
+     * fallback scales. Only the default single-scale lookup of a 1080-wide screen; scale tests and custom scales are unchanged.
+     */
+    override fun match(
+        sourceBitmap: Bitmap,
+        templateBitmap: Bitmap,
+        templateName: String,
+        region: IntArray,
+        useSingleScale: Boolean,
+        customConfidence: Double,
+        testScale: Double,
+    ): Pair<Boolean, Point?> {
+        val result = super.match(sourceBitmap, templateBitmap, templateName, region, useSingleScale, customConfidence, testScale)
+        if (testScale != 0.0 || customScale != 1.0 || !is1080p) return result
+        if (result.first) {
+            textScaleFallback.matchedAtFullSize(templateName)
+            return result
+        }
+        val hit =
+            textScaleFallback.afterMiss(templateName) { scale ->
+                super.match(sourceBitmap, templateBitmap, templateName, region, useSingleScale, customConfidence, scale).takeIf { it.first }
+            } ?: return result
+        if (hit.firstOfRun) {
+            MessageLog.i(TAG, "[LAYOUT] Text scale ${hit.scale}: \"${templateName.substringAfterLast('/')}\" matched only below full size, so this screen draws some text smaller than 1080x1920.")
+        }
+        return hit.value
+    }
+
     /** Converts this bitmap to a new OpenCV [Mat]. */
     private fun Bitmap.toMat(): Mat {
         val mat = Mat()
