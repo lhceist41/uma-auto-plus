@@ -381,6 +381,39 @@ class DailyExtrasTest {
     }
 
     @Test
+    fun `two empty pages after a partial read are incomplete, not the list end`() {
+        val pages = livePages(0, 3) + listOf(emptyList<Pair<String, String>>(), emptyList())
+        val scan = mergePickerPages(pages)
+        assertFalse(scan.complete)
+        assertNull(lowestHeldItem(scan))
+        val game = FakeGame(sashes = scan)
+        runClub(game, item = ClubRequestItems.LOWEST_HELD_SASH)
+        assertNull(game.requested)
+        assertFalse(CONFIRM in game.taps)
+    }
+
+    @Test
+    fun `a read that misses one catalog sash is incomplete even when every page overlaps`() {
+        val missing = "Yasuda Kinen Winner's Sash"
+        val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).map { page -> page.filter { it.first != missing } }
+        val scan = mergePickerPages(pages)
+        assertEquals(33, scan.rows.size)
+        assertTrue(scan.endReached)
+        assertFalse(scan.complete)
+        assertNull(lowestHeldItem(scan))
+    }
+
+    @Test
+    fun `all 34 sashes in the Held ascending sort read complete and the top row is the pick`() {
+        val byHeld = LIVE_SASHES.sortedBy { it.second.toInt() }
+        val pages = listOf(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).map { byHeld.subList(it, minOf(it + 6, byHeld.size)) }
+        val scan = mergePickerPages(pages)
+        assertTrue(scan.complete)
+        assertEquals(34, scan.rows.size)
+        assertEquals(byHeld.first().first, lowestHeldItem(scan))
+    }
+
+    @Test
     fun `a list that never shows its end is incomplete`() {
         assertFalse(mergePickerPages(livePages(0, 3)).complete)
         assertFalse(mergePickerPages(emptyList()).complete)

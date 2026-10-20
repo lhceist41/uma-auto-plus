@@ -111,8 +111,9 @@ internal data class PickerScan(val rows: List<PickerRow>, val complete: Boolean,
 internal typealias PickerPage = List<Pair<String, String>>
 
 /**
- * Merges screenfuls into one read. A row in view that is not a known item, or a page that shares no row with the
- * page before it (a swipe that flung past a row), makes the read incomplete. The end is two pages with nothing new.
+ * Merges screenfuls into one read. A row in view that is not a known item, an empty page, or a page that shares no row
+ * with the page before it (a swipe that flung past a row) makes the read incomplete. The end is two pages with nothing new.
+ * Complete also needs every catalog sash read once, whatever the sort, so a missed list top or end cannot pass.
  */
 internal fun mergePickerPages(pages: List<PickerPage>): PickerScan {
     val rows = mutableListOf<PickerRow>()
@@ -124,7 +125,7 @@ internal fun mergePickerPages(pages: List<PickerPage>): PickerScan {
         val names = page.map { (title, _) -> itemNameFromTitle(title) }
         if (names.any { it == null }) readable = false
         val current = names.filterNotNull().toSet()
-        if (index > 0 && current.isNotEmpty() && current.none { it in previous }) gapless = false
+        if (page.isEmpty() || (index > 0 && current.none { it in previous })) gapless = false
         var newRows = 0
         page.zip(names).forEach { (row, name) ->
             if (name != null && rows.none { it.name == name }) {
@@ -136,7 +137,8 @@ internal fun mergePickerPages(pages: List<PickerPage>): PickerScan {
         previous = current
     }
     val endReached = stalePages >= 2
-    return PickerScan(rows, complete = endReached && readable && gapless && rows.isNotEmpty(), endReached = endReached)
+    val wholeCatalog = rows.map { it.name }.toSet() == ClubRequestItems.SASHES.toSet()
+    return PickerScan(rows, complete = endReached && readable && gapless && wholeCatalog, endReached = endReached)
 }
 
 /**
@@ -307,7 +309,7 @@ internal class DailyExtras(
             if (requestItem == ClubRequestItems.LOWEST_HELD_SASH) {
                 device.openPickerTab(shoes = false)
                 val scan = device.scanPicker()
-                log("Winner's Sash held counts: " + scan.rows.joinToString { "${it.name}=${it.held ?: "?"}" } + if (scan.complete) "" else " (incomplete)")
+                log("Winner's Sash held counts: " + scan.rows.joinToString { "${it.name}=${it.held ?: "?"}" } + if (scan.complete) "" else " (incomplete, ${scan.rows.size} of ${ClubRequestItems.SASHES.size} read)")
                 lowestHeldItem(scan) ?: return cancelPicker("the Winner's Sash list was not fully read")
             } else {
                 device.openPickerTab(shoes = ClubRequestItems.isShoes(requestItem))
