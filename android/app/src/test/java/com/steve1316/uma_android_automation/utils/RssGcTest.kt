@@ -19,15 +19,19 @@ class RssGcTest {
     private val lines = mutableListOf<String>()
     private var rss: Long? = 0
 
+    /** Share of RssAnon a collection frees; garbage on MuMu freed 42-83 %. */
+    private var freedShare = 0.5
+
     private fun policy(read: () -> Long? = { rss }) =
         RssGc(
             thresholdKb = 700L * 1024,
-            minIntervalMs = 10_000,
+            minIntervalMs = 3_000,
+            maxIntervalMs = 30_000,
             readRssKb = read,
             now = { clock.get() },
             collect = {
                 collections.incrementAndGet()
-                rss = rss?.let { it / 2 }
+                rss = rss?.let { (it * (1 - freedShare)).toLong() }
             },
             log = { synchronized(lines) { lines.add(it) } },
         )
@@ -48,17 +52,79 @@ class RssGcTest {
     }
 
     @Test
-    @DisplayName("at most one collection per 10 s, however high the memory stays")
+    @DisplayName("at most one collection per 3 s while collections free garbage")
     fun rateLimit() {
         val gc = policy()
         rss = 2_000_000
         assertTrue(gc.check("turn"))
         rss = 2_000_000
-        clock.addAndGet(9_999)
+        clock.addAndGet(2_999)
         assertFalse(gc.check("capture"))
         clock.addAndGet(1)
         assertTrue(gc.check("capture"))
         assertEquals(2, collections.get())
+        assertEquals(3_000, gc.currentIntervalMs)
+        assertTrue(lines.none { it.contains("event=gc_interval") })
+    }
+
+    @Test
+    @DisplayName("collections that free under 15 % double the interval up to 30 s, each change logged once")
+    fun backOff() {
+        val gc = policy()
+        freedShare = 0.10
+        val intervals = mutableListOf<Long>()
+        repeat(6) {
+            rss = 2_000_000
+            clock.addAndGet(gc.currentIntervalMs)
+            assertTrue(gc.check("turn"))
+            intervals.add(gc.currentIntervalMs)
+        }
+        assertEquals(listOf(6_000L, 12_000L, 24_000L, 30_000L, 30_000L, 30_000L), intervals)
+        assertEquals(4, lines.count { it.contains("event=gc_interval") })
+        assertTrue(lines.any { it == "[MEM] event=gc_interval ms=6000 freedKB=200000" })
+        rss = 2_000_000
+        clock.addAndGet(29_999)
+        assertFalse(gc.check("capture"), "the backed-off interval rate-limits")
+    }
+
+    @Test
+    @DisplayName("a collection that frees a lot resets the interval to 3 s")
+    fun resetAfterGarbage() {
+        val gc = policy()
+        freedShare = 0.05
+        repeat(2) {
+            rss = 1_500_000
+            clock.addAndGet(gc.currentIntervalMs)
+            gc.check("turn")
+        }
+        assertEquals(12_000, gc.currentIntervalMs)
+        freedShare = 0.6
+        rss = 1_500_000
+        clock.addAndGet(12_000)
+        assertTrue(gc.check("turn"))
+        assertEquals(3_000, gc.currentIntervalMs)
+        assertTrue(lines.last().startsWith("[MEM] event=gc_interval ms=3000 freedKB="))
+    }
+
+    @Test
+    @DisplayName("an unreadable reading after a collection leaves the interval alone")
+    fun unknownAfter() {
+        var reads = 0
+        val gc = policy { if (reads++ == 0) 2_000_000L else null }
+        assertTrue(gc.check("turn"))
+        assertEquals(3_000, gc.currentIntervalMs)
+    }
+
+    @Test
+    @DisplayName("the between-runs cleanup runs the same collection as the policy")
+    fun cleanupUsesTheCollection() {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null && !File(dir, "android/app/src/main/java").isDirectory) dir = dir.parentFile
+        val game = File(dir!!, "android/app/src/main/java/com/steve1316/uma_android_automation/bot/Game.kt").readText().replace("\r\n", "\n")
+        val cleanup = game.substring(game.indexOf("fun cleanupBetweenRuns()"), game.indexOf("init {", game.indexOf("fun cleanupBetweenRuns()")))
+        assertTrue(cleanup.contains("RssGc.collectGarbage()"))
+        assertFalse(cleanup.contains("System.gc()"), "libcore's System.gc() can skip the collection")
+        assertEquals(listOf(3_000L, 30_000L, 15L), listOf(RssGc.MIN_INTERVAL_MS, RssGc.MAX_INTERVAL_MS, RssGc.WEAK_FREE_PERCENT))
     }
 
     @Test
@@ -115,7 +181,7 @@ class RssGcTest {
         val base = File(dir!!, "android/app/src/main/java/com/steve1316/uma_android_automation")
         fun src(path: String) = File(base, path).readText().replace("\r\n", "\n")
         val policy = src("utils/RssGc.kt")
-        val collect = policy.substring(policy.indexOf("private fun collectGarbage()"))
+        val collect = policy.substring(policy.indexOf("fun collectGarbage()"))
         assertTrue(collect.indexOf("runtime.gc()") < collect.indexOf("runtime.runFinalization()"))
         assertTrue(collect.indexOf("runtime.runFinalization()") < collect.lastIndexOf("runtime.gc()"))
         assertFalse(collect.contains("System.gc()"), "libcore's System.gc() can skip the collection")
@@ -125,6 +191,8 @@ class RssGcTest {
         assertTrue(turn.indexOf("RssGc.shared.check(\"turn\")") in 0 until turn.indexOf("game.memoryLog.turnEnd("))
         assertFalse(src("bot/StallWatchdog.kt").contains("RssGc"))
         val game = src("bot/Game.kt")
-        assertFalse(game.substring(game.indexOf("fun heartbeat()"), game.indexOf("fun start(): TaskResult")).contains("RssGc"))
+        // The heartbeat and watchdog block, and watchRun/checkCurrentRun; the between-runs cleanup is not a watchdog.
+        assertFalse(game.substring(game.indexOf("fun heartbeat()"), game.indexOf("fun acquireWakeLock(")).contains("RssGc"))
+        assertFalse(game.substring(game.indexOf("private fun watchRun()"), game.indexOf("fun start(): TaskResult")).contains("RssGc"))
     }
 }

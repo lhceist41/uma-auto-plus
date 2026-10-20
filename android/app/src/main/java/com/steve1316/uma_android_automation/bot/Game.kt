@@ -45,6 +45,7 @@ import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkill
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.MemoryLog
+import com.steve1316.uma_android_automation.utils.RssGc
 import com.steve1316.uma_android_automation.utils.TesseractReinitSchedule
 import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.floatingButtonRect
@@ -378,7 +379,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             try {
                 // Refresh the heartbeat so the watchdog does not fire during cleanup (no wait() runs between runs).
                 heartbeat()
-                System.gc()
+                RssGc.collectGarbage()
                 Log.i(TAG, "[CLEANUP] Between-run cleanup completed.")
             } catch (_: Throwable) {
             }
