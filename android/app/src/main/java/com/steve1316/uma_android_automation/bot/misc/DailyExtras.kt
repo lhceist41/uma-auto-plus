@@ -90,13 +90,8 @@ internal fun matchItemName(ocr: String, target: String): Boolean {
     return read.isNotEmpty() && wanted.endsWith(read) && wanted.length - read.length <= 2
 }
 
-/** The catalog name an OCR'd row title stands for, or the title itself when it reads as an item the catalog does not know yet. */
-internal fun itemNameFromTitle(ocr: String): String? {
-    val known = (ClubRequestItems.SHOES + ClubRequestItems.SASHES).firstOrNull { matchItemName(ocr, it) }
-    if (known != null) return known
-    val read = normalizeItemName(ocr)
-    return if (read.length > "winnerssash".length && (read.endsWith("winnerssash") || read.endsWith("racingshoes"))) ocr.trim() else null
-}
+/** The catalog name an OCR'd row title stands for, or null. A sash the catalog lacks (a game update) also reads as null, so the scan stops short of a request. */
+internal fun itemNameFromTitle(ocr: String): String? = (ClubRequestItems.SHOES + ClubRequestItems.SASHES).firstOrNull { matchItemName(ocr, it) }
 
 internal fun isSashName(item: String): Boolean = normalizeItemName(item).endsWith("winnerssash")
 
@@ -109,8 +104,40 @@ internal fun parseHeldCount(ocr: String): Int? {
 /** One row of the item picker as read. */
 internal data class PickerRow(val name: String, val held: Int?)
 
-/** A full read of one picker tab; [complete] only when the list end was seen and every row parsed. */
-internal data class PickerScan(val rows: List<PickerRow>, val complete: Boolean)
+/** A full read of one picker tab; [complete] only when the list end was seen and every row in view was read. */
+internal data class PickerScan(val rows: List<PickerRow>, val complete: Boolean, val endReached: Boolean = complete)
+
+/** The title and "Held" text of each row in view on one screenful, top to bottom. */
+internal typealias PickerPage = List<Pair<String, String>>
+
+/**
+ * Merges screenfuls into one read. A row in view that is not a known item, or a page that shares no row with the
+ * page before it (a swipe that flung past a row), makes the read incomplete. The end is two pages with nothing new.
+ */
+internal fun mergePickerPages(pages: List<PickerPage>): PickerScan {
+    val rows = mutableListOf<PickerRow>()
+    var readable = true
+    var gapless = true
+    var stalePages = 0
+    var previous = emptySet<String>()
+    for ((index, page) in pages.withIndex()) {
+        val names = page.map { (title, _) -> itemNameFromTitle(title) }
+        if (names.any { it == null }) readable = false
+        val current = names.filterNotNull().toSet()
+        if (index > 0 && current.isNotEmpty() && current.none { it in previous }) gapless = false
+        var newRows = 0
+        page.zip(names).forEach { (row, name) ->
+            if (name != null && rows.none { it.name == name }) {
+                rows += PickerRow(name, parseHeldCount(row.second))
+                newRows++
+            }
+        }
+        stalePages = if (newRows == 0) stalePages + 1 else 0
+        previous = current
+    }
+    val endReached = stalePages >= 2
+    return PickerScan(rows, complete = endReached && readable && gapless && rows.isNotEmpty(), endReached = endReached)
+}
 
 /**
  * The sash with the fewest held, or null unless every row of a complete scan is a sash with a count.
@@ -183,6 +210,9 @@ internal class DailyExtras(
 
         /** Presents collects at most 100 gifts per tap. */
         const val MAX_PRESENT_COLLECTS = 3
+
+        /** Home shows before its buttons finish drawing; polls of about a second for a Home button. */
+        const val HOME_BUTTON_POLLS = 6
     }
 
     private var spendingDialogsCancelled = 0
@@ -213,7 +243,7 @@ internal class DailyExtras(
     }
 
     private fun missions(): String {
-        if (!device.press(ExtrasTarget.MISSIONS_BUTTON)) return "Missions button not found"
+        if (!pressOnHome(ExtrasTarget.MISSIONS_BUTTON)) return "Missions button not found"
         if (awaitScreen(ExtrasScreen.MISSIONS) != ExtrasScreen.MISSIONS) return "Missions screen did not appear"
         val note = collect(ExtrasScreen.MISSIONS)
         device.press(ExtrasTarget.BACK)
@@ -221,7 +251,7 @@ internal class DailyExtras(
     }
 
     private fun presents(): String {
-        if (!device.press(ExtrasTarget.PRESENTS_BUTTON)) return "Presents button not found"
+        if (!pressOnHome(ExtrasTarget.PRESENTS_BUTTON)) return "Presents button not found"
         if (awaitScreen(ExtrasScreen.PRESENTS) != ExtrasScreen.PRESENTS) return "Presents did not open"
         var note = "nothing to collect"
         for (round in 1..MAX_PRESENT_COLLECTS) {
@@ -246,7 +276,7 @@ internal class DailyExtras(
     }
 
     private fun club(): String {
-        if (!device.press(ExtrasTarget.CLUB_BUTTON)) return "Club button not found"
+        if (!pressOnHome(ExtrasTarget.CLUB_BUTTON)) return "Club button not found"
         if (awaitScreen(ExtrasScreen.CLUB, polls = 20) != ExtrasScreen.CLUB) return "Club screen did not appear"
         // A finished request shows its result first; closing it frees the slot, then the button opens the picker.
         repeat(2) {
@@ -314,6 +344,14 @@ internal class DailyExtras(
         return false
     }
 
+    private fun pressOnHome(target: ExtrasTarget): Boolean {
+        repeat(HOME_BUTTON_POLLS) {
+            if (device.press(target)) return true
+            device.pause(1.0)
+        }
+        return false
+    }
+
     private fun awaitScreen(screen: ExtrasScreen, polls: Int = SCREEN_POLLS): ExtrasScreen? = awaitAny(screen, polls = polls)
 
     /** Polls until one of [screens] shows, cancelling spending dialogs on the way; null when none showed. */
@@ -340,7 +378,7 @@ private const val ROW_TITLE_W = 720
 private const val ROW_TITLE_H = 45
 private const val ROW_HELD_DX = 115
 private const val ROW_HELD_DY = -26
-private const val ROW_HELD_W = 200
+private const val ROW_HELD_W = 170
 private const val ROW_HELD_H = 52
 private const val ROW_TAP_DX = 130
 private const val ROW_TAP_DY = -57
@@ -353,10 +391,13 @@ private const val CONFIRM_ITEM_H = 50
 
 /** The list shows rows between the tabs and the sort buttons; from the "Select an item" prompt, pills above this offset have their title in view. */
 private const val LIST_TOP_FROM_PROMPT = -1330
-private const val LIST_BOTTOM_FROM_PROMPT = -200
-private const val SWIPE_FROM_PROMPT = -350
-private const val SWIPE_TO_PROMPT = -1150
-private const val MAX_PICKER_PAGES = 15
+private const val LIST_BOTTOM_FROM_PROMPT = -140
+
+/** About three 214 px rows per slow swipe, so pages overlap even when the list coasts (LIVE frames showed a fast swipe skip a row). */
+private const val SWIPE_FROM_PROMPT = -400
+private const val SWIPE_TO_PROMPT = -1040
+private const val SWIPE_MS = 1200L
+private const val MAX_PICKER_PAGES = 20
 
 /** Dialogs that would spend RP, money or items; the step cancels them. */
 private val SPENDING_DIALOG_NAMES =
@@ -416,28 +457,12 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
 
     override fun scanPicker(): PickerScan {
         scrollPickerToTop()
-        val rows = mutableListOf<PickerRow>()
-        var unreadable = false
-        var stalePages = 0
-        var pages = 0
-        while (pages++ < MAX_PICKER_PAGES) {
-            var newRows = 0
-            for ((title, held) in readVisibleRows()) {
-                val name = itemNameFromTitle(title)
-                if (name == null) {
-                    unreadable = true
-                    continue
-                }
-                if (rows.none { it.name == name }) {
-                    rows += PickerRow(name, parseHeldCount(held))
-                    newRows++
-                }
-            }
-            if (newRows == 0 && ++stalePages >= 2) return PickerScan(rows, complete = !unreadable)
-            if (newRows > 0) stalePages = 0
-            if (!swipePicker(up = true)) break
+        val pages = mutableListOf<PickerPage>()
+        while (pages.size < MAX_PICKER_PAGES) {
+            pages += readVisibleRows()
+            if (mergePickerPages(pages).endReached || !swipePicker(up = true)) break
         }
-        return PickerScan(rows, complete = false)
+        return mergePickerPages(pages)
     }
 
     override fun tapPickerRow(item: String): Boolean {
@@ -530,7 +555,7 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
         val far = imageUtils.relY(prompt.y, SWIPE_TO_PROMPT).toFloat()
         val (start, end) = if (up) near to far else far to near
         OwnUiForeground.waitForGame()
-        game.gestureUtils.swipe(x, start, x, end)
+        game.gestureUtils.swipe(x, start, x, end, SWIPE_MS)
         game.wait(1.0)
         return true
     }

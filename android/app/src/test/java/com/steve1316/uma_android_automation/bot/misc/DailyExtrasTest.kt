@@ -40,6 +40,8 @@ private class FakeGame(
     val spendingAfter: ExtrasTarget? = null,
     /** After this tap the game shows a screen the step does not know, for good. */
     val unknownAfter: ExtrasTarget? = null,
+    /** Presses of the Club button that miss while Home is still drawing. */
+    var clubButtonMisses: Int = 0,
 ) : ExtrasDevice {
     val taps = mutableListOf<ExtrasTarget>()
     var requested: String? = null
@@ -58,6 +60,10 @@ private class FakeGame(
             taps += target
             spendingShowing = false
             return true
+        }
+        if (target == CLUB_BUTTON && clubButtonMisses > 0) {
+            clubButtonMisses--
+            return false
         }
         val next = transition(target) ?: return false
         taps += target
@@ -130,6 +136,48 @@ private class FakeGame(
 
     override fun pause(seconds: Double) {}
 }
+
+/** A real Winner's Sash tab as the picker lists it (Default sort), with its held counts. */
+private val LIVE_SASHES =
+    listOf(
+        "February S." to 65,
+        "Takamatsunomiya Kinen" to 21,
+        "Osaka Hai" to 487,
+        "Oka Sho" to 64,
+        "Satsuki Sho" to 317,
+        "Tenno Sho (Spring)" to 35,
+        "NHK Mile C." to 113,
+        "Victoria Mile" to 249,
+        "Japanese Oaks" to 38,
+        "Japanese Derby" to 197,
+        "Yasuda Kinen" to 505,
+        "Takarazuka Kinen" to 295,
+        "Sprinters S." to 215,
+        "Shuka Sho" to 32,
+        "Kikuka Sho" to 76,
+        "Tenno Sho (Autumn)" to 604,
+        "Mile Ch." to 122,
+        "Queen Elizabeth II Cup" to 666,
+        "Japan Cup" to 692,
+        "Champions Cup" to 68,
+        "Hanshin J.F." to 61,
+        "Asahi Hai F.S." to 97,
+        "Arima Kinen" to 703,
+        "Hopeful S." to 287,
+        "Japan Dirt Derby" to 56,
+        "JBC Sprint" to 63,
+        "JBC Classic" to 55,
+        "JBC Ladies’ Classic" to 56,
+        "Teio Sho" to 55,
+        "Tokyo Daishoten" to 69,
+        "Kawasaki Kinen" to 4,
+        "Zen-Nippon Junior Yushun" to 4,
+        "Kashiwa Kinen" to 4,
+        "M.C. Nambu Hai" to 2,
+    ).map { (race, held) -> "$race Winner's Sash" to held.toString() }
+
+/** Screenfuls of six rows starting at [firsts] (row indexes), the way the bot reads them after each swipe. */
+private fun livePages(vararg firsts: Int): List<PickerPage> = firsts.map { LIVE_SASHES.subList(it, minOf(it + 6, LIVE_SASHES.size)) }
 
 private fun runClub(game: FakeGame, item: String = "Dirt Racing Shoes"): List<String> = DailyExtras(game, collectRewards = false, clubRequest = true, requestItem = item).run()
 
@@ -281,8 +329,76 @@ class DailyExtrasTest {
         assertFalse(matchItemName("JBC Classic Winner's Sash", "JBC Ladies' Classic Winner's Sash"))
         assertFalse(matchItemName("", "Dirt Racing Shoes"))
         assertEquals("M.C. Nambu Hai Winner's Sash", itemNameFromTitle("MC Nambu Hai Winner's Sash"))
-        assertEquals("Hokkaido Cup Winner's Sash", itemNameFromTitle("Hokkaido Cup Winner's Sash"))
+        assertNull(itemNameFromTitle("Hokkaido Cup Winner's Sash"))
         assertNull(itemNameFromTitle("Held"))
+    }
+
+    @Test
+    fun `every sash the live picker lists is named, including the six the first live scan missed`() {
+        for ((title, _) in LIVE_SASHES) assertTrue(itemNameFromTitle(title) != null, title)
+        for (ocr in listOf(
+            "NHK Mile C Winners Sash",
+            "Sprinters S Winner’s Sash",
+            "huka Sho Winner's Sash",
+            "Hanshin JF Winner's Sash",
+            "JBC Classic Winners Sash",
+            "JBC Ladies Classic Winner's Sash",
+        )) {
+            assertTrue(itemNameFromTitle(ocr) != null, ocr)
+        }
+        assertEquals("JBC Classic Winner's Sash", itemNameFromTitle("JBC Classic Winners Sash"))
+        assertEquals("JBC Ladies' Classic Winner's Sash", itemNameFromTitle("JBC Ladies Classic Winner's Sash"))
+    }
+
+    @Test
+    fun `overlapping screenfuls read all 34 sashes and pick the true lowest`() {
+        val scan = mergePickerPages(livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28))
+        assertTrue(scan.complete)
+        assertEquals(34, scan.rows.size)
+        assertEquals("M.C. Nambu Hai Winner's Sash", lowestHeldItem(scan))
+    }
+
+    @Test
+    fun `a swipe that skips a row leaves the read incomplete and requests nothing`() {
+        // A swipe that coasted one row too far: rows 1 to 6, then 8 to 13, so row 7 (NHK Mile C.) was never in view.
+        val scan = mergePickerPages(livePages(0, 7, 10, 13, 16, 19, 22, 25, 28, 28, 28))
+        assertTrue(scan.endReached)
+        assertFalse(scan.complete)
+        assertNull(lowestHeldItem(scan))
+    }
+
+    @Test
+    fun `a row that reads as no known item leaves the read incomplete`() {
+        val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).toMutableList()
+        pages[2] = pages[2].toMutableList().also { it[1] = "Hokkaido Cup Winner's Sash" to "1" }
+        val scan = mergePickerPages(pages)
+        assertFalse(scan.complete)
+        assertNull(lowestHeldItem(scan))
+        val game = FakeGame(sashes = scan)
+        runClub(game, item = ClubRequestItems.LOWEST_HELD_SASH)
+        assertNull(game.requested)
+        assertFalse(CONFIRM in game.taps)
+    }
+
+    @Test
+    fun `a list that never shows its end is incomplete`() {
+        assertFalse(mergePickerPages(livePages(0, 3)).complete)
+        assertFalse(mergePickerPages(emptyList()).complete)
+    }
+
+    @Test
+    fun `the Club button is pressed once Home has finished drawing it`() {
+        val game = FakeGame(clubButtonMisses = 2)
+        assertEquals(listOf("Club: requested Dirt Racing Shoes"), runClub(game))
+        assertEquals("Dirt Racing Shoes", game.requested)
+    }
+
+    @Test
+    fun `a Club button that never draws ends the part safely on Home`() {
+        val game = FakeGame(clubButtonMisses = 100)
+        assertEquals(listOf("Club: Club button not found"), runClub(game))
+        assertTrue(game.taps.isEmpty())
+        assertEquals(HOME, game.screen)
     }
 
     @Test
