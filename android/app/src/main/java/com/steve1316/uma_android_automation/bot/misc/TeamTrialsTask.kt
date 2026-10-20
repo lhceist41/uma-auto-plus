@@ -36,6 +36,7 @@ import com.steve1316.uma_android_automation.utils.gameY
 import com.steve1316.uma_android_automation.utils.parseRpCount
 import com.steve1316.uma_android_automation.utils.quickModePillOn
 import com.steve1316.uma_android_automation.utils.readRpPips
+import com.steve1316.uma_android_automation.utils.teamTrialsClassResult
 import com.steve1316.uma_android_automation.utils.teamTrialsHighScoreBanner
 import kotlin.random.Random
 
@@ -70,6 +71,8 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         POST_MATCH_RESULTS,
 
         HIGH_SCORE_BANNER,
+
+        CLASS_RESULT,
 
         UNKNOWN,
     }
@@ -141,7 +144,8 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             currentState == TeamTrialsScreenState.ITEMS_SELECTED_POPUP ||
                 currentState == TeamTrialsScreenState.RESTORE_RP_PROMPT ||
                 currentState == TeamTrialsScreenState.DAILY_SALE_POPUP ||
-                currentState == TeamTrialsScreenState.HIGH_SCORE_BANNER
+                currentState == TeamTrialsScreenState.HIGH_SCORE_BANNER ||
+                currentState == TeamTrialsScreenState.CLASS_RESULT
         if (!ownDialog && handleIncidentalPopups()) {
             return null
         }
@@ -204,6 +208,11 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
                 null
             }
 
+            TeamTrialsScreenState.CLASS_RESULT -> {
+                handleClassResult(sourceBitmap)
+                null
+            }
+
             TeamTrialsScreenState.UNKNOWN -> {
                 handleUnknown(sourceBitmap)
                 null
@@ -217,6 +226,12 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         // It covers the results screens, whose header and Next can still match under it.
         if (matchInProgress && teamTrialsHighScoreBanner(sampler(sourceBitmap), sourceBitmap.width, sourceBitmap.height)) {
             return TeamTrialsScreenState.HIGH_SCORE_BANNER
+        }
+
+        // Once a week the first entry shows the class result (retention, demotion or promotion) rewards over the blurred
+        // Team Trials home: no header, no nav.
+        if (!matchInProgress && teamTrialsClassResult(sampler(sourceBitmap), sourceBitmap.width, sourceBitmap.height)) {
+            return TeamTrialsScreenState.CLASS_RESULT
         }
 
         if (LabelDailySale.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
@@ -512,6 +527,16 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         MessageLog.i(TAG, "[TEAM_TRIALS] New weekly high score banner; tapping past it.")
         val y = gameY(TeamTrialsGeometry.HIGH_SCORE_TAP_Y.toDouble(), ScreenBand.BOTTOM, bitmap.width, bitmap.height)
         CoordinateTap.tap(game.gestureUtils, TeamTrialsGeometry.HIGH_SCORE_TAP_X.toDouble(), y, "high_score_banner_tap")
+        game.wait(2.0)
+    }
+
+    /** The weekly class result rewards close with Next, which leads to the Team Trials home. */
+    private fun handleClassResult(bitmap: Bitmap) {
+        MessageLog.i(TAG, "[TEAM_TRIALS] Weekly class result rewards; closing them with Next.")
+        if (!ButtonNext.click(game.imageUtils, sourceBitmap = bitmap, region = Region.bottomHalf)) {
+            val y = gameY(TeamTrialsGeometry.CLASS_RESULT_NEXT_Y.toDouble(), ScreenBand.BOTTOM, bitmap.width, bitmap.height)
+            CoordinateTap.tap(game.gestureUtils, TeamTrialsGeometry.CLASS_RESULT_NEXT_X.toDouble(), y, "class_result_next_tap")
+        }
         game.wait(2.0)
     }
 

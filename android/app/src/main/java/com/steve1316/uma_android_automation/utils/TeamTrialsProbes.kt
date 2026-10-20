@@ -52,6 +52,22 @@ object TeamTrialsGeometry {
     /** Its blinking "TAP" prompt, BOTTOM band: MuMu y 1596-1683. */
     const val HIGH_SCORE_TAP_X = 540
     const val HIGH_SCORE_TAP_Y = 1640
+
+    /**
+     * Weekly class result screen ("CLASS RETENTION", "CLASS DEMOTION", by the same layout "CLASS PROMOTION"), measured on
+     * MuMu 1080x1920 retention and demotion frames (DIALOG band): white panel rows below the reward icons, the green
+     * stripe rows above and below the panel, and the second title word's rows (lime on retention, light blue on demotion).
+     */
+    val CLASS_RESULT_WHITE_YS = intArrayOf(985, 1005, 1025, 1045)
+    val CLASS_RESULT_STRIPE_YS = intArrayOf(380, 400, 1180, 1200)
+    const val CLASS_RESULT_TITLE_Y0 = 600
+    const val CLASS_RESULT_TITLE_Y1 = 640
+    const val CLASS_RESULT_TITLE_X0 = 150
+    const val CLASS_RESULT_TITLE_X1 = 930
+
+    /** Its Next button, BOTTOM band: MuMu x 330-750, y 1562-1676. */
+    const val CLASS_RESULT_NEXT_X = 540
+    const val CLASS_RESULT_NEXT_Y = 1620
 }
 
 private fun red(argb: Int): Int = (argb shr 16) and 0xFF
@@ -217,4 +233,31 @@ fun teamTrialsHighScoreBanner(
     val titleRows = TeamTrialsGeometry.HIGH_SCORE_TITLE_Y0..TeamTrialsGeometry.HIGH_SCORE_TITLE_Y1 step 4
     val title = titleRows.map { y -> rowShare(mapped, y, TeamTrialsGeometry.HIGH_SCORE_TITLE_X0, TeamTrialsGeometry.HIGH_SCORE_TITLE_X1, 3, ::isBannerLime) }.average()
     return title >= 0.12
+}
+
+/** Coloured title ink of any hue: not white, not grey. */
+private fun isTitleInk(argb: Int): Boolean {
+    val r = red(argb)
+    val g = green(argb)
+    val b = blue(argb)
+    return minOf(r, g, b) < 235 && maxOf(r, g, b) - minOf(r, g, b) >= 60
+}
+
+/**
+ * Whether the weekly class result screen is up, shown once a week on the first Team Trials entry over the blurred Team
+ * Trials home. Measured: white rows 0.97 and up on both frames, stripe rows 0.72 and up, title ink 0.60 (retention) and
+ * 0.24 (demotion); the Team Trials home behind it fails the white rows outright.
+ */
+fun teamTrialsClassResult(
+    sampler: SparkPixelSampler,
+    width: Int,
+    height: Int,
+): Boolean {
+    if (!isMappedSurface(width, height)) return false
+    val mapped = sampler.onScreen(ScreenBand.DIALOG, width, height)
+    if (TeamTrialsGeometry.CLASS_RESULT_WHITE_YS.any { y -> rowShare(mapped, y, 0, 1080, 6) { minOf(red(it), green(it), blue(it)) >= 235 } < 0.9 }) return false
+    if (TeamTrialsGeometry.CLASS_RESULT_STRIPE_YS.any { y -> rowShare(mapped, y, 0, 1080, 6) { isBannerLime(it) || isBannerEmerald(it) } < 0.4 }) return false
+    val titleRows = TeamTrialsGeometry.CLASS_RESULT_TITLE_Y0..TeamTrialsGeometry.CLASS_RESULT_TITLE_Y1 step 4
+    val title = titleRows.map { y -> rowShare(mapped, y, TeamTrialsGeometry.CLASS_RESULT_TITLE_X0, TeamTrialsGeometry.CLASS_RESULT_TITLE_X1, 3, ::isTitleInk) }.average()
+    return title >= 0.15
 }
