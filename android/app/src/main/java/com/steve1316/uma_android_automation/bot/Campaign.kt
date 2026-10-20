@@ -115,6 +115,7 @@ import com.steve1316.uma_android_automation.utils.ProgressEvent
 import com.steve1316.uma_android_automation.utils.ProgressNotification
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.StatReadPlausibility
+import com.steve1316.uma_android_automation.utils.RssGc
 import com.steve1316.uma_android_automation.utils.StatusBoard
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
@@ -4486,6 +4487,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** After a main-screen tick, whose analysis threads are done: the turn's "[MEM]" line and, when due, the Tesseract re-creation test. */
     private fun onTurnBoundary() {
+        RssGc.shared.check("turn")
         val phase = if (date.bIsFinaleSeason) "FINALE" else "${date.year.name}_${date.phase.name}_${date.month.name}"
         if (!game.memoryLog.turnEnd(date.day, phase, StatusBoard.snapshot().career?.actionKind)) return
         if (!game.tesseractReinit.turnEnded()) return

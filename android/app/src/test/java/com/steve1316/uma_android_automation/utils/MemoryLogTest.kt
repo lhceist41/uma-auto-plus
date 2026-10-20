@@ -103,4 +103,20 @@ class MemoryLogTest {
         assertNull(MemoryLog.parseRssAnonKb("XRssAnon:\t 5 kB\n"))
         assertTrue(MemoryLog.formatLine("turn", 1, 2, null, "URA Finale", null, MemorySample(null, 1, 1)).contains(" rssAnonKB=- "))
     }
+
+    @Test
+    @DisplayName("each line counts captures and memory GCs since the previous line, starting at 0 for a new run")
+    fun captureAndGcCounts() {
+        val totals = ArrayDeque(listOf(500L to 3, 530L to 3, 600L to 5))
+        val out = mutableListOf<String>()
+        val memory =
+            MemoryLog(2, "Grand Concert", sample = {
+                val (captures, gcRuns) = totals.removeFirst()
+                MemorySample(400_000, 30_000, 50, captures, gcRuns)
+            }, emit = { out.add(it) })
+        memory.gameStart()
+        memory.turnEnd(1, "JUNIOR_EARLY_JANUARY", "training")
+        memory.turnEnd(2, "JUNIOR_LATE_JANUARY", "training")
+        assertEquals(listOf(" captures=0 gc=0", " captures=30 gc=0", " captures=70 gc=2"), out.map { it.substring(it.indexOf(" captures=")) })
+    }
 }

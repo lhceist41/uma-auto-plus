@@ -5,8 +5,8 @@ import com.steve1316.uma_android_automation.MainActivity
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
-/** One reading for a [MemoryLog] line: anonymous resident memory (null when unreadable), Java heap in use, live Java threads. */
-data class MemorySample(val rssAnonKb: Long?, val javaKb: Long, val threads: Int)
+/** One reading for a [MemoryLog] line: anonymous resident memory (null when unreadable), Java heap in use, live Java threads, and the process totals of captures and memory GCs. */
+data class MemorySample(val rssAnonKb: Long?, val javaKb: Long, val threads: Int, val captures: Long = 0, val gcRuns: Int = 0)
 
 /**
  * Writes one "[MEM]" line per career turn and at each run's start and end, so a long queue shows which memory grows.
@@ -19,17 +19,29 @@ class MemoryLog(
     private val emit: (String) -> Unit = { MessageLog.i(TAG, it) },
 ) {
     private var lastTurn: Int? = null
+    private var lastCaptures: Long? = null
+    private var lastGcRuns: Int? = null
 
-    fun gameStart() = emit(formatLine("game_start", gameId, null, null, scenario, null, sample()))
+    fun gameStart() = emit(line("game_start", null, null, null))
 
-    fun gameEnd() = emit(formatLine("game_end", gameId, lastTurn, null, scenario, null, sample()))
+    fun gameEnd() = emit(line("game_end", lastTurn, null, null))
 
     /** Logs the turn once; the turn's later main-screen ticks stay silent. Returns true when it logged. */
     fun turnEnd(turn: Int, phase: String, step: String?): Boolean {
         if (turn == lastTurn) return false
         lastTurn = turn
-        emit(formatLine("turn", gameId, turn, phase, scenario, step, sample()))
+        emit(line("turn", turn, phase, step))
         return true
+    }
+
+    /** Captures and memory GCs count from this log's previous line. */
+    private fun line(event: String, turn: Int?, phase: String?, step: String?): String {
+        val s = sample()
+        val captures = s.captures - (lastCaptures ?: s.captures)
+        val gcRuns = s.gcRuns - (lastGcRuns ?: s.gcRuns)
+        lastCaptures = s.captures
+        lastGcRuns = s.gcRuns
+        return formatLine(event, gameId, turn, phase, scenario, step, s) + " captures=$captures gc=$gcRuns"
     }
 
     companion object {
@@ -50,14 +62,14 @@ class MemoryLog(
             // The root group's count covers every Java thread, including the bot's unnamed worker threads.
             var group: ThreadGroup? = Thread.currentThread().threadGroup
             while (group?.parent != null) group = group.parent
-            return MemorySample(readRssAnonKb(), (runtime.totalMemory() - runtime.freeMemory()) / 1024, group?.activeCount() ?: 0)
+            return MemorySample(readRssAnonKb(), (runtime.totalMemory() - runtime.freeMemory()) / 1024, group?.activeCount() ?: 0, RssGc.shared.captureCount, RssGc.shared.runCount)
         }
 
         /**
          * Anonymous resident memory: the native heap plus the Java heap and other private mappings. Not mallinfo
          * (Debug.getNativeHeapAllocatedSize): under Scudo it sums per-thread counters and reports 0 whenever the sum dips below zero.
          */
-        private fun readRssAnonKb(): Long? = runCatching { parseRssAnonKb(File("/proc/self/status").readText()) }.getOrNull()
+        internal fun readRssAnonKb(): Long? = runCatching { parseRssAnonKb(File("/proc/self/status").readText()) }.getOrNull()
 
         internal fun parseRssAnonKb(status: String): Long? = Regex("^RssAnon:\\s+(\\d+) kB", RegexOption.MULTILINE).find(status)?.groupValues?.get(1)?.toLongOrNull()
     }

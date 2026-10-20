@@ -194,6 +194,8 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         }
         val bitmap = cropToScreenWidth(super.getSourceBitmap(saveImage), SharedData.displayWidth)
         ProgressTracker.noteCapture(bitmap)
+        // Never collect while holding the OCR lock: a GC with finalizers can take hundreds of ms.
+        RssGc.shared.noteCapture(mayCollect = !Thread.holdsLock(ocrLock))
         return bitmap
     }
 
@@ -1133,6 +1135,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             greenMask.release()
             orangeMask.release()
             hsvMat.release()
+            rgbMat.release()
             barMat.release()
 
             if (debugMode) {
@@ -4374,6 +4377,8 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         thumbMask.release()
         hsvImage.release()
         srcImage.release()
+        morphOpenKernel.release()
+        morphCloseKernel.release()
 
         if (debugMode) {
             MessageLog.d(TAG, "[DEBUG] detectScrollBar:: Results: bboxBar=$bboxBar, bboxThumb=$bboxThumb")
