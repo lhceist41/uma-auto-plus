@@ -104,7 +104,10 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
                 else -> DifficultyListStep.STOP
             }
 
-        /** Why a committed multi-race cannot be reported as done; null when it can. A tap alone is not proof the races ran. */
+        /**
+         * Why a committed multi-race cannot be reported as done; null when it can. A tap alone is not proof the races ran:
+         * Race Results on screen is, and so is the counter read back at 0 after the commit.
+         */
         internal fun multiRaceFailure(
             committed: Boolean,
             resultsSeen: Boolean,
@@ -112,10 +115,26 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         ): String? =
             when {
                 !committed -> null
-                !resultsSeen -> "Race! was tapped on the Multi-Race popup, but no race results were seen."
                 ticketsLeft != null && ticketsLeft > 0 -> "$ticketsLeft ticket(s) still held after the multi-race."
+                !resultsSeen && ticketsLeft != 0 -> "Race! was tapped on the Multi-Race popup, but no race results were seen."
                 else -> null
             }
+
+        /**
+         * Frames outside this task's own dialogs that wait, after the commit, for its own Race Results check. Both instances
+         * showed 3 before it matched. Must stay below [MAX_CONSECUTIVE_UNKNOWNS], or the safety rail ends the task first.
+         */
+        const val RESULTS_WAIT_FRAMES = 4
+
+        /**
+         * Whether the shared dialog handler may look at a frame outside this task's own dialogs. Race Results animates in after the
+         * commit, and the shared handler reads its title as Race Details and taps Close before this task sees the results.
+         */
+        internal fun sharedHandlerAllowed(
+            committed: Boolean,
+            resultsSeen: Boolean,
+            framesAwaitingResults: Int,
+        ): Boolean = !committed || resultsSeen || framesAwaitingResults > RESULTS_WAIT_FRAMES
     }
 
     enum class DifficultyListStep {
@@ -155,6 +174,9 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
     /** Set once Race Results or Total Rewards shows after the commit. */
     private var resultsSeen: Boolean = false
 
+    /** Frames outside this task's own dialogs between the commit and the first Race Results. */
+    private var framesAwaitingResults: Int = 0
+
     /** The counter read back on the Daily Races screen after the multi-race; null when not read or unreadable. */
     private var ticketsLeft: Int? = null
 
@@ -188,8 +210,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
                 currentState == DailyRaceScreenState.MULTI_RACE_POPUP ||
                 currentState == DailyRaceScreenState.RACE_RESULTS ||
                 currentState == DailyRaceScreenState.DAILY_SALE_POPUP
-        if (!ownDialog && handleIncidentalPopups()) {
-            return null
+        if (!ownDialog) {
+            if (raceSequenceCommitted && !resultsSeen && ++framesAwaitingResults == RESULTS_WAIT_FRAMES + 1) {
+                MessageLog.w(TAG, "[DAILY_RACES] No Race Results recognised in $RESULTS_WAIT_FRAMES frames after the commit; the shared dialog handler may look now.")
+            }
+            if (sharedHandlerAllowed(raceSequenceCommitted, resultsSeen, framesAwaitingResults) && handleIncidentalPopups()) return null
         }
 
         return when (currentState) {

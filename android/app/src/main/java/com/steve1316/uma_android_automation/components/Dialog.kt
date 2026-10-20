@@ -303,6 +303,8 @@ object DialogUtils {
         val match = TextUtils.matchStringInList(text, DialogObjects.items.map { it.title }) ?: return null
         // Jaro-Winkler's prefix boost carries any "Event ..." title to Event Home (0.81 to 0.90), so it needs a closer read.
         if (match == DialogEventHome.title) return TextUtils.matchStringInList(text, listOf(match), threshold = 0.95)
+        // The Daily Races "Race Results" screen scores 0.88 against Race Details and was closed as that dialog.
+        if (match == DialogRaceDetails.title) return TextUtils.matchStringInList(text, listOf(match), threshold = 0.95)
         return match
     }
 
