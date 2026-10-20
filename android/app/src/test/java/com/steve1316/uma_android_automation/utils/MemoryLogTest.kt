@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.utils
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -14,21 +15,21 @@ class MemoryLogTest {
     private fun log(scenario: String = "Grand Concert") =
         MemoryLog(7, scenario, sample = {
             reads++
-            MemorySample(nativeKb = 227208L + reads, javaKb = 19612, threads = 42)
+            MemorySample(rssAnonKb = 227208L + reads, javaKb = 19612, threads = 42)
         }, emit = { lines.add(it) })
 
     @Test
     @DisplayName("the line names the event, run, turn, phase, scenario, step and the three readings")
     fun lineFormat() {
         val line = MemoryLog.formatLine("turn", 3, 56, "SENIOR_LATE_APRIL", "Grand Concert", "training", MemorySample(227208, 19612, 42))
-        assertEquals("[MEM] event=turn game=3 turn=56 phase=SENIOR_LATE_APRIL scenario=Grand_Concert step=training nativeKB=227208 javaKB=19612 threads=42", line)
+        assertEquals("[MEM] event=turn game=3 turn=56 phase=SENIOR_LATE_APRIL scenario=Grand_Concert step=training rssAnonKB=227208 javaKB=19612 threads=42", line)
     }
 
     @Test
     @DisplayName("missing values print as a dash so every line keeps the same fields")
     fun missingValues() {
-        val line = MemoryLog.formatLine("game_start", 1, null, null, "", "  ", MemorySample(0, 0, 0))
-        assertEquals("[MEM] event=game_start game=1 turn=- phase=- scenario=- step=- nativeKB=0 javaKB=0 threads=0", line)
+        val line = MemoryLog.formatLine("game_start", 1, null, null, "", "  ", MemorySample(null, 0, 0))
+        assertEquals("[MEM] event=game_start game=1 turn=- phase=- scenario=- step=- rssAnonKB=- javaKB=0 threads=0", line)
     }
 
     @Test
@@ -53,8 +54,8 @@ class MemoryLogTest {
         memory.turnEnd(40, "CLASSIC_LATE_AUGUST", "training")
         memory.gameEnd()
         assertEquals(3, lines.size)
-        assertTrue(lines[0].startsWith("[MEM] event=game_start game=7 turn=- phase=- scenario=URA_Finale step=- nativeKB="))
-        assertTrue(lines[2].startsWith("[MEM] event=game_end game=7 turn=40 phase=- scenario=URA_Finale step=- nativeKB="))
+        assertTrue(lines[0].startsWith("[MEM] event=game_start game=7 turn=- phase=- scenario=URA_Finale step=- rssAnonKB="))
+        assertTrue(lines[2].startsWith("[MEM] event=game_end game=7 turn=40 phase=- scenario=URA_Finale step=- rssAnonKB="))
     }
 
     @Test
@@ -78,5 +79,28 @@ class MemoryLogTest {
     @DisplayName("the default reading counts at least the calling thread")
     fun defaultReading() {
         assertTrue(MemoryLog.readMemory().threads >= 1)
+    }
+
+    @Test
+    @DisplayName("RssAnon is read from the kernel's status text, tabs and padding included")
+    fun rssAnonFromStatus() {
+        val status =
+            listOf(
+                "Name:\t1.uma_auto_plus",
+                "VmRSS:\t  549700 kB",
+                "RssAnon:\t  412340 kB",
+                "RssFile:\t  118220 kB",
+                "RssShmem:\t   19140 kB",
+                "Threads:\t108",
+            ).joinToString("\n")
+        assertEquals(412340L, MemoryLog.parseRssAnonKb(status))
+    }
+
+    @Test
+    @DisplayName("no RssAnon line, or only a look-alike, reads as unknown, never as 0")
+    fun rssAnonMissing() {
+        assertNull(MemoryLog.parseRssAnonKb("Name:\tx\nVmRSS:\t 1000 kB\n"))
+        assertNull(MemoryLog.parseRssAnonKb("XRssAnon:\t 5 kB\n"))
+        assertTrue(MemoryLog.formatLine("turn", 1, 2, null, "URA Finale", null, MemorySample(null, 1, 1)).contains(" rssAnonKB=- "))
     }
 }
