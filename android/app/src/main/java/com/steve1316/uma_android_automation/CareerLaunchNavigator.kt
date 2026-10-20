@@ -162,6 +162,18 @@ import java.util.Date
 import java.util.Locale
 
 /**
+ * The five stat-type counts from their "xN" badge reads, or null when no box read a digit: an absent badge reads empty
+ * (zero of that type), but a deck always holds a card of some stat type, so five empty boxes mean the badges were not on
+ * screen. tesseract_digits is non-deterministic on the leading "x" ("x1" reads "1" or "11"); the count is the trailing
+ * glyph and single-digit (0-6 cards of one type), so the last digit is taken and larger misreads clamped.
+ */
+internal fun parseDeckTypeCounts(raws: List<String>): IntArray? {
+    val digits = raws.map { raw -> raw.lastOrNull { it.isDigit() }?.digitToIntOrNull() }
+    if (digits.all { it == null }) return null
+    return IntArray(raws.size) { (digits[it] ?: 0).coerceIn(0, 6) }
+}
+
+/**
  * Whether a Borrow Card row's OCR text contains the user's preferred card/character name.
  * Both sides are lowercased and stripped to alphanumerics, so OCR line breaks, brackets, and
  * punctuation ("[Fire at My Heels]\nKitasan Black") cannot break a plain "kitasan black" match.
@@ -805,6 +817,11 @@ class CareerLaunchNavigator(private val context: Context) {
     private var requestedSupportDeckIndex: Int? = null
     private var supportDeckPreBorrowVerified: Boolean = false
     private var supportDeckPostBorrowVerified: Boolean = false
+
+    // The type count badges read on the Support Formation screen at its Start Career tap (the only screen that shows them);
+    // null when the check is off or the badges did not read. Reset per navigate().
+    private var deckTypeCountsAtStart: IntArray? = null
+    private var deckTypeCountsAttempted: Boolean = false
     private var supportDeckAutoFillSuppressedLogged: Boolean = false
 
     // Build-aware launch state (reset per navigate()). lastBuildAwareLaunchResult holds the transaction
@@ -1012,6 +1029,8 @@ class CareerLaunchNavigator(private val context: Context) {
         supportDeckPreBorrowVerified = false
         supportDeckPostBorrowVerified = false
         supportDeckAutoFillSuppressedLogged = false
+        deckTypeCountsAtStart = null
+        deckTypeCountsAttempted = false
         lastBuildAwareLaunchResult = null
         buildAwareLaunchBlocked = false
         // Finalization-guard context for THIS navigation: the verdict present when the
@@ -5200,6 +5219,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 )
             }
             startCareerClickAttempts++
+            readDeckTypeCountsOnce { bitmap }
             MessageLog.i(TAG, "[NAV] Deck complete or auto-fill off. Clicking Start Career! (attempt $startCareerClickAttempts)...")
             if (!ButtonStartCareer.click(iu, sourceBitmap = bitmap) && !ButtonStartCareerOffset.click(iu, sourceBitmap = bitmap)) {
                 ButtonStartCareerRight.click(iu, sourceBitmap = bitmap)
@@ -5338,6 +5358,7 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         }
         startCareerClickAttempts++
+        readDeckTypeCountsOnce { iu.getSourceBitmap() }
         if (!ButtonStartCareer.click(iu) && !ButtonStartCareerOffset.click(iu)) {
             ButtonStartCareerRight.click(iu)
         }
@@ -5633,6 +5654,9 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         }
         borrowDuplicateReplacements++
+        // The badge row read before the refused Start Career described the replaced borrow; the next tap reads it again.
+        deckTypeCountsAttempted = false
+        deckTypeCountsAtStart = null
         val refused = lastBorrowPickEntry?.let { borrowEntryCharacter(it) }
         refused?.let { borrowExcludedCharacters.add(it) }
         lastBorrowPickEntry = null
@@ -6548,12 +6572,13 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * Reads the five stat-type "xN" count badges off the deck-selection screen. An absent badge
-     * (zero of that type) reads as empty, which parses to 0. Returns counts indexed to
+     * Reads the five stat-type "xN" count badges off the Support Formation screen. An absent badge (zero of that type)
+     * reads as empty, so only a read with no digit in any box is null: a deck always has a card of some stat type, and
+     * five empty boxes mean the badges were not on screen ([parseDeckTypeCounts]). Returns counts indexed to
      * [deckStatLabels] (Speed, Stamina, Power, Guts, Wit). Never throws except on interrupt.
      */
-    private fun readDeckTypeCounts(bitmap: Bitmap): IntArray {
-        val counts = IntArray(deckCountColFractions.size)
+    private fun readDeckTypeCounts(bitmap: Bitmap): IntArray? {
+        val raws = ArrayList<String>(deckCountColFractions.size)
         val boxW = (bitmap.width * deckCountBoxW).toInt()
         val boxH = (bitmap.height * deckCountBoxH).toInt()
         val y = (bitmap.height * deckCountRowYFraction).toInt()
@@ -6578,13 +6603,16 @@ class CareerLaunchNavigator(private val context: Context) {
                 } catch (_: Exception) {
                     ""
                 }
-            // The badge reads "xN". tesseract_digits is non-deterministic on the leading "x" — it
-            // usually drops it ("x1" -> "1") but sometimes maps it to a digit ("x1" -> "11"). The
-            // count is always the TRAILING glyph and physically single-digit (0-6 cards of one type),
-            // so take the last digit, not the whole run, and clamp out any larger misread.
-            counts[i] = (raw.lastOrNull { it.isDigit() }?.digitToIntOrNull() ?: 0).coerceIn(0, 6)
+            raws.add(raw)
         }
-        return counts
+        return parseDeckTypeCounts(raws)
+    }
+
+    /** One read per launch, at the Start Career tap of the Support Formation screen, where the badges are; [capture] runs only when the check is on. */
+    private fun readDeckTypeCountsOnce(capture: () -> Bitmap) {
+        if (deckTypeCountsAttempted || !SettingsHelper.getBooleanSetting("training", "enableDeckConcentrationCheck", false)) return
+        deckTypeCountsAttempted = true
+        deckTypeCountsAtStart = checkDeckConcentration(capture())
     }
 
     /**
@@ -6598,13 +6626,17 @@ class CareerLaunchNavigator(private val context: Context) {
      * concentration, so the count is informational there (the Race-Bonus gate is a separate check).
      * Unity Cup gets extra non-rainbow growth from team mechanics, so its floor is one lower.
      */
-    private fun checkDeckConcentration(): IntArray? {
+    private fun checkDeckConcentration(bitmap: Bitmap): IntArray? {
         try {
             if (!SettingsHelper.getBooleanSetting("training", "enableDeckConcentrationCheck", false)) return null
             val scenario = SettingsHelper.getStringSetting("general", "scenario")
             if (scenario == "Daily Races" || scenario == "Team Trials") return null // No support deck in misc modes.
 
-            val counts = readDeckTypeCounts(iu.getSourceBitmap())
+            val counts = readDeckTypeCounts(bitmap)
+            if (counts == null) {
+                MessageLog.w(TAG, "[DECK] Support deck type counts could not be read (no count badge read); skipping the concentration check. The run continues normally.")
+                return null
+            }
             val breakdown = deckStatLabels.indices.joinToString(", ") { "${deckStatLabels[it]}=${counts[it]}" }
 
             if (scenario == "Trackblazer") {
@@ -6664,12 +6696,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 slot == null -> "Deck $requiredDeck was not verified on both sides of the borrow"
                 else -> null
             }
-        val typeCountsReason =
-            when {
-                typeCounts != null -> null
-                !SettingsHelper.getBooleanSetting("training", "enableDeckConcentrationCheck", false) -> "not read: Deck Concentration Check is off"
-                else -> "read failed"
-            }
+        val typeCountsReason = deckTypeCountsReason()
         val pinnedName = SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim().takeIf { it.isNotEmpty() }
         val borrow = launchBorrowTap?.let { (identity, action) -> launchBorrowFromTap(identity, action, listOfNotNull(pinnedName) + SmartBorrowList.priority) }
         val borrowReason =
@@ -6699,6 +6726,15 @@ class CareerLaunchNavigator(private val context: Context) {
         MessageLog.i(TAG, launchDeckLogLine(observation))
     }
 
+    /** Why [deckTypeCountsAtStart] is null, for the deck record. */
+    private fun deckTypeCountsReason(): String? =
+        when {
+            deckTypeCountsAtStart != null -> null
+            !SettingsHelper.getBooleanSetting("training", "enableDeckConcentrationCheck", false) -> "not read: Deck Concentration Check is off"
+            deckTypeCountsAttempted -> "read failed: no count badge read on the Support Formation screen"
+            else -> "not read: this launch did not pass the Support Formation Start Career tap"
+        }
+
     /**
      * Read-only diagnostic for calibrating the deck-composition count read against a live device.
      * Park the game on the deck-selection screen (the one with Start Career! / Perks), enable
@@ -6718,7 +6754,7 @@ class CareerLaunchNavigator(private val context: Context) {
         val y = (bitmap.height * deckCountRowYFraction).toInt()
         deckStatLabels.forEachIndexed { i, label ->
             val cx = (bitmap.width * deckCountColFractions[i]).toInt()
-            MessageLog.i(TAG, "[DECK-TEST] $label: count=${counts[i]} (box centre x=$cx, y=$y)")
+            MessageLog.i(TAG, "[DECK-TEST] $label: count=${counts?.get(i) ?: "unread"} (box centre x=$cx, y=$y)")
         }
         val core =
             SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").firstOrNull()
@@ -9519,9 +9555,8 @@ class CareerLaunchNavigator(private val context: Context) {
             tickEventBoostIfOff()
         }
 
-        // Read the support-deck composition off this screen and warn if it looks too spread for the
-        // build. Read-only and fully guarded — it never blocks the Start Career tap below.
-        val launchDeck = buildLaunchDeckObservation(checkDeckConcentration())
+        // The deck record for the career this tap starts, from what the Support Formation screen already gave.
+        val launchDeck = buildLaunchDeckObservation(deckTypeCountsAtStart)
 
         MessageLog.i(TAG, "[NAV] Clicking 'Start Career!'...")
 

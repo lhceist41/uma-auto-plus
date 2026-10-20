@@ -248,7 +248,7 @@ class LaunchDeckObservationTest {
         @DisplayName("the launch publishes before the Start Career tap, records only sent taps, and resets per navigation")
         fun navigatorWiring() {
             val navigator = source("$base/CareerLaunchNavigator.kt")
-            val build = navigator.indexOf("val launchDeck = buildLaunchDeckObservation(checkDeckConcentration())")
+            val build = navigator.indexOf("val launchDeck = buildLaunchDeckObservation(deckTypeCountsAtStart)")
             assertTrue(build > 0)
             val click = navigator.indexOf("if (ButtonStartCareer.click(iu) || ButtonStartCareerOffset.click(iu) || ButtonStartCareerRight.click(iu)) {", build)
             val publish = navigator.indexOf("publishLaunchDeckObservation(launchDeck)", build)
