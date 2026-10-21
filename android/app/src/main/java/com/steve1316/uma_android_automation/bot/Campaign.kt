@@ -3454,6 +3454,10 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.i(TAG, "[SKILLS] Skill Points ${trainee.skillPoints} now cover the held Grand Concert gold ($heldGoldCost SP). Re-arming the skill point check.")
             bHasHandledSkillPointCheck = false
             heldGoldCost = null
+        } else if (shouldRearmAtCareerEnd(bHasHandledSkillPointCheck, heldGoldCost, GrandConcertScenario.matches(game.scenario), date.day)) {
+            MessageLog.i(TAG, "[SKILLS] Last turn with a Grand Concert gold still held ($heldGoldCost SP). Re-arming the skill point check for the Finals.")
+            bHasHandledSkillPointCheck = false
+            heldGoldCost = null
         }
 
         // The two adaptive-only trigger inputs. Everything defaults inert (manual mode, rank objective, disabled plan, OCR failure, finals adjacency).

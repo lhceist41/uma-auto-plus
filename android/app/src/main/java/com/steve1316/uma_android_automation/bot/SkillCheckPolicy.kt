@@ -1,5 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
+
 enum class SkillCheckTrigger {
     HIGH_WATER,
 
@@ -89,6 +91,17 @@ fun shouldRearmHighWater(
     heldAtSkillPoints: Int,
     skillPoints: Int,
 ): Boolean = alreadyHandledHighWater && heldGoldCost != null && skillPoints >= heldGoldCost && skillPoints > heldAtSkillPoints
+
+/**
+ * A Grand Concert gold still held when the last turn arrives re-opens the check once, affordable or not, so the session that holds nothing
+ * runs before the Finals instead of leaving the skills to the career-end spend. Clearing [heldGoldCost] on the re-arm keeps it to once.
+ */
+fun shouldRearmAtCareerEnd(
+    alreadyHandledHighWater: Boolean,
+    heldGoldCost: Int?,
+    grandConcert: Boolean,
+    day: Int,
+): Boolean = alreadyHandledHighWater && heldGoldCost != null && grandConcert && day == GrandConcert.CAREER_END_TURN
 
 const val PRE_FINALS_DAY: Int = 72
 

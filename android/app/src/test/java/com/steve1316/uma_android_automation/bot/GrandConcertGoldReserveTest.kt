@@ -260,6 +260,39 @@ class GrandConcertGoldReserveTest {
     }
 
     @Test
+    fun `a gold still held on the last turn re-arms the check once and that session holds nothing`() {
+        val screen = milesOnScreen + iWannaWin400
+        for (heldOn in listOf(72, 73, 74)) {
+            // Held on turn heldOn, never affordable: SP stays at 350 and the old re-arm never fires.
+            val held = heldCost(screen, 350)
+            assertEquals(400, held)
+            for (day in heldOn..74) assertFalse(shouldRearmAtCareerEnd(true, held, true, day), "turn $day")
+            assertFalse(shouldRearmHighWater(true, held, heldAtSkillPoints = 350, skillPoints = 350))
+            assertTrue(shouldRearmAtCareerEnd(true, held, true, 75))
+
+            // The re-armed state (flag cleared, hold cleared) cannot re-arm again, and the turn-75 session spends by the usual plan.
+            assertFalse(shouldRearmAtCareerEnd(false, null, true, 75))
+            assertEquals(SkillCheckAction.RUN_PLAN, highWater(skillPoints = 350, handled = false, day = 75).action)
+            assertEquals(SkillCheckAction.NONE, highWater(skillPoints = 350, handled = true, day = 75).action)
+            val plan = session(screen, skillPoints = 350, turn = 75)
+            assertTrue(plan.isNotEmpty())
+            assertFalse(plan.any { it.first == "I Wanna Win with You" })
+            assertEquals(emptyList<Pair<String, Int>>() to 0, reserveForScenarioGolds(gc, SkillSpendObjective.RANK, SkillCheckTrigger.HIGH_WATER, screen, 350, turn = 75))
+        }
+    }
+
+    @Test
+    fun `the last-turn re-arm needs a held gold, Grand Concert, a handled check and a date read as turn 75`() {
+        assertFalse(shouldRearmAtCareerEnd(true, null, true, 75))
+        assertFalse(shouldRearmAtCareerEnd(true, 400, false, 75))
+        assertFalse(shouldRearmAtCareerEnd(false, 400, true, 75))
+        // An unread date leaves the previous or default day, never turn 75 by itself.
+        assertFalse(shouldRearmAtCareerEnd(true, 400, true, 1))
+        assertFalse(shouldRearmAtCareerEnd(true, 400, true, 76))
+        assertFalse(shouldRearmAtCareerEnd(true, 400, true, 72))
+    }
+
+    @Test
     fun `a bought or withdrawn gold, or a hold at the same SP, cannot loop the re-arm`() {
         // The re-armed session at 410 plans the gold, so nothing is held afterwards.
         assertEquals(null, heldCost(milesOnScreen + iWannaWin400, 410))
@@ -284,6 +317,8 @@ class GrandConcertGoldReserveTest {
         val rearm = body.indexOf("if (shouldRearmHighWater(bHasHandledSkillPointCheck, heldGoldCost, heldGoldAtSkillPoints, trainee.skillPoints))")
         assertTrue(rearm in 0 until body.indexOf("decideSkillCheck("))
         assertEquals(2, Regex("heldGoldCost = skillPlan.sessionHeldGoldCost").findAll(body).count())
+        val careerEnd = body.indexOf("else if (shouldRearmAtCareerEnd(bHasHandledSkillPointCheck, heldGoldCost, GrandConcertScenario.matches(game.scenario), date.day))")
+        assertTrue(careerEnd in rearm until body.indexOf("decideSkillCheck("))
 
         val plan = source(base + "SkillPlan.kt")
         assertTrue(plan.contains("sessionHeldGoldCost = if (reservedSkillPoints > 0) cheapestHeldGold(goldCandidates, goldsFirst) else null"))
