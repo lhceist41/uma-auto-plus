@@ -370,7 +370,7 @@ class DailyExtrasTest {
     @Test
     fun `a row that reads as no known item leaves the read incomplete`() {
         val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).toMutableList()
-        pages[2] = pages[2].toMutableList().also { it[1] = "Hokkaido Cup Winner's Sash" to "1" }
+        pages[0] = pages[0].toMutableList().also { it[0] = "Hokkaido Cup Winner's Sash" to "1" }
         val scan = mergePickerPages(pages)
         assertFalse(scan.complete)
         assertNull(lowestHeldItem(scan))
@@ -378,6 +378,73 @@ class DailyExtrasTest {
         runClub(game, item = ClubRequestItems.LOWEST_HELD_SASH)
         assertNull(game.requested)
         assertFalse(CONFIRM in game.taps)
+    }
+
+    @Test
+    fun `a title misread on one page does not veto a read that holds every sash`() {
+        val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).toMutableList()
+        pages[5] = pages[5].toMutableList().also { it[2] = "Queen Elizabeth I Cup Winner's Sash" to "666" }
+        val scan = mergePickerPages(pages)
+        assertTrue(scan.complete)
+        assertEquals(34, scan.rows.size)
+        assertEquals("M.C. Nambu Hai Winner's Sash", lowestHeldItem(scan))
+        val game = FakeGame(sashes = scan)
+        assertEquals(listOf("Club: requested M.C. Nambu Hai Winner's Sash"), runClub(game, item = ClubRequestItems.LOWEST_HELD_SASH))
+    }
+
+    @Test
+    fun `a page without a shared row does not veto a read that holds every sash`() {
+        val scan = mergePickerPages(livePages(0, 6, 12, 18, 24, 28, 28, 28))
+        assertTrue(scan.complete)
+        assertEquals("M.C. Nambu Hai Winner's Sash", lowestHeldItem(scan))
+    }
+
+    @Test
+    fun `33 of 34 sashes with a misread title stay incomplete and request nothing`() {
+        val missing = "Yasuda Kinen Winner's Sash"
+        val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).map { page -> page.filter { it.first != missing } }.toMutableList()
+        pages[5] = pages[5].toMutableList().also { it[2] = "Queen Elizabeth I Cup Winner's Sash" to "666" }
+        val scan = mergePickerPages(pages)
+        assertEquals(33, scan.rows.size)
+        assertFalse(scan.complete)
+        assertNull(lowestHeldItem(scan))
+        val game = FakeGame(sashes = scan)
+        runClub(game, item = ClubRequestItems.LOWEST_HELD_SASH)
+        assertNull(game.requested)
+        assertFalse(CONFIRM in game.taps)
+    }
+
+    @Test
+    fun `a sash read twice with different counts stays incomplete and requests nothing`() {
+        val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28) + listOf(listOf(LIVE_SASHES[2].first to "999"))
+        val scan = mergePickerPages(pages)
+        assertEquals(34, scan.rows.size)
+        assertFalse(scan.complete)
+        assertNull(lowestHeldItem(scan))
+        val game = FakeGame(sashes = scan)
+        runClub(game, item = ClubRequestItems.LOWEST_HELD_SASH)
+        assertNull(game.requested)
+        assertFalse(CONFIRM in game.taps)
+    }
+
+    @Test
+    fun `a count that failed to read on one page is taken from the next, and one that never reads leaves the read incomplete`() {
+        val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).toMutableList()
+        pages[0] = pages[0].toMutableList().also { it[4] = it[4].first to "" }
+        assertTrue(mergePickerPages(pages).complete)
+        val never = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).map { page -> page.map { (name, held) -> if (name == LIVE_SASHES[4].first) name to "" else name to held } }
+        assertFalse(mergePickerPages(never).complete)
+    }
+
+    @Test
+    fun `the page line names the counts, the shared rows and a title that is no known item`() {
+        val previous = livePages(0)[0]
+        val page = livePages(3)[0].toMutableList().also { it[1] = "Queen Elizabeth I Cup Winner's Sash" to "666" }
+        assertEquals(
+            "rows [Oka Sho=64, ?=666, Tenno Sho (Spring)=35, NHK Mile C.=113, Victoria Mile=249, Japanese Oaks=38], overlap 2, unknown \"Queen Elizabeth I Cup Winner's Sash\"",
+            pickerPageSummary(page, previous),
+        )
+        assertEquals("rows [February S.=65, Takamatsunomiya Kinen=21, Osaka Hai=487, Oka Sho=64, Satsuki Sho=317, Tenno Sho (Spring)=35]", pickerPageSummary(previous, null))
     }
 
     @Test

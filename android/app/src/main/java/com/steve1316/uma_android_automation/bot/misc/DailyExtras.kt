@@ -90,7 +90,7 @@ internal fun matchItemName(ocr: String, target: String): Boolean {
     return read.isNotEmpty() && wanted.endsWith(read) && wanted.length - read.length <= 2
 }
 
-/** The catalog name an OCR'd row title stands for, or null. A sash the catalog lacks (a game update) also reads as null, so the scan stops short of a request. */
+/** The catalog name an OCR'd row title stands for, or null. A sash the catalog lacks (a game update) also reads as null and is left out of the read. */
 internal fun itemNameFromTitle(ocr: String): String? = (ClubRequestItems.SHOES + ClubRequestItems.SASHES).firstOrNull { matchItemName(ocr, it) }
 
 internal fun isSashName(item: String): Boolean = normalizeItemName(item).endsWith("winnerssash")
@@ -104,41 +104,49 @@ internal fun parseHeldCount(ocr: String): Int? {
 /** One row of the item picker as read. */
 internal data class PickerRow(val name: String, val held: Int?)
 
-/** A full read of one picker tab; [complete] only when the list end was seen and every row in view was read. */
+/** A full read of one picker tab; [complete] only when every catalog sash was read with a consistent count. */
 internal data class PickerScan(val rows: List<PickerRow>, val complete: Boolean, val endReached: Boolean = complete)
 
 /** The title and "Held" text of each row in view on one screenful, top to bottom. */
 internal typealias PickerPage = List<Pair<String, String>>
 
 /**
- * Merges screenfuls into one read. A row in view that is not a known item, an empty page, or a page that shares no row
- * with the page before it (a swipe that flung past a row) makes the read incomplete. The end is two pages with nothing new.
- * Complete also needs every catalog sash read once, whatever the sort, so a missed list top or end cannot pass.
+ * Merges screenfuls into one read. The end is two pages with nothing new. Complete means every catalog sash was read
+ * with a count and no sash was read twice with different counts. An unreadable title or a page without overlap does not
+ * matter once the whole catalog is in hand: a row that misreads on one screenful is read right on the next.
  */
 internal fun mergePickerPages(pages: List<PickerPage>): PickerScan {
     val rows = mutableListOf<PickerRow>()
-    var readable = true
-    var gapless = true
+    var contradiction = false
     var stalePages = 0
-    var previous = emptySet<String>()
-    for ((index, page) in pages.withIndex()) {
-        val names = page.map { (title, _) -> itemNameFromTitle(title) }
-        if (names.any { it == null }) readable = false
-        val current = names.filterNotNull().toSet()
-        if (page.isEmpty() || (index > 0 && current.none { it in previous })) gapless = false
+    for (page in pages) {
         var newRows = 0
-        page.zip(names).forEach { (row, name) ->
-            if (name != null && rows.none { it.name == name }) {
-                rows += PickerRow(name, parseHeldCount(row.second))
-                newRows++
+        for ((title, heldText) in page) {
+            val name = itemNameFromTitle(title) ?: continue
+            val held = parseHeldCount(heldText)
+            val seen = rows.indexOfFirst { it.name == name }
+            when {
+                seen < 0 -> {
+                    rows += PickerRow(name, held)
+                    newRows++
+                }
+                rows[seen].held == null -> rows[seen] = PickerRow(name, held)
+                held != null && held != rows[seen].held -> contradiction = true
             }
         }
         stalePages = if (newRows == 0) stalePages + 1 else 0
-        previous = current
     }
-    val endReached = stalePages >= 2
-    val wholeCatalog = rows.map { it.name }.toSet() == ClubRequestItems.SASHES.toSet()
-    return PickerScan(rows, complete = endReached && readable && gapless && wholeCatalog, endReached = endReached)
+    val wholeCatalog = rows.map { it.name }.toSet() == ClubRequestItems.SASHES.toSet() && rows.all { it.held != null }
+    return PickerScan(rows, complete = wholeCatalog && !contradiction, endReached = stalePages >= 2)
+}
+
+/** One debug line per screenful: its rows with counts, how many rows it shares with the page before, and any title that is no known item. */
+internal fun pickerPageSummary(page: PickerPage, previous: PickerPage?): String {
+    val names = page.map { (title, _) -> itemNameFromTitle(title) }
+    val rows = page.zip(names).joinToString { (row, name) -> "${name?.removeSuffix(" Winner's Sash") ?: "?"}=${parseHeldCount(row.second) ?: "?"}" }
+    val before = previous?.mapNotNull { (title, _) -> itemNameFromTitle(title) }.orEmpty().toSet()
+    val unknown = page.zip(names).filter { it.second == null }.map { "\"${it.first.first}\"" }
+    return "rows [$rows]" + (if (previous == null) "" else ", overlap ${names.count { it != null && it in before }}") + if (unknown.isEmpty()) "" else ", unknown ${unknown.joinToString()}"
 }
 
 /**
@@ -461,7 +469,9 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
         scrollPickerToTop()
         val pages = mutableListOf<PickerPage>()
         while (pages.size < MAX_PICKER_PAGES) {
-            pages += readVisibleRows()
+            val page = readVisibleRows()
+            MessageLog.d(TAG, "[DAILY_EXTRAS] Picker page ${pages.size + 1}: ${pickerPageSummary(page, pages.lastOrNull())}")
+            pages += page
             if (mergePickerPages(pages).endReached || !swipePicker(up = true)) break
         }
         return mergePickerPages(pages)
