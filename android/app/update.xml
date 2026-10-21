@@ -1,13 +1,13 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.7.4</latestVersion>
+    <latestVersion>1.7.5</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.7.4 - Daily Races and Team Trials sessions, frozen-game restarts, Grand Concert fixes
+v1.7.5 - Steadier long runs, Team Trials fixes, optional Club requests
 
-- New: Daily Races and Team Trials play a whole session on their own, and Share bug report on Home and Save to Phone in Settings make bug reports easy.
-- Changed: a frozen game is restarted in careers, Team Trials and Daily Races (on Android 14 and newer the bot can only bring it to the front). A Recreation date the bot cannot start is closed and it rests instead (not seen live yet). Grand Concert uses the Infirmary, and when the concerts are behind schedule it trains instead of racing while enough race turns are left for the next fan goal (tests only so far). Careers log one plain line per race saying which race and why.
-- Fixed: fewer false energy stops, one tap per training tab, better gain, stat and score reads, Oka Sho keeps its G1 grade, a stopped run queue resumes on the right slot, Start works on Legacy Select and Support Formation, the trainee scan reads the last roster row on tall phones, and a race the 17:00 reset sends back to Home is left cleanly.
+- New: Rewards and Club in Settings, off by default. After Daily Races or Team Trials the bot can collect Missions and Presents and make a Club item request. It never donates.
+- Changed: on MuMu the bot frees its unused memory itself on long runs. Team Trials taps past "NEW HIGH SCORE!", and closes the "Story Unlocked" dialog and passes the weekly class result (not seen live yet). Grand Concert skill points are saved for a gold skill and spent before the Finals (tests only so far). 1080-wide phones that draw the game's text smaller are read at slightly smaller label sizes (not tested live).
+- Fixed: Daily Races waits for its results and reads an empty ticket counter, the Event Home and New Scenario popups are closed, and the Trackblazer shop is waited for (not seen live yet).
 
     </releaseNotes>
   </update>

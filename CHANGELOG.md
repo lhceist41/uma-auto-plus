@@ -10,6 +10,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-10-22
+
+### Highlights
+
+- **Long runs keep going.** On MuMu (Android 12) the system stopped freeing the bot's unused memory on long runs. The bot now frees it itself. In our tests the memory left after each cleanup stayed level over 7 Grand Concert careers in one run; short peaks above 1 GB remain.
+- **Team Trials and Daily Races stop less.** Team Trials taps past the "NEW HIGH SCORE!" banner, closes the "Story Unlocked" dialog (also in Daily Races and careers) and passes the weekly class result screen instead of stopping. The dialog and class result fixes are not yet seen live. Daily Races waits for its result screens and reads an empty ticket counter correctly.
+- **Grand Concert skill points** are saved for an offered gold skill, bought as soon as it is affordable, and spent before the Finals instead of staying unspent (tests only so far), including when the gold was first held on turns 72 to 74.
+- **New, off by default: Rewards and Club** in Settings. After Daily Races or Team Trials the bot can collect Missions and Presents and request a Club item: a kind of Racing Shoes, one Winner's Sash, or the Winner's Sash you hold the fewest of. It never donates or spends anything, and the fewest-held choice asks for nothing if a count cannot be read. A Winner's Sash list whose rows were all read counts as read even when one title was misread on a screen.
+- **Phones:** on 1080-wide phones that draw the game's text smaller than MuMu, such as a Galaxy A13, labels are read again at slightly smaller sizes (tested on screenshots only). The log warns at Start when the screen capture is smaller than the screen, and Home warns when a 1080x1920 screen is not at 240 DPI.
+- **Also:** the story event's "Event Home" popup and the first-time "New Scenario" popup (not seen live yet) are closed, the Trackblazer shop is waited for (not seen live yet), and every career record notes the deck slot, support types and borrowed card.
+
 ## [1.7.4] - 2026-10-12
 
 ### Highlights
@@ -658,4 +669,5 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.4...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.5...main
+[1.7.5]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.4...v1.7.5
