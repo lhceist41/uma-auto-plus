@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.utils
 
+import com.steve1316.uma_android_automation.bot.misc.TeamTrialsTask
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -98,7 +99,8 @@ class TeamTrialsClassResultTest {
         val result = detect.indexOf("if (!matchInProgress && teamTrialsClassResult(sampler(sourceBitmap), sourceBitmap.width, sourceBitmap.height))")
         assertTrue(banner in 0 until result, "the class result check follows the banner check")
         assertTrue(result < detect.indexOf("return TeamTrialsScreenState.", banner + 40), "no other screen is named before it")
-        assertTrue(src.contains("currentState == TeamTrialsScreenState.CLASS_RESULT\n        if (!ownDialog"), "the shared popup handler leaves it alone")
+        assertTrue(TeamTrialsTask.ownDialog(TeamTrialsTask.TeamTrialsScreenState.CLASS_RESULT), "the shared popup handler leaves it alone")
+        assertTrue(src.contains("if (!ownDialog(currentState) && handleIncidentalPopups())"), "the own-dialog check gates the shared popup handler")
         val handler = src.substringAfter("private fun handleClassResult(bitmap: Bitmap) {").substringBefore("game.wait(")
         assertTrue(handler.contains("ButtonNext.click(game.imageUtils, sourceBitmap = bitmap, region = Region.bottomHalf)"))
         assertTrue(handler.contains("TeamTrialsGeometry.CLASS_RESULT_NEXT_Y"))

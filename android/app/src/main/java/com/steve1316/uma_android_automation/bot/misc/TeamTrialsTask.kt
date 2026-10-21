@@ -103,6 +103,14 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
     }
 
     companion object {
+        /** These are named states, not dismissed by the shared handler; every other frame, UNKNOWN included, is offered to it first. */
+        internal fun ownDialog(state: TeamTrialsScreenState): Boolean =
+            state == TeamTrialsScreenState.ITEMS_SELECTED_POPUP ||
+                state == TeamTrialsScreenState.RESTORE_RP_PROMPT ||
+                state == TeamTrialsScreenState.DAILY_SALE_POPUP ||
+                state == TeamTrialsScreenState.HIGH_SCORE_BANNER ||
+                state == TeamTrialsScreenState.CLASS_RESULT
+
         /** Only a screen right after the standby or the reveal can be a splash; any other unknown screen, a dialog included, is never tapped. */
         internal fun splashTapAllowed(
             matchInProgress: Boolean,
@@ -139,14 +147,7 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
 
         MessageLog.v(TAG, "[STATE] iter=$iterationsCompleted state=$currentState matches=$matchesCompleted")
 
-        // These are named states below, not dismissed by the shared handler.
-        val ownDialog =
-            currentState == TeamTrialsScreenState.ITEMS_SELECTED_POPUP ||
-                currentState == TeamTrialsScreenState.RESTORE_RP_PROMPT ||
-                currentState == TeamTrialsScreenState.DAILY_SALE_POPUP ||
-                currentState == TeamTrialsScreenState.HIGH_SCORE_BANNER ||
-                currentState == TeamTrialsScreenState.CLASS_RESULT
-        if (!ownDialog && handleIncidentalPopups()) {
+        if (!ownDialog(currentState) && handleIncidentalPopups()) {
             return null
         }
 

@@ -194,6 +194,11 @@ open class DialogHandler(val game: Game) {
                 dialog.close(game.imageUtils)
             }
 
+            "story_unlocked" -> {
+                // A trainee's story episode unlocks after a Team Trials match; Close keeps it unwatched and the task goes on.
+                dialog.close(game.imageUtils)
+            }
+
             "session_error" -> {
                 throw InterruptedException("Session error. Stopping bot...")
             }

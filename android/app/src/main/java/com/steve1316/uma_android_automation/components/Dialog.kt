@@ -1759,14 +1759,15 @@ object DialogStrategy : DialogInterface {
         )
 }
 
-/** Main Screen, end of career. */
+/** Team Trials after a match, and the Main Screen at the end of a career: a trainee's story episode unlocked. */
 object DialogStoryUnlocked : DialogInterface {
     override val name: String = "story_unlocked"
     override val title: String = "Story Unlocked"
-    override val closeButton = null
+    override val closeButton: BaseComponentInterface = ButtonClose
     override val okButton = null
     override val buttons: List<BaseComponentInterface> =
         listOf(
+            ButtonClose,
             ButtonToHome,
         )
 }
