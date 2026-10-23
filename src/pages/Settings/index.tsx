@@ -43,6 +43,40 @@ const TEAM_TRIALS_OPPONENT_PICKS = [
     { value: "RANDOM", label: "Random" },
 ] as const
 
+// The legends of the Daily Legend Races grid, as the bot's logo templates name them.
+const DAILY_LEGEND_RACE_LEGENDS = [
+    "First legend that can still unlock a star",
+    "Agnes Digital",
+    "Air Groove",
+    "Biwa Hayahide",
+    "Curren Chan",
+    "Eishin Flash",
+    "El Condor Pasa",
+    "Fuji Kiseki",
+    "Gold Ship",
+    "Grass Wonder",
+    "King Halo",
+    "Maruzensky",
+    "Matikanefukukitaru",
+    "Mayano Top Gun",
+    "Mejiro McQueen",
+    "Mejiro Ryan",
+    "Mihono Bourbon",
+    "Nice Nature",
+    "Oguri Cap",
+    "Sakura Bakushin O",
+    "Seiun Sky",
+    "Silence Suzuka",
+    "Special Week",
+    "Super Creek",
+    "Symboli Rudolf",
+    "T.M. Opera O",
+    "Taiki Shuttle",
+    "Tokai Teio",
+    "Vodka",
+    "Winning Ticket",
+] as const
+
 // The Club item picker offers only shoes and Winner's Sashes. The bot matches these names against the picker rows.
 const CLUB_REQUEST_ITEMS = [
     "Lowest held Winner's Sash",
@@ -453,6 +487,37 @@ const Settings = () => {
                     showValue={true}
                     showLabels={true}
                     description="Stops after this many matches even if Race Points remain. A full Race Point pool is 5 matches, so 5 lets the run finish on the game's own limit."
+                />
+
+                <Separator style={{ marginVertical: 16 }} />
+
+                <CustomTitle title="Daily Legend Race" description="Runs on Home after Daily Races or Team Trials finish. It spends only the free daily ticket and never buys one." />
+
+                <CustomCheckbox
+                    searchId="settings-daily-legend-race"
+                    checked={bsc.settings.misc.enableDailyLegendRace}
+                    onCheckedChange={(checked) => {
+                        bsc.setSettings({ ...bsc.settings, misc: { ...bsc.settings.misc, enableDailyLegendRace: checked } })
+                    }}
+                    label="Race the Daily Legend Race"
+                    description="Opens Daily Programs, picks the legend below and races the top race of its list once with the game's runner pick. When the card says Done for today, nothing is raced."
+                    className="mt-4"
+                />
+
+                <CustomSelect
+                    searchId="settings-daily-legend-race-legend"
+                    value={bsc.settings.misc.dailyLegendRaceLegend}
+                    options={DAILY_LEGEND_RACE_LEGENDS.map((legend) => ({ label: legend, value: legend }))}
+                    onValueChange={(value) => {
+                        const legend = DAILY_LEGEND_RACE_LEGENDS.find((option) => option === value)
+                        if (legend) {
+                            bsc.setSettings({ ...bsc.settings, misc: { ...bsc.settings.misc, dailyLegendRaceLegend: legend } })
+                        }
+                    }}
+                    placeholder="Select legend"
+                    label="Legend To Race"
+                    description="The legend to race while it can still unlock a star. A legend with every star unlocked, or one missing from the grid, falls back to the first legend that still can."
+                    style={{ marginTop: 16 }}
                 />
 
                 <Separator style={{ marginVertical: 16 }} />

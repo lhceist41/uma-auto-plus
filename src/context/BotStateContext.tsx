@@ -159,6 +159,10 @@ export interface Settings {
         enableClubItemRequest: boolean
         // An exact item name from CLUB_REQUEST_ITEMS, or "Lowest held Winner's Sash".
         clubRequestItem: string
+        // After Daily Races or Team Trials ends on Home: race the Daily Legend Race once with the free ticket (never buys one).
+        enableDailyLegendRace: boolean
+        // A legend's name from DAILY_LEGEND_RACE_LEGENDS, or "First legend that can still unlock a star".
+        dailyLegendRaceLegend: string
     }
 
     // Daily Races misc-task settings. DailyRaceTask compares the persisted strings directly
@@ -736,6 +740,9 @@ export const defaultSettings: Settings = {
         enableClubItemRequest: false,
         // The sash the account holds fewest of is the Potential Level item it lacks most.
         clubRequestItem: "Lowest held Winner's Sash",
+        enableDailyLegendRace: false,
+        // A legend with every star unlocked pays no piece, so the pick follows the grid unless the player names one.
+        dailyLegendRaceLegend: "First legend that can still unlock a star",
     },
     miscDailyRace: {
         ensureMultiRaceOn: true,

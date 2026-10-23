@@ -64,6 +64,9 @@ import org.opencv.core.Point
 
 /** Utility class for detecting and handling dialogs in the game. */
 object DialogUtils {
+    /** Message prefix of the interrupt a dangerous dialog raises; the Home follow-ups turn it into a run error. */
+    const val DANGEROUS_DIALOG_STOP = "Stopping bot due to a dangerous dialog: "
+
     private val TAG: String = "[${MainActivity.loggerTag}]DialogUtils"
 
     /** List of templates used to detect the title bar gradient of a dialog. */
@@ -317,7 +320,7 @@ object DialogUtils {
      */
     private fun handleDangerousDialogs(dialog: DialogInterface) {
         if (dialog in dangerousDialogs) {
-            throw InterruptedException("Stopping bot due to a dangerous dialog: ${dialog.name}")
+            throw InterruptedException("$DANGEROUS_DIALOG_STOP${dialog.name}")
         }
     }
 

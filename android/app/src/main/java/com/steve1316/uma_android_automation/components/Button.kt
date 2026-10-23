@@ -90,6 +90,11 @@ object ButtonDailyRacesDisabled : ButtonInterface {
     override val template = Template("components/button/daily_races_disabled")
 }
 
+/** The "Daily Legend Races" label on its Daily Program tile. */
+object ButtonDailyLegendRacesCard : ButtonInterface {
+    override val template = Template("components/button/daily_legend_races_card", region = Region.bottomHalf)
+}
+
 object ButtonDailyRacesJupiterCup : ButtonInterface {
     override val template = Template("components/button/daily_races_jupiter_cup_logo")
 }

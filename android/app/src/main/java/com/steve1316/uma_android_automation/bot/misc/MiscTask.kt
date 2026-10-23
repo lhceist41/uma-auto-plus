@@ -12,6 +12,7 @@ import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
 import com.steve1316.uma_android_automation.bot.miscFrozenGameReopens
 import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
+import com.steve1316.uma_android_automation.components.DialogUtils
 
 /**
  * Base for non-career ("misc") tasks that automate standalone game modes from the Home Screen, each a
@@ -22,6 +23,10 @@ import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
 abstract class MiscTask(game: Game) : Task(game) {
     companion object {
         const val MAX_ITERATIONS_SAFETY: Int = 300
+
+        /** A dangerous dialog met by a follow-up's shared handler ends the run as an error, as in the mode's own loop; a user Stop leaves the mode's result. */
+        internal fun followUpStopResult(e: InterruptedException): TaskResult? =
+            if (e.message?.startsWith(DialogUtils.DANGEROUS_DIALOG_STOP) == true) TaskResult.Error(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, e.message!!) else null
 
         const val MAX_CONSECUTIVE_UNKNOWNS: Int = 5
 
@@ -45,19 +50,27 @@ abstract class MiscTask(game: Game) : Task(game) {
 
     private var actedIterations: Long = 0
 
-    /** After a mode finished on Home, collects Missions and Presents and makes the Club item request when those are turned on. */
+    /** After a mode finished on Home: the Daily Legend Race, then Missions, Presents and the Club item request, each when turned on. */
     override fun start(maxRuntimeMinutes: Int): TaskResult {
         val result = super.start(maxRuntimeMinutes)
         if (result !is TaskResult.Success) return result
+        val stop =
+            runFollowUp("[LEGEND_RACE]") { GameLegendDevice.runFromSettings(game, ::handleIncidentalPopups) }
+                ?: runFollowUp("[DAILY_EXTRAS]") { GameExtrasDevice.runFromSettings(game)?.let { "${it.joinToString("; ")}." } }
+        return stop?.let { followUpStopResult(it) } ?: result
+    }
+
+    /** Runs one Home follow-up and logs its note; a plain failure leaves the mode's own result. Returns the interrupt that stopped it, if any. */
+    private fun runFollowUp(tag: String, body: () -> String?): InterruptedException? {
         try {
-            GameExtrasDevice.runFromSettings(game)?.let { MessageLog.i(TAG, "[DAILY_EXTRAS] ${it.joinToString("; ")}.") }
+            body()?.let { MessageLog.i(TAG, "$tag $it") }
         } catch (e: InterruptedException) {
-            MessageLog.w(TAG, "[DAILY_EXTRAS] Stopped: ${e.message}")
+            MessageLog.w(TAG, "$tag Stopped: ${e.message}")
+            return e
         } catch (e: Exception) {
-            // The mode's own result stands; the extras are a follow-up.
-            MessageLog.w(TAG, "[DAILY_EXTRAS] Failed: ${e.message}")
+            MessageLog.w(TAG, "$tag Failed: ${e.message}")
         }
-        return result
+        return null
     }
 
     /** Dismisses incidental popups (login bonus, gift, announcement) that can interrupt any misc flow; subclasses may override. */

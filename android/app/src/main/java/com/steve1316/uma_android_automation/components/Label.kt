@@ -298,6 +298,66 @@ object LabelRunnerSelection : ComponentInterface {
     override val template = Template("components/label/runner_selection", region = Region.topHalf)
 }
 
+/** "Done for today!" strip on a Daily Program card whose tickets are spent. */
+object LabelDoneForToday : ComponentInterface {
+    override val template = Template("components/label/done_for_today", region = Region.bottomHalf)
+}
+
+/** "Daily Legend Races" purple header over the legend grid. */
+object LabelDailyLegendRacesHeader : ComponentInterface {
+    override val template = Template("components/label/daily_legend_races_header", region = Region.topQuarter, confidence = 0.9)
+}
+
+/** "to Star Unlock" strip under a legend card that can still unlock a star. Search with the grid's region. */
+object LabelStarUnlockText : ComponentInterface {
+    override val template = Template("components/label/star_unlock_text", confidence = 0.85)
+}
+
+/** "Main Rewards" label on each row of a legend's race list. */
+object LabelMainRewards : ComponentInterface {
+    override val template = Template("components/label/main_rewards", region = Region.middle)
+}
+
+/** A legend's name logo on its Daily Legend Races card. */
+private fun legendLogo(template: Template): ComponentInterface =
+    object : ComponentInterface {
+        override val template = template
+    }
+
+/** Name logos on the Daily Legend Races cards, keyed by the legend's name as stored in settings. Search with the grid's region. */
+val LabelDailyLegendLogos: Map<String, ComponentInterface> =
+    mapOf(
+        "Agnes Digital" to legendLogo(Template("components/label/daily_legend_agnes_digital", confidence = 0.8)),
+        "Air Groove" to legendLogo(Template("components/label/daily_legend_air_groove", confidence = 0.8)),
+        "Biwa Hayahide" to legendLogo(Template("components/label/daily_legend_biwa_hayahide", confidence = 0.8)),
+        "Curren Chan" to legendLogo(Template("components/label/daily_legend_curren_chan", confidence = 0.8)),
+        "Eishin Flash" to legendLogo(Template("components/label/daily_legend_eishin_flash", confidence = 0.8)),
+        "El Condor Pasa" to legendLogo(Template("components/label/daily_legend_el_condor_pasa", confidence = 0.8)),
+        "Fuji Kiseki" to legendLogo(Template("components/label/daily_legend_fuji_kiseki", confidence = 0.8)),
+        "Gold Ship" to legendLogo(Template("components/label/daily_legend_gold_ship", confidence = 0.8)),
+        "Grass Wonder" to legendLogo(Template("components/label/daily_legend_grass_wonder", confidence = 0.8)),
+        "King Halo" to legendLogo(Template("components/label/daily_legend_king_halo", confidence = 0.8)),
+        "Maruzensky" to legendLogo(Template("components/label/daily_legend_maruzensky", confidence = 0.8)),
+        "Matikanefukukitaru" to legendLogo(Template("components/label/daily_legend_matikanefukukitaru", confidence = 0.8)),
+        "Mayano Top Gun" to legendLogo(Template("components/label/daily_legend_mayano_top_gun", confidence = 0.8)),
+        "Mejiro McQueen" to legendLogo(Template("components/label/daily_legend_mejiro_mcqueen", confidence = 0.8)),
+        "Mejiro Ryan" to legendLogo(Template("components/label/daily_legend_mejiro_ryan", confidence = 0.8)),
+        "Mihono Bourbon" to legendLogo(Template("components/label/daily_legend_mihono_bourbon", confidence = 0.8)),
+        "Nice Nature" to legendLogo(Template("components/label/daily_legend_nice_nature", confidence = 0.8)),
+        "Oguri Cap" to legendLogo(Template("components/label/daily_legend_oguri_cap", confidence = 0.8)),
+        "Sakura Bakushin O" to legendLogo(Template("components/label/daily_legend_sakura_bakushin_o", confidence = 0.8)),
+        "Seiun Sky" to legendLogo(Template("components/label/daily_legend_seiun_sky", confidence = 0.8)),
+        "Silence Suzuka" to legendLogo(Template("components/label/daily_legend_silence_suzuka", confidence = 0.8)),
+        "Special Week" to legendLogo(Template("components/label/daily_legend_special_week", confidence = 0.8)),
+        "Super Creek" to legendLogo(Template("components/label/daily_legend_super_creek", confidence = 0.8)),
+        "Symboli Rudolf" to legendLogo(Template("components/label/daily_legend_symboli_rudolf", confidence = 0.8)),
+        "T.M. Opera O" to legendLogo(Template("components/label/daily_legend_t_m_opera_o", confidence = 0.8)),
+        "Taiki Shuttle" to legendLogo(Template("components/label/daily_legend_taiki_shuttle", confidence = 0.8)),
+        "Tokai Teio" to legendLogo(Template("components/label/daily_legend_tokai_teio", confidence = 0.8)),
+        "Vodka" to legendLogo(Template("components/label/daily_legend_vodka", confidence = 0.8)),
+        "Winning Ticket" to legendLogo(Template("components/label/daily_legend_winning_ticket", confidence = 0.8)),
+    )
+
 /** "Multi-Race" green header on the popup that asks how many races to run (1/3, 2/3, 3/3). Bot commits 3/3. */
 object LabelMultiRacePopup : ComponentInterface {
     override val template = Template("components/label/multi_race_popup", region = Region.middle)

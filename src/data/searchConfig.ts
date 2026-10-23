@@ -126,6 +126,18 @@ const searchConfig: SearchOption[] = [
         page: "SettingsMain",
     },
     {
+        id: "settings-daily-legend-race",
+        title: "Race the Daily Legend Race",
+        description: "After Daily Races or Team Trials, races the Daily Legend Race once with the free ticket. Never buys a ticket.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-daily-legend-race-legend",
+        title: "Legend To Race",
+        description: "Which legend to race while it can still unlock a star, or the first legend in the grid that still can.",
+        page: "SettingsMain",
+    },
+    {
         id: "settings-collect-daily-rewards",
         title: "Collect Missions and Presents",
         description: "After Daily Races or Team Trials, taps Collect All in the present box and on the Missions tab that opens.",

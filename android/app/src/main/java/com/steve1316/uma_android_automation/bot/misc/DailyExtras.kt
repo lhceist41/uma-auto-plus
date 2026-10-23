@@ -420,8 +420,8 @@ private const val SWIPE_TO_PROMPT = -1040
 private const val SWIPE_MS = 1200L
 private const val MAX_PICKER_PAGES = 20
 
-/** Dialogs that would spend RP, money or items; the step cancels them. */
-private val SPENDING_DIALOG_NAMES =
+/** Dialogs that would spend RP, money or items; the Home steps cancel them. */
+internal val SPENDING_DIALOG_NAMES =
     setOf("confirm_exchange", "confirm_restore_rp", "daily_sale", "purchase_alarm_clock", "purchase_carats", "purchase_daily_race_ticket", "shop")
 
 /** Drives [DailyExtras] on the game. Templates and offsets come from 1080x1920 Global frames. */
