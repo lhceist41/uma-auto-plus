@@ -42,6 +42,8 @@ private class FakeGame(
     val unknownAfter: ExtrasTarget? = null,
     /** Presses of the Club button that miss while Home is still drawing. */
     var clubButtonMisses: Int = 0,
+    /** A running request the step does not recognise that is really an expired one: closing it frees the slot. */
+    val expiredMissed: Boolean = false,
 ) : ExtrasDevice {
     val taps = mutableListOf<ExtrasTarget>()
     var requested: String? = null
@@ -85,7 +87,7 @@ private class FakeGame(
                     else -> ITEM_REQUEST_PICKER
                 }
             ITEM_REQUEST_ENDED to CLOSE -> CLUB.also { request = "none" }
-            ITEM_REQUEST_OTHER to CLOSE -> CLUB
+            ITEM_REQUEST_OTHER to CLOSE -> CLUB.also { if (expiredMissed) request = "none" }
             ITEM_REQUEST_PICKER to CANCEL -> CLUB
             CONFIRM_REQUEST to CANCEL -> ITEM_REQUEST_PICKER
             CONFIRM_REQUEST to CONFIRM ->
@@ -207,8 +209,24 @@ class DailyExtrasTest {
         val notes = runClub(game)
         assertNull(game.requested)
         assertFalse(CONFIRM in game.taps)
-        assertEquals(listOf(CLUB_BUTTON, ITEM_REQUEST_BUTTON, CLOSE, HOME_TAB), game.taps)
+        assertEquals(listOf(CLUB_BUTTON, ITEM_REQUEST_BUTTON, CLOSE, ITEM_REQUEST_BUTTON, CLOSE, HOME_TAB), game.taps)
         assertEquals(listOf("Club: a request is still running"), notes)
+    }
+
+    @Test
+    fun `an unrecognised request that frees the slot on close is reopened once and a new item is requested`() {
+        val game = FakeGame(request = "running", expiredMissed = true)
+        runClub(game, item = "Kawasaki Kinen Winner's Sash")
+        assertEquals(listOf(CLUB_BUTTON, ITEM_REQUEST_BUTTON, CLOSE, ITEM_REQUEST_BUTTON, CONFIRM, HOME_TAB), game.taps)
+        assertEquals("Kawasaki Kinen Winner's Sash", game.requested)
+    }
+
+    @Test
+    fun `an unrecognised request twice stops after one reopen`() {
+        val game = FakeGame(request = "running")
+        runClub(game)
+        assertEquals(2, game.taps.count { it == ITEM_REQUEST_BUTTON })
+        assertNull(game.requested)
     }
 
     @Test
@@ -331,6 +349,46 @@ class DailyExtrasTest {
         assertEquals("M.C. Nambu Hai Winner's Sash", itemNameFromTitle("MC Nambu Hai Winner's Sash"))
         assertNull(itemNameFromTitle("Hokkaido Cup Winner's Sash"))
         assertNull(itemNameFromTitle("Held"))
+    }
+
+    @Test
+    fun `a front crop of Shuka or Kikuka that is also the tail of another sash name reads as unknown`() {
+        for (crop in listOf("uka Sho", "ka Sho")) assertNull(itemNameFromTitle("$crop Winner's Sash"), crop)
+        assertFalse(matchItemName("ka Sho Winner's Sash", "Oka Sho Winner's Sash"))
+        assertFalse(matchItemName("uka Sho Winner's Sash", "Shuka Sho Winner's Sash"))
+    }
+
+    @Test
+    fun `Oka Sho, Shuka Sho and Kikuka Sho still match in full and with one lost letter`() {
+        assertEquals("Oka Sho Winner's Sash", itemNameFromTitle("Oka Sho Winner's Sash"))
+        assertEquals("Shuka Sho Winner's Sash", itemNameFromTitle("Shuka Sho Winner's Sash"))
+        assertEquals("Kikuka Sho Winner's Sash", itemNameFromTitle("Kikuka Sho Winner's Sash"))
+        assertEquals("Kikuka Sho Winner's Sash", itemNameFromTitle("kuka Sho Winner's Sash"))
+        assertEquals("Shuka Sho Winner's Sash", itemNameFromTitle("huka Sho Winner's Sash"))
+        assertEquals("Kikuka Sho Winner's Sash", itemNameFromTitle("ikuka Sho Winner's Sash"))
+    }
+
+    @Test
+    fun `no catalog name with up to two lost leading letters reads as a different name`() {
+        val names = ClubRequestItems.SHOES + ClubRequestItems.SASHES
+        for (name in names) {
+            for (lost in 0..2) {
+                val read = itemNameFromTitle(name.drop(lost))
+                assertTrue(read == null || read == name, "$name minus $lost read as $read")
+            }
+        }
+    }
+
+    @Test
+    fun `a cropped Shuka row beside the real row still gives a complete read`() {
+        val shuka = LIVE_SASHES.first { it.first.startsWith("Shuka") }
+        val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).map { page -> page.map { if (it == shuka) "ka Sho Winner's Sash" to "1" else it } }
+        val withReal = pages + listOf(listOf(shuka))
+        assertTrue(mergePickerPages(withReal).complete)
+        assertEquals(34, mergePickerPages(withReal).rows.size)
+        val without = mergePickerPages(pages)
+        assertEquals(33, without.rows.size)
+        assertFalse(without.complete)
     }
 
     @Test

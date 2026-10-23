@@ -83,11 +83,16 @@ object ClubRequestItems {
 /** Lower-case letters and digits only, so OCR that drops punctuation or spaces still compares equal. */
 internal fun normalizeItemName(name: String): String = name.lowercase().replace(Regex("[^a-z0-9]"), "")
 
-/** Whether an OCR'd row title is [target]. Two dropped leading characters still match (a crop edge can cut a first letter); no two item names differ only there. */
+/**
+ * Whether an OCR'd row title is [target]. Two dropped leading characters still match (a crop edge can cut a first letter),
+ * but not a read that is also a front crop of three or more letters of another catalog name ("ka Sho" fits Oka, Shuka and Kikuka).
+ */
 internal fun matchItemName(ocr: String, target: String): Boolean {
     val read = normalizeItemName(ocr)
     val wanted = normalizeItemName(target)
-    return read.isNotEmpty() && wanted.endsWith(read) && wanted.length - read.length <= 2
+    if (read.isEmpty() || !wanted.endsWith(read) || wanted.length - read.length > 2) return false
+    if (read == wanted) return true
+    return (ClubRequestItems.SHOES + ClubRequestItems.SASHES).map(::normalizeItemName).none { it != wanted && it.endsWith(read) && it.length - read.length >= 3 }
 }
 
 /** The catalog name an OCR'd row title stands for, or null. A sash the catalog lacks (a game update) also reads as null and is left out of the read. */
@@ -289,20 +294,26 @@ internal class DailyExtras(
         if (!pressOnHome(ExtrasTarget.CLUB_BUTTON)) return "Club button not found"
         if (awaitScreen(ExtrasScreen.CLUB, polls = 20) != ExtrasScreen.CLUB) return "Club screen did not appear"
         // A finished request shows its result first; closing it frees the slot, then the button opens the picker.
-        repeat(2) {
+        // An unrecognised request may be an expired one whose label was missed: closing collects it, so reopen once.
+        var ended = false
+        var reopened = false
+        repeat(3) {
             if (!device.press(ExtrasTarget.ITEM_REQUEST_BUTTON)) return "Item Request button not found"
             when (awaitAny(ExtrasScreen.ITEM_REQUEST_ENDED, ExtrasScreen.ITEM_REQUEST_PICKER, ExtrasScreen.ITEM_REQUEST_OTHER)) {
                 ExtrasScreen.ITEM_REQUEST_ENDED -> {
                     log("The last item request has ended; closing its result.")
                     device.press(ExtrasTarget.CLOSE)
                     if (awaitScreen(ExtrasScreen.CLUB) != ExtrasScreen.CLUB) return "Club screen did not come back after the ended request"
+                    if (ended) return "no item picker after closing the ended request"
+                    ended = true
                 }
 
                 ExtrasScreen.ITEM_REQUEST_PICKER -> return request()
 
                 ExtrasScreen.ITEM_REQUEST_OTHER -> {
                     device.press(ExtrasTarget.CLOSE)
-                    return "a request is still running"
+                    if (reopened || awaitScreen(ExtrasScreen.CLUB) != ExtrasScreen.CLUB) return "a request is still running"
+                    reopened = true
                 }
 
                 else -> return "Item Request did not open"
