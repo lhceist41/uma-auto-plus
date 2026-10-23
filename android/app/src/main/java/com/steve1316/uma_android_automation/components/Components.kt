@@ -321,7 +321,14 @@ interface ComponentInterface : BaseComponentInterface {
      * @param confidence The threshold (0.0, 1.0] required for a match.
      * @return The factor that matched, or null if the component was not found at any of them.
      */
-    fun checkAtScales(imageUtils: CustomImageUtils, sourceBitmap: Bitmap, shrinkFactors: List<Double>, region: IntArray? = null, confidence: Double? = null): Double? {
+    fun checkAtScales(imageUtils: CustomImageUtils, sourceBitmap: Bitmap, shrinkFactors: List<Double>, region: IntArray? = null, confidence: Double? = null): Double? =
+        matchAtScales(imageUtils, sourceBitmap, shrinkFactors, region, confidence)?.first
+
+    /** Like [checkAtScales], but returns where the component matched. */
+    fun findAtScales(imageUtils: CustomImageUtils, sourceBitmap: Bitmap, shrinkFactors: List<Double>, region: IntArray? = null, confidence: Double? = null): Point? =
+        matchAtScales(imageUtils, sourceBitmap, shrinkFactors, region, confidence)?.second
+
+    private fun matchAtScales(imageUtils: CustomImageUtils, sourceBitmap: Bitmap, shrinkFactors: List<Double>, region: IntArray?, confidence: Double?): Pair<Double, Point>? {
         val templateBitmap: Bitmap = template.getBitmap(imageUtils) ?: return null
         return imageUtils.matchTemplateAtScales(
             sourceBitmap = sourceBitmap,

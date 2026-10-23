@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.bot
 
 import android.graphics.Bitmap
 import android.util.Log
+import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SQLiteSettingsManager
 import com.steve1316.automation_library.utils.SettingsHelper
@@ -60,6 +61,7 @@ import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.StatusBoard
+import com.steve1316.uma_android_automation.utils.isMappedSurface
 import net.ricecode.similarity.JaroWinklerStrategy
 import net.ricecode.similarity.StringSimilarityServiceImpl
 import org.json.JSONArray
@@ -79,6 +81,18 @@ import kotlin.math.abs
  * tier, which races anyway and logs a warning, so the warning is the tripwire for widening this.
  */
 private val GOAL_CRITERIA_SHRINK_FACTORS: List<Double> = (100 downTo 80).map { it / 100.0 }
+
+/**
+ * A tall 1080-wide screen can draw the "fan(s) to go" and "time(s) left" counters below template size (0.94 on 1080x2340; other text down to 0.88 on
+ * tall phones). Steps stay at 0.02: a counter drawn 0.02 off a factor already scores about 0.88, under the 0.9 bar.
+ */
+internal val TALL_GOAL_COUNTER_SHRINK_FACTORS: List<Double> = listOf(1.0, 0.98, 0.96, 0.94, 0.92, 0.90, 0.88)
+
+/** The counter templates come from 1080x1920, where they match at full size, so only a taller 1080-wide screen gets the smaller sizes. */
+internal fun hasTallGoalCounters(
+    width: Int,
+    height: Int,
+): Boolean = isMappedSurface(width, height) && height > 1920
 
 /** How far above the goal's progress counter the criteria line search band starts. The line sits ~28px above the counter's center, so this leaves room for a taller or wrapped one. */
 private const val GOAL_CRITERIA_BAND_ABOVE_COUNTER = 90
@@ -979,6 +993,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         hasInsufficientGoalRacePtsRequirement = false
     }
 
+    private fun hasTallGoalCounters(): Boolean = hasTallGoalCounters(SharedData.displayWidth, SharedData.displayHeight)
+
+    private fun findTallGoalCounter(label: ComponentInterface, sourceBitmap: Bitmap): Point? =
+        label.findAtScales(game.imageUtils, sourceBitmap, TALL_GOAL_COUNTER_SHRINK_FACTORS, confidence = 0.9)
+
     /**
      * Reads which race grades satisfy the active trophy goal from the criteria line above the goal's progress counter.
      *
@@ -1502,7 +1521,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Check for fan requirement on the main screen.
         val sourceBitmapToUse = sourceBitmap ?: game.imageUtils.getSourceBitmap()
-        val needsFanRequirement = LabelRaceCriteriaFans.check(game.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0.9)
+        val tallGoalCounters = hasTallGoalCounters()
+        val needsFanRequirement =
+            if (tallGoalCounters) {
+                findTallGoalCounter(LabelRaceCriteriaFans, sourceBitmapToUse) != null
+            } else {
+                LabelRaceCriteriaFans.check(game.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0.9)
+            }
         if (needsFanRequirement) {
             hasFanRequirement = true
             MessageLog.i(TAG, "[RACE] Fan requirement criteria detected on main screen. Forcing racing to fulfill requirement.")
@@ -1514,7 +1539,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
 
             // Check for trophy requirement on the main screen. The counter doubles as the anchor for the criteria line sitting directly above it.
-            val trophyCounterLocation = LabelRaceCriteriaTrophies.findImageWithBitmap(game.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0.9)
+            val trophyCounterLocation =
+                if (tallGoalCounters) {
+                    findTallGoalCounter(LabelRaceCriteriaTrophies, sourceBitmapToUse)
+                } else {
+                    LabelRaceCriteriaTrophies.findImageWithBitmap(game.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0.9)
+                }
             if (trophyCounterLocation != null) {
                 hasTrophyRequirement = true
 
@@ -1642,7 +1672,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     hasFanRequirement ||
                         goalTextNearDeadline.contains("fans", ignoreCase = true) ||
                         criteriaFanShortfallUnmet ||
-                        LabelRaceCriteriaFans.check(game.imageUtils, confidence = 0.9)
+                        if (hasTallGoalCounters()) {
+                            findTallGoalCounter(LabelRaceCriteriaFans, game.imageUtils.getSourceBitmap()) != null
+                        } else {
+                            LabelRaceCriteriaFans.check(game.imageUtils, confidence = 0.9)
+                        }
                 )
         bFanEmergencyActive = isFanEmergency(fanGoalUnmet, turnsRemaining)
         if (bFanEmergencyActive) {
