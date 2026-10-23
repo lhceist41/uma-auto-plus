@@ -17,7 +17,7 @@ export const whatsNewEntries: Record<string, WhatsNewEntry> = {
             "Grand Concert skill points are saved for an offered gold skill, which is bought as soon as it is affordable, and spent before the Finals instead of staying unspent.",
             "New, off by default: Rewards and Club in Settings. After Daily Races or Team Trials the bot can collect Missions and Presents and make a Club item request (shoes, a Winner's Sash, or the sash you hold fewest of). It never donates.",
             "On 1080-wide phones that draw the game's text smaller, labels are now read at slightly smaller sizes (not tested live). The log warns at Start when the screen capture is smaller than the screen, and Home warns when a 1080x1920 screen is not at 240 DPI.",
-            "The story event's Event Home popup and the first-time New Scenario popup are closed, the Trackblazer shop is waited for (not seen live yet), and career records note the deck slot, support types and borrowed card.",
+            "The story event's Event Home popup and the first-time New Scenario popup are closed, and the Trackblazer shop is waited for (not seen live yet).",
         ],
     },
     "1.7.4": {

@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [1.7.5] - 2026-10-22
+## [1.7.5] - 2026-10-23
 
 ### Highlights
 
@@ -19,7 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Grand Concert skill points** are saved for an offered gold skill, bought as soon as it is affordable, and spent before the Finals instead of staying unspent (tests only so far), including when the gold was first held on turns 72 to 74.
 - **New, off by default: Rewards and Club** in Settings. After Daily Races or Team Trials the bot can collect Missions and Presents and request a Club item: a kind of Racing Shoes, one Winner's Sash, or the Winner's Sash you hold the fewest of. It never donates or spends anything, and the fewest-held choice asks for nothing if a count cannot be read. A Winner's Sash list whose rows were all read counts as read even when one title was misread on a screen.
 - **Phones:** on 1080-wide phones that draw the game's text smaller than MuMu, such as a Galaxy A13, labels are read again at slightly smaller sizes (tested on screenshots only). The log warns at Start when the screen capture is smaller than the screen, and Home warns when a 1080x1920 screen is not at 240 DPI.
-- **Also:** the story event's "Event Home" popup and the first-time "New Scenario" popup (not seen live yet) are closed, the Trackblazer shop is waited for (not seen live yet), and every career record notes the deck slot, support types and borrowed card.
+- **Also:** the story event's "Event Home" popup and the first-time "New Scenario" popup (not seen live yet) are closed, and the Trackblazer shop is waited for (not seen live yet).
 
 ## [1.7.4] - 2026-10-12
 
