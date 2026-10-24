@@ -875,6 +875,8 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     protected var bHasCheckedDateThisTurn: Boolean = false
 
+    private val racingPopupTurn = RacingPopupTurn()
+
     /** Computed once at the top of [handleMainScreen] and reused, avoiding three template-match scans per turn; reset on every fresh turn. */
     protected var cachedScheduledRaceDay: Boolean = false
     protected var cachedMandatoryRaceDay: Boolean = false
@@ -1268,15 +1270,13 @@ abstract class Campaign(game: Game) : Task(game) {
 
             "goal_not_reached" -> {
                 // We are handling the logic for when to race on our own. Thus, we just close this warning.
-                racing.encounteredRacingPopup = true
-                racing.racingPopupNote = "the game showed its goal-not-reached popup"
+                markRacingPopup("the game showed its goal-not-reached popup")
                 result.dialog.close(game.imageUtils)
             }
 
             "insufficient_fans" -> {
                 // We are handling the logic for when to race on our own. Thus, we just close this warning.
-                racing.encounteredRacingPopup = true
-                racing.racingPopupNote = "the game showed its insufficient-fans popup"
+                markRacingPopup("the game showed its insufficient-fans popup")
                 result.dialog.close(game.imageUtils)
             }
 
@@ -3050,8 +3050,7 @@ abstract class Campaign(game: Game) : Task(game) {
             return true
         } else if (IconRaceNotEnoughFans.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             MessageLog.i(TAG, "[MISC] There was a popup about insufficient fans.")
-            racing.encounteredRacingPopup = true
-            racing.racingPopupNote = "the game showed its insufficient-fans popup"
+            markRacingPopup("the game showed its insufficient-fans popup")
             ButtonCancel.click(game.imageUtils, sourceBitmap = sourceBitmap)
             return true
         } else if (LabelUmamusumeClassFans.check(game.imageUtils, sourceBitmap = sourceBitmap) && ButtonClose.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
@@ -3139,6 +3138,12 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
+    private fun markRacingPopup(note: String) {
+        racing.encounteredRacingPopup = true
+        racing.racingPopupNote = note
+        racingPopupTurn.closed(dateReadThisTurn = bHasCheckedDateThisTurn)
+    }
+
     /**
      * Handles all main screen logic including daily updates, racing decisions, and training.
      *
@@ -3177,9 +3182,10 @@ abstract class Campaign(game: Game) : Task(game) {
         // Skip if we've already checked the date this turn and no game-advancing action was taken.
         if (!bHasCheckedDateThisTurn) {
             val dateChanged = updateDate()
-            if (dateChanged || !trainee.bHasUpdatedStats) {
+            val newTurn = dateChanged || !trainee.bHasUpdatedStats
+            racing.encounteredRacingPopup = racingPopupTurn.armedAfterDateRead(newTurn, racing.encounteredRacingPopup)
+            if (newTurn) {
                 // Reset common daily flags.
-                racing.encounteredRacingPopup = false
                 racing.raceRepeatWarningCheck = false
                 bHasTriedCheckingFansToday = false
                 bHasCheckedForMaidenRaceToday = false
@@ -3696,12 +3702,19 @@ abstract class Campaign(game: Game) : Task(game) {
             return choose(MainScreenAction.RACE, "mandatory race day")
         }
 
+        // Asked at most once per decision: the Grand Concert policy logs its decision and tracks race payouts.
+        val fanRaceDeferred by lazy { considerFanRaceDeferral() }
+
         if (racing.encounteredRacingPopup) {
             // Consume the flag at decision time so a failed race attempt does not spin on RACE turn after turn over a popup from two turns ago. Sits
             // above DATE: an open popup must be consumed before any Recreation tap can land.
+            val popupForcesRace = RacingPopupTurn.forcesRace(armed = true) { fanRaceDeferred }
             racing.encounteredRacingPopup = false
-            racing.popupForcedTurn = date.day
-            return choose(MainScreenAction.RACE, "a racing popup was encountered")
+            if (popupForcesRace) {
+                racing.popupForcedTurn = date.day
+                return choose(MainScreenAction.RACE, "a racing popup was encountered")
+            }
+            MessageLog.i(TAG, "[INFO] The racing popup does not force a race: the scenario fan policy deferred this turn's fan requirement.")
         }
 
         if (shouldDoRecreationToday()) {
@@ -3731,7 +3744,7 @@ abstract class Campaign(game: Game) : Task(game) {
         // cannot re-force the race it was just deferred from.
         var fanRequirementDeferredThisTurn = false
         if (isRacingRequirementActive) {
-            if (considerFanRaceDeferral()) {
+            if (fanRaceDeferred) {
                 // A scenario fan policy proved enough slack to train instead of racing the fan requirement; the base never defers.
                 fanRequirementDeferredThisTurn = true
                 MessageLog.i(TAG, "[INFO] Fan requirement deferred for a training turn by the scenario policy.")
