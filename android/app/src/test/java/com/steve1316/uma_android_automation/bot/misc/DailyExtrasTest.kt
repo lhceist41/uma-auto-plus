@@ -44,9 +44,12 @@ private class FakeGame(
     var clubButtonMisses: Int = 0,
     /** A running request the step does not recognise that is really an expired one: closing it frees the slot. */
     val expiredMissed: Boolean = false,
+    /** What the second read of the lowest sashes returns; null repeats the scan's counts. */
+    val rereads: Map<String, Int?>? = null,
 ) : ExtrasDevice {
     val taps = mutableListOf<ExtrasTarget>()
     var requested: String? = null
+    var rereadCalls = 0
     var shoesTab: Boolean? = null
     var collectedMissions = false
     var collectedPresents = 0
@@ -117,6 +120,11 @@ private class FakeGame(
     }
 
     override fun scanPicker(): PickerScan = sashes
+
+    override fun rereadHeld(items: List<String>): Map<String, Int?> {
+        rereadCalls++
+        return rereads?.filterKeys { it in items } ?: sashes.rows.filter { it.name in items }.associate { it.name to it.held }
+    }
 
     override fun tapPickerRow(item: String): Boolean {
         if (screen != ITEM_REQUEST_PICKER) return false
@@ -236,6 +244,66 @@ class DailyExtrasTest {
         runClub(game, item = ClubRequestItems.LOWEST_HELD_SASH)
         assertEquals("Kashiwa Kinen Winner's Sash", game.requested)
         assertEquals(false, game.shoesTab)
+    }
+
+    private fun lowestRequest(rows: List<PickerRow>, rereads: Map<String, Int?>? = null, complete: Boolean = true): Triple<FakeGame, List<String>, List<String>> {
+        val game = FakeGame(sashes = PickerScan(rows, complete = complete), rereads = rereads)
+        val logs = mutableListOf<String>()
+        val notes = DailyExtras(game, collectRewards = false, clubRequest = true, requestItem = ClubRequestItems.LOWEST_HELD_SASH, log = logs::add).run()
+        return Triple(game, logs, notes)
+    }
+
+    @Test
+    fun `a high count misread low that is not the lowest is logged and the pick stays`() {
+        val rows = listOf(PickerRow("Kawasaki Kinen Winner's Sash", 30), PickerRow("Japan Cup Winner's Sash", 96), PickerRow("Zen-Nippon Junior Yushun Winner's Sash", 120))
+        val (game, logs, _) = lowestRequest(rows, mapOf("Kawasaki Kinen Winner's Sash" to 30, "Japan Cup Winner's Sash" to 196))
+        assertEquals("Kawasaki Kinen Winner's Sash", game.requested)
+        assertEquals(1, logs.count { "second time" in it && "Japan Cup 96 then 196" in it })
+        assertEquals(1, game.rereadCalls)
+    }
+
+    @Test
+    fun `a first row misread low is replaced by its larger second read and the next sash is requested`() {
+        val rows = listOf(PickerRow("Japan Cup Winner's Sash", 96), PickerRow("Kawasaki Kinen Winner's Sash", 150), PickerRow("Zen-Nippon Junior Yushun Winner's Sash", 300))
+        val (game, logs, _) = lowestRequest(rows, mapOf("Japan Cup Winner's Sash" to 196, "Kawasaki Kinen Winner's Sash" to 150))
+        assertEquals("Kawasaki Kinen Winner's Sash", game.requested)
+        assertEquals(1, logs.count { "Japan Cup 96 then 196" in it })
+    }
+
+    @Test
+    fun `counts that read the same twice change nothing and log nothing`() {
+        val rows = listOf(PickerRow("Japan Cup Winner's Sash", 40), PickerRow("Kawasaki Kinen Winner's Sash", 150))
+        val (game, logs, notes) = lowestRequest(rows)
+        assertEquals("Japan Cup Winner's Sash", game.requested)
+        assertTrue(logs.none { "second time" in it })
+        assertEquals(listOf("Club: requested Japan Cup Winner's Sash"), notes)
+    }
+
+    @Test
+    fun `a lower or unreadable second read never lowers a count`() {
+        val rows = listOf(PickerRow("Japan Cup Winner's Sash", 40), PickerRow("Kawasaki Kinen Winner's Sash", 150))
+        val (game, _, _) = lowestRequest(rows, mapOf("Japan Cup Winner's Sash" to 4, "Kawasaki Kinen Winner's Sash" to null))
+        assertEquals("Japan Cup Winner's Sash", game.requested)
+    }
+
+    @Test
+    fun `a row seen on two pages keeps its larger count and an unreadable sighting finds nothing`() {
+        val japanCup = "Japan Cup Winner's Sash"
+        val items = listOf(japanCup, "Kawasaki Kinen Winner's Sash")
+        val found = mutableMapOf<String, Int>()
+        noteRereads(found, listOf(japanCup to "196", "Kawasaki Kinen Winner's Sash" to "unreadable"), items)
+        noteRereads(found, listOf(japanCup to "96", "Satsuki Sho Winner's Sash" to "50"), items)
+        noteRereads(found, listOf(japanCup to ""), items)
+        assertEquals(mapOf(japanCup to 196), found)
+        noteRereads(found, listOf("Kawasaki Kinen Winner's Sash" to "30"), items)
+        assertEquals(setOf(japanCup, "Kawasaki Kinen Winner's Sash"), found.keys)
+    }
+
+    @Test
+    fun `an incomplete read asks for nothing and reads nothing again`() {
+        val (game, _, _) = lowestRequest(listOf(PickerRow("Japan Cup Winner's Sash", 40)), complete = false)
+        assertNull(game.requested)
+        assertEquals(0, game.rereadCalls)
     }
 
     @Test

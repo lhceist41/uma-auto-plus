@@ -163,6 +163,30 @@ internal fun lowestHeldItem(scan: PickerScan): String? {
     return scan.rows.minByOrNull { it.held!! }?.name
 }
 
+/** Adds the readable counts of [items] on [page] to [found], keeping the larger when a row is seen twice. */
+internal fun noteRereads(found: MutableMap<String, Int>, page: PickerPage, items: List<String>) {
+    for ((title, heldText) in page) {
+        val name = itemNameFromTitle(title)?.takeIf { it in items } ?: continue
+        parseHeldCount(heldText)?.let { found.merge(name, it, ::maxOf) }
+    }
+}
+
+/**
+ * The sash to request after the two lowest counts are read again. A count that differs the second time becomes the larger of
+ * the two, since a misread only drops a digit. Returns the sash and a log line of the changed counts (null when none changed).
+ */
+internal fun lowestAfterReread(scan: PickerScan, reread: (List<String>) -> Map<String, Int?>): Pair<String, String?>? {
+    val first = lowestHeldItem(scan) ?: return null
+    val held = scan.rows.associate { it.name to it.held!! }
+    val lowest = scan.rows.sortedBy { it.held!! }.take(2).map { it.name }
+    val again = reread(lowest)
+    val changed = lowest.filter { name -> again[name]?.let { it != held[name] } == true }
+    if (changed.isEmpty()) return first to null
+    val fixed = scan.rows.map { if (it.name in changed) it.copy(held = maxOf(it.held!!, again.getValue(it.name)!!)) else it }
+    val line = changed.joinToString { "${it.removeSuffix(" Winner's Sash")} ${held[it]} then ${again[it]}" }
+    return (lowestHeldItem(scan.copy(rows = fixed)) ?: first) to line
+}
+
 internal enum class ExtrasScreen {
     HOME,
     CLUB,
@@ -192,6 +216,9 @@ internal interface ExtrasDevice {
     fun openPickerTab(shoes: Boolean)
 
     fun scanPicker(): PickerScan
+
+    /** The "Held" count of each named sash read again from fresh screenshots; the larger of its sightings, and a sash with no readable count is absent. */
+    fun rereadHeld(items: List<String>): Map<String, Int?>
 
     /** Taps the picker row of [item]; false when no row reads as it. */
     fun tapPickerRow(item: String): Boolean
@@ -329,7 +356,9 @@ internal class DailyExtras(
                 device.openPickerTab(shoes = false)
                 val scan = device.scanPicker()
                 log("Winner's Sash held counts: " + scan.rows.joinToString { "${it.name}=${it.held ?: "?"}" } + if (scan.complete) "" else " (incomplete, ${scan.rows.size} of ${ClubRequestItems.SASHES.size} read)")
-                lowestHeldItem(scan) ?: return cancelPicker("the Winner's Sash list was not fully read")
+                val (lowest, changed) = lowestAfterReread(scan, device::rereadHeld) ?: return cancelPicker("the Winner's Sash list was not fully read")
+                if (changed != null) log("Winner's Sash counts read differently the second time, the larger one is used: $changed.")
+                lowest
             } else {
                 device.openPickerTab(shoes = ClubRequestItems.isShoes(requestItem))
                 requestItem
@@ -486,6 +515,19 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
             if (mergePickerPages(pages).endReached || !swipePicker(up = true)) break
         }
         return mergePickerPages(pages)
+    }
+
+    override fun rereadHeld(items: List<String>): Map<String, Int?> {
+        scrollPickerToTop()
+        val found = mutableMapOf<String, Int>()
+        val pages = mutableListOf<PickerPage>()
+        while (pages.size < MAX_PICKER_PAGES) {
+            val page = readVisibleRows()
+            pages += page
+            noteRereads(found, page, items)
+            if (found.keys.containsAll(items) || mergePickerPages(pages).endReached || !swipePicker(up = true)) break
+        }
+        return found
     }
 
     override fun tapPickerRow(item: String): Boolean {
