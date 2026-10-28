@@ -109,8 +109,8 @@ internal fun parseHeldCount(ocr: String): Int? {
 /** One row of the item picker as read. */
 internal data class PickerRow(val name: String, val held: Int?)
 
-/** A full read of one picker tab; [complete] only when every catalog sash was read with a consistent count. */
-internal data class PickerScan(val rows: List<PickerRow>, val complete: Boolean, val endReached: Boolean = complete)
+/** A full read of one picker tab; [complete] only when every catalog sash was read with a consistent count. [conflicts] holds the first count and the largest later count of each sash read with different ones. */
+internal data class PickerScan(val rows: List<PickerRow>, val complete: Boolean, val endReached: Boolean = complete, val conflicts: Map<String, Pair<Int, Int>> = emptyMap())
 
 /** The title and "Held" text of each row in view on one screenful, top to bottom. */
 internal typealias PickerPage = List<Pair<String, String>>
@@ -122,7 +122,7 @@ internal typealias PickerPage = List<Pair<String, String>>
  */
 internal fun mergePickerPages(pages: List<PickerPage>): PickerScan {
     val rows = mutableListOf<PickerRow>()
-    var contradiction = false
+    val conflicts = linkedMapOf<String, Pair<Int, Int>>()
     var stalePages = 0
     for (page in pages) {
         var newRows = 0
@@ -136,14 +136,15 @@ internal fun mergePickerPages(pages: List<PickerPage>): PickerScan {
                     newRows++
                 }
                 rows[seen].held == null -> rows[seen] = PickerRow(name, held)
-                held != null && held != rows[seen].held -> contradiction = true
+                held != null && held != rows[seen].held -> conflicts[name] = rows[seen].held!! to maxOf(conflicts[name]?.second ?: held, held)
             }
         }
         stalePages = if (newRows == 0) stalePages + 1 else 0
     }
-    val wholeCatalog = rows.map { it.name }.toSet() == ClubRequestItems.SASHES.toSet() && rows.all { it.held != null }
-    return PickerScan(rows, complete = wholeCatalog && !contradiction, endReached = stalePages >= 2)
+    return PickerScan(rows, complete = catalogRead(rows) && conflicts.isEmpty(), endReached = stalePages >= 2, conflicts = conflicts)
 }
+
+private fun catalogRead(rows: List<PickerRow>): Boolean = rows.map { it.name }.toSet() == ClubRequestItems.SASHES.toSet() && rows.all { it.held != null }
 
 /** One debug line per screenful: its rows with counts, how many rows it shares with the page before, and any title that is no known item. */
 internal fun pickerPageSummary(page: PickerPage, previous: PickerPage?): String {
@@ -172,19 +173,40 @@ internal fun noteRereads(found: MutableMap<String, Int>, page: PickerPage, items
 }
 
 /**
- * The sash to request after the two lowest counts are read again. A count that differs the second time becomes the larger of
- * the two, since a misread only drops a digit. Returns the sash and a log line of the changed counts (null when none changed).
+ * Reads each sash that showed different counts once more and keeps the largest of its reads: a count read too high can only
+ * skip the sash, so the largest read never makes it the fewest. Null unless the rest of the catalog was read.
  */
-internal fun lowestAfterReread(scan: PickerScan, reread: (List<String>) -> Map<String, Int?>): Pair<String, String?>? {
-    val first = lowestHeldItem(scan) ?: return null
-    val held = scan.rows.associate { it.name to it.held!! }
-    val lowest = scan.rows.sortedBy { it.held!! }.take(2).map { it.name }
+private fun settleConflicts(scan: PickerScan, reread: (List<String>) -> Map<String, Int?>, lines: MutableList<String>): PickerScan? {
+    if (!catalogRead(scan.rows)) return null
+    val again = reread(scan.conflicts.keys.toList())
+    val rows =
+        scan.rows.map { row ->
+            val (a, b) = scan.conflicts[row.name] ?: return@map row
+            val third = again[row.name]
+            val largest = maxOf(a, b, third ?: 0)
+            lines += "Winner's Sash ${row.name.removeSuffix(" Winner's Sash")} was read $a and $b on different pages and ${third ?: "?"} the third time, the largest ($largest) is used."
+            row.copy(held = largest)
+        }
+    return scan.copy(rows = rows, complete = true, conflicts = emptyMap())
+}
+
+/**
+ * The sash to request, and the log lines of the counts the second reads changed. A sash with two disagreeing counts is settled
+ * first, then the two lowest counts are read again; a count that differs the second time becomes the larger of the two, since a
+ * misread only drops a digit.
+ */
+internal fun lowestAfterReread(scan: PickerScan, reread: (List<String>) -> Map<String, Int?>): Pair<String, List<String>>? {
+    val lines = mutableListOf<String>()
+    val settled = if (scan.conflicts.isEmpty()) scan else settleConflicts(scan, reread, lines) ?: return null
+    val first = lowestHeldItem(settled) ?: return null
+    val held = settled.rows.associate { it.name to it.held!! }
+    val lowest = settled.rows.sortedBy { it.held!! }.take(2).map { it.name }
     val again = reread(lowest)
     val changed = lowest.filter { name -> again[name]?.let { it != held[name] } == true }
-    if (changed.isEmpty()) return first to null
-    val fixed = scan.rows.map { if (it.name in changed) it.copy(held = maxOf(it.held!!, again.getValue(it.name)!!)) else it }
-    val line = changed.joinToString { "${it.removeSuffix(" Winner's Sash")} ${held[it]} then ${again[it]}" }
-    return (lowestHeldItem(scan.copy(rows = fixed)) ?: first) to line
+    if (changed.isEmpty()) return first to lines
+    val fixed = settled.rows.map { if (it.name in changed) it.copy(held = maxOf(it.held!!, again.getValue(it.name)!!)) else it }
+    lines += "Winner's Sash counts read differently the second time, the larger one is used: " + changed.joinToString { "${it.removeSuffix(" Winner's Sash")} ${held[it]} then ${again[it]}" } + "."
+    return (lowestHeldItem(settled.copy(rows = fixed)) ?: first) to lines
 }
 
 internal enum class ExtrasScreen {
@@ -355,9 +377,9 @@ internal class DailyExtras(
             if (requestItem == ClubRequestItems.LOWEST_HELD_SASH) {
                 device.openPickerTab(shoes = false)
                 val scan = device.scanPicker()
-                log("Winner's Sash held counts: " + scan.rows.joinToString { "${it.name}=${it.held ?: "?"}" } + if (scan.complete) "" else " (incomplete, ${scan.rows.size} of ${ClubRequestItems.SASHES.size} read)")
-                val (lowest, changed) = lowestAfterReread(scan, device::rereadHeld) ?: return cancelPicker("the Winner's Sash list was not fully read")
-                if (changed != null) log("Winner's Sash counts read differently the second time, the larger one is used: $changed.")
+                log("Winner's Sash held counts: " + scan.rows.joinToString { "${it.name}=${it.held ?: "?"}" } + if (scan.complete) "" else if (scan.conflicts.isEmpty()) " (incomplete, ${scan.rows.size} of ${ClubRequestItems.SASHES.size} read)" else " (${scan.rows.size} of ${ClubRequestItems.SASHES.size} read, ${scan.conflicts.size} read with different counts)")
+                val (lowest, lines) = lowestAfterReread(scan, device::rereadHeld) ?: return cancelPicker("the Winner's Sash list was not fully read")
+                lines.forEach(log)
                 lowest
             } else {
                 device.openPickerTab(shoes = ClubRequestItems.isShoes(requestItem))

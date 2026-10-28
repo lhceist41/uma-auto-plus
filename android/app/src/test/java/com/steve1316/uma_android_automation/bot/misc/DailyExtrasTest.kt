@@ -50,6 +50,7 @@ private class FakeGame(
     val taps = mutableListOf<ExtrasTarget>()
     var requested: String? = null
     var rereadCalls = 0
+    val rereadAsked = mutableListOf<List<String>>()
     var shoesTab: Boolean? = null
     var collectedMissions = false
     var collectedPresents = 0
@@ -123,6 +124,7 @@ private class FakeGame(
 
     override fun rereadHeld(items: List<String>): Map<String, Int?> {
         rereadCalls++
+        rereadAsked += items
         return rereads?.filterKeys { it in items } ?: sashes.rows.filter { it.name in items }.associate { it.name to it.held }
     }
 
@@ -540,17 +542,83 @@ class DailyExtrasTest {
         assertFalse(CONFIRM in game.taps)
     }
 
+    private val shukaSash = "Shuka Sho Winner's Sash"
+    private val nambuSash = "M.C. Nambu Hai Winner's Sash"
+
+    /** The live read where [name] shows [reads] on the pages that hold it, in order, and the last one on any further page. */
+    private fun sequencedPages(name: String, reads: List<String>): List<PickerPage> {
+        var seen = 0
+        return livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).map { page -> page.map { if (it.first == name) name to reads[minOf(seen++, reads.lastIndex)] else it } }
+    }
+
+    private fun conflictingPages(name: String, first: String, later: String) = sequencedPages(name, listOf(first, later))
+
+    private fun conflictRequest(pages: List<PickerPage>, rereads: Map<String, Int?>): Triple<FakeGame, List<String>, List<String>> {
+        val game = FakeGame(sashes = mergePickerPages(pages), rereads = rereads)
+        val logs = mutableListOf<String>()
+        val notes = DailyExtras(game, collectRewards = false, clubRequest = true, requestItem = ClubRequestItems.LOWEST_HELD_SASH, log = logs::add).run()
+        return Triple(game, logs, notes)
+    }
+
     @Test
-    fun `a sash read twice with different counts stays incomplete and requests nothing`() {
-        val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28) + listOf(listOf(LIVE_SASHES[2].first to "999"))
-        val scan = mergePickerPages(pages)
-        assertEquals(34, scan.rows.size)
-        assertFalse(scan.complete)
-        assertNull(lowestHeldItem(scan))
-        val game = FakeGame(sashes = scan)
-        runClub(game, item = ClubRequestItems.LOWEST_HELD_SASH)
+    fun `a sash read 99 and 66 on two pages, in either order, keeps 99 and the request goes ahead without picking it`() {
+        for ((first, later) in listOf("99" to "66", "66" to "99")) {
+            val scan = mergePickerPages(conflictingPages(shukaSash, first, later))
+            assertFalse(scan.complete)
+            assertEquals(mapOf(shukaSash to (first.toInt() to later.toInt())), scan.conflicts)
+            for (third in listOf(66, 99, null)) {
+                val (game, logs, notes) = conflictRequest(conflictingPages(shukaSash, first, later), mapOf(shukaSash to third))
+                assertEquals(nambuSash, game.requested, "$first then $later, third $third")
+                assertEquals(listOf(shukaSash), game.rereadAsked.first())
+                assertEquals(1, logs.count { "Shuka Sho" in it && "$first and $later" in it && "the largest (99) is used" in it })
+                assertEquals(listOf("Club: requested $nambuSash"), notes)
+            }
+        }
+    }
+
+    @Test
+    fun `a true-low sash with one high misread is skipped as its larger read`() {
+        // True count 2 read as 20 on one page: the larger read stands even when the third read repeats 2.
+        val (game, logs, _) = conflictRequest(conflictingPages(nambuSash, "2", "20"), mapOf(nambuSash to 2))
+        assertEquals("Kawasaki Kinen Winner's Sash", game.requested)
+        assertEquals(1, logs.count { "Nambu Hai" in it && "2 and 20" in it && "2 the third time, the largest (20) is used" in it })
+    }
+
+    @Test
+    fun `a third read larger than both earlier reads is the one kept`() {
+        val (game, logs, _) = conflictRequest(conflictingPages(nambuSash, "2", "20"), mapOf(nambuSash to 200))
+        assertEquals("Kawasaki Kinen Winner's Sash", game.requested)
+        assertEquals(1, logs.count { "Nambu Hai" in it && "the largest (200) is used" in it })
+    }
+
+    @Test
+    fun `a sash read three different ways keeps the largest of all reads and the scan line is not called incomplete`() {
+        val kashiwa = "Kashiwa Kinen Winner's Sash"
+        val pages = sequencedPages(kashiwa, listOf("5", "9", "559"))
+        assertEquals(mapOf(kashiwa to (5 to 559)), mergePickerPages(pages).conflicts)
+        val (game, logs, _) = conflictRequest(pages, mapOf(kashiwa to 5))
+        assertEquals(nambuSash, game.requested)
+        assertEquals(1, logs.count { "Kashiwa Kinen" in it && "5 and 559" in it && "the largest (559) is used" in it })
+        assertEquals(1, logs.count { "held counts" in it && "(34 of 34 read, 1 read with different counts)" in it && "incomplete" !in it })
+    }
+
+    @Test
+    fun `a clean catalog is read again only at the two lowest and logs nothing`() {
+        val (game, logs, notes) = conflictRequest(livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28), emptyMap())
+        assertEquals(nambuSash, game.requested)
+        assertEquals(1, game.rereadCalls)
+        assertEquals(listOf(listOf(nambuSash, "Kawasaki Kinen Winner's Sash")), game.rereadAsked)
+        assertTrue(logs.none { "third time" in it || "second time" in it })
+        assertEquals(listOf("Club: requested $nambuSash"), notes)
+    }
+
+    @Test
+    fun `a disagreement on a read that also lacks a sash requests nothing and reads nothing again`() {
+        val pages = conflictingPages(shukaSash, "99", "66").map { page -> page.filter { it.first != "Yasuda Kinen Winner's Sash" } }
+        val (game, _, notes) = conflictRequest(pages, mapOf(shukaSash to 99))
         assertNull(game.requested)
-        assertFalse(CONFIRM in game.taps)
+        assertEquals(0, game.rereadCalls)
+        assertEquals(listOf("Club: no request: the Winner's Sash list was not fully read"), notes)
     }
 
     @Test
