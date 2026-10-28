@@ -10,7 +10,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-- Presets for **Hokko Tarumae** and the newly released outfits **Narita Brian (Ravenous Wolf)**, **Satono Diamond (Jade's Prosperity)** and **Kitasan Black (Crane's Ambition)**, in all four scenarios. Hokko Tarumae runs as a dirt Pace Chaser; her URA Finale preset races the Junior dirt calendar for the 5000 fans her career asks for early in the Classic year, and her last two goal races must be won. Unity Cup and Trackblazer show a caution for her, since her turf aptitude is G. The three outfits keep their base outfit's build with their own skills. All are research-graded until a full career completes. The roster is now 452 presets across 112 trainee cards.
+## [1.8.0] - 2026-10-29
+
+### Highlights
+
+- **New, off by default: Daily Legend Race.** In Settings, "Race the Daily Legend Race" races your free daily Legend ticket once after Daily Races or Team Trials, on the legend you pick under "Legend To Race" (default: the first legend that can still unlock a star). It never buys a ticket. The bot's own run is not yet seen live.
+- **Rewards and Club also run after the last career of a run.** With "Collect Missions and Presents" or "Make the Club Item Request" on, the bot now does them after a run's final career too, not only after Daily Races or Team Trials. It still never donates. Not seen live yet.
+- **A run queue started on the Club screen no longer stops.** The bot taps Home once and goes on to the CAREER button (not seen live yet).
+- **The Club item request is steadier.** A sash name cut off at the front is read as unknown, a sash read twice with different counts keeps the larger count, the two sashes you hold fewest of are read again before asking, and a stuck Item Request is reopened once. Seen live as the request, with the two fewest sashes read again; the cut-off name, two different counts and the reopen are tests only so far.
+- **Game update:** Hokko Tarumae, the released Narita Brian (Ravenous Wolf), Satono Diamond (Jade's Prosperity) and Kitasan Black (Crane's Ambition) outfits, six support cards and updated skill rankings are in, each trainee with research-graded presets for all four scenarios (452 presets across 112 trainee cards). Hokko Tarumae runs as a dirt Pace Chaser: her URA Finale preset races dirt from Junior on for the 5000 fans due in the Classic spring, and Unity Cup and Trackblazer show a caution for her turf G aptitude.
+- **Also:** a race forced by a turn-start "not enough fans" popup is kept for that turn unless Grand Concert's fan rule defers it, and on tall 1080-wide phones the fan and trophy goal counters are found at slightly smaller sizes (both tests only, not seen live).
 
 ## [1.7.5] - 2026-10-23
 
@@ -671,5 +680,6 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.5...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.8.0...main
+[1.8.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.5...v1.8.0
 [1.7.5]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.4...v1.7.5

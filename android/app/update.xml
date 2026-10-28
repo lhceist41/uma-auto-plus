@@ -1,13 +1,13 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.7.5</latestVersion>
+    <latestVersion>1.8.0</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.7.5 - Steadier long runs, Team Trials fixes, optional Club requests
+v1.8.0 - Daily Legend Race, rewards after the last career, new outfits
 
-- New: Rewards and Club in Settings, off by default. After Daily Races or Team Trials the bot can collect Missions and Presents and make a Club item request. It never donates.
-- Changed: on MuMu the bot frees its unused memory itself on long runs. Team Trials taps past "NEW HIGH SCORE!", and closes the "Story Unlocked" dialog and passes the weekly class result (not seen live yet). Grand Concert skill points are saved for a gold skill and spent before the Finals (tests only so far). 1080-wide phones that draw the game's text smaller are read at slightly smaller label sizes (not tested live).
-- Fixed: Daily Races waits for its results and reads an empty ticket counter, the Event Home and New Scenario popups are closed, and the Trackblazer shop is waited for (not seen live yet).
+- New: Daily Legend Race in Settings, off by default. After Daily Races or Team Trials it races your free daily Legend ticket once and never buys a ticket (the bot's own run is not seen live yet).
+- Changed: Rewards and Club also run after the last career of a run, and a run queue started on the Club screen no longer stops (both not seen live yet). The Club item request reads Winner's Sash counts more reliably.
+- Added: Hokko Tarumae, three newly released outfits with presets, six support cards and updated skill rankings.
 
     </releaseNotes>
   </update>
