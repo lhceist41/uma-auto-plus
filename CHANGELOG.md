@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- Presets for **Hokko Tarumae** and the newly released outfits **Narita Brian (Ravenous Wolf)**, **Satono Diamond (Jade's Prosperity)** and **Kitasan Black (Crane's Ambition)**, in all four scenarios. Hokko Tarumae runs as a dirt Pace Chaser; her URA Finale preset races the Junior dirt calendar for the 5000 fans her career asks for early in the Classic year, and her last two goal races must be won. Unity Cup and Trackblazer show a caution for her, since her turf aptitude is G. The three outfits keep their base outfit's build with their own skills. All are research-graded until a full career completes. The roster is now 452 presets across 112 trainee cards.
+
 ## [1.7.5] - 2026-10-23
 
 ### Highlights

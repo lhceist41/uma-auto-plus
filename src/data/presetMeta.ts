@@ -33,6 +33,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Haru Urara": "Bestest Prize ♪",
     "Hishi Akebono": "Buono ☆ Alla Moda",
     "Hishi Amazon": "Azure Amazon",
+    "Hokko Tarumae": "Starry Lightship",
     "Inari One": "Edomurasaki",
     "Ines Fujin": "Always Electrifying",
     "Kawakami Princess": "Princess of Pink",
