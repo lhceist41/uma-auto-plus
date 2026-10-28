@@ -140,13 +140,13 @@ const searchConfig: SearchOption[] = [
     {
         id: "settings-collect-daily-rewards",
         title: "Collect Missions and Presents",
-        description: "After Daily Races or Team Trials, taps Collect All in the present box and on the Missions tab that opens.",
+        description: "After Daily Races, Team Trials or the last career, taps Collect All in the present box and on the Missions tab that opens.",
         page: "SettingsMain",
     },
     {
         id: "settings-club-item-request",
         title: "Make the Club Item Request",
-        description: "After Daily Races or Team Trials, asks Club members for an item. Never donates.",
+        description: "After Daily Races, Team Trials or the last career, asks Club members for an item. Never donates.",
         page: "SettingsMain",
     },
     {

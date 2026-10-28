@@ -153,9 +153,9 @@ export interface Settings {
         // Records lightweight, on-device per-turn decision data so a career can be analyzed and improved later.
         // Local only, no upload. Independent of Debug Mode: the heavy debug diagnostics stay off when this is on.
         recordDecisionData: boolean
-        // After Daily Races or Team Trials ends on Home: collect Daily Missions and the present box.
+        // After Daily Races, Team Trials or the last career ends on Home: collect Daily Missions and the present box.
         collectDailyRewards: boolean
-        // After Daily Races or Team Trials ends on Home: make the Club item request (never donates).
+        // After Daily Races, Team Trials or the last career ends on Home: make the Club item request (never donates).
         enableClubItemRequest: boolean
         // An exact item name from CLUB_REQUEST_ITEMS, or "Lowest held Winner's Sash".
         clubRequestItem: string

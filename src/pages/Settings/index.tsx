@@ -522,7 +522,7 @@ const Settings = () => {
 
                 <Separator style={{ marginVertical: 16 }} />
 
-                <CustomTitle title="Rewards and Club" description="Runs on Home after Daily Races or Team Trials finish. It never donates items and never spends anything." />
+                <CustomTitle title="Rewards and Club" description="Runs on Home after Daily Races, Team Trials or the bot's last career finish. It never donates items and never spends anything." />
 
                 <CustomCheckbox
                     searchId="settings-collect-daily-rewards"

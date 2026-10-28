@@ -486,6 +486,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             return if (resultCode == TaskResultCode.TASK_RESULT_COMPLETE) PostCareerAction.FINALIZE_TO_HOME else PostCareerAction.STOP
         }
 
+        /** After a career's end flow reached Home the Rewards and Club step runs; Daily Races and Team Trials ran it in their own task. */
+        fun runsDailyExtrasAfterFinalize(scenario: String): Boolean = scenario != "Daily Races" && scenario != "Team Trials"
+
         /**
          * Runs already completed before this process started, given the persisted queue state's
          * [phase] and the [currentRun] it recorded. Feeds the resumed queue's completedRuns count
@@ -1821,6 +1824,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         if (liveSlot >= 0) reapplyRotationSlotIfDrifted(context, liveSlot, run)
     }
 
+    /** Runs the Rewards and Club step once a career's end flow parked the game on Home; the run's result never depends on it. */
+    private fun runDailyExtrasAfterCareer() {
+        try {
+            CareerLaunchNavigator(context).runDailyExtras()?.let { MessageLog.i(TAG, "[DAILY_EXTRAS] ${it.joinToString("; ")}.") }
+        } catch (e: InterruptedException) {
+            MessageLog.w(TAG, "[DAILY_EXTRAS] Stopped: ${e.message}")
+        } catch (e: Exception) {
+            MessageLog.w(TAG, "[DAILY_EXTRAS] Failed: ${e.message}")
+        }
+    }
+
     /**
      * Runs one CareerLaunchNavigator.navigate() call under the navigation deadline.
      *
@@ -2861,6 +2875,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         attachCareerEndSparks(ledger, i, runCareerEndSeq)
                         if (finalizeResult.success) {
                             MessageLog.i(TAG, "[QUEUE] Career-end flow finished; the game is parked on the home screen.")
+                            if (runsDailyExtrasAfterFinalize(SettingsHelper.getStringSetting("general", "scenario"))) runDailyExtrasAfterCareer()
                         } else if (enableRunQueue && finalizeResult.reasonKey == "CAREER_NOT_FINISHED") {
                             logNavigationFailure(finalizeResult)
                             haltCareerNotFinished(i)
@@ -2925,6 +2940,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     }
                                     break
                                 }
+                                runDailyExtrasAfterCareer()
                             }
                             stoppedAfterCareerRun = i
                             ledger.stoppedAfterCareer = true

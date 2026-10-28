@@ -23,6 +23,7 @@ import com.steve1316.uma_android_automation.bot.RebindStep
 import com.steve1316.uma_android_automation.bot.rebindStep
 import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
+import com.steve1316.uma_android_automation.bot.misc.GameExtrasDevice
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.LaunchDeckObservation
@@ -889,6 +890,9 @@ class CareerLaunchNavigator(private val context: Context) {
         imageUtils = game.imageUtils
         liveGameAttached = true
     }
+
+    /** The Rewards and Club step on Home; null when no part is on or no Game could be built. */
+    fun runDailyExtras(): List<String>? = if (ensureInitialised()) tempGame?.let { GameExtrasDevice.runFromSettings(it) } else null
 
     /** Presses the game's Back until Home shows; presses nothing on a screen without a Back. */
     fun backOutToHome(): Boolean {
