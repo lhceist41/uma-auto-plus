@@ -52,7 +52,7 @@
         2
       ]
     },
-    "hpRecoveryWitnessCount": 70,
+    "hpRecoveryWitnessCount": 71,
     "hpSelfDrainWitnessCount": 16,
     "hpOpponentEffectWitnessCount": 21
   },
@@ -1836,6 +1836,26 @@
       "precondition2": "",
       "cooldown1Raw": 5000000,
       "cooldown2Raw": 5000000,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 110671,
+      "name": "Rain Cloud Bolt",
+      "desc": "Shine brilliantly, increasing velocity and moderately recovering endurance when positioned midpack around halfway through the race.",
+      "rarity": 5,
+      "condition1": "distance_rate>=40&distance_rate<=50&order_rate>=40&order_rate<=80",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
       "effects": [
         {
           "slot": "1_2",
@@ -3894,6 +3914,26 @@
       "precondition2": "",
       "cooldown1Raw": 5000000,
       "cooldown2Raw": 5000000,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 50,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 910671,
+      "name": "Rain Cloud Bolt",
+      "desc": "Slightly increase velocity and very slightly recover endurance when positioned midpack around halfway through the race.",
+      "rarity": 1,
+      "condition1": "distance_rate>=40&distance_rate<=50&order_rate>=40&order_rate<=80",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
       "effects": [
         {
           "slot": "1_2",

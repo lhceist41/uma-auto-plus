@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "outfitSource": "gametora character-cards title_en_gl",
-  "characterCount": 69,
-  "outfitCount": 123,
+  "characterCount": 70,
+  "outfitCount": 124,
   "characters": {
     "Admire Vega": {
       "outfits": [
@@ -123,6 +123,11 @@
       "outfits": [
         "Azure Amazon",
         "Hungry Veil"
+      ]
+    },
+    "Hokko Tarumae": {
+      "outfits": [
+        "Starry Lightship"
       ]
     },
     "Inari One": {

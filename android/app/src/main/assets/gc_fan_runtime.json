@@ -1811,6 +1811,100 @@
         }
       ]
     },
+    "Hokko Tarumae": {
+      "fanGoals": [
+        {
+          "turn": 31,
+          "targetFans": 5000
+        }
+      ],
+      "mandatoryRaces": [
+        {
+          "turn": 39,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Leopard Stakes",
+              "fansNeeded": 1250
+            }
+          ]
+        },
+        {
+          "turn": 47,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Champions Cup",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 51,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Kawasaki Kinen",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 57,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Kashiwa Kinen",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 60,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Teio Sho",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 69,
+          "isChoice": true,
+          "options": [
+            {
+              "raceName": "JBC Classic",
+              "fansNeeded": 12000
+            },
+            {
+              "raceName": "JBC Classic",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 71,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Champions Cup",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 72,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Tokyo Daishoten",
+              "fansNeeded": 12000
+            }
+          ]
+        }
+      ]
+    },
     "Inari One": {
       "fanGoals": [
         {

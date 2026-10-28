@@ -907,7 +907,7 @@
       "condition": "phase>=2&remain_distance<=401&remain_distance>=399&order_rate<=40&grade==100&popularity<=3@phase>=2&remain_distance<=401&remain_distance>=399&order_rate<=40",
       "precondition": "",
       "inherited": true,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": null
     },
@@ -1355,7 +1355,7 @@
       "condition": "is_lastspurt==1&order_rate<=40&order_rate>=30&ground_type==2",
       "precondition": "phase==1&blocked_side_continuetime>=2&corner!=0",
       "inherited": true,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": null
     },
@@ -1627,7 +1627,7 @@
     },
     {
       "id": 110161,
-      "name": "Free From the Ashes",
+      "name": "Free from the Ashes",
       "desc": "Slightly increase velocity when positioned in the front part of the pack on the latter half of the final corner late-race.",
       "iconId": 20011,
       "cost": 200,
@@ -1635,7 +1635,7 @@
       "condition": "phase>=2&is_finalcorner_laterhalf==1&order_rate<=40",
       "precondition": "",
       "inherited": true,
-      "tier": null,
+      "tier": 0,
       "upgrade": null,
       "downgrade": null
     },
@@ -2097,7 +2097,7 @@
       "condition": "distance_rate>=40&distance_rate<=50&order_rate>=40&order_rate<=80",
       "precondition": "",
       "inherited": true,
-      "tier": null,
+      "tier": 0,
       "upgrade": null,
       "downgrade": null
     },
@@ -2111,7 +2111,7 @@
       "condition": "phase>=2&corner!=0&remain_distance>=600&order<=3",
       "precondition": "",
       "inherited": true,
-      "tier": null,
+      "tier": 0,
       "upgrade": null,
       "downgrade": null
     },
@@ -8565,7 +8565,7 @@
       "condition": "distance_type==4&running_style==2&phase==2",
       "precondition": "distance_diff_top<=10&distance_rate>=60&phase==1",
       "inherited": false,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": 202482
     },
@@ -8579,7 +8579,7 @@
       "condition": "distance_type==4&running_style==2&phase==2",
       "precondition": "distance_diff_top<=10&distance_rate>=60&phase==1",
       "inherited": false,
-      "tier": 0,
+      "tier": 1,
       "upgrade": 202481,
       "downgrade": null
     },
@@ -8593,7 +8593,7 @@
       "condition": "running_style==4&phase_firsthalf_random==2",
       "precondition": "distance_rate>=66&order_rate_out50_continue==1&temptation_count==0",
       "inherited": false,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": 202492
     },
@@ -8607,7 +8607,7 @@
       "condition": "running_style==4&phase_firsthalf_random==2",
       "precondition": "distance_rate>=66&order_rate_out50_continue==1&temptation_count==0",
       "inherited": false,
-      "tier": null,
+      "tier": 1,
       "upgrade": 202491,
       "downgrade": null
     },

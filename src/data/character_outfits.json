@@ -289,6 +289,16 @@
             }
         ]
     },
+    "Hokko Tarumae": {
+        "name": "Hokko Tarumae",
+        "outfits": [
+            {
+                "title": "Starry Lightship",
+                "cardId": 109901,
+                "releasedEn": "2026-10-24"
+            }
+        ]
+    },
     "Inari One": {
         "name": "Inari One",
         "outfits": [
@@ -355,7 +365,7 @@
             {
                 "title": "Crane's Ambition",
                 "cardId": 106802,
-                "releasedEn": null
+                "releasedEn": "2026-10-20"
             }
         ]
     },
@@ -565,7 +575,7 @@
             {
                 "title": "Ravenous Wolf",
                 "cardId": 101602,
-                "releasedEn": null
+                "releasedEn": "2026-10-14"
             }
         ]
     },
@@ -685,7 +695,7 @@
             {
                 "title": "Jade's Prosperity",
                 "cardId": 106702,
-                "releasedEn": null
+                "releasedEn": "2026-10-20"
             }
         ]
     },

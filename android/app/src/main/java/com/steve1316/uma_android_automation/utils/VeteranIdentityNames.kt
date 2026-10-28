@@ -42,6 +42,7 @@ object VeteranIdentityNames {
             "Haru Urara",
             "Hishi Akebono",
             "Hishi Amazon",
+            "Hokko Tarumae",
             "Inari One",
             "Ines Fujin",
             "Kawakami Princess",
