@@ -679,6 +679,9 @@ class CareerLaunchNavigator(private val context: Context) {
     // navigator would re-enter Legacy Select handling each iteration instead of clicking Next.
     private var legacyAutoSelectAlreadyDone: Boolean = false
 
+    /** The Home tab was tapped once this navigation because Home showed no CAREER button. */
+    private var homeTabRetried: Boolean = false
+
     // Back presses this navigation spent returning to Trainee Select from a later setup screen.
     private var traineeSelectBacks = 0
 
@@ -988,6 +991,7 @@ class CareerLaunchNavigator(private val context: Context) {
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
+        homeTabRetried = false
         traineeSelectBacks = 0
         lineageCaptureAttempted = false
         careerLaunchInitiated = false
@@ -4989,6 +4993,18 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Continue
         }
         MessageLog.i(TAG, "[NAV] [HOME] OCR did not find 'CAREER' or 'Event'.")
+
+        // Screens opened from Home, such as the Club, keep the Home tab selected and so read as Home here.
+        if (!homeTabRetried) {
+            homeTabRetried = true
+            val club = if (LabelClubMenu.check(iu, sourceBitmap = bitmap)) " (Club Menu shows)" else ""
+            MessageLog.i(TAG, "[NAV] [HOME] No CAREER button; tapping the Home tab once$club.")
+            if (ButtonMenuBarHomeSelected.click(iu, sourceBitmap = bitmap)) {
+                waitSafe(2.0)
+                return TransitionResult.Continue
+            }
+            MessageLog.w(TAG, "[NAV] [HOME] Home tab not found.")
+        }
 
         // All detectors failed
         val screenshotPath = captureFailureScreenshot("HOME_SCREEN_career_click")
