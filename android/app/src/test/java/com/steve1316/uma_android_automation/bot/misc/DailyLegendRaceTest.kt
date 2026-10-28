@@ -57,6 +57,8 @@ private class FakeLegendGame(
     val spendingAfter: LegendTarget? = null,
     /** Where Cancel on that stacked dialog leads; null keeps the screen beneath. */
     val spendingCancelTo: LegendScreen? = null,
+    /** Whether a card tap opens its race list; false leaves the grid as it is. */
+    val listOpens: Boolean = true,
 ) : LegendDevice {
     var screen: LegendScreen = HOME
     val taps = mutableListOf<LegendTarget>()
@@ -128,7 +130,7 @@ private class FakeLegendGame(
     override fun tapGrid(point: Pair<Int, Int>) {
         check(screen() == LEGEND_GRID) { "tapped the grid on ${screen()}" }
         tappedCard = pages[pageIndex].firstOrNull { kotlin.math.abs(point.first - it.x) <= 160 && kotlin.math.abs(point.second - it.y) <= 120 } ?: error("tapped no card at $point")
-        screen = RACE_LIST
+        if (listOpens) screen = RACE_LIST
     }
 
     override fun viewResultsLocked(): Boolean? = viewResultsLocked
@@ -185,6 +187,15 @@ class DailyLegendRaceTest {
     fun `nothing is raced when every legend has every star unlocked`() {
         val game = FakeLegendGame(pages = listOf(page("Special Week" to false, "Silence Suzuka" to false), page("Gold Ship" to false)))
         assertEquals("no \"to Star Unlock\" strip found on 2 grid page(s)", run(game))
+        assertNull(game.raced)
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `a card whose race list never opens backs out with nothing spent`() {
+        val game = FakeLegendGame(listOpens = false)
+        assertEquals("the race list of ${DailyLegendRace.FIRST_UNLOCKABLE} did not open", run(game))
+        assertEquals(listOf(LegendTarget.RACE_TAB, DAILY_PROGRAM_TILE, LEGEND_CARD, HOME_TAB), game.taps)
         assertNull(game.raced)
         assertEquals(HOME, game.screen)
     }

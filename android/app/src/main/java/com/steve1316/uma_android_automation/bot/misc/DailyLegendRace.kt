@@ -33,10 +33,10 @@ import com.steve1316.uma_android_automation.components.LabelDailyLegendRacesHead
 import com.steve1316.uma_android_automation.components.LabelDailyPrograms
 import com.steve1316.uma_android_automation.components.LabelDoneForToday
 import com.steve1316.uma_android_automation.components.LabelItemsSelected
+import com.steve1316.uma_android_automation.components.LabelLegendRunnerSelection
 import com.steve1316.uma_android_automation.components.LabelMainRewards
 import com.steve1316.uma_android_automation.components.LabelRaceDetails
 import com.steve1316.uma_android_automation.components.LabelRaceResultsHeader
-import com.steve1316.uma_android_automation.components.LabelRunnerSelection
 import com.steve1316.uma_android_automation.components.LabelStarUnlockText
 import com.steve1316.uma_android_automation.components.Region
 import com.steve1316.uma_android_automation.utils.ScreenBand
@@ -387,31 +387,38 @@ private const val ROW_BANNER_DY = 10
 /** Looks at the Daily Programs counter this many frames before it counts as unreadable. */
 private const val COUNTER_READS = 3
 
+/**
+ * The screen a frame shows, from the step's labels and buttons checked in this order. Spending dialogs first: one stacked on
+ * Items Selected leaves that header visible beneath it. A legend's race list keeps the grid's header, so the grid is that
+ * header without race rows. The Items Selected Race! is read only after the Race Details header, whose own Race! sits at the
+ * bottom of the screen.
+ */
+internal fun legendScreenOf(spendingDialog: () -> Boolean, shows: (ComponentInterface) -> Boolean): LegendScreen =
+    when {
+        spendingDialog() -> LegendScreen.SPENDING_DIALOG
+        shows(LabelItemsSelected) -> LegendScreen.ITEMS_SELECTED
+        shows(LabelDailyPrograms) -> LegendScreen.DAILY_PROGRAMS
+        shows(LabelDailyLegendRacesHeader) && !shows(LabelMainRewards) -> LegendScreen.LEGEND_GRID
+        shows(LabelRaceResultsHeader) -> LegendScreen.NEXT
+        shows(LabelRaceDetails) -> LegendScreen.RACE_DETAILS
+        shows(LabelLegendRunnerSelection) -> LegendScreen.RUNNER_SELECTION
+        shows(LabelMainRewards) -> LegendScreen.RACE_LIST
+        shows(ButtonRaceExclamationShiftedUp) -> LegendScreen.ITEMS_SELECTED
+        shows(ButtonViewResults) -> LegendScreen.RACE_PREP
+        shows(ButtonSkip) -> LegendScreen.RACE_PLAYING
+        shows(ButtonNext) || shows(ButtonNextWithImage) -> LegendScreen.NEXT
+        shows(ButtonMenuBarRaceSelected) -> LegendScreen.RACE_TAB
+        shows(ButtonMenuBarHomeSelected) -> LegendScreen.HOME
+        else -> LegendScreen.UNKNOWN
+    }
+
 /** Drives [DailyLegendRace] on the game. */
 internal class GameLegendDevice(private val game: Game, private val handlePopup: () -> Boolean) : LegendDevice {
     private val imageUtils get() = game.imageUtils
 
     override fun screen(): LegendScreen {
         val bitmap = imageUtils.getSourceBitmap()
-        // Spending dialogs first: one stacked on Items Selected leaves that header visible beneath it. The Items Selected
-        // Race! is read only after the Race Details header, whose own Race! sits at the bottom of the screen.
-        return when {
-            spendingDialogShown(bitmap) -> LegendScreen.SPENDING_DIALOG
-            bitmap.shows(LabelItemsSelected) -> LegendScreen.ITEMS_SELECTED
-            bitmap.shows(LabelDailyPrograms) -> LegendScreen.DAILY_PROGRAMS
-            bitmap.shows(LabelDailyLegendRacesHeader) -> LegendScreen.LEGEND_GRID
-            bitmap.shows(LabelRaceResultsHeader) -> LegendScreen.NEXT
-            bitmap.shows(LabelRaceDetails) -> LegendScreen.RACE_DETAILS
-            LabelRunnerSelection.check(imageUtils, sourceBitmap = bitmap, region = Region.topHalf) -> LegendScreen.RUNNER_SELECTION
-            bitmap.shows(LabelMainRewards) -> LegendScreen.RACE_LIST
-            bitmap.shows(ButtonRaceExclamationShiftedUp) -> LegendScreen.ITEMS_SELECTED
-            bitmap.shows(ButtonViewResults) -> LegendScreen.RACE_PREP
-            bitmap.shows(ButtonSkip) -> LegendScreen.RACE_PLAYING
-            bitmap.shows(ButtonNext) || bitmap.shows(ButtonNextWithImage) -> LegendScreen.NEXT
-            bitmap.shows(ButtonMenuBarRaceSelected) -> LegendScreen.RACE_TAB
-            bitmap.shows(ButtonMenuBarHomeSelected) -> LegendScreen.HOME
-            else -> LegendScreen.UNKNOWN
-        }
+        return legendScreenOf({ spendingDialogShown(bitmap) }) { bitmap.shows(it) }
     }
 
     private fun Bitmap.shows(component: ComponentInterface): Boolean = component.check(imageUtils, sourceBitmap = this)

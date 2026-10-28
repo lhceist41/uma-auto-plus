@@ -298,6 +298,14 @@ object LabelRunnerSelection : ComponentInterface {
     override val template = Template("components/label/runner_selection", region = Region.topHalf)
 }
 
+/**
+ * The "Runner Selection" header text alone, for the Legend Race: its screen lacks the Daily Races art that the full header
+ * template carries under the label.
+ */
+object LabelLegendRunnerSelection : ComponentInterface {
+    override val template = Template("components/label/legend_runner_selection", region = Region.topHalf)
+}
+
 /** "Done for today!" strip on a Daily Program card whose tickets are spent. */
 object LabelDoneForToday : ComponentInterface {
     override val template = Template("components/label/done_for_today", region = Region.bottomHalf)
