@@ -12,9 +12,9 @@ export const RELEASE_NOTES_BASE_URL = "https://github.com/lhceist41/uma-auto-plu
 export const whatsNewEntries: Record<string, WhatsNewEntry> = {
     "1.8.0": {
         highlights: [
-            "New, off by default: Daily Legend Race in Settings. After Daily Races or Team Trials it races your free daily Legend ticket once, on the legend you pick, and never buys a ticket. The bot's own run is not seen live yet.",
-            "Rewards and Club also run after the last career of a run: Collect Missions and Presents and the Club item request, when they are on (not seen live yet).",
-            "A run queue started on the Club screen no longer stops: the bot taps Home once and goes on (not seen live yet).",
+            "New, off by default: Daily Legend Race in Settings. After Daily Races or Team Trials it races your free daily Legend ticket once, on the legend you pick, and never buys a ticket.",
+            "Rewards and Club also run after the last career of a run: Collect Missions and Presents and the Club item request, when they are on.",
+            "A run queue started on the Club screen no longer stops: the bot taps Home once and goes on.",
             "The Club item request reads Winner's Sash counts more reliably: a name cut off at the front reads as unknown, two different counts for one sash keep the larger, and the two sashes you hold fewest of are read again before asking.",
             "Hokko Tarumae, three newly released outfits (Narita Brian, Satono Diamond, Kitasan Black), six support cards and updated skill rankings are in. The four trainees have presets for all four scenarios (research-graded).",
             "A race forced by a turn-start fans popup is kept for that turn, and tall 1080-wide phones find the fan and trophy goal counters at slightly smaller sizes (tests only).",

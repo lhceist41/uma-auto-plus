@@ -5,8 +5,8 @@
     <releaseNotes>
 v1.8.0 - Daily Legend Race, rewards after the last career, new outfits
 
-- New: Daily Legend Race in Settings, off by default. After Daily Races or Team Trials it races your free daily Legend ticket once and never buys a ticket (the bot's own run is not seen live yet).
-- Changed: Rewards and Club also run after the last career of a run, and a run queue started on the Club screen no longer stops (both not seen live yet). The Club item request reads Winner's Sash counts more reliably.
+- New: Daily Legend Race in Settings, off by default. After Daily Races or Team Trials it races your free daily Legend ticket once and never buys a ticket.
+- Changed: Rewards and Club also run after the last career of a run, and a run queue started on the Club screen no longer stops. The Club item request reads Winner's Sash counts more reliably.
 - Added: Hokko Tarumae, three newly released outfits with presets, six support cards and updated skill rankings.
 
     </releaseNotes>
