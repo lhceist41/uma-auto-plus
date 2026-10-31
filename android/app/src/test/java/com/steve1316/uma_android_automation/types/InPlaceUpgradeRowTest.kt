@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.types
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -139,6 +140,17 @@ class InPlaceUpgradeRowTest {
     }
 
     @Test
+    fun `a ◎ title proves its own in-place ○ and nothing else`() {
+        assertTrue(inPlaceRowProvesOwnedPrev(leftHandedUp, leftHanded))
+        assertTrue(inPlaceRowProvesOwnedPrev(mediumStraightawaysUp, mediumStraightaways))
+        assertTrue(inPlaceRowProvesOwnedPrev(firmConditionsUp, firmConditions))
+        assertFalse(inPlaceRowProvesOwnedPrev(firmConditions, firmConditionsX), "a ○ title proves no ×")
+        assertFalse(inPlaceRowProvesOwnedPrev(swingingMaestro, cornerRecovery), "a gold is not an in-place ◎")
+        assertFalse(inPlaceRowProvesOwnedPrev(kyotoUp, leftHanded), "another chain's ○")
+        assertFalse(inPlaceRowProvesOwnedPrev(leftHandedUp, null))
+    }
+
+    @Test
     fun `both scan paths look the row up by its resolved name`() {
         // SkillList needs a live Game, so its call sites are pinned by source.
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
@@ -156,5 +168,8 @@ class InPlaceUpgradeRowTest {
         assertTrue(resolver.contains("inPlaceUpgradeRowName(row.skillData, upgrade.skillData, price, rowObtained, owned)"))
         val twin: Int = resolver.indexOf("negativeTwinRowName(read.skillData, read.next?.skillData, price, rowObtained)")
         assertTrue(twin >= 0 && twin < resolver.indexOf("val row: SkillListEntry = entries[name]"), "the × rule runs before the in-place lookup")
+        val proves: Int = resolver.indexOf("inPlaceRowProvesOwnedPrev(row.skillData, prev.skillData)")
+        assertTrue(proves >= 0 && proves < resolver.indexOf("val owned: Set<String>"), "a ◎ read marks its ○ before the upgrade check")
+        assertTrue(resolver.substring(proves).substringBefore("}").let { it.contains("prev.bIsObtained = true") && it.contains("prev.bIsVirtual = true") })
     }
 }

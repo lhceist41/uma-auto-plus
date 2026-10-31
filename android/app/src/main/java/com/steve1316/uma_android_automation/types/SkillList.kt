@@ -111,6 +111,15 @@ internal const val DETAILS_GLYPH_MIN_CONFIDENCE = 0.75
 private val DETAILS_SKILL_GLYPHS: Map<String, ComponentInterface> =
     mapOf("◎" to IconDetailsSkillDoubleCircle, "○" to IconDetailsSkillCircle, "×" to IconDetailsSkillX)
 
+/** The Learn list draws its title glyph at about 0.95x the templates, where none clears 0.69 (upstream 1cf83139b, measured at 1080x1920). */
+internal const val SKILL_LIST_GLYPH_UPSCALE = 1 / 0.95
+
+/** Upstream measured the right glyph at 0.94-0.96, the wrong circle at most 0.71 and a glyph-free title about 0.62 at [SKILL_LIST_GLYPH_UPSCALE]. */
+internal const val SKILL_LIST_GLYPH_MIN_CONFIDENCE = 0.85
+
+private val SKILL_LIST_GLYPHS: Map<ComponentInterface, ComponentInterface> =
+    listOf(IconSkillTitleDoubleCircle, IconSkillTitleCircle, IconSkillTitleX).associateWith { it }
+
 /** A row cropped from a frame captured before a verified buy still shows its (+), and the game never un-selects a skill mid-session. */
 internal fun ownedAfterScan(scanObtained: Boolean, name: String, ownedThisSession: Set<String>): Boolean = scanObtained || name in ownedThisSession
 
@@ -124,6 +133,10 @@ internal fun inPlaceUpgradeRowName(row: SkillData, upgrade: SkillData?, price: I
     val priceOnlyFitsUpgrade: Boolean = price > row.cost && price <= upgrade.cost
     return if (row.name in owned || priceOnlyFitsUpgrade) upgrade.name else row.name
 }
+
+/** An in-place ◎ row only shows once its ○ is owned, so a ◎ title proves the ○ even when no ○ was ever read. */
+internal fun inPlaceRowProvesOwnedPrev(row: SkillData, prev: SkillData?): Boolean =
+    prev != null && row.bIsInPlace && prev.bIsInPlace && row.name.endsWith(" ◎") && prev.name.endsWith(" ○") && prev.upgrade == row.id
 
 /**
  * A ○/◎ title whose glyph OCR dropped fuzzy-matches its × twin, which sorts first. A × never shows above its cost while a ○ (at most
@@ -638,21 +651,17 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             skillName = skillName.drop("remove".length).trim()
         }
 
-        // Detect special icons (◎, ○, ×) that indicate skill levels or status.
-        val componentsToCheck: List<ComponentInterface> =
-            listOf(
-                IconSkillTitleDoubleCircle,
-                IconSkillTitleCircle,
-                IconSkillTitleX,
+        // Detect special icons (◎, ○, ×) that indicate skill levels or status. A single-ring template also scores well on the outer ring of a
+        // double circle, so the best score wins. The crop is normalized to the 1080 width so the upscale holds on any device.
+        val glyphScale: Double = SKILL_LIST_GLYPH_UPSCALE * 1080.0 / SharedData.displayWidth
+        val match: ComponentInterface? =
+            game.imageUtils.findBestTemplateMatch(
+                croppedTitle,
+                SKILL_LIST_GLYPHS,
+                (croppedTitle.width * glyphScale).toInt(),
+                (croppedTitle.height * glyphScale).toInt(),
+                SKILL_LIST_GLYPH_MIN_CONFIDENCE,
             )
-        var match: ComponentInterface? = null
-        for (component in componentsToCheck) {
-            val point: Point? = component.findImageWithBitmap(game.imageUtils, croppedTitle)
-            if (point != null) {
-                match = component
-                break
-            }
-        }
 
         // Map the detected icon to its corresponding Unicode character.
         var iconChar: String =
@@ -668,7 +677,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         val baseName: String = stripTrailingGlyphNoise(skillName)
 
         // Template match found no glyph, but OCR left a trailing letter that is really a misread
-        // rank glyph: ○ reads as "O"/"0", × as "x"/"X" (◎ never survives a scan as a letter).
+        // rank glyph: ○ reads as "O"/"0", × as "x"/"X". OCR has no stable misread for ◎, so only the templates find it.
         // Only accept the recovery when "<base> <glyph>" is a real skill so a legitimate name
         // ending in a letter is not mangled.
         if (iconChar.isEmpty()) {
@@ -1040,6 +1049,12 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[SKILLS] \"$readName\" row price $price is above its cost ${read.skillData.cost}: reading the row as \"$name\".")
         }
         val row: SkillListEntry = entries[name] ?: return name
+        val prev: SkillListEntry? = row.prev
+        if (prev != null && !prev.bIsObtained && inPlaceRowProvesOwnedPrev(row.skillData, prev.skillData)) {
+            // Marked like a resolved ○ below, so the ◎ rates only its own gain over the ○ and a plan reset keeps the ○.
+            prev.bIsObtained = true
+            prev.bIsVirtual = true
+        }
         val owned: Set<String> = campaign.trainee.ownedSkillNames + ownedThisSession
         val upgrade: SkillListEntry? = row.next
         if (upgrade == null) {

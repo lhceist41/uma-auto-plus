@@ -12,3 +12,20 @@ screen.
 
 `adb screencap` writes the device colours as they are, so no red/blue swap was needed. The band was cropped with
 its pixels unchanged. It shows game UI and a skill name only, with no player, trainer or account content.
+
+## Learn-list title glyph crops
+
+The `circle_`, `double_` and `none_` files are title crops of single Learn-list rows: x 188-749, 85 px tall around the
+title line, on 1080x1920 frames. That is the title box `SkillList.getSkillListEntryTitle` cuts, where the glyph sits.
+They are ground truth for the `skill_title_double_circle`, `skill_title_circle` and `skill_title_x` templates, the 1/0.95
+upscale and the 0.85 floor. The frames are MuMu screencaps from 2026-10-30, at the career-end Learn lists of two
+Grand Concert careers on two emulator instances, in device colours, cropped with their pixels unchanged.
+
+| Prefix | Row shows |
+|---|---|
+| `double_` | a skill with the ◎ glyph, two on Obtained (grey) rows |
+| `circle_` | a skill with the ○ glyph, one on an Obtained row |
+| `none_` | a skill with no glyph: plain, Obtained, and gold tiles (one Obtained) |
+
+No × row was on screen in these frames. Each crop holds one skill title and its tile only: no trainer name, rank, ID or
+friend code.
