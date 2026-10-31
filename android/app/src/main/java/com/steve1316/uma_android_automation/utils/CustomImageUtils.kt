@@ -812,6 +812,8 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @return Integer representing the failure percentage, or -1 if detection fails.
      */
     fun findTrainingFailureChance(sourceBitmap: Bitmap? = null, trainingSelectionLocation: Point? = null, tries: Int = 1): Int {
+        // The frame the last attempt read, so a miss saves what the OCR saw rather than a later capture.
+        var readBitmap: Bitmap? = sourceBitmap
         fun detectTrainingFailureChance(sourceBitmap: Bitmap? = null, trainingSelectionLocation: Point? = null): Int {
             // Crop the source screenshot to hold the success percentage only.
             // Delay for failure bubble tween.
@@ -823,6 +825,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 } else {
                     Pair(trainingSelectionLocation, sourceBitmap)
                 }
+            readBitmap = sourceBitmap
 
             if (trainingSelectionLocation == null) {
                 // Distinguish this "bubble not located" miss (template/region) from the OCR-garbage
@@ -892,16 +895,17 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 pace = { game.wait(FAILURE_CHANCE_RETRY_PACE) },
             )
 
-        if (result == -1) {
-            // When every detection attempt fails, save the actual Training screen so a failure-chance
-            // miss (Trackblazer overlays / shifted bubble / OCR garbage) can be root-caused from the
-            // real frame. Best-effort and non-fatal; never blocks the caller.
+        if (result == -1 && debugMode) {
+            // Debug Mode only: a full frame per miss. The frame saved is the one the OCR read, so a miss
+            // (Trackblazer overlays / shifted bubble / OCR garbage) can be root-caused from it. Best-effort and non-fatal.
             try {
                 val missName = "training_failurechance_miss_${System.currentTimeMillis()}"
-                saveBitmap(filename = missName, fullRes = true)
-                MessageLog.w(TAG, "[WARN] findTrainingFailureChance:: All $tries detection attempt(s) failed; saved the Training screen as $missName.png for diagnosis.")
+                saveBitmap(bitmap = readBitmap, filename = missName, fullRes = true)
+                MessageLog.w(TAG, "[WARN] findTrainingFailureChance:: All $tries detection attempt(s) failed; saved the frame read as $missName.png for diagnosis.")
             } catch (_: Exception) {
             }
+        } else if (result == -1) {
+            MessageLog.w(TAG, "[WARN] findTrainingFailureChance:: All $tries detection attempt(s) failed.")
         }
 
         if (debugMode) {

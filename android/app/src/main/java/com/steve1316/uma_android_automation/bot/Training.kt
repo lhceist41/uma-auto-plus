@@ -1650,12 +1650,25 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
 
                 // Get bitmaps and locations before starting threads to make them safe for parallel processing.
-                val sourceBitmap = game.imageUtils.getSourceBitmap()
+                // The failure bubble is still tweening in when the tab header shows, and the threads below must not recapture (the next
+                // tab is tapped while they run), so the frame is recaptured here until the bubble's label is found on the frame itself.
+                val settleStart = System.currentTimeMillis()
+                var captures = 0
+                val (sourceBitmap, failureChanceLocation) =
+                    captureSettledFailureChanceFrame(
+                        capture = {
+                            captures++
+                            game.imageUtils.getSourceBitmap()
+                        },
+                        locate = { LabelTrainingFailureChance.findImageWithBitmap(game.imageUtils, it) },
+                        nowMs = { System.currentTimeMillis() },
+                        pause = { game.wait(0.1, skipWaitingForLoading = true) },
+                    )
+                val settleMs = System.currentTimeMillis() - settleStart
                 // [GC_TELEMETRY] Dev-only, debug-gated: persist this facility's analysis frame so the "+N" gain reads can be measured offline.
                 // Taps nothing, does not touch scoring, and reuses the frame captured above.
                 GrandConcertTelemetry.captureTrainingFacility(game, statName, sourceBitmap)
                 val skillPointsLocation = LabelStatTableHeaderSkillPoints.find(game.imageUtils).first
-                val failureChanceLocation = LabelTrainingFailureChance.find(game.imageUtils).first
 
                 // Record start time for elapsed time measurement.
                 val startTime = System.currentTimeMillis()
@@ -1751,7 +1764,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     } finally {
                         latch.countDown()
                         val elapsedTime = System.currentTimeMillis() - startTimeFailureChance
-                        Log.d(TAG, "[DEBUG] analyzeTrainings:: Total time to determine failure chance for $statName: ${elapsedTime}ms")
+                        Log.d(TAG, "[DEBUG] analyzeTrainings:: Total time to determine failure chance for $statName: ${elapsedTime}ms (frame settled in ${settleMs}ms over $captures capture(s))")
                     }
                 }.start()
 
