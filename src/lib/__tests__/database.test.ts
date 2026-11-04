@@ -22,7 +22,7 @@ type Store = Record<string, Row[]>
  * UNIQUE. One instance per test, shared by every call, like the app's single connection.
  */
 function createFakeSettingsDb() {
-    let committed: Store = { profiles: [], settings: [], races: [], skills: [] }
+    let committed: Store = { profiles: [], settings: [], races: [], race_venues: [], skills: [] }
     let nextProfileId = 1
     let rowCount = 0
     let failOnRowAt: number | null = null
@@ -89,6 +89,11 @@ function createFakeSettingsDb() {
             const [settings, id] = args as [string, number]
             const row = store.profiles.find((r) => r.id === id)
             if (row) row.settings = settings
+            return 0
+        }
+        if (/^INSERT OR REPLACE INTO race_venues /i.test(s)) {
+            store.race_venues = store.race_venues.filter((r) => !(r.args[0] === args[0] && r.args[1] === args[1]))
+            store.race_venues.push({ args })
             return 0
         }
         if (/^INSERT OR REPLACE INTO (races|skills) /i.test(s)) {
@@ -390,6 +395,29 @@ describe("DatabaseManager races and skills batches", () => {
         expect(steps).toHaveLength(1)
         expect(steps[0].rows[0]).toHaveLength(13)
         expect(steps[0].rows[0][4]).toBeNull()
+    })
+
+    it("saves a race's alternate courses in one native transaction, several per race", async () => {
+        const fake = createFakeSettingsDb()
+        const venue = { raceKey: "jbc", nameFormatted: "Kawasaki Dirt 2100m (Med) Left", raceTrack: "Kawasaki", distanceType: "Medium", distanceMeters: 2100 }
+        await managerWith(fake).saveRaceVenuesBatch([venue, { ...venue, nameFormatted: "Funabashi Dirt 1800m (Mile) Left", raceTrack: "Funabashi", distanceType: "Mile", distanceMeters: 1800 }])
+        const [steps] = fake.transactions()
+        expect(steps).toHaveLength(1)
+        expect(steps[0].rows[1]).toEqual(["jbc", "Funabashi Dirt 1800m (Mile) Left", "Funabashi", "Mile", 1800])
+        expect(fake.getCommitted("race_venues")).toHaveLength(2)
+    })
+
+    it("sends nothing for an empty venue batch", async () => {
+        const fake = createFakeSettingsDb()
+        await managerWith(fake).saveRaceVenuesBatch([])
+        expect(fake.transactions()).toEqual([])
+    })
+
+    it("clears the alternate courses together with the races, in one exec", async () => {
+        const fake = createFakeSettingsDb()
+        await managerWith(fake).clearRaces()
+        const execs = fake.calls.filter((call) => call.method === "exec")
+        expect(execs.at(-1)?.payload).toEqual(["DELETE FROM races", "DELETE FROM race_venues"])
     })
 
     it("saves skills in one native transaction, passing inherited through as a boolean", async () => {

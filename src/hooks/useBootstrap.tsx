@@ -4,7 +4,7 @@ import { BotStateContext, BotStateProviderProps } from "../context/BotStateConte
 import { MessageLogContext, MessageLogProviderProps } from "../context/MessageLogContext"
 import { useSettings } from "../context/SettingsContext"
 import { logWithTimestamp, logErrorWithTimestamp } from "../lib/logger"
-import { databaseManager, DatabaseRace, DatabaseSkill } from "../lib/database"
+import { databaseManager, DatabaseRace, DatabaseRaceVenue, DatabaseSkill } from "../lib/database"
 import racesData from "../data/races.json"
 import skillsData from "../data/skills.json"
 import charactersData from "../data/characters.json"
@@ -89,11 +89,22 @@ export const useBootstrap = () => {
 
             logWithTimestamp(`[Bootstrap] Converted ${races.length} races from JSON to database format`)
 
+            const venues: DatabaseRaceVenue[] = Object.entries(racesData).flatMap(([raceKey, race]) =>
+                ((race as { venues?: Omit<DatabaseRaceVenue, "raceKey">[] }).venues ?? []).map((venue) => ({
+                    raceKey,
+                    nameFormatted: venue.nameFormatted,
+                    raceTrack: venue.raceTrack,
+                    distanceType: venue.distanceType,
+                    distanceMeters: venue.distanceMeters,
+                })),
+            )
+
             // Clear existing races and populate with new data.
             await databaseManager.clearRaces()
             await databaseManager.saveRacesBatch(races)
+            await databaseManager.saveRaceVenuesBatch(venues)
 
-            logWithTimestamp(`[Bootstrap] Successfully populated ${races.length} races into database`)
+            logWithTimestamp(`[Bootstrap] Successfully populated ${races.length} races and ${venues.length} alternate courses into database`)
         } catch (error) {
             logErrorWithTimestamp("[Bootstrap] Error populating races data:", error)
             throw error

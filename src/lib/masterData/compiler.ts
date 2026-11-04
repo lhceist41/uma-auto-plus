@@ -32,13 +32,14 @@ const RACE_TERRAINS = new Set(["Turf", "Dirt"])
 const RACE_DIRECTIONS = new Set(["Left", "Right"])
 const RACE_DISTANCE_TYPES = new Set(["Sprint", "Mile", "Medium", "Long"])
 const RACE_COURSES = new Set(["Inner", "Outer"]) // plus null
+const RACE_VENUE_COURSES = new Set(["Inner", "Outer", "Outer-Inner"]) // plus null
 
 /** Generous sane bound for a career turn number (current data spans 14..72); outside this is a hard error. */
 const MAX_TURN_NUMBER = 120
 
 /** Known raw keys per compiled family, for additive schema-drift detection (Part J). */
 const KNOWN_SKILL_KEYS = new Set(["id", "name_en", "desc_en", "icon_id", "cost", "eval_pt", "condition", "precondition", "inherited", "community_tier", "upgrade", "downgrade"])
-const KNOWN_RACE_KEYS = new Set(["name", "date", "raceTrack", "course", "direction", "grade", "terrain", "distanceType", "distanceMeters", "fans", "fanPayoutsByPlace", "turnNumber", "nameFormatted"])
+const KNOWN_RACE_KEYS = new Set(["name", "date", "raceTrack", "course", "direction", "grade", "terrain", "distanceType", "distanceMeters", "fans", "fanPayoutsByPlace", "turnNumber", "nameFormatted", "venues"])
 
 /** Large-change thresholds vs a previous manifest (Part K): warn past 20% or 10 rows, whichever is larger. */
 const LARGE_CHANGE_ABS = 10
@@ -334,6 +335,8 @@ function compileRaces(raw: Record<string, unknown>, errors: CompileError[], warn
             continue
         }
 
+        if (value.venues !== undefined && !validateRaceVenues(name, value.venues, errors)) continue
+
         const keyStr = raceKeyString(name, turnNumber)
         if (keySeen.has(keyStr)) {
             errors.push({ code: "raceDuplicateKey", detail: `duplicate race (name, turnNumber) = (${name}, ${turnNumber})` })
@@ -394,6 +397,29 @@ function compileRaces(raw: Record<string, unknown>, errors: CompileError[], warn
     // Deterministic order: turnNumber asc, then name asc (the pair is unique, so this fully orders).
     races.sort((a, b) => a.turnNumber - b.turnNumber || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
     return races
+}
+
+/** The alternate courses a race can be drawn on. Read by the bot's race list lookup only, so they are validated here but not compiled. */
+function validateRaceVenues(name: string, venues: unknown, errors: CompileError[]): boolean {
+    const fail = (detail: string): false => {
+        errors.push({ code: "raceInvalidVenue", detail: `race "${name}" ${detail}` })
+        return false
+    }
+    if (!Array.isArray(venues) || venues.length === 0) return fail("venues is not a non-empty array")
+    const labels = new Set<string>()
+    for (const venue of venues) {
+        if (!isObject(venue)) return fail("has a venue that is not an object")
+        const { raceTrack, course, direction, distanceMeters, distanceType, nameFormatted } = venue
+        if (typeof raceTrack !== "string" || raceTrack.length === 0) return fail("has a venue without a raceTrack")
+        if (course !== null && (typeof course !== "string" || !RACE_VENUE_COURSES.has(course))) return fail(`has a venue with course ${JSON.stringify(course)}`)
+        if (typeof direction !== "string" || !RACE_DIRECTIONS.has(direction)) return fail(`has a venue with direction ${JSON.stringify(direction)}`)
+        if (!isInt(distanceMeters) || distanceMeters <= 0) return fail(`has a venue with distanceMeters ${JSON.stringify(distanceMeters)}`)
+        if (typeof distanceType !== "string" || !RACE_DISTANCE_TYPES.has(distanceType)) return fail(`has a venue with distanceType ${JSON.stringify(distanceType)}`)
+        if (typeof nameFormatted !== "string" || nameFormatted.length === 0) return fail("has a venue without a nameFormatted")
+        if (labels.has(nameFormatted)) return fail(`lists the venue "${nameFormatted}" twice`)
+        labels.add(nameFormatted)
+    }
+    return true
 }
 
 function validateRaceEnums(name: string, value: Record<string, unknown>, errors: CompileError[]): boolean {

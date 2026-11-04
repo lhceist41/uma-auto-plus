@@ -47,6 +47,19 @@ export interface DatabaseRace {
     nameFormatted: string
 }
 
+export interface DatabaseRaceVenue {
+    /** The key of the race this course is an alternate of. */
+    raceKey: string
+    /** The race list label of the alternate course. */
+    nameFormatted: string
+    /** The race track of the alternate course. */
+    raceTrack: string
+    /** The distance type of the alternate course. */
+    distanceType: string
+    /** The distance of the alternate course in meters. */
+    distanceMeters: number
+}
+
 export interface DatabaseSkill {
     /** The unique identifier for the skill. */
     id: number
@@ -99,6 +112,7 @@ export class DatabaseManager {
     private STRING_ONLY_SETTINGS = ["racingPlan", "racingPlanData", "discordToken", "discordUserID"]
     private TABLE_SETTINGS = "settings"
     private TABLE_RACES = "races"
+    private TABLE_RACE_VENUES = "race_venues"
     private TABLE_SKILLS = "skills"
     private TABLE_PROFILES = "profiles"
 
@@ -238,6 +252,18 @@ export class DatabaseManager {
             ])
             logWithTimestamp("Races table created successfully.")
 
+            // Alternate courses a race can be drawn on. Its own table: the races table keeps one row per race and turn.
+            await this.db.exec([
+                `CREATE TABLE IF NOT EXISTS ${this.TABLE_RACE_VENUES} (
+                    raceKey TEXT NOT NULL,
+                    nameFormatted TEXT NOT NULL,
+                    raceTrack TEXT NOT NULL,
+                    distanceType TEXT NOT NULL,
+                    distanceMeters INTEGER NOT NULL,
+                    PRIMARY KEY (raceKey, nameFormatted)
+                )`,
+            ])
+
             // Create skills table.
             logWithTimestamp("Creating skills table...")
             // Two statements, one call: Android runs only a string's first statement, and exec runs
@@ -285,6 +311,7 @@ export class DatabaseManager {
                 `CREATE INDEX IF NOT EXISTS idx_settings_category_key ON ${this.TABLE_SETTINGS}(category, key)`,
                 `CREATE INDEX IF NOT EXISTS idx_races_turn_number ON ${this.TABLE_RACES}(turnNumber)`,
                 `CREATE INDEX IF NOT EXISTS idx_races_name_formatted ON ${this.TABLE_RACES}(nameFormatted)`,
+                `CREATE INDEX IF NOT EXISTS idx_race_venues_name_formatted ON ${this.TABLE_RACE_VENUES}(nameFormatted)`,
                 `CREATE INDEX IF NOT EXISTS idx_skills_name_en ON ${this.TABLE_SKILLS}(name_en)`,
                 `CREATE INDEX IF NOT EXISTS idx_profiles_name ON ${this.TABLE_PROFILES}(name)`,
             ])
@@ -663,7 +690,32 @@ export class DatabaseManager {
     }
 
     /**
-     * Clear all races from the database.
+     * Save the alternate courses of races in one native transaction.
+     * @param venues - The alternate courses to save.
+     * @returns A promise that resolves when the venues are saved.
+     */
+    async saveRaceVenuesBatch(venues: DatabaseRaceVenue[]): Promise<void> {
+        this.ensureInitialized()
+        if (venues.length === 0) return
+
+        try {
+            await this.executeWithQueue(async () => {
+                await this.db!.transaction([
+                    {
+                        sql: `INSERT OR REPLACE INTO ${this.TABLE_RACE_VENUES} (raceKey, nameFormatted, raceTrack, distanceType, distanceMeters) VALUES (?, ?, ?, ?, ?)`,
+                        rows: venues.map((venue) => [venue.raceKey, venue.nameFormatted, venue.raceTrack, venue.distanceType, venue.distanceMeters]),
+                    },
+                ])
+                logWithTimestamp(`[DB] Successfully saved ${venues.length} race venues in batch.`)
+            })
+        } catch (error) {
+            logErrorWithTimestamp(`[DB] Failed to save race venues batch (${venues.length} venues):`, error)
+            throw error
+        }
+    }
+
+    /**
+     * Clear all races, and their alternate courses, from the database.
      * @returns A promise that resolves when the races are cleared.
      */
     async clearRaces(): Promise<void> {
@@ -672,7 +724,7 @@ export class DatabaseManager {
         this.ensureInitialized()
 
         try {
-            await this.db!.run(`DELETE FROM ${this.TABLE_RACES}`)
+            await this.db!.exec([`DELETE FROM ${this.TABLE_RACES}`, `DELETE FROM ${this.TABLE_RACE_VENUES}`])
             logWithTimestamp("[DB] Successfully cleared all races.")
             endTiming({ status: "success" })
         } catch (error) {

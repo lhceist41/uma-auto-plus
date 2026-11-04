@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import android.database.sqlite.SQLiteDatabase
 import android.graphics.Bitmap
 import android.util.Log
 import com.steve1316.automation_library.data.SharedData
@@ -530,6 +531,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         /** The name of the races table in the database. */
         private const val TABLE_RACES = "races"
 
+        /** The alternate courses a race can be drawn on, keyed to a races row by `key`. */
+        private const val TABLE_RACE_VENUES = "race_venues"
+
         /** The name of the race name column. */
         private const val RACES_COLUMN_NAME = "name"
 
@@ -697,6 +701,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
          */
         internal fun canonicalizeRaceLabelForLookup(detectedName: String): String =
             DISTANCE_METER_TOKEN.replace(detectedName) { match -> match.value.replace('O', '0') }
+
+        /** The venue rows (each a base race refiled under an alternate course's label and distance type) whose label is [lookupName]. */
+        internal fun venueMatches(
+            lookupName: String,
+            turnVenueRaces: List<RaceData>,
+        ): List<RaceData> = turnVenueRaces.filter { it.nameFormatted == lookupName }
 
         /**
          * Some turns run two races on one course (Oka Sho and Arlington Cup, the Derby and the Oaks), and the race list label is the course, so
@@ -2391,6 +2401,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
             exactCursor.close()
 
+            // The label may name another course the race can be drawn on (a JBC venue, a trainee's Satsuki Sho, Tenno Sho or Takarazuka Kinen course).
+            val venueRaces = venueMatches(lookupName, queryVenueRaces(database, turnNumber))
+            if (venueRaces.isNotEmpty()) {
+                MessageLog.i(TAG, "[RACE] Found venue match: ${venueRaces.joinToString { "\"${it.name}\" AKA \"${it.nameFormatted}\" (Fans: ${it.fans})" }}.")
+                lastLookupTier = LookupTier.EXACT
+                return ArrayList(venueRaces)
+            }
+
             // Otherwise, do fuzzy matching to find matches using Jaro-Winkler.
             val fuzzyCursor =
                 database.query(
@@ -2563,6 +2581,43 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             gradeScore = gradeScore,
             aptitudeBonus = aptitudeBonus,
         )
+    }
+
+    /** Every race on [turnNumber] that has an alternate course, once per course: the base race's name, grade, fans and terrain under the course's label and distance type. */
+    private fun queryVenueRaces(
+        database: SQLiteDatabase,
+        turnNumber: Int,
+    ): List<RaceData> {
+        val venueRaces = arrayListOf<RaceData>()
+        try {
+            val sql =
+                "SELECT r.$RACES_COLUMN_NAME, r.$RACES_COLUMN_GRADE, r.$RACES_COLUMN_FANS, v.$RACES_COLUMN_NAME_FORMATTED, r.$RACES_COLUMN_TRACK_SURFACE, " +
+                    "v.$RACES_COLUMN_TRACK_DISTANCE, r.$RACES_COLUMN_TURN_NUMBER FROM $TABLE_RACE_VENUES v JOIN $TABLE_RACES r ON r.key = v.raceKey " +
+                    "WHERE r.$RACES_COLUMN_TURN_NUMBER = ?"
+            database.rawQuery(sql, arrayOf(turnNumber.toString())).use { cursor ->
+                while (cursor.moveToNext()) {
+                    try {
+                        venueRaces.add(
+                            RaceData(
+                                name = cursor.getString(0),
+                                grade = cursor.getString(1),
+                                fans = cursor.getInt(2),
+                                nameFormatted = cursor.getString(3),
+                                trackSurface = cursor.getString(4),
+                                trackDistance = cursor.getString(5),
+                                turnNumber = cursor.getInt(6),
+                            ),
+                        )
+                    } catch (e: Exception) {
+                        MessageLog.w(TAG, "[WARN] queryVenueRaces:: Skipping venue row with unmappable fields: ${e.message}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // A database from before the venue table existed still falls through to the fuzzy match.
+            MessageLog.w(TAG, "[WARN] queryVenueRaces:: Venue lookup unavailable: ${e.message}")
+        }
+        return venueRaces
     }
 
     /**

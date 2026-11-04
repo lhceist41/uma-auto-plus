@@ -113,6 +113,36 @@ describe("compileMasterData - race fan payout curve", () => {
     })
 })
 
+// ---- Race venues (alternate courses, validated but not compiled) ----
+
+describe("compileMasterData - race venues", () => {
+    const noObjectives = { C1: { name: "C1", mandatoryRaces: [] } }
+    const venue = (over: Record<string, unknown> = {}) => ({ raceTrack: "Kawasaki", course: null, direction: "Left", distanceMeters: 2100, distanceType: "Medium", nameFormatted: "Kawasaki Dirt 2100m (Med) Left", ...over })
+    const compileWith = (venues: unknown) => compileMasterData(six({ races: { r1: race("JBC Classic", 45, { terrain: "Dirt", venues }) }, objectives: noObjectives }))
+
+    it("accepts well-formed venues, including the Outer-Inner course, and keeps them out of the compiled race", () => {
+        const r = compileWith([venue(), venue({ raceTrack: "Hanshin", course: "Outer-Inner", direction: "Right", distanceMeters: 3200, distanceType: "Long", nameFormatted: "Hanshin Turf 3200m (Long) Right / Outer-Inner" })])
+        expect(r.ok).toBe(true)
+        expect(r.validation.warnings.map((w) => w.code)).not.toContain("schemaDriftUnknownField")
+        expect(JSON.parse(r.artifacts!.races).races[0]).not.toHaveProperty("venues")
+    })
+
+    it.each([
+        ["an empty list", []],
+        ["a non-array", "nope"],
+        ["a venue without a label", [venue({ nameFormatted: "" })]],
+        ["an unknown distance type", [venue({ distanceType: "Short" })]],
+        ["an unknown course", [venue({ course: "Middle" })]],
+        ["a bad direction", [venue({ direction: "Up" })]],
+        ["a non-integer distance", [venue({ distanceMeters: 2100.5 })]],
+        ["the same label twice", [venue(), venue()]],
+    ])("rejects %s as a hard error", (_label, venues) => {
+        const r = compileWith(venues)
+        expect(r.ok).toBe(false)
+        expect(r.errors.map((e) => e.code)).toContain("raceInvalidVenue")
+    })
+})
+
 // ---- Objective fan goals (master-route data) ----
 
 describe("compileMasterData - objective fan goals", () => {

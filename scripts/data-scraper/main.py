@@ -1307,6 +1307,19 @@ class RaceScraper(BaseScraper):
         10103: "Kawasaki", 10104: "Funabashi", 10105: "Morioka",
     }
 
+    # The EN client spells track 10101 "Oi", so the race-list labels the bot matches on use it; raceTrack keeps "Ooi".
+    TRACK_LABEL_NAMES = {"Ooi": "Oi"}
+
+    # Races whose course differs for some trainees: (race name, career year) -> the course they run instead.
+    # Source: master.mdb single_mode_chara_program, programs 1095 (Satsuki Sho, Tokyo), 1076 (Tenno Sho Spring,
+    # Hanshin) and 1071 (Takarazuka Kinen, Kyoto). GameTora carries none of them. The race list shows the drawn
+    # course, so these are matched by label with no trainee check.
+    TRAINEE_VENUES = {
+        ("Satsuki Sho", 2): {"raceTrack": "Tokyo", "course": None, "direction": "Left", "distanceMeters": 2000},
+        ("Tenno Sho (Spring)", 3): {"raceTrack": "Hanshin", "course": "Outer-Inner", "direction": "Right", "distanceMeters": 3200},
+        ("Takarazuka Kinen", 3): {"raceTrack": "Kyoto", "course": "Outer", "direction": "Right", "distanceMeters": 2200},
+    }
+
     # GameTora tags a race with the JP history era in which it did not yet exist. That is a JP timeline
     # marker, NOT an EN-availability flag - it only doubled as one while EN trailed JP on every era.
     # EN received the NAR dirt update (Kashiwa Kinen, Teio Sho, M.C. Nambu Hai, Tokyo Daishoten and the
@@ -1340,6 +1353,65 @@ class RaceScraper(BaseScraper):
         if meters <= 2400:
             return "Medium"
         return "Long"
+
+    @classmethod
+    def _name_formatted(cls, track: str, terrain: str, distance_meters: int, direction: str, course: Optional[str]) -> str:
+        """The race-list course label the bot matches on, e.g. "Kyoto Turf 2200m (Med) Right / Outer".
+
+        Args:
+            track (str): The track name (raceTrack spelling).
+            terrain (str): "Turf" or "Dirt".
+            distance_meters (int): The race distance in meters.
+            direction (str): "Left" or "Right".
+            course (Optional[str]): The course variant, or None.
+
+        Returns:
+            The label as the EN race list prints it.
+        """
+        distance_type = cls._distance_type(distance_meters)
+        distance_type_formatted = "Med" if distance_type == "Medium" else distance_type
+        label = f"{cls.TRACK_LABEL_NAMES.get(track, track)} {terrain} {distance_meters}m ({distance_type_formatted}) {direction}"
+        return f"{label} / {course}" if course else label
+
+    @classmethod
+    def _venues(cls, details: dict, year: int) -> list:
+        """The other courses a race can be drawn on, each with the label the race list prints for it.
+
+        Covers GameTora's `alts` (the random JBC venues; an alt without a distance runs the base distance)
+        and TRAINEE_VENUES. Terrain is the base race's for every alternate.
+
+        Args:
+            details (dict): The race instance's `details`.
+            year (int): The instance's career year (1 to 3).
+
+        Returns:
+            A list of {"raceTrack", "course", "direction", "distanceMeters", "distanceType", "nameFormatted"}; empty when the race has no alternates.
+        """
+        terrain = cls.TERRAIN_CODES[details["terrain"]]
+        courses = []
+        for alt in details.get("alts", []):
+            if alt.get("did_not_exist") in cls.ERAS_NOT_ON_EN:
+                continue
+            courses.append({
+                "raceTrack": cls.TRACK_CODES[alt["track"]],
+                "course": cls.COURSE_CODES[alt.get("course", 1)],
+                "direction": "Right" if alt["direction"] == 1 else "Left",
+                "distanceMeters": alt.get("distance", details["distance"]),
+            })
+        trainee_course = cls.TRAINEE_VENUES.get((details["name_en"], year))
+        if trainee_course:
+            courses.append(dict(trainee_course))
+        return [
+            {
+                "raceTrack": c["raceTrack"],
+                "course": c["course"],
+                "direction": c["direction"],
+                "distanceMeters": c["distanceMeters"],
+                "distanceType": cls._distance_type(c["distanceMeters"]),
+                "nameFormatted": cls._name_formatted(c["raceTrack"], terrain, c["distanceMeters"], c["direction"], c["course"]),
+            }
+            for c in courses
+        ]
 
     @staticmethod
     def _fan_payouts_by_place(entry_fans: list) -> list:
@@ -1386,11 +1458,7 @@ class RaceScraper(BaseScraper):
             terrain = self.TERRAIN_CODES[details["terrain"]]
             distance_meters = details["distance"]
             distance_type = self._distance_type(distance_meters)
-
-            distance_type_formatted = "Med" if distance_type == "Medium" else distance_type
-            name_formatted = f"{track} {terrain} {distance_meters}m ({distance_type_formatted}) {direction}"
-            if course:
-                name_formatted += f" / {course}"
+            venues = self._venues(details, instance["year"])
 
             self.data[f"{details['name_en']} ({date})"] = {
                 "name": details["name_en"],
@@ -1405,7 +1473,8 @@ class RaceScraper(BaseScraper):
                 "fans": first_place_fans[instance["fans_gain"]],
                 "fanPayoutsByPlace": fan_payouts_by_place.get(instance["fans_gain"], []),
                 "turnNumber": (instance["year"] - 1) * 24 + (instance["month"] - 1) * 2 + (1 if instance["half"] == 1 else 2),
-                "nameFormatted": name_formatted,
+                "nameFormatted": self._name_formatted(track, terrain, distance_meters, direction, course),
+                **({"venues": venues} if venues else {}),
             }
 
         logging.info(f"Built {len(self.data)} races from GameTora JSON.")

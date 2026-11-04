@@ -11525,7 +11525,33 @@
             }
         ],
         "turnNumber": 45,
-        "nameFormatted": "Ooi Dirt 2000m (Med) Right"
+        "nameFormatted": "Oi Dirt 2000m (Med) Right",
+        "venues": [
+            {
+                "raceTrack": "Kawasaki",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 2100,
+                "distanceType": "Medium",
+                "nameFormatted": "Kawasaki Dirt 2100m (Med) Left"
+            },
+            {
+                "raceTrack": "Funabashi",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1800,
+                "distanceType": "Mile",
+                "nameFormatted": "Funabashi Dirt 1800m (Mile) Left"
+            },
+            {
+                "raceTrack": "Morioka",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 2000,
+                "distanceType": "Medium",
+                "nameFormatted": "Morioka Dirt 2000m (Med) Left"
+            }
+        ]
     },
     "JBC Classic (Senior Class November, First Half)": {
         "name": "JBC Classic",
@@ -11613,7 +11639,33 @@
             }
         ],
         "turnNumber": 69,
-        "nameFormatted": "Ooi Dirt 2000m (Med) Right"
+        "nameFormatted": "Oi Dirt 2000m (Med) Right",
+        "venues": [
+            {
+                "raceTrack": "Kawasaki",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 2100,
+                "distanceType": "Medium",
+                "nameFormatted": "Kawasaki Dirt 2100m (Med) Left"
+            },
+            {
+                "raceTrack": "Funabashi",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1800,
+                "distanceType": "Mile",
+                "nameFormatted": "Funabashi Dirt 1800m (Mile) Left"
+            },
+            {
+                "raceTrack": "Morioka",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 2000,
+                "distanceType": "Medium",
+                "nameFormatted": "Morioka Dirt 2000m (Med) Left"
+            }
+        ]
     },
     "JBC Ladies’ Classic (Classic Class November, First Half)": {
         "name": "JBC Ladies’ Classic",
@@ -11701,7 +11753,33 @@
             }
         ],
         "turnNumber": 45,
-        "nameFormatted": "Ooi Dirt 1800m (Mile) Right"
+        "nameFormatted": "Oi Dirt 1800m (Mile) Right",
+        "venues": [
+            {
+                "raceTrack": "Kawasaki",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1600,
+                "distanceType": "Mile",
+                "nameFormatted": "Kawasaki Dirt 1600m (Mile) Left"
+            },
+            {
+                "raceTrack": "Funabashi",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1600,
+                "distanceType": "Mile",
+                "nameFormatted": "Funabashi Dirt 1600m (Mile) Left"
+            },
+            {
+                "raceTrack": "Morioka",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1800,
+                "distanceType": "Mile",
+                "nameFormatted": "Morioka Dirt 1800m (Mile) Left"
+            }
+        ]
     },
     "JBC Ladies’ Classic (Senior Class November, First Half)": {
         "name": "JBC Ladies’ Classic",
@@ -11789,7 +11867,33 @@
             }
         ],
         "turnNumber": 69,
-        "nameFormatted": "Ooi Dirt 1800m (Mile) Right"
+        "nameFormatted": "Oi Dirt 1800m (Mile) Right",
+        "venues": [
+            {
+                "raceTrack": "Kawasaki",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1600,
+                "distanceType": "Mile",
+                "nameFormatted": "Kawasaki Dirt 1600m (Mile) Left"
+            },
+            {
+                "raceTrack": "Funabashi",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1600,
+                "distanceType": "Mile",
+                "nameFormatted": "Funabashi Dirt 1600m (Mile) Left"
+            },
+            {
+                "raceTrack": "Morioka",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1800,
+                "distanceType": "Mile",
+                "nameFormatted": "Morioka Dirt 1800m (Mile) Left"
+            }
+        ]
     },
     "JBC Sprint (Classic Class November, First Half)": {
         "name": "JBC Sprint",
@@ -11877,7 +11981,33 @@
             }
         ],
         "turnNumber": 45,
-        "nameFormatted": "Ooi Dirt 1200m (Sprint) Right"
+        "nameFormatted": "Oi Dirt 1200m (Sprint) Right",
+        "venues": [
+            {
+                "raceTrack": "Kawasaki",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1400,
+                "distanceType": "Sprint",
+                "nameFormatted": "Kawasaki Dirt 1400m (Sprint) Left"
+            },
+            {
+                "raceTrack": "Funabashi",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1000,
+                "distanceType": "Sprint",
+                "nameFormatted": "Funabashi Dirt 1000m (Sprint) Left"
+            },
+            {
+                "raceTrack": "Morioka",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1200,
+                "distanceType": "Sprint",
+                "nameFormatted": "Morioka Dirt 1200m (Sprint) Left"
+            }
+        ]
     },
     "JBC Sprint (Senior Class November, First Half)": {
         "name": "JBC Sprint",
@@ -11965,7 +12095,33 @@
             }
         ],
         "turnNumber": 69,
-        "nameFormatted": "Ooi Dirt 1200m (Sprint) Right"
+        "nameFormatted": "Oi Dirt 1200m (Sprint) Right",
+        "venues": [
+            {
+                "raceTrack": "Kawasaki",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1400,
+                "distanceType": "Sprint",
+                "nameFormatted": "Kawasaki Dirt 1400m (Sprint) Left"
+            },
+            {
+                "raceTrack": "Funabashi",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1000,
+                "distanceType": "Sprint",
+                "nameFormatted": "Funabashi Dirt 1000m (Sprint) Left"
+            },
+            {
+                "raceTrack": "Morioka",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 1200,
+                "distanceType": "Sprint",
+                "nameFormatted": "Morioka Dirt 1200m (Sprint) Left"
+            }
+        ]
     },
     "January Stakes (Senior Class January, First Half)": {
         "name": "January Stakes",
@@ -12317,7 +12473,7 @@
             }
         ],
         "turnNumber": 37,
-        "nameFormatted": "Ooi Dirt 2000m (Med) Right"
+        "nameFormatted": "Oi Dirt 2000m (Med) Right"
     },
     "Japanese Oaks (Classic Class May, Second Half)": {
         "name": "Japanese Oaks",
@@ -16629,7 +16785,7 @@
             }
         ],
         "turnNumber": 43,
-        "nameFormatted": "Ooi Dirt 1800m (Mile) Right"
+        "nameFormatted": "Oi Dirt 1800m (Mile) Right"
     },
     "Ladies' Prelude (Senior Class October, First Half)": {
         "name": "Ladies' Prelude",
@@ -16717,7 +16873,7 @@
             }
         ],
         "turnNumber": 67,
-        "nameFormatted": "Ooi Dirt 1800m (Mile) Right"
+        "nameFormatted": "Oi Dirt 1800m (Mile) Right"
     },
     "Lapis Lazuli Stakes (Classic Class December, First Half)": {
         "name": "Lapis Lazuli Stakes",
@@ -26661,7 +26817,17 @@
             }
         ],
         "turnNumber": 31,
-        "nameFormatted": "Nakayama Turf 2000m (Med) Right / Inner"
+        "nameFormatted": "Nakayama Turf 2000m (Med) Right / Inner",
+        "venues": [
+            {
+                "raceTrack": "Tokyo",
+                "course": null,
+                "direction": "Left",
+                "distanceMeters": 2000,
+                "distanceType": "Medium",
+                "nameFormatted": "Tokyo Turf 2000m (Med) Left"
+            }
+        ]
     },
     "Saudi Arabia Royal Cup (Junior Class October, First Half)": {
         "name": "Saudi Arabia Royal Cup",
@@ -30621,7 +30787,7 @@
             }
         ],
         "turnNumber": 50,
-        "nameFormatted": "Ooi Dirt 1800m (Mile) Right"
+        "nameFormatted": "Oi Dirt 1800m (Mile) Right"
     },
     "Tachibana Stakes (Classic Class April, Second Half)": {
         "name": "Tachibana Stakes",
@@ -30973,7 +31139,17 @@
             }
         ],
         "turnNumber": 60,
-        "nameFormatted": "Hanshin Turf 2200m (Med) Right / Inner"
+        "nameFormatted": "Hanshin Turf 2200m (Med) Right / Inner",
+        "venues": [
+            {
+                "raceTrack": "Kyoto",
+                "course": "Outer",
+                "direction": "Right",
+                "distanceMeters": 2200,
+                "distanceType": "Medium",
+                "nameFormatted": "Kyoto Turf 2200m (Med) Right / Outer"
+            }
+        ]
     },
     "Tanabata Sho (Classic Class July, First Half)": {
         "name": "Tanabata Sho",
@@ -31765,7 +31941,7 @@
             }
         ],
         "turnNumber": 60,
-        "nameFormatted": "Ooi Dirt 2000m (Med) Right"
+        "nameFormatted": "Oi Dirt 2000m (Med) Right"
     },
     "Tempozan Stakes (Classic Class June, First Half)": {
         "name": "Tempozan Stakes",
@@ -32205,7 +32381,17 @@
             }
         ],
         "turnNumber": 56,
-        "nameFormatted": "Kyoto Turf 3200m (Long) Right / Outer"
+        "nameFormatted": "Kyoto Turf 3200m (Long) Right / Outer",
+        "venues": [
+            {
+                "raceTrack": "Hanshin",
+                "course": "Outer-Inner",
+                "direction": "Right",
+                "distanceMeters": 3200,
+                "distanceType": "Long",
+                "nameFormatted": "Hanshin Turf 3200m (Long) Right / Outer-Inner"
+            }
+        ]
     },
     "Tennozan Stakes (Senior Class April, Second Half)": {
         "name": "Tennozan Stakes",
@@ -32645,7 +32831,7 @@
             }
         ],
         "turnNumber": 48,
-        "nameFormatted": "Ooi Dirt 2000m (Med) Right"
+        "nameFormatted": "Oi Dirt 2000m (Med) Right"
     },
     "Tokyo Daishoten (Senior Class December, Second Half)": {
         "name": "Tokyo Daishoten",
@@ -32733,7 +32919,7 @@
             }
         ],
         "turnNumber": 72,
-        "nameFormatted": "Ooi Dirt 2000m (Med) Right"
+        "nameFormatted": "Oi Dirt 2000m (Med) Right"
     },
     "Tokyo Hai (Classic Class October, First Half)": {
         "name": "Tokyo Hai",
@@ -32821,7 +33007,7 @@
             }
         ],
         "turnNumber": 43,
-        "nameFormatted": "Ooi Dirt 1200m (Sprint) Right"
+        "nameFormatted": "Oi Dirt 1200m (Sprint) Right"
     },
     "Tokyo Hai (Senior Class October, First Half)": {
         "name": "Tokyo Hai",
@@ -32909,7 +33095,7 @@
             }
         ],
         "turnNumber": 67,
-        "nameFormatted": "Ooi Dirt 1200m (Sprint) Right"
+        "nameFormatted": "Oi Dirt 1200m (Sprint) Right"
     },
     "Tokyo Shimbun Hai (Senior Class February, First Half)": {
         "name": "Tokyo Shimbun Hai",
@@ -33173,7 +33359,7 @@
             }
         ],
         "turnNumber": 56,
-        "nameFormatted": "Ooi Dirt 1200m (Sprint) Right"
+        "nameFormatted": "Oi Dirt 1200m (Sprint) Right"
     },
     "Tokyo Yushun (Japanese Derby) (Classic Class May, Second Half)": {
         "name": "Tokyo Yushun (Japanese Derby)",
