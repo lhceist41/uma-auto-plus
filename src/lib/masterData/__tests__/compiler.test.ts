@@ -376,8 +376,8 @@ describe("real committed dataset", () => {
 
     it("current snapshot counts (update intentionally when the scrape changes)", () => {
         const r = compileMasterData(inputs())
-        expect(r.stats.skillCompiledCount).toBe(697)
-        expect(r.stats.uniqueSkillIdCount).toBe(697)
+        expect(r.stats.skillCompiledCount).toBe(626)
+        expect(r.stats.uniqueSkillIdCount).toBe(626)
         expect(r.stats.raceCompiledCount).toBe(402)
         expect(r.stats.uniqueRaceKeyCount).toBe(402)
         expect(r.stats.distinctBareRaceNameCount).toBe(296)
@@ -453,8 +453,8 @@ describe("U+2014 escaping in generated artifacts", () => {
     it("Part B: decoded compiled skill names equal the raw names exactly, em dash preserved", () => {
         const rawSkills = JSON.parse(readFileSync(join(DATA_DIR, "skills.json"), "utf8")) as Record<string, { id: number; name_en: string }>
         const compiled = JSON.parse(compileMasterData(inputs()).artifacts!.skills).skills as { id: number; name: string }[]
-        // Both raw names that carry an em dash.
-        for (const id of [101041, 100441]) {
+        // The one raw name that carries an em dash.
+        for (const id of [100441]) {
             const rawName = Object.values(rawSkills).find((s) => s.id === id)!.name_en
             const compName = compiled.find((s) => s.id === id)!.name
             expect(rawName.includes(EM_DASH)).toBe(true) // raw genuinely has the code point

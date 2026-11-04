@@ -63,6 +63,8 @@ export function buildPayload(characters, outfits) {
         // leaves its outfit unresolved fail-closed. Emitting an empty list says that explicitly.
         const titles = []
         for (const outfit of record?.outfits ?? []) {
+            // A null release date marks a costume the Global client does not have, so no Veteran can wear it.
+            if (outfit?.releasedEn === null) continue
             const title = typeof outfit?.title === "string" ? outfit.title.trim() : ""
             if (!title) throw new GenerateError(`character "${name}" has an outfit with no title`)
             if (titles.includes(title)) throw new GenerateError(`character "${name}" lists the outfit "${title}" twice`)

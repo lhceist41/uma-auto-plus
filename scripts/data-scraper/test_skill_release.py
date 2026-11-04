@@ -9,7 +9,9 @@ never touch GameTora and never write into src/data.
 """
 
 import logging
+import sqlite3
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -47,9 +49,9 @@ class ScrapeResult:
         return None
 
 
-def run_scraper(skills, tier_map=None, evaluation_points=None):
+def run_scraper(skills, tier_map=None, evaluation_points=None, master_db=None):
     """Runs SkillScraper.start() against `skills` with every network call and disk write patched out."""
-    scraper = main.SkillScraper()
+    scraper = main.SkillScraper(master_db)
     with mock.patch.object(main, "fetch_gametora_manifest_data", return_value=skills), mock.patch.object(
         main.SkillScraper, "scrape_skill_evaluation_points", return_value=evaluation_points or {}
     ), mock.patch.object(main.SkillScraper, "scrape_skill_tier_list", return_value=tier_map or {}), mock.patch.object(
@@ -184,6 +186,49 @@ class SkillCostRetentionTest(unittest.TestCase):
             json.dumps({k: first.data[k] for k in sorted(first.data)}, ensure_ascii=False, sort_keys=True),
             json.dumps({k: second.data[k] for k in sorted(second.data)}, ensure_ascii=False, sort_keys=True),
         )
+
+
+class MasterDbGateTest(unittest.TestCase):
+    """With a master.mdb, a priced skill must exist in its skill_data (by id or gene id); without one nothing changes."""
+
+    def make_db(self, ids):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = str(Path(folder.name) / "master.mdb")
+        db = sqlite3.connect(path)
+        db.execute("CREATE TABLE skill_data (id INTEGER PRIMARY KEY)")
+        db.executemany("INSERT INTO skill_data (id) VALUES (?)", [(i,) for i in ids])
+        db.commit()
+        db.close()
+        return path
+
+    def test_priced_skill_missing_from_the_db_is_dropped_even_when_not_flagged_unreleased(self):
+        skills = [make_skill(920001, "In Game", cost=120), make_skill(920002, "Japan Only", cost=130)]
+        result = run_scraper(skills, master_db=self.make_db([920001]))
+        self.assertIn("In Game", result.data)
+        self.assertNotIn("Japan Only", result.data)
+
+    def test_without_a_db_every_priced_skill_is_kept(self):
+        skills = [make_skill(920001, "In Game", cost=120), make_skill(920002, "Japan Only", cost=130)]
+        result = run_scraper(skills)
+        self.assertIn("In Game", result.data)
+        self.assertIn("Japan Only", result.data)
+
+    def test_inherited_unique_is_kept_when_only_its_gene_id_is_in_the_db(self):
+        unique = make_skill(920003, "Unique Dash", cost=200, gene_version={"id": 930003, "desc_en": "gene", "iconid": 20011, "cost": 200})
+        result = run_scraper([unique], master_db=self.make_db([930003]))
+        self.assertIn("Unique Dash", result.data)
+        self.assertNotIn("Unique Dash", run_scraper([unique], master_db=self.make_db([920009])).data)
+
+    def test_chain_pointer_to_a_dropped_skill_is_cleared(self):
+        skills = [
+            make_skill(920011, "Kept Sharp", cost=100, versions=[920012]),
+            make_skill(920012, "Gone Sharp", cost=150, versions=[920011]),
+        ]
+        result = run_scraper(skills, master_db=self.make_db([920011]))
+        self.assertNotIn("Gone Sharp", result.data)
+        self.assertIsNone(result.data["Kept Sharp"]["downgrade"])
+        self.assertIsNone(result.data["Kept Sharp"]["upgrade"])
 
 
 class SkillChainOrderTest(unittest.TestCase):

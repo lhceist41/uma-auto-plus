@@ -31,6 +31,25 @@ test("buildPayload keys every character and carries its outfits in source order"
     assert.equal(payload.schemaVersion, SCHEMA_VERSION)
 })
 
+test("an outfit with a null Global release date is left out, and a dated one is kept", () => {
+    const payload = buildPayload(
+        { Alpha: {} },
+        { Alpha: { outfits: [{ title: "First", releasedEn: "2025-06-26" }, { title: "Unreleased", releasedEn: null }] } },
+    )
+    assert.deepEqual(payload.characters.Alpha.outfits, ["First"])
+    assert.equal(payload.outfitCount, 1)
+})
+
+test("the committed domain holds no costume the Global client lacks", () => {
+    const payload = buildPayload(characters, outfits)
+    for (const [name, entry] of Object.entries(outfits)) {
+        for (const outfit of entry.outfits) {
+            const shipped = payload.characters[name].outfits.includes(outfit.title)
+            assert.equal(shipped, outfit.releasedEn !== null, `${name}: ${outfit.title}`)
+        }
+    }
+})
+
 test("a character with no outfit row still gets an empty list, never a missing key", () => {
     const payload = buildPayload({ Alpha: {}, Ghost: {} }, { Alpha: { outfits: [{ title: "First" }] } })
     assert.deepEqual(payload.characters.Ghost.outfits, [])

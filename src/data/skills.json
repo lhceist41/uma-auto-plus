@@ -97,20 +97,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "A Journey in a Step": {
-        "id": 202641,
-        "name_en": "A Journey in a Step",
-        "desc_en": "Moderately increase velocity for a medium duration when positioned midpack mid-race. (Late Surger)",
-        "icon_id": 20012,
-        "cost": 180,
-        "eval_pt": 508,
-        "condition": "running_style==3&phase_random==1&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202642
-    },
     "A Kiss for Courage": {
         "id": 110041,
         "name_en": "A Kiss for Courage",
@@ -167,20 +153,6 @@
         "upgrade": 201421,
         "downgrade": null
     },
-    "A Warm Cup for You": {
-        "id": 110271,
-        "name_en": "A Warm Cup for You",
-        "desc_en": "Slightly increase velocity for a moderate duration when 2nd or worse and within 4 lengths of the lead on a downhill just before late-race. If the race is medium, also very minimally increase acceleration.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=60&slope==2&phase==1&order>=2&distance_diff_top<=10&distance_type==3@distance_rate>=60&slope==2&phase==1&order>=2&distance_diff_top<=10&distance_type!=3",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Acceleration": {
         "id": 201062,
         "name_en": "Acceleration",
@@ -193,20 +165,6 @@
         "inherited": false,
         "community_tier": 3,
         "upgrade": 201061,
-        "downgrade": null
-    },
-    "Ad Astra": {
-        "id": 101051,
-        "name_en": "Ad Astra",
-        "desc_en": "Slightly increase velocity when in midpack around halfway through the race. If the race is medium and at least 7 skills have activated, moderately increase velocity instead.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=50&distance_rate<=55&order_rate>=40&order_rate<=80&distance_type==3&activate_count_all>=7@distance_rate>=50&distance_rate<=55&order_rate>=40&order_rate<=80",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
         "downgrade": null
     },
     "Adored by All": {
@@ -237,20 +195,6 @@
         "upgrade": null,
         "downgrade": 200762
     },
-    "Adventurer": {
-        "id": 202702,
-        "name_en": "Adventurer",
-        "desc_en": "Slightly increase Speed when the Speed attribute greatly exceeds a certain amount. If the Wit attribute also greatly exceeds that amount, increase Speed moderately instead. (Pace, Medium)",
-        "icon_id": 10011,
-        "cost": 120,
-        "eval_pt": 174,
-        "condition": "running_style==2&distance_type==3&base_speed>=1200&base_wiz>=1200@running_style==2&distance_type==3&base_speed>=1200&base_wiz<1200",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202701,
-        "downgrade": null
-    },
     "After-School Stroll": {
         "id": 201482,
         "name_en": "After-School Stroll",
@@ -263,20 +207,6 @@
         "inherited": false,
         "community_tier": 1,
         "upgrade": 201481,
-        "downgrade": null
-    },
-    "Ahead of the Horizon": {
-        "id": 110021,
-        "name_en": "Ahead of the Horizon",
-        "desc_en": "Very slightly surge ahead when leading at the start of late-race. If it's on the third corner and the skill user led by a large margin mid-race, moderately surge ahead instead.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=66&distance_rate<=68&corner==3&order==1@distance_rate>=66&distance_rate<=68&order==1",
-        "precondition": "phase==1&bashin_diff_behind>=3&order==1",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
         "downgrade": null
     },
     "All Charged! It's Go Time!": {
@@ -433,20 +363,6 @@
         "upgrade": 202411,
         "downgrade": null
     },
-    "Bang! Miracle Shot ☆": {
-        "id": 101061,
-        "name_en": "Bang! Miracle Shot ☆",
-        "desc_en": "Very slightly increase velocity continuously when in midpack on the latter half of the final corner. If unfavored and the race is long, moderately increase velocity continuously instead.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_type==4&order_rate>=40&order_rate<=70&is_finalcorner_laterhalf==1&popularity>=4@order_rate>=40&order_rate<=70&is_finalcorner_laterhalf==1",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Barcarole of Blessings": {
         "id": 110151,
         "name_en": "Barcarole of Blessings",
@@ -517,34 +433,6 @@
         "upgrade": null,
         "downgrade": 202482
     },
-    "Beating Heart": {
-        "id": 202672,
-        "name_en": "Beating Heart",
-        "desc_en": "Slightly increase acceleration when positioned toward the front in the early part of late-race. (Mile)",
-        "icon_id": 20041,
-        "cost": 160,
-        "eval_pt": 217,
-        "condition": "distance_type==2&phase_firsthalf_random==2&order_rate<=50",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202671,
-        "downgrade": null
-    },
-    "Beautiful Form": {
-        "id": 202521,
-        "name_en": "Beautiful Form",
-        "desc_en": "Surge ahead when positioned toward the back on a third corner just before the final corner. (Medium/Long)",
-        "icon_id": 20012,
-        "cost": 180,
-        "eval_pt": 508,
-        "condition": "distance_type==3&corner_random==3&order_rate>=40@distance_type==4&corner_random==3&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202522
-    },
     "Beeline Burst": {
         "id": 200361,
         "name_en": "Beeline Burst",
@@ -558,20 +446,6 @@
         "community_tier": 1,
         "upgrade": null,
         "downgrade": 200362
-    },
-    "Before Anyone!": {
-        "id": 202691,
-        "name_en": "Before Anyone!",
-        "desc_en": "Increase acceleration in the start dash. (Medium)",
-        "icon_id": 20042,
-        "cost": 120,
-        "eval_pt": 334,
-        "condition": "distance_type==3&always==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202692
     },
     "Behold Thine Emperor's Divine Might": {
         "id": 100171,
@@ -725,20 +599,6 @@
         "inherited": true,
         "community_tier": 1,
         "upgrade": null,
-        "downgrade": null
-    },
-    "Break the Mold": {
-        "id": 202522,
-        "name_en": "Break the Mold",
-        "desc_en": "Slightly surge ahead when positioned toward the back on a third corner just before the final corner. (Medium/Long)",
-        "icon_id": 20011,
-        "cost": 180,
-        "eval_pt": 217,
-        "condition": "distance_type==3&corner_random==3&order_rate>=40@distance_type==4&corner_random==3&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202521,
         "downgrade": null
     },
     "Breakin' Ahead": {
@@ -1063,20 +923,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Cherry☆Scramble": {
-        "id": 110411,
-        "name_en": "Cherry☆Scramble",
-        "desc_en": "Very minimally increase acceleration for a brief duration when toward the front with 400m remaining. Effect and duration increase based on how long the user engaged in a challenge mid-race.",
-        "icon_id": 20041,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "order<=3&remain_distance<=401&remain_distance>=399",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Chin Up, Derby Umamusume!": {
         "id": 300111,
         "name_en": "Chin Up, Derby Umamusume!",
@@ -1343,20 +1189,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Confident": {
-        "id": 202652,
-        "name_en": "Confident",
-        "desc_en": "Slightly increase Speed and Power when both attributes exceed a certain amount. (Mile/Medium)",
-        "icon_id": 10011,
-        "cost": 180,
-        "eval_pt": 217,
-        "condition": "base_speed>=1000&base_power>=1000&distance_type==2@base_speed>=1000&base_power>=1000&distance_type==3",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202651,
-        "downgrade": null
-    },
     "Cooldown": {
         "id": 200741,
         "name_en": "Cooldown",
@@ -1511,34 +1343,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Crescent Gale": {
-        "id": 201253,
-        "name_en": "Crescent Gale",
-        "desc_en": "Increase velocity on a corner. (Front Runner)",
-        "icon_id": 20012,
-        "cost": 150,
-        "eval_pt": 508,
-        "condition": "running_style==1&all_corner_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 201252,
-        "downgrade": null
-    },
-    "Crescent Gust": {
-        "id": 201043,
-        "name_en": "Crescent Gust",
-        "desc_en": "Increase velocity on a corner. (Mile)",
-        "icon_id": 20012,
-        "cost": 150,
-        "eval_pt": 508,
-        "condition": "distance_type==2&all_corner_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 201042,
-        "downgrade": null
-    },
     "Crusader": {
         "id": 201501,
         "name_en": "Crusader",
@@ -1606,20 +1410,6 @@
         "precondition": "",
         "inherited": true,
         "community_tier": 3,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "Danser le Présent": {
-        "id": 110711,
-        "name_en": "Danser le Présent",
-        "desc_en": "Expend endurance to slightly increase velocity and minimally surge ahead when well-positioned on the final straight late-race with another runner close behind.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "phase>=2&is_last_straight==1&order_rate>=20&order_rate<=40&bashin_diff_behind<=1",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
         "upgrade": null,
         "downgrade": null
     },
@@ -1721,20 +1511,6 @@
         "upgrade": null,
         "downgrade": 201342
     },
-    "Ding Dong, Boo!": {
-        "id": 100431,
-        "name_en": "Ding Dong, Boo!",
-        "desc_en": "Very slightly increase velocity when dueling. If it's a dirt race, also slightly increase acceleration.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "compete_fight_count>0&ground_type==2@compete_fight_count>0",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Dirt Race Enthusiast": {
         "id": 1200051,
         "name_en": "Dirt Race Enthusiast",
@@ -1762,20 +1538,6 @@
         "community_tier": 3,
         "upgrade": 201371,
         "downgrade": null
-    },
-    "Divine Speed": {
-        "id": 202551,
-        "name_en": "Divine Speed",
-        "desc_en": "Surge ahead and slightly recover endurance sometime during the second half of the race.",
-        "icon_id": 20012,
-        "cost": 200,
-        "eval_pt": 633,
-        "condition": "distance_rate_after_random==50",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202552
     },
     "Dodging Danger": {
         "id": 201262,
@@ -1844,7 +1606,7 @@
         "precondition": "",
         "inherited": false,
         "community_tier": 2,
-        "upgrade": 202171,
+        "upgrade": null,
         "downgrade": null
     },
     "Dream Run": {
@@ -1943,20 +1705,6 @@
         "inherited": false,
         "community_tier": 3,
         "upgrade": 202021,
-        "downgrade": null
-    },
-    "Earth's Blessing": {
-        "id": 210282,
-        "name_en": "Earth's Blessing",
-        "desc_en": "Slightly increase velocity around halfway through late-race. Increase this skill's effectiveness based on the number of skills the user has learned.",
-        "icon_id": 20191,
-        "cost": 200,
-        "eval_pt": 263,
-        "condition": "phase_laterhalf_random==2",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 210281,
         "downgrade": null
     },
     "Elated": {
@@ -2085,20 +1833,6 @@
         "upgrade": null,
         "downgrade": 201452
     },
-    "Engines LIT!": {
-        "id": 10661,
-        "name_en": "Engines LIT!",
-        "desc_en": "Minimally increase velocity continuously for an extremely long duration when leading by a fair margin halfway through mid-race, but very slightly lose steam at the end of late-race.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=34&distance_rate<=36&order==1&bashin_diff_behind>=1@phase==3&is_activate_other_skill_detail==1",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Escape Artist": {
         "id": 200541,
         "name_en": "Escape Artist",
@@ -2138,20 +1872,6 @@
         "precondition": "",
         "inherited": true,
         "community_tier": 2,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "Ever Supreme": {
-        "id": 100851,
-        "name_en": "Ever Supreme",
-        "desc_en": "If the skill user ran calmly, very slightly surge ahead and very minimally intimidate the first 4 runners when positioned toward the back at the start of late-race.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=66&distance_rate<=68&order_rate>=60&order_rate<=90&temptation_count==0",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
         "upgrade": null,
         "downgrade": null
     },
@@ -2505,34 +2225,6 @@
         "upgrade": 202461,
         "downgrade": null
     },
-    "First Bite of the Feast!": {
-        "id": 110121,
-        "name_en": "First Bite of the Feast!",
-        "desc_en": "Slightly increase velocity and very minimally increase acceleration for a moderate duration when toward the back on a downhill just before late-race after passing another runner 3 times mid-race.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=60&phase==1&slope==2&order_rate>=50",
-        "precondition": "change_order_up_middle>=3",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "First Step": {
-        "id": 202642,
-        "name_en": "First Step",
-        "desc_en": "Very slightly increase velocity for a medium duration when positioned midpack mid-race. (Late Surger)",
-        "icon_id": 20011,
-        "cost": 180,
-        "eval_pt": 217,
-        "condition": "running_style==3&phase_random==1&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202641,
-        "downgrade": null
-    },
     "Flash Forward": {
         "id": 201103,
         "name_en": "Flash Forward",
@@ -2558,20 +2250,6 @@
         "precondition": "",
         "inherited": true,
         "community_tier": 2,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "Flowering Dreams": {
-        "id": 110511,
-        "name_en": "Flowering Dreams",
-        "desc_en": "Slightly increase velocity when positioned somewhere from 2nd to midpack with 200m remaining. If there are at least 3 runners nearby, also minimally surge ahead.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "order>=2&order_rate<=70&remain_distance<=201&remain_distance>=199&near_count>=3@order>=2&order_rate<=70&remain_distance<=201&remain_distance>=199",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
         "upgrade": null,
         "downgrade": null
     },
@@ -2785,20 +2463,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Fresh☆Parlor": {
-        "id": 110311,
-        "name_en": "Fresh☆Parlor",
-        "desc_en": "Very slightly increase velocity continuously and very slightly recover endurance when positioned toward the front in the early part of mid-race.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "phase_firsthalf_random==1&order_rate<=30",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "From the Brink": {
         "id": 202081,
         "name_en": "From the Brink",
@@ -2825,7 +2489,7 @@
         "inherited": false,
         "community_tier": 0,
         "upgrade": 201251,
-        "downgrade": 201253
+        "downgrade": null
     },
     "Front Runner Corners ◎": {
         "id": 201251,
@@ -3205,34 +2869,6 @@
         "upgrade": null,
         "downgrade": 201482
     },
-    "Goin' First": {
-        "id": 202692,
-        "name_en": "Goin' First",
-        "desc_en": "Slightly increase acceleration in the start dash. (Medium)",
-        "icon_id": 20041,
-        "cost": 120,
-        "eval_pt": 217,
-        "condition": "distance_type==3&always==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202691,
-        "downgrade": null
-    },
-    "Gonna Be Ur #1 FRFR": {
-        "id": 202511,
-        "name_en": "Gonna Be Ur #1 FRFR",
-        "desc_en": "Press coverage goes to the skill user's head, moderately increasing chance of rushing.",
-        "icon_id": 10054,
-        "cost": 0,
-        "eval_pt": 0,
-        "condition": "always==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Got the Spirit!": {
         "id": 202312,
         "name_en": "Got the Spirit!",
@@ -3275,20 +2911,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Graceful Gait": {
-        "id": 202532,
-        "name_en": "Graceful Gait",
-        "desc_en": "Slightly increase velocity mid-race. (Mile/Medium)",
-        "icon_id": 20011,
-        "cost": 180,
-        "eval_pt": 217,
-        "condition": "distance_type==2&phase_random==1@distance_type==3&phase_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202531,
-        "downgrade": null
-    },
     "Greed for Speed": {
         "id": 201081,
         "name_en": "Greed for Speed",
@@ -3314,7 +2936,7 @@
         "precondition": "",
         "inherited": false,
         "community_tier": 0,
-        "upgrade": 201602,
+        "upgrade": null,
         "downgrade": null
     },
     "Guten Appetit ♪": {
@@ -3372,20 +2994,6 @@
         "community_tier": 3,
         "upgrade": null,
         "downgrade": 200092
-    },
-    "Hands in the Air Like Ya Don't Care!": {
-        "id": 100651,
-        "name_en": "Hands in the Air Like Ya Don't Care!",
-        "desc_en": "Very slightly increase velocity when positioned toward the front sometime upon approaching late-race. If it's a sprint or mile race, very slightly increase velocity continuously.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_type==1&phase_laterhalf_random==1&order_rate<=50@distance_type==2&phase_laterhalf_random==1&order_rate<=50@distance_type==3&phase_laterhalf_random==1&order_rate<=50@distance_type==4&phase_laterhalf_random==1&order_rate<=50",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
     },
     "Hanshin Racecourse ×": {
         "id": 200053,
@@ -3569,34 +3177,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "High Speed": {
-        "id": 202552,
-        "name_en": "High Speed",
-        "desc_en": "Slightly surge ahead and minimally recover endurance sometime during the second half of the race.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 263,
-        "condition": "distance_rate_after_random==50",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202551,
-        "downgrade": null
-    },
-    "High Voltage": {
-        "id": 202671,
-        "name_en": "High Voltage",
-        "desc_en": "Increase acceleration when positioned toward the front in the early part of late-race. (Mile)",
-        "icon_id": 20042,
-        "cost": 160,
-        "eval_pt": 508,
-        "condition": "distance_type==2&phase_firsthalf_random==2&order_rate<=50",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202672
-    },
     "Highlander": {
         "id": 201581,
         "name_en": "Highlander",
@@ -3665,20 +3245,6 @@
         "inherited": false,
         "community_tier": 2,
         "upgrade": 200981,
-        "downgrade": null
-    },
-    "Hurry Up!": {
-        "id": 202592,
-        "name_en": "Hurry Up!",
-        "desc_en": "If still going strong, slightly surge ahead in the early part of late-race. (Late, Long)",
-        "icon_id": 20011,
-        "cost": 160,
-        "eval_pt": 217,
-        "condition": "distance_type==4&running_style==3&phase_firsthalf_random==2&lastspurt==2",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202591,
         "downgrade": null
     },
     "Hydrate": {
@@ -3849,20 +3415,6 @@
         "upgrade": 210051,
         "downgrade": null
     },
-    "Ignition": {
-        "id": 202602,
-        "name_en": "Ignition",
-        "desc_en": "Slightly surge ahead upon activating 13 skills this race. (Medium)",
-        "icon_id": 20011,
-        "cost": 160,
-        "eval_pt": 217,
-        "condition": "distance_type==3&activate_count_all>=13",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202601,
-        "downgrade": null
-    },
     "Illusionist": {
         "id": 201231,
         "name_en": "Illusionist",
@@ -3904,20 +3456,6 @@
         "community_tier": 1,
         "upgrade": null,
         "downgrade": 202042
-    },
-    "In One Fell Swoop": {
-        "id": 202591,
-        "name_en": "In One Fell Swoop",
-        "desc_en": "If still going strong, surge ahead in the early part of late-race. (Late, Long)",
-        "icon_id": 20012,
-        "cost": 160,
-        "eval_pt": 508,
-        "condition": "distance_type==4&running_style==3&phase_firsthalf_random==2&lastspurt==2",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202592
     },
     "Indomitable": {
         "id": 200471,
@@ -4365,7 +3903,7 @@
         "inherited": false,
         "community_tier": 0,
         "upgrade": 201391,
-        "downgrade": 201393
+        "downgrade": null
     },
     "Late Surger Corners ◎": {
         "id": 201391,
@@ -4619,20 +4157,6 @@
         "upgrade": 202041,
         "downgrade": null
     },
-    "Light-Footed as a Hare": {
-        "id": 202581,
-        "name_en": "Light-Footed as a Hare",
-        "desc_en": "Recover endurance and moderately increase velocity mid-race. (Long)",
-        "icon_id": 20022,
-        "cost": 200,
-        "eval_pt": 633,
-        "condition": "distance_type==4&phase_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202582
-    },
     "Lightning Flare": {
         "id": 110211,
         "name_en": "Lightning Flare",
@@ -4687,20 +4211,6 @@
         "inherited": true,
         "community_tier": 1,
         "upgrade": null,
-        "downgrade": null
-    },
-    "Locked On": {
-        "id": 202562,
-        "name_en": "Locked On",
-        "desc_en": "Slightly increase velocity when positioned toward the back upon approaching late-race. (Long)",
-        "icon_id": 20011,
-        "cost": 160,
-        "eval_pt": 217,
-        "condition": "distance_type==4&phase_laterhalf_random==1&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202561,
         "downgrade": null
     },
     "Lone Wolf": {
@@ -4885,34 +4395,6 @@
         "upgrade": 201561,
         "downgrade": null
     },
-    "Luminescence": {
-        "id": 202601,
-        "name_en": "Luminescence",
-        "desc_en": "Surge ahead upon activating 13 skills this race. (Medium)",
-        "icon_id": 20012,
-        "cost": 160,
-        "eval_pt": 508,
-        "condition": "distance_type==3&activate_count_all>=13",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202602
-    },
-    "Lyrical Journey": {
-        "id": 100571,
-        "name_en": "Lyrical Journey",
-        "desc_en": "Very slightly increase velocity continuously when toward the back sometime upon approaching late-race. Effect increases if far from the lead and the race is medium or long.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_type==3&phase_laterhalf_random==1&order_rate>50@distance_type==4&phase_laterhalf_random==1&order_rate>50@distance_type==1&phase_laterhalf_random==1&order_rate>50@distance_type==2&phase_laterhalf_random==1&order_rate>50",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Mad Dash": {
         "id": 202392,
         "name_en": "Mad Dash",
@@ -4940,34 +4422,6 @@
         "community_tier": 1,
         "upgrade": null,
         "downgrade": 202342
-    },
-    "Magical☆Marvelous★World": {
-        "id": 100551,
-        "name_en": "Magical☆Marvelous★World",
-        "desc_en": "Slightly increase velocity when close to another runner midpack around halfway through the race. Increase this skill's effectiveness if at least 4 runners are in view.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate<=50&distance_rate>=40&order_rate<=80&order_rate>=50&near_count>=1&visiblehorse>=4@distance_rate<=50&distance_rate>=40&order_rate<=80&order_rate>=50&near_count>=1",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "Master of Declines": {
-        "id": 202171,
-        "name_en": "Master of Declines",
-        "desc_en": "Increase velocity on a downhill.",
-        "icon_id": 20012,
-        "cost": 170,
-        "eval_pt": 508,
-        "condition": "down_slope_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202172
     },
     "Master of the Sands": {
         "id": 202001,
@@ -5121,7 +4575,7 @@
         "inherited": false,
         "community_tier": 0,
         "upgrade": 201041,
-        "downgrade": 201043
+        "downgrade": null
     },
     "Mile Corners ◎": {
         "id": 201041,
@@ -5206,20 +4660,6 @@
         "community_tier": 1,
         "upgrade": null,
         "downgrade": 201142
-    },
-    "Mission: Triumph": {
-        "id": 100831,
-        "name_en": "Mission: Triumph",
-        "desc_en": "Slightly increase velocity when positioned midpack on a straight around halfway through the race or later. If it's downhill, slightly increase velocity continuously.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=40&corner==0&slope==2&order_rate>=40&order_rate<=80@distance_rate>=40&corner==0&order_rate>=40&order_rate<=80",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
     },
     "Moonlit Flash": {
         "id": 201453,
@@ -6047,20 +5487,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Part the Clouds": {
-        "id": 202651,
-        "name_en": "Part the Clouds",
-        "desc_en": "Increase Speed and Power when both attributes exceed a certain amount. (Mile/Medium)",
-        "icon_id": 10012,
-        "cost": 180,
-        "eval_pt": 508,
-        "condition": "base_speed>=1000&base_power>=1000&distance_type==2@base_speed>=1000&base_power>=1000&distance_type==3",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202652
-    },
     "Passing Pro": {
         "id": 201202,
         "name_en": "Passing Pro",
@@ -6199,20 +5625,6 @@
         "inherited": true,
         "community_tier": 2,
         "upgrade": null,
-        "downgrade": null
-    },
-    "Pop Off!": {
-        "id": 202682,
-        "name_en": "Pop Off!",
-        "desc_en": "Slightly increase velocity and very slightly recover endurance mid-race. (Long)",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 263,
-        "condition": "distance_type==4&phase_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202681,
         "downgrade": null
     },
     "Position Pilfer": {
@@ -6593,20 +6005,6 @@
         "upgrade": 200461,
         "downgrade": null
     },
-    "Rampaging Passion": {
-        "id": 202621,
-        "name_en": "Rampaging Passion",
-        "desc_en": "Increase velocity when positioned midpack or further back upon approaching late-race. (Late Surger)",
-        "icon_id": 20012,
-        "cost": 180,
-        "eval_pt": 508,
-        "condition": "running_style==3&phase_laterhalf_random==1&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202622
-    },
     "Rapid Gain": {
         "id": 202322,
         "name_en": "Rapid Gain",
@@ -6915,34 +6313,6 @@
         "upgrade": null,
         "downgrade": 200612
     },
-    "Rising Heat": {
-        "id": 202662,
-        "name_en": "Rising Heat",
-        "desc_en": "Slightly surge ahead when positioned midpack in the early part of late-race. (Medium/Long)",
-        "icon_id": 20011,
-        "cost": 180,
-        "eval_pt": 217,
-        "condition": "distance_type==3&phase_firsthalf_random==2&order_rate>=30&order_rate<=80@distance_type==4&phase_firsthalf_random==2&order_rate>=30&order_rate<=80",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202661,
-        "downgrade": null
-    },
-    "Rising Pulse": {
-        "id": 202661,
-        "name_en": "Rising Pulse",
-        "desc_en": "Surge ahead when positioned midpack in the early part of late-race. (Medium/Long)",
-        "icon_id": 20012,
-        "cost": 180,
-        "eval_pt": 508,
-        "condition": "distance_type==3&phase_firsthalf_random==2&order_rate>=30&order_rate<=80@distance_type==4&phase_firsthalf_random==2&order_rate>=30&order_rate<=80",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202662
-    },
     "Risk-Maker": {
         "id": 202441,
         "name_en": "Risk-Maker",
@@ -7139,20 +6509,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Scorching Summer Tech!": {
-        "id": 110531,
-        "name_en": "Scorching Summer Tech!",
-        "desc_en": "Very slightly increase velocity when positioned toward the front with 200m remaining. If it's a sprint and the skill user passed another runner late-race, increase velocity moderately instead.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_type==1&remain_distance<=201&remain_distance>=199&order_rate>=20&order_rate<=50&change_order_up_end_after>=1@remain_distance<=201&remain_distance>=199&order_rate>=20&order_rate<=50",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Scramble": {
         "id": 202422,
         "name_en": "Scramble",
@@ -7165,20 +6521,6 @@
         "inherited": false,
         "community_tier": null,
         "upgrade": 202421,
-        "downgrade": null
-    },
-    "Sea's Blessing": {
-        "id": 210272,
-        "name_en": "Sea's Blessing",
-        "desc_en": "Slightly increase acceleration in the early part of early-race. Increase this skill's effectiveness based on the number of skills the user has learned.",
-        "icon_id": 20201,
-        "cost": 200,
-        "eval_pt": 263,
-        "condition": "phase_firsthalf_random==0",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 210271,
         "downgrade": null
     },
     "Second Wind": {
@@ -7208,34 +6550,6 @@
         "community_tier": 0,
         "upgrade": null,
         "downgrade": 201661
-    },
-    "Seirios": {
-        "id": 100701,
-        "name_en": "Seirios",
-        "desc_en": "Minimally increase acceleration when positioned midpack with 800m remaining. If it's a 2400m race and the skill user is favored, increase acceleration moderately instead.",
-        "icon_id": 20041,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "remain_distance>=799&remain_distance<=801&order_rate>=30&order_rate<=60&course_distance==2400&popularity<=3@remain_distance>=799&remain_distance<=801&order_rate>=30&order_rate<=60",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "Send It! ☆": {
-        "id": 202681,
-        "name_en": "Send It! ☆",
-        "desc_en": "Increase velocity and moderately recover endurance mid-race. (Long)",
-        "icon_id": 20012,
-        "cost": 200,
-        "eval_pt": 633,
-        "condition": "distance_type==4&phase_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202682
     },
     "Serenity": {
         "id": 201491,
@@ -7277,20 +6591,6 @@
         "inherited": false,
         "community_tier": 3,
         "upgrade": null,
-        "downgrade": null
-    },
-    "Sharp Arc": {
-        "id": 201393,
-        "name_en": "Sharp Arc",
-        "desc_en": "Increase velocity on a corner. (Late Surger)",
-        "icon_id": 20012,
-        "cost": 150,
-        "eval_pt": 508,
-        "condition": "running_style==3&all_corner_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 201392,
         "downgrade": null
     },
     "Sharp Gaze": {
@@ -7517,20 +6817,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Singularity": {
-        "id": 202701,
-        "name_en": "Singularity",
-        "desc_en": "Increase Speed when the Speed attribute greatly exceeds a certain amount. If the Wit attribute also greatly exceeds that amount, increase Speed greatly instead. (Pace, Medium)",
-        "icon_id": 10012,
-        "cost": 120,
-        "eval_pt": 461,
-        "condition": "running_style==2&distance_type==3&base_speed>=1200&base_wiz>=1200@running_style==2&distance_type==3&base_speed>=1200&base_wiz<1200",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202702
-    },
     "Sixth Sense": {
         "id": 201261,
         "name_en": "Sixth Sense",
@@ -7670,20 +6956,6 @@
         "community_tier": 1,
         "upgrade": 201141,
         "downgrade": null
-    },
-    "Solid Preparation": {
-        "id": 201602,
-        "name_en": "Solid Preparation",
-        "desc_en": "Increase acceleration when many skills activate early-race.",
-        "icon_id": 20042,
-        "cost": 180,
-        "eval_pt": 508,
-        "condition": "activate_count_start>=3",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 201601
     },
     "Solid Steps": {
         "id": 202332,
@@ -8007,20 +7279,6 @@
         "upgrade": 200621,
         "downgrade": null
     },
-    "Start the Charge": {
-        "id": 202622,
-        "name_en": "Start the Charge",
-        "desc_en": "Slightly increase velocity when positioned midpack or further back upon approaching late-race. (Late Surger)",
-        "icon_id": 20011,
-        "cost": 180,
-        "eval_pt": 217,
-        "condition": "running_style==3&phase_laterhalf_random==1&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202621,
-        "downgrade": null
-    },
     "Steadfast": {
         "id": 200732,
         "name_en": "Steadfast",
@@ -8259,48 +7517,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Sublimated Thunder": {
-        "id": 100841,
-        "name_en": "Sublimated Thunder",
-        "desc_en": "Slightly surge ahead when positioned toward the back on the final straight late-race.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "is_last_straight==1",
-        "precondition": "phase>=2&order_rate>=50",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "Summer Gust": {
-        "id": 200184,
-        "name_en": "Summer Gust",
-        "desc_en": "Increase performance in summer races, increasing Speed and Power.",
-        "icon_id": 10012,
-        "cost": 130,
-        "eval_pt": 461,
-        "condition": "season==2",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 200183,
-        "downgrade": null
-    },
-    "Summer Halation": {
-        "id": 110321,
-        "name_en": "Summer Halation",
-        "desc_en": "Moderately increase velocity for a moderate duration when well-positioned on a corner in the second half of the race. If at Nakayama Racecourse, also increase acceleration based on Speed.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=50&corner!=0&order_rate>=20&order_rate<=50&track_id==10005@distance_rate>=50&corner!=0&order_rate>=20&order_rate<=50",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Summer Runner ×": {
         "id": 200183,
         "name_en": "Summer Runner ×",
@@ -8313,7 +7529,7 @@
         "inherited": false,
         "community_tier": null,
         "upgrade": 200182,
-        "downgrade": 200184
+        "downgrade": null
     },
     "Summer Runner ○": {
         "id": 200182,
@@ -8342,20 +7558,6 @@
         "community_tier": 1,
         "upgrade": null,
         "downgrade": 200182
-    },
-    "Sun's Blessing": {
-        "id": 210262,
-        "name_en": "Sun's Blessing",
-        "desc_en": "Slightly increase velocity when engaging in a challenge mid-race. Increase this skill's effectiveness based on the number of skills the user has learned.",
-        "icon_id": 20191,
-        "cost": 200,
-        "eval_pt": 263,
-        "condition": "phase==1&blocked_side_continuetime>=2",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 210261,
-        "downgrade": null
     },
     "Sunny Breeze": {
         "id": 100781,
@@ -8413,20 +7615,6 @@
         "upgrade": 202261,
         "downgrade": null
     },
-    "Sunrise Banner—Katsuragi Ace!": {
-        "id": 101041,
-        "name_en": "Sunrise Banner—Katsuragi Ace!",
-        "desc_en": "Very slightly increase velocity and very slightly recover endurance when leading on the third corner. If it's a medium-distance race at Tokyo Racecourse, increase this skill's duration.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "corner==3&order==1&track_id==10006&distance_type==3@corner==3&order==1",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Super Lucky Seven": {
         "id": 201561,
         "name_en": "Super Lucky Seven",
@@ -8469,20 +7657,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Superb Gait": {
-        "id": 202531,
-        "name_en": "Superb Gait",
-        "desc_en": "Increase velocity mid-race. (Mile/Medium)",
-        "icon_id": 20012,
-        "cost": 180,
-        "eval_pt": 508,
-        "condition": "distance_type==2&phase_random==1@distance_type==3&phase_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202532
-    },
     "Superior Heal": {
         "id": 110111,
         "name_en": "Superior Heal",
@@ -8510,20 +7684,6 @@
         "community_tier": 0,
         "upgrade": null,
         "downgrade": 201591
-    },
-    "Sure Shot": {
-        "id": 202561,
-        "name_en": "Sure Shot",
-        "desc_en": "Increase velocity when positioned toward the back upon approaching late-race. (Long)",
-        "icon_id": 20012,
-        "cost": 160,
-        "eval_pt": 508,
-        "condition": "distance_type==4&phase_laterhalf_random==1&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 202562
     },
     "Swinging Maestro": {
         "id": 200351,
@@ -8987,34 +8147,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Tumbly Power Drive!": {
-        "id": 110621,
-        "name_en": "Tumbly Power Drive!",
-        "desc_en": "Very slightly increase velocity for a duration based on remaining endurance when in midpack on a second-half corner. If the race is medium, also very minimally increase acceleration.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=50&corner!=0&order_rate>=40&order_rate<=80&distance_type==3@distance_rate>=50&corner!=0&order_rate>=40&order_rate<=80",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "Turbo BLAST!": {
-        "id": 100661,
-        "name_en": "Turbo BLAST!",
-        "desc_en": "Minimally increase velocity continuously for an extremely long duration when leading by a fair margin halfway through mid-race, but very slightly lose steam at the end of late-race.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=34&distance_rate<=36&order==1&bashin_diff_behind>=1@phase==3&is_activate_other_skill_detail==1",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Turbo Sprint": {
         "id": 200651,
         "name_en": "Turbo Sprint",
@@ -9071,20 +8203,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Undistracted": {
-        "id": 202582,
-        "name_en": "Undistracted",
-        "desc_en": "Slightly recover endurance and very slightly increase velocity mid-race. (Long)",
-        "icon_id": 20021,
-        "cost": 200,
-        "eval_pt": 263,
-        "condition": "distance_type==4&phase_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": 202581,
-        "downgrade": null
-    },
     "Unquenched Thirst": {
         "id": 300011,
         "name_en": "Unquenched Thirst",
@@ -9112,20 +8230,6 @@
         "community_tier": 1,
         "upgrade": null,
         "downgrade": 200552
-    },
-    "Unrestrained Passion": {
-        "id": 202612,
-        "name_en": "Unrestrained Passion",
-        "desc_en": "Slightly increase velocity when positioned midpack or further back upon approaching mid-race. (Late Surger)",
-        "icon_id": 20011,
-        "cost": 180,
-        "eval_pt": 217,
-        "condition": "running_style==3&phase_laterhalf_random==0&order_rate>=40",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
     },
     "Unruffled": {
         "id": 200481,
@@ -9209,20 +8313,6 @@
         "inherited": false,
         "community_tier": 1,
         "upgrade": 200701,
-        "downgrade": null
-    },
-    "Us Girlies Keep Winnin'! ♪": {
-        "id": 110481,
-        "name_en": "Us Girlies Keep Winnin'! ♪",
-        "desc_en": "Very slightly increase velocity continuously when positioned midpack around halfway through the race. Increase this skill's effectiveness when the user's mood is great.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_rate>=40&distance_rate<=50&order_rate>=40&order_rate<=80&motivation==5@distance_rate>=40&distance_rate<=50&order_rate>=40&order_rate<=80",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
         "downgrade": null
     },
     "V Is for Victory!": {
@@ -9309,20 +8399,6 @@
         "upgrade": null,
         "downgrade": null
     },
-    "Vying for the Throne": {
-        "id": 202541,
-        "name_en": "Vying for the Throne",
-        "desc_en": "When positioned midpack or further back on the final corner, slightly decrease the velocity of 3 runners ahead and 3 behind. Increase skill user's velocity. (Late Surger)",
-        "icon_id": 20012,
-        "cost": 190,
-        "eval_pt": 508,
-        "condition": "running_style==3&order_rate>=40&is_finalcorner_random==1",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": null
-    },
     "Wait-and-See": {
         "id": 200662,
         "name_en": "Wait-and-See",
@@ -9362,20 +8438,6 @@
         "precondition": "",
         "inherited": true,
         "community_tier": 1,
-        "upgrade": null,
-        "downgrade": null
-    },
-    "Watch! Me! BLOOM!": {
-        "id": 110691,
-        "name_en": "Watch! Me! BLOOM!",
-        "desc_en": "If the skill user engaged in a challenge mid-race, slightly increase acceleration continuously when well-positioned with 650m remaining.",
-        "icon_id": 20041,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "remain_distance<=651&remain_distance>=649&order_rate<=40&order_rate>=30",
-        "precondition": "phase==1&blocked_side_continuetime>=2",
-        "inherited": true,
-        "community_tier": null,
         "upgrade": null,
         "downgrade": null
     },
@@ -9533,48 +8595,6 @@
         "upgrade": null,
         "downgrade": 200202
     },
-    "Wisdom of the Earth": {
-        "id": 210281,
-        "name_en": "Wisdom of the Earth",
-        "desc_en": "Increase velocity around halfway through late-race. Increase this skill's effectiveness based on the number of skills the user has learned.",
-        "icon_id": 20192,
-        "cost": 200,
-        "eval_pt": 633,
-        "condition": "phase_laterhalf_random==2",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 210282
-    },
-    "Wisdom of the Sea": {
-        "id": 210271,
-        "name_en": "Wisdom of the Sea",
-        "desc_en": "Increase acceleration in the early part of early-race. Increase this skill's effectiveness based on the number of skills the user has learned.",
-        "icon_id": 20202,
-        "cost": 200,
-        "eval_pt": 633,
-        "condition": "phase_firsthalf_random==0",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 210272
-    },
-    "Wisdom of the Sun": {
-        "id": 210261,
-        "name_en": "Wisdom of the Sun",
-        "desc_en": "Increase velocity when engaging in a challenge mid-race. Increase this skill's effectiveness based on the number of skills the user has learned.",
-        "icon_id": 20192,
-        "cost": 200,
-        "eval_pt": 633,
-        "condition": "phase==1&blocked_side_continuetime>=2",
-        "precondition": "",
-        "inherited": false,
-        "community_tier": null,
-        "upgrade": null,
-        "downgrade": 210262
-    },
     "With All My Soul": {
         "id": 202132,
         "name_en": "With All My Soul",
@@ -9587,20 +8607,6 @@
         "inherited": false,
         "community_tier": 1,
         "upgrade": 202131,
-        "downgrade": null
-    },
-    "World in Bloom": {
-        "id": 100761,
-        "name_en": "World in Bloom",
-        "desc_en": "Very slightly increase velocity when positioned midpack halfway through the race. If it's a long-distance race, increase this skill's duration and moderately recover endurance.",
-        "icon_id": 20011,
-        "cost": 200,
-        "eval_pt": 180,
-        "condition": "distance_type==4&distance_rate>=50&distance_rate<=51&order_rate>=30&order_rate<=80@distance_rate>=50&distance_rate<=51&order_rate>=30&order_rate<=80",
-        "precondition": "",
-        "inherited": true,
-        "community_tier": null,
-        "upgrade": null,
         "downgrade": null
     },
     "Xceleration": {

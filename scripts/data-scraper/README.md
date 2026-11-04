@@ -12,8 +12,10 @@ pip install lxml                                       # parser used by the skil
 ## Usage
 
 ```bash
-python update.py            # from the repo root; delta mode, only new/changed entries
+python update.py --master-db <copy of master.mdb>   # from the repo root; delta mode, only new/changed entries
 ```
+
+Pass a copy of the game's `master.mdb`, never the live file. Without `--master-db`, skills the Global client does not have come back into `skills.json`.
 
 Outputs land in `src/data/`: `characters.json`, `supports.json`, `skills.json`, `races.json`, `character_outfits.json` (every EN outfit title per playable character; read by `scripts/generate-veteran-identity-data.mjs`, never bundled into the app), and `character_objectives.json` (goal turns per character; read by `scripts/generate-racing-plan.mjs`, never bundled into the app). Races are a full rebuild rather than a delta, because EN keeps receiving calendar additions; the rebuild is idempotent, so running it every time is cheap. The epithet and scraped-preset outputs feed the upstream project's solver and are disabled here.
 
@@ -44,7 +46,7 @@ A data refresh can silently miss one of these; check all five whenever any `src/
 The data JSONs ship inside the JS bundle, so a refresh reaches devices via a normal release:
 
 ```bash
-python update.py
+python update.py --master-db <copy of master.mdb>
 yarn test                   # data-shape canaries
 yarn build:bundle           # rebundle + release APK
 # bump the version, commit, tag - CI builds and publishes the release,

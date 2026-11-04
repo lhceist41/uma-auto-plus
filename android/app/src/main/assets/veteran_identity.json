@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "outfitSource": "gametora character-cards title_en_gl",
   "characterCount": 70,
-  "outfitCount": 124,
+  "outfitCount": 112,
   "characters": {
     "Admire Vega": {
       "outfits": [
@@ -17,8 +17,7 @@
     },
     "Agnes Tachyon": {
       "outfits": [
-        "tach-nology",
-        "Lunatic Lab"
+        "tach-nology"
       ]
     },
     "Air Groove": {
@@ -39,8 +38,7 @@
     },
     "Bamboo Memory": {
       "outfits": [
-        "Iron Ambition",
-        "Ultra☆Marine"
+        "Iron Ambition"
       ]
     },
     "Biwa Hayahide": {
@@ -121,8 +119,7 @@
     },
     "Hishi Amazon": {
       "outfits": [
-        "Azure Amazon",
-        "Hungry Veil"
+        "Azure Amazon"
       ]
     },
     "Hokko Tarumae": {
@@ -138,8 +135,7 @@
     },
     "Ines Fujin": {
       "outfits": [
-        "Always Electrifying",
-        "Melt Your Heart"
+        "Always Electrifying"
       ]
     },
     "Kawakami Princess": {
@@ -178,8 +174,7 @@
     },
     "Matikanetannhauser": {
       "outfits": [
-        "Clippety-Tippety-Clop",
-        "Blue Turbulence"
+        "Clippety-Tippety-Clop"
       ]
     },
     "Mayano Top Gun": {
@@ -196,8 +191,7 @@
     },
     "Mejiro Ardan": {
       "outfits": [
-        "Crystalline",
-        "Neige Émeraude"
+        "Crystalline"
       ]
     },
     "Mejiro Bright": {
@@ -225,8 +219,7 @@
     },
     "Mejiro Ryan": {
       "outfits": [
-        "Down the Line",
-        "Marguerite Latte"
+        "Down the Line"
       ]
     },
     "Mihono Bourbon": {
@@ -260,8 +253,7 @@
     },
     "Nishino Flower": {
       "outfits": [
-        "Layered Petals",
-        "Sweet Juneberry"
+        "Layered Petals"
       ]
     },
     "Oguri Cap": {
@@ -278,14 +270,12 @@
     },
     "Sakura Bakushin O": {
       "outfits": [
-        "Blossom in Learning",
-        "Red Hot☆Leader"
+        "Blossom in Learning"
       ]
     },
     "Sakura Chiyono O": {
       "outfits": [
-        "Strength in Full Bloom",
-        "Fleur Enneigée"
+        "Strength in Full Bloom"
       ]
     },
     "Satono Diamond": {
@@ -307,8 +297,7 @@
     },
     "Silence Suzuka": {
       "outfits": [
-        "Innocent Silence",
-        "Emerald Tidings"
+        "Innocent Silence"
       ]
     },
     "Smart Falcon": {
@@ -367,8 +356,7 @@
     },
     "Tosen Jordan": {
       "outfits": [
-        "Jokester ☆ Vibes",
-        "Aurore☆Vacances"
+        "Jokester ☆ Vibes"
       ]
     },
     "Vodka": {

@@ -1,9 +1,11 @@
 ﻿import json
+import argparse
 import re
 import time
 import math
 import logging
 import os
+import sqlite3
 from pathlib import Path
 from datetime import date
 from typing import List, Dict, Any, Optional, Tuple, Union
@@ -213,7 +215,8 @@ def exists_on_global(entry: Dict[str, Any]) -> bool:
     `unreleased_servers` elsewhere, so both spellings are accepted here.
 
     Scope: this is only consulted for skills that carry no shop price. GameTora's flag lags reality often enough that gating
-    priced skills on it would drop live ones, so priced skills are kept regardless of what it says. The race scraper does its
+    priced skills on it would drop live ones, so priced skills are kept regardless of what it says (SkillScraper gates them
+    on a master.mdb instead when one is given). The race scraper does its
     own gating through ERAS_NOT_ON_EN, because `did_not_exist` is a JP-history marker rather than an EN-availability flag and
     the skill dataset does not carry that field at all.
 
@@ -224,6 +227,22 @@ def exists_on_global(entry: Dict[str, Any]) -> bool:
         True when Global already has the entry.
     """
     return "en" not in (entry.get("unreleased_servers") or entry.get("unreleased") or [])
+
+
+def read_master_skill_ids(db_path: str) -> set:
+    """Reads the skill ids the game's master.mdb holds. Only presence is taken from the db, never a skill field.
+
+    Args:
+        db_path (str): Path to a copy of master.mdb.
+
+    Returns:
+        Every `skill_data` id, including the 900xxx inherited copies.
+    """
+    db = sqlite3.connect(f"file:{Path(db_path).resolve().as_posix()}?mode=ro", uri=True)
+    try:
+        return {row[0] for row in db.execute("SELECT id FROM skill_data")}
+    finally:
+        db.close()
 
 
 def fetch_gametora_manifest_data(manifest_name: str) -> dict:
@@ -356,8 +375,9 @@ class BaseScraper:
 class SkillScraper(BaseScraper):
     """Scrapes the skills from the website."""
 
-    def __init__(self):
+    def __init__(self, master_db: Optional[str] = None):
         super().__init__("https://gametora.com/umamusume/skills", "skills.json")
+        self.master_db = master_db
 
     def scrape_skill_evaluation_points(self):
         """Scrapes skill Evaluation Points (which affect result rank) from the umamusu wiki.
@@ -549,6 +569,9 @@ class SkillScraper(BaseScraper):
 
         try:
             skill_data = fetch_gametora_manifest_data("skills")
+            # GameTora lists skills the Global client does not have, and its unreleased flag misses some, so with a db
+            # a priced skill must exist there (by id or gene id) to be kept.
+            master_skill_ids = read_master_skill_ids(self.master_db) if self.master_db else None
 
             rarity_by_id = {s["id"]: s.get("rarity", 1) for s in skill_data if "id" in s}
             iconid_by_id = {s["id"]: s.get("iconid", 0) for s in skill_data if "id" in s}
@@ -588,6 +611,10 @@ class SkillScraper(BaseScraper):
                             logging.debug(f"Skipping skill with no COST that Global does not have yet: {skill_name_en}")
                             continue
                         skill_cost = DEFAULT_SKILL_COST
+
+                    if master_skill_ids is not None and bHasShopCost and not {skill_id, skill_gene_id} & master_skill_ids:
+                        logging.debug(f"Skipping priced skill missing from master.mdb: {skill_name_en}")
+                        continue
 
                     # Get the skill activation conditions.
                     skill_condition = self.get_skill_activation_conditions(skill)
@@ -2455,7 +2482,11 @@ if __name__ == "__main__":
     logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
     start_time = time.time()
 
-    run_scraper_with_retry(SkillScraper())
+    parser = argparse.ArgumentParser(description="Regenerates the bundled game data in src/data.")
+    parser.add_argument("--master-db", help="Copy of the game's master.mdb; skills missing from it are dropped from skills.json.")
+    args = parser.parse_args()
+
+    run_scraper_with_retry(SkillScraper(args.master_db))
 
     run_scraper_with_retry(CharacterScraper())
 
