@@ -377,6 +377,7 @@ class QueueLedgerWiringTest {
                     "CAREER_NOT_FINISHED",
                     "FINAL_CONFIRMATION_MODE_UNVERIFIED",
                     "GRAND_CONCERT_SCREEN_UNSUPPORTED",
+                    "SCENARIO_NOT_FOUND",
                 ),
                 keys,
             )

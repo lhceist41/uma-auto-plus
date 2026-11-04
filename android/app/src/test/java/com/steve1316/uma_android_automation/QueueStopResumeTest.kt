@@ -114,6 +114,10 @@ class QueueStopResumeTest {
             assertTrue(data.nextAction!!.endsWith("within 24 hours, with Run Queue on and the same number of runs, to continue the queue."))
             val scenario = queueReportText(JSONObject(kept.toString()).put("reasonKey", "CAREER_SCENARIO_MISMATCH"))
             assertFalse(scenario.nextAction!!.contains("continue the queue"))
+            val unproven = queueReportText(JSONObject(kept.toString()).put("reasonKey", "CAREER_SCENARIO_UNPROVEN"))
+            assertTrue(unproven.reason.contains("did not show the button its scenario always shows"))
+            assertFalse(unproven.nextAction!!.contains("continue the queue"))
+            assertTrue(unproven.nextAction!!.contains("select a preset for it on Home, discarding any saved queue there,"), "the kept resume record is a saved queue on Home")
         }
     }
 

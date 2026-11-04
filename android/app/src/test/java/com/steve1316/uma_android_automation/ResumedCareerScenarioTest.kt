@@ -1,5 +1,10 @@
 package com.steve1316.uma_android_automation
 
+import com.steve1316.uma_android_automation.bot.MAX_INCONCLUSIVE_SCENARIO_CHECKS
+import com.steve1316.uma_android_automation.bot.STEADY_SCENARIO_BUTTONS
+import com.steve1316.uma_android_automation.bot.ScenarioCheckStep
+import com.steve1316.uma_android_automation.bot.careerScenarioUnproven
+import com.steve1316.uma_android_automation.bot.scenarioCheckStep
 import com.steve1316.uma_android_automation.bot.foreignCareerScenario
 import com.steve1316.uma_android_automation.bot.scenarioButtonConfidence
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -13,7 +18,8 @@ import java.io.File
 
 /**
  * A career the run did not start (a resume, a retry, a Start on a career in progress) is played by the campaign its settings name, so its
- * screen is checked first. Only another scenario's button on two fresh captures stops it; a missed or ambiguous read plays on.
+ * screen is checked first. Another scenario's button on two fresh captures stops it, and so does a Grand Concert career screen without
+ * its Races button, the one button that shows on every turn. Any other miss or ambiguous read plays on.
  */
 @DisplayName("Scenario check on a career the run did not start")
 class ResumedCareerScenarioTest {
@@ -49,7 +55,7 @@ class ResumedCareerScenarioTest {
         }
 
         @Test
-        fun `no scenario button plays on, so a URA career and a missed template never stop`() {
+        fun `no scenario button proves no other known scenario`() {
             for (configured in listOf(gc, tb, uc, ura)) {
                 assertNull(foreignCareerScenario(configured, emptySet(), emptySet()))
             }
@@ -64,6 +70,89 @@ class ResumedCareerScenarioTest {
         @Test
         fun `two foreign buttons at once are ambiguous and play on`() {
             assertNull(foreignCareerScenario(ura, setOf(gc, tb), setOf(gc, tb)))
+        }
+    }
+
+    @Nested
+    @DisplayName("unproven career")
+    inner class Unproven {
+        @Test
+        fun `a Grand Concert career screen without any scenario button on both captures is unproven`() {
+            assertTrue(careerScenarioUnproven(gc, emptySet(), emptySet()))
+        }
+
+        @Test
+        fun `its Races button on either capture proves it`() {
+            assertFalse(careerScenarioUnproven(gc, setOf(gc), emptySet()))
+            assertFalse(careerScenarioUnproven(gc, emptySet(), setOf(gc)))
+        }
+
+        @Test
+        fun `scenarios without a button on every turn still play on with no button`() {
+            for (configured in listOf(tb, uc, ura)) {
+                assertFalse(careerScenarioUnproven(configured, emptySet(), emptySet()), configured)
+            }
+        }
+
+        @Test
+        fun `another scenario's button on any capture leaves the decision to the mismatch check`() {
+            assertFalse(careerScenarioUnproven(gc, setOf(tb), emptySet()))
+            assertFalse(careerScenarioUnproven(gc, emptySet(), setOf(uc)))
+            assertFalse(careerScenarioUnproven(gc, setOf(tb), setOf(tb)))
+            assertEquals(tb, foreignCareerScenario(gc, setOf(tb), setOf(tb)))
+        }
+
+        @Test
+        fun `only Grand Concert counts as showing its button on every turn`() {
+            // Unity Cup's race button is a race-turn button, URA Finale has none, and no Trackblazer career-screen fixture proves its Shop button.
+            assertEquals(setOf(gc), STEADY_SCENARIO_BUTTONS.keys)
+        }
+    }
+
+    @Nested
+    @DisplayName("inconclusive recheck")
+    inner class Inconclusive {
+        /** The steps a run of passes takes, counting as the campaign does: a retry adds one, every other step resets to zero. */
+        private fun run(passes: List<Pair<Boolean, Boolean>>): List<ScenarioCheckStep> {
+            var count = 0
+            return passes.map { (unproven, held) ->
+                scenarioCheckStep(unproven, held, count).also { count = if (it == ScenarioCheckStep.RETRY) count + 1 else 0 }
+            }
+        }
+
+        private val lost = true to false
+        private val held = true to true
+        private val proven = false to false
+
+        @Test
+        fun `an unproven pass whose career screen holds stops at once`() {
+            assertEquals(ScenarioCheckStep.STOP, scenarioCheckStep(unproven = true, screenHeld = true, inconclusiveBefore = 0))
+        }
+
+        @Test
+        fun `a lost career screen retries, and the third in a row fails closed`() {
+            assertEquals(3, MAX_INCONCLUSIVE_SCENARIO_CHECKS)
+            assertEquals(listOf(ScenarioCheckStep.RETRY, ScenarioCheckStep.RETRY, ScenarioCheckStep.STOP), run(listOf(lost, lost, lost)))
+        }
+
+        @Test
+        fun `a held screen after one or two lost ones stops`() {
+            assertEquals(listOf(ScenarioCheckStep.RETRY, ScenarioCheckStep.STOP), run(listOf(lost, held)))
+            assertEquals(listOf(ScenarioCheckStep.RETRY, ScenarioCheckStep.RETRY, ScenarioCheckStep.STOP), run(listOf(lost, lost, held)))
+        }
+
+        @Test
+        fun `a proven pass after one or two lost ones plays and resets the count`() {
+            assertEquals(listOf(ScenarioCheckStep.RETRY, ScenarioCheckStep.PLAY), run(listOf(lost, proven)))
+            assertEquals(
+                listOf(ScenarioCheckStep.RETRY, ScenarioCheckStep.RETRY, ScenarioCheckStep.PLAY, ScenarioCheckStep.RETRY, ScenarioCheckStep.RETRY, ScenarioCheckStep.STOP),
+                run(listOf(lost, lost, proven, lost, lost, lost)),
+            )
+        }
+
+        @Test
+        fun `a proven pass never stops, whatever came before`() {
+            for (before in 0..5) assertEquals(ScenarioCheckStep.PLAY, scenarioCheckStep(unproven = false, screenHeld = false, inconclusiveBefore = before))
         }
     }
 
@@ -108,20 +197,64 @@ class ResumedCareerScenarioTest {
         @Test
         fun `the check runs once, at the first career screen, before any scenario hook and only for a career the run did not start`() {
             val body = campaign.substring(campaign.indexOf("open fun handleMainScreen(): Boolean {"))
-            val check = body.indexOf("if (!game.careerLaunched) checkReEnteredCareerScenario()")
+            val check = body.indexOf("if (!game.careerLaunched && !checkReEnteredCareerScenario()) {")
             assertTrue(check > body.indexOf("if (!checkMainScreen()) {"), "on the career screen")
             assertTrue(check < body.indexOf("onBeforeMainScreenUpdate()"), "before the scenario's own hook can act")
             assertTrue(body.substring(0, check).contains("if (!bCareerScenarioChecked) {\n            bCareerScenarioChecked = true"), "once per run")
         }
 
         @Test
+        fun `an inconclusive check plays no turn and runs again on the next main-screen pass`() {
+            val body = campaign.substring(campaign.indexOf("open fun handleMainScreen(): Boolean {"))
+            val check = body.indexOf("if (!game.careerLaunched && !checkReEnteredCareerScenario()) {")
+            assertTrue(
+                body.substring(check).startsWith(
+                    "if (!game.careerLaunched && !checkReEnteredCareerScenario()) {\n                bCareerScenarioChecked = false\n                return false\n            }",
+                ),
+                "the flag is cleared and the pass returns before anything else",
+            )
+            assertTrue(body.indexOf("return false", check) < body.indexOf("onBeforeMainScreenUpdate()"), "before any turn work")
+        }
+
+        @Test
+        fun `the inconclusive count rises only on a retry and resets on every other outcome`() {
+            val body = campaign.substring(campaign.indexOf("private fun checkReEnteredCareerScenario(): Boolean {"), campaign.indexOf("private fun stopOnSlotScenarioMismatch("))
+            val step = body.indexOf("val step = scenarioCheckStep(unproven, unproven && checkMainScreen(), inconclusiveScenarioChecks)")
+            val retry = body.indexOf("if (step == ScenarioCheckStep.RETRY) {\n            inconclusiveScenarioChecks++")
+            val retryReturn = body.indexOf("return false", retry)
+            val reset = body.indexOf("inconclusiveScenarioChecks = 0")
+            assertTrue(step in 0 until retry, "decided once per pass")
+            assertTrue(retryReturn in retry until reset, "a retry leaves before the reset")
+            assertTrue(reset < body.indexOf("if (step == ScenarioCheckStep.STOP) {"), "a stop or a play resets it")
+            assertEquals(1, Regex("inconclusiveScenarioChecks\\+\\+").findAll(campaign).count(), "counted in one place")
+        }
+
+        @Test
         fun `a proven mismatch stops the queue with its own key, before any tap`() {
-            val body = campaign.substring(campaign.indexOf("private fun checkReEnteredCareerScenario() {"), campaign.indexOf("private fun stopOnSlotScenarioMismatch("))
+            val body = campaign.substring(campaign.indexOf("private fun checkReEnteredCareerScenario(): Boolean {"), campaign.indexOf("private fun stopOnSlotScenarioMismatch("))
             assertTrue(body.contains("StartModule.queueStopKey = \"CAREER_SCENARIO_MISMATCH\""))
             assertTrue(body.contains("StartModule.queueStopRequested = true"))
             assertTrue(body.contains("throw InterruptedException(reason)"))
             assertFalse(Regex("\\.tap|click\\(", RegexOption.IGNORE_CASE).containsMatchIn(body), "no tap or click")
             assertTrue("CAREER_SCENARIO_MISMATCH" in REPORT_REASON_KEYS, "the stop has its own words for the player")
+        }
+
+        @Test
+        fun `an unproven career stops with its own key on a second look at a career screen that still shows, before any tap`() {
+            val body = campaign.substring(campaign.indexOf("private fun checkReEnteredCareerScenario(): Boolean {"), campaign.indexOf("private fun stopOnSlotScenarioMismatch("))
+            assertTrue(
+                body.contains("if (game.scenario in first || (first.isEmpty() && game.scenario !in STEADY_SCENARIO_BUTTONS)) {"),
+                "a Grand Concert screen with no button gets its second look",
+            )
+            val unproven = body.indexOf("if (step == ScenarioCheckStep.STOP) {")
+            assertTrue(body.indexOf("val unproven = careerScenarioUnproven(game.scenario, first, second)") > body.indexOf("scenariosOnScreen()\n            }"), "after both looks")
+            assertTrue(unproven < body.indexOf("val foreign = foreignCareerScenario("), "before the play-on path")
+            val stop = body.substring(unproven, body.indexOf("val foreign = foreignCareerScenario("))
+            assertTrue(stop.contains("StartModule.queueStopKey = \"CAREER_SCENARIO_UNPROVEN\""))
+            assertTrue(stop.contains("StartModule.queueStopRequested = true"))
+            assertTrue(stop.contains("throw InterruptedException(reason)"))
+            assertFalse(Regex("\\.tap|click\\(", RegexOption.IGNORE_CASE).containsMatchIn(body), "no tap or click")
+            assertTrue("CAREER_SCENARIO_UNPROVEN" in REPORT_REASON_KEYS, "the stop has its own words for the player")
         }
 
         @Test

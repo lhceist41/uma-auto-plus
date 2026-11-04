@@ -313,6 +313,25 @@
             }
         },
         {
+            "name": "single run: the bot stopped on a career it could not match to its scenario",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "totalRuns": 1,
+                "reasonKey": "CAREER_SCENARIO_UNPROVEN",
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_MANUALLY_STOPPED"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Run stopped",
+                "reason": "The bot stopped the run: the career's screen did not show the button its scenario always shows, so it may be a career from another scenario, or from a scenario the bot does not support yet. The career is kept.",
+                "nextAction": "Check the career's scenario in the game: select a preset for it on Home, discarding any saved queue there, or finish the career in the game, then press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "single run: the bot stopped on the game's data prompt",
             "report": {
                 "kind": "SINGLE_RUN_ENDED",
@@ -616,6 +635,21 @@
                 "title": "Queue stopped",
                 "reason": "The bot stopped the queue with 1 of 3 runs done: the career in the game is from a different scenario than this run's settings. The career is kept.",
                 "nextAction": "Select a preset for that career's scenario on Home, discarding any saved queue there, or finish the career in the game, then press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "bot stop: resumed career the bot could not match to its scenario",
+            "report": {
+                "kind": "STOPPED_BY_BOT",
+                "queueEnabled": true,
+                "totalRuns": 3,
+                "completedRuns": 1,
+                "reasonKey": "CAREER_SCENARIO_UNPROVEN"
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The bot stopped the queue with 1 of 3 runs done: the career's screen did not show the button its scenario always shows, so it may be a career from another scenario, or from a scenario the bot does not support yet. The career is kept.",
+                "nextAction": "Check the career's scenario in the game: select a preset for it on Home, discarding any saved queue there, or finish the career in the game, then press Start in UMA Auto+."
             }
         },
         {
@@ -1183,6 +1217,22 @@
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: TP ran out.",
                 "nextAction": "Wait for TP to refill, or turn on Restore TP with Items in Run Queue Settings, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: SCENARIO_NOT_FOUND",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "SCENARIO_NOT_FOUND"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the game's scenario list never showed the scenario this run needs. A game update may have changed the list.",
+                "nextAction": "Check for an UMA Auto+ update, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

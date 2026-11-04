@@ -207,6 +207,12 @@ internal fun backToTraineeSelect(traineeOwed: Boolean, backsPressed: Int): Boole
 internal fun launchesNewCareer(finalizeToHome: Boolean, homeSeen: Boolean): Boolean = !finalizeToHome && homeSeen
 
 /**
+ * Logo checks on Scenario Select for a carousel the bot has [knownCards] logos for: a full cycle with room for two cards a game update
+ * added before their logos exist here, plus one re-check for a misread or a chevron tap that did not page.
+ */
+internal fun scenarioCarouselPageChecks(knownCards: Int): Int = knownCards + 3
+
+/**
  * Result of a navigation attempt between runs.
  *
  * @property success Whether navigation completed successfully.
@@ -9962,8 +9968,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * The game opens this screen on whatever scenario was last played, so a same-scenario queue
      * passes with a single Next tap. A cross-scenario rotation pages the cyclic carousel
      * (URA Finale -> Unity Cup -> Trackblazer -> Grand Concert) with the right arrow until the
-     * target scenario's logo shows. Bounded at 6 swipes, which still clears a full cycle plus a
-     * settle re-check now that the carousel carries four entries, so a misread cannot loop.
+     * target scenario's logo shows. Bounded by [scenarioCarouselPageChecks], so a misread cannot loop.
      */
     private fun handleScenarioSelect(): TransitionResult {
         val target = SettingsHelper.getStringSetting("general", "scenario")
@@ -9992,7 +9997,8 @@ class CareerLaunchNavigator(private val context: Context) {
                     )
             }
 
-        repeat(6) { attempt ->
+        val pageChecks = scenarioCarouselPageChecks(carouselLogos.size)
+        repeat(pageChecks) { attempt ->
             if (!BotService.isRunning || StartModule.queueStopRequested) {
                 return TransitionResult.Failed(
                     reason = "Bot stopped while paging the Scenario Select carousel.",
@@ -10026,7 +10032,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     ?: "unrecognised"
             MessageLog.i(
                 TAG,
-                "[NAV] Scenario Select shows \"$showing\", wanted \"$target\" (page check ${attempt + 1}/6). " +
+                "[NAV] Scenario Select shows \"$showing\", wanted \"$target\" (page check ${attempt + 1}/$pageChecks). " +
                     "Swiping the carousel to the next scenario.",
             )
             // Tap the carousel's own right chevron rather than dragging the card. A drag has to land
@@ -10048,6 +10054,7 @@ class CareerLaunchNavigator(private val context: Context) {
             reason = "Scenario Select never showed \"$target\" after paging the full carousel.",
             transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
             recommendedAction = "Manually select the scenario in-game and restart the queue. If the scenario logos changed in a patch, recapture the scenario_select_* templates.",
+            reasonKey = "SCENARIO_NOT_FOUND",
         )
     }
 

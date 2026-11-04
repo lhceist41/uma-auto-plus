@@ -211,12 +211,37 @@ internal fun infirmaryReadsEnabled(disabledRead: Boolean?): Boolean = disabledRe
 
 /**
  * The other scenario a career screen proves it plays, from the scenario buttons two fresh captures show: one scenario seen on both, and
- * [configured]'s own button on neither. Null means play on; a missed template must never stop a career.
+ * [configured]'s own button on neither. Null means no other known scenario is proven.
  */
 internal fun foreignCareerScenario(configured: String, first: Set<String>, second: Set<String>): String? {
     if (configured in first || configured in second) return null
     return (first intersect second).singleOrNull()
 }
+
+/**
+ * The scenarios whose own button shows on every career-screen turn, with its name for the player. Only these are proven wrong by a
+ * missing button: Unity Cup's race button shows on race turns only, and URA Finale has none.
+ */
+internal val STEADY_SCENARIO_BUTTONS: Map<String, String> = mapOf(GrandConcertScenario.KEY to "Races button")
+
+/** A career [configured] cannot be matched to: its steady button, and every other scenario button, missing from both captures. */
+internal fun careerScenarioUnproven(configured: String, first: Set<String>, second: Set<String>): Boolean = configured in STEADY_SCENARIO_BUTTONS && first.isEmpty() && second.isEmpty()
+
+/** Unproven passes in a row whose career screen did not hold for the recheck before the check fails closed. */
+internal const val MAX_INCONCLUSIVE_SCENARIO_CHECKS = 3
+
+internal enum class ScenarioCheckStep { PLAY, RETRY, STOP }
+
+/**
+ * An unproven pass stops when the career screen still shows ([screenHeld]). One that lost the screen plays no turn and checks again on
+ * the next pass, until the [MAX_INCONCLUSIVE_SCENARIO_CHECKS]th in a row, counted from [inconclusiveBefore], stops too: never play on unproven.
+ */
+internal fun scenarioCheckStep(unproven: Boolean, screenHeld: Boolean, inconclusiveBefore: Int): ScenarioCheckStep =
+    when {
+        !unproven -> ScenarioCheckStep.PLAY
+        screenHeld || inconclusiveBefore + 1 >= MAX_INCONCLUSIVE_SCENARIO_CHECKS -> ScenarioCheckStep.STOP
+        else -> ScenarioCheckStep.RETRY
+    }
 
 // The stock Races button on every other scenario's career screen scores about 0.70 against the Grand Concert one, so a lowered template
 // confidence setting would read every URA Finale career as Grand Concert.
@@ -407,20 +432,46 @@ abstract class Campaign(game: Game) : Task(game) {
         return scenarioButtons.filterValues { it.check(game.imageUtils, sourceBitmap = bitmap, confidence = confidence) }.keys
     }
 
-    /** A career this run did not start can belong to another scenario, and the campaign is fixed when Game is built: stop before its first turn. */
-    private fun checkReEnteredCareerScenario() {
+    /**
+     * A career this run did not start can belong to another scenario, and the campaign is fixed when Game is built: stop before its first turn.
+     * False means the check was inconclusive and this pass must play no turn.
+     */
+    private fun checkReEnteredCareerScenario(): Boolean {
         val first = scenariosOnScreen()
         val second =
-            if (first.isEmpty() || game.scenario in first) {
+            if (game.scenario in first || (first.isEmpty() && game.scenario !in STEADY_SCENARIO_BUTTONS)) {
                 emptySet()
             } else {
                 game.wait(1.0, skipWaitingForLoading = true)
                 scenariosOnScreen()
             }
+        // A dialog rising between the looks hides the button too, so the miss counts only while the career screen still shows.
+        val unproven = careerScenarioUnproven(game.scenario, first, second)
+        val step = scenarioCheckStep(unproven, unproven && checkMainScreen(), inconclusiveScenarioChecks)
+        if (step == ScenarioCheckStep.RETRY) {
+            inconclusiveScenarioChecks++
+            MessageLog.i(
+                TAG,
+                "[CONFIG_DRIFT] No scenario button on two looks, but the career screen did not hold for the recheck; " +
+                    "checking again on the next pass ($inconclusiveScenarioChecks/$MAX_INCONCLUSIVE_SCENARIO_CHECKS).",
+            )
+            return false
+        }
+        inconclusiveScenarioChecks = 0
+        if (step == ScenarioCheckStep.STOP) {
+            val reason =
+                "Stopped: this career's screen did not show the ${game.scenario} ${STEADY_SCENARIO_BUTTONS.getValue(game.scenario)} on two looks, " +
+                    "so it may be another scenario's career. The career is kept in the game."
+            MessageLog.e(TAG, "[CONFIG_DRIFT] $reason")
+            StartModule.queueStopKey = "CAREER_SCENARIO_UNPROVEN"
+            StartModule.queueStopReason = reason
+            StartModule.queueStopRequested = true
+            throw InterruptedException(reason)
+        }
         val foreign = foreignCareerScenario(game.scenario, first, second)
         if (foreign == null) {
             MessageLog.i(TAG, "[CONFIG_DRIFT] Career screen of a career this run did not start shows ${first.ifEmpty { setOf("no scenario button") }.joinToString()}; playing it as ${game.scenario}.")
-            return
+            return true
         }
         val reason = "Stopped on a scenario mismatch: the career in the game is a $foreign career, but this run loaded ${game.scenario} settings. The career is kept in the game."
         MessageLog.e(TAG, "[CONFIG_DRIFT] $reason")
@@ -645,6 +696,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** Once per run, at the first career screen. */
     private var bCareerScenarioChecked: Boolean = false
+    private var inconclusiveScenarioChecks: Int = 0
 
     /** Jaro-Winkler floor for the rotation trainee verify; slightly lenient versus the navigator's 0.86 select threshold because a STOP halts the
      * whole unattended queue. */
@@ -3160,7 +3212,10 @@ abstract class Campaign(game: Game) : Task(game) {
 
         if (!bCareerScenarioChecked) {
             bCareerScenarioChecked = true
-            if (!game.careerLaunched) checkReEnteredCareerScenario()
+            if (!game.careerLaunched && !checkReEnteredCareerScenario()) {
+                bCareerScenarioChecked = false
+                return false
+            }
         }
 
         // Scenario-specific pre-update hook.

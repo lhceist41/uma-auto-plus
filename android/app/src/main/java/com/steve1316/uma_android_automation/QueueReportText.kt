@@ -93,7 +93,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.STOPPED_BY_BOT -> {
             val why = keyText(key, r)
             // Continuing replays the same scenario check, so that stop's fix starts over instead.
-            val continues = resumable && key != "CAREER_SCENARIO_MISMATCH"
+            val continues = resumable && key != "CAREER_SCENARIO_MISMATCH" && key != "CAREER_SCENARIO_UNPROVEN"
             ReportText(haltTitle(resumable), "The bot stopped the queue with $done of ${runsPhrase(total)} done: ${why.reason}" + runNotes(r), why.next(continues))
         }
         SessionEnd.SERVICE_ENDED ->
@@ -393,6 +393,17 @@ internal val REPORT_REASON_KEYS =
             KeyText(
                 "the career in the game is from a different scenario than this run's settings. The career is kept.",
                 "Select a preset for that career's scenario on Home, discarding any saved queue there, or finish the career in the game",
+            ),
+        "CAREER_SCENARIO_UNPROVEN" to
+            KeyText(
+                "the career's screen did not show the button its scenario always shows, so it may be a career from another scenario, or from " +
+                    "a scenario the bot does not support yet. The career is kept.",
+                "Check the career's scenario in the game: select a preset for it on Home, discarding any saved queue there, or finish the career in the game",
+            ),
+        "SCENARIO_NOT_FOUND" to
+            KeyText(
+                "the game's scenario list never showed the scenario this run needs. A game update may have changed the list.",
+                "Check for an UMA Auto+ update",
             ),
         CAREER_NOT_FINISHED to
             KeyText("the game's daily reset or another interruption stopped the career's Finish. The career is kept, and Start finishes it.", null),
