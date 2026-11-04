@@ -9798,8 +9798,7 @@ const basePresets: CharacterPreset[] = [
     {
         // Grand Concert preset, cloned from the URA build that ran the scenario's first fully
         // automated career (A+ 12,611 on 2026-07-24). Differences from URA: the scenario fields
-        // and the Mile Speed target raised to the scenario's 1600 Speed cap (URA's 1200 target
-        // left cap headroom unused; that career finished at Speed 1275 against the lower target).
+        // and the Mile targets and priority that `applyGrandConcertTargets` below gives every Mile twin.
         name: "Taiki Shuttle",
         scenario: "Grand Concert",
         settings: {
@@ -9957,7 +9956,7 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Power", "Wit", "Guts", "Stamina"],
+                statPrioritization: ["Speed", "Wit", "Power", "Stamina", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Power"],
@@ -9980,9 +9979,9 @@ const basePresets: CharacterPreset[] = [
                 trainingSprintStatTarget_witStatTarget: 1200,
                 trainingMileStatTarget_speedStatTarget: 1600,
                 trainingMileStatTarget_staminaStatTarget: 450,
-                trainingMileStatTarget_powerStatTarget: 1000,
-                trainingMileStatTarget_gutsStatTarget: 250,
-                trainingMileStatTarget_witStatTarget: 800,
+                trainingMileStatTarget_powerStatTarget: 1250,
+                trainingMileStatTarget_gutsStatTarget: 300,
+                trainingMileStatTarget_witStatTarget: 1300,
                 trainingMediumStatTarget_speedStatTarget: 1200,
                 trainingMediumStatTarget_staminaStatTarget: 700,
                 trainingMediumStatTarget_powerStatTarget: 900,
@@ -70058,12 +70057,33 @@ const basePresets: CharacterPreset[] = [
     },
 ]
 
-/** Maps a `preferredDistanceOverride` to its Speed target key in the `trainingStatTarget` block. */
-const SPEED_TARGET_KEY: Record<string, keyof Settings["trainingStatTarget"]> = {
-    Sprint: "trainingSprintStatTarget_speedStatTarget",
-    Mile: "trainingMileStatTarget_speedStatTarget",
-    Medium: "trainingMediumStatTarget_speedStatTarget",
-    Long: "trainingLongStatTarget_speedStatTarget",
+type StatTargetKey = keyof Settings["trainingStatTarget"]
+const targetKey = (distance: string, stat: string) => `training${distance}StatTarget_${stat}StatTarget` as StatTargetKey
+
+/**
+ * The career rating scores every stat on one curve, so Sprint, Mile and Medium twins aim Speed at
+ * its 1600 cap with Wit and Power close behind, keeping a higher URA Stamina target where their
+ * own goal races may need one. Long stayers keep their Stamina-led weighting and priority and only
+ * raise Wit. Stays within the scenario's caps (Speed 1600, Guts 1500, the rest 1300).
+ */
+const applyGrandConcertTargets = (settings: DeepPartial<Settings>, distance: string | undefined, uraName: string) => {
+    const targets = { ...settings.trainingStatTarget }
+    if (distance === "Long") {
+        targets[targetKey(distance, "wit")] = 1100
+    } else if (distance === "Sprint" || distance === "Mile" || distance === "Medium") {
+        const stamina = targets[targetKey(distance, "stamina")] ?? 0
+        Object.assign(targets, {
+            [targetKey(distance, "speed")]: 1600,
+            [targetKey(distance, "stamina")]: Math.max(stamina, 450),
+            [targetKey(distance, "power")]: 1250,
+            [targetKey(distance, "guts")]: 300,
+            [targetKey(distance, "wit")]: 1300,
+        })
+        settings.training = { ...settings.training, statPrioritization: ["Speed", "Wit", "Power", "Stamina", "Guts"] }
+    } else {
+        throw new Error(`grandConcertFrom: "${uraName}" has no stat target block for distance "${distance}"`)
+    }
+    settings.trainingStatTarget = targets
 }
 
 /**
@@ -70071,19 +70091,18 @@ const SPEED_TARGET_KEY: Record<string, keyof Settings["trainingStatTarget"]> = {
  *
  * Grand Concert differs from URA Finale in exactly one way a preset cares about: its stat caps.
  * Speed rises to 1600 where URA is a flat 1400, while Stamina, Power and Wit drop to 1300.
- * Everything else a preset carries -- racing plan, skill plans, event picks, stat priorities,
- * failure thresholds -- applies unchanged, which is why these are derived rather than copied: a
- * hand-cloned twin silently rots the first time someone fixes the URA build.
+ * Everything else a preset carries -- racing plan, skill plans, event picks, failure thresholds --
+ * applies unchanged, which is why these are derived rather than copied: a hand-cloned twin silently
+ * rots the first time someone fixes the URA build. The exceptions are the stat targets for the
+ * preset's own preferred distance and, except for Long, the stat priority, both set by
+ * `applyGrandConcertTargets`.
  *
- * `speedTarget` is optional and raises the Speed target for the preset's own preferred distance.
- * Pass it ONLY for builds that genuinely want Speed maximised. A stat target is not a ceiling, it
- * is a weight: `Training.kt`'s `calculateStatEfficiencyScore` scores a stat by how far
- * current/target is behind, 5.0x while under 30% of target down to 0.3x once well over, and the
- * stat-priority list is only a tiebreaker inside a 10% completion window. So raising Speed on a
- * stayer pulls training away from the Stamina its 3000m+ goals need. Omit it for those and only
- * the scenario fields change.
+ * A stat target is not a ceiling, it is a weight: `Training.kt`'s `calculateStatEfficiencyScore`
+ * scores a stat by how far current/target is behind, 5.0x while under 30% of target down to 0.3x
+ * once well over, and the stat-priority list is only a tiebreaker inside a 10% completion window.
+ * So raising Speed on a stayer pulls training away from the Stamina its 3000m+ goals need.
  */
-const grandConcertFrom = (uraName: string, speedTarget?: number): CharacterPreset => {
+const grandConcertFrom = (uraName: string): CharacterPreset => {
     const base = basePresets.find((p) => p.name === uraName && p.scenario === "URA Finale")
     if (base === undefined) throw new Error(`grandConcertFrom: no URA Finale preset named "${uraName}"`)
 
@@ -70105,12 +70124,7 @@ const grandConcertFrom = (uraName: string, speedTarget?: number): CharacterPrese
     // which has no counterpart here. Dropping it lets Grand Concert fall back to the rank objective.
     if (settings.skills !== undefined) delete settings.skills.skillSpendObjective
 
-    if (speedTarget !== undefined) {
-        const distance = base.settings.training?.preferredDistanceOverride
-        const key = distance === undefined ? undefined : SPEED_TARGET_KEY[distance]
-        if (key === undefined) throw new Error(`grandConcertFrom: "${uraName}" has no Speed target key for distance "${distance}"`)
-        settings.trainingStatTarget = { ...settings.trainingStatTarget, [key]: speedTarget }
-    }
+    applyGrandConcertTargets(settings, base.settings.training?.preferredDistanceOverride, uraName)
 
     return {
         name: base.name,
@@ -70124,11 +70138,8 @@ const grandConcertFrom = (uraName: string, speedTarget?: number): CharacterPrese
 const goldCityGrandConcertFrom = (uraName: string): CharacterPreset => {
     const preset = grandConcertFrom(uraName)
     preset.settings.training = { ...preset.settings.training, preferredDistanceOverride: "Mile" }
-    preset.settings.trainingStatTarget = {
-        ...preset.settings.trainingStatTarget,
-        trainingMileStatTarget_speedStatTarget: 1400,
-        trainingLongStatTarget_staminaStatTarget: 600,
-    }
+    applyGrandConcertTargets(preset.settings, "Mile", uraName)
+    preset.settings.trainingStatTarget = { ...preset.settings.trainingStatTarget, trainingLongStatTarget_staminaStatTarget: 600 }
     return preset
 }
 
@@ -70138,16 +70149,7 @@ const goldCityGrandConcertFrom = (uraName: string): CharacterPreset => {
  * no stat or aptitude check and no fail state), so what varies between twins is exactly what the
  * URA builds already encode: goal chains, distance, surface, and stat weighting.
  *
- * Speed target rationale, per the weight-not-ceiling note on `grandConcertFrom`:
- *   - Sprint and Mile Speed-primary builds (URA Speed target at the 1200 norm) take the full
- *     1600 cap.
- *   - Sprint and Mile builds whose URA Speed target sits BELOW the 1200 norm deliberately temper
- *     Speed (wit- or stamina-led kits, caution profiles); they take 1400, keeping the raised-cap
- *     headroom without repointing a build that never chased Speed to begin with.
- *   - Medium builds take 1400, using the headroom URA's flat cap denied them without starving
- *     the Stamina their goal races still need.
- *   - Long stayers take no Speed change at all; Stamina is their bottleneck and Grand Concert
- *     already caps it at 1300, below URA's 1400.
+ * Stat targets per distance: see `applyGrandConcertTargets`.
  *
  * The three Legacy Farm arms (Daiwa Scarlet, El Condor Pasa, Air Groove) are deliberately NOT
  * ported: they are URA-specific farm specializations whose `sparks` objective this helper strips,
@@ -70161,104 +70163,102 @@ const grandConcertPresets: CharacterPreset[] = [
     // Scenario-link trainees first: present as the trainee, the Senior Early Nov lyric event
     // upgrades its skill hint from white to gold (Tachyon -> Come What May, Bourbon ->
     // Concentration).
-    grandConcertFrom("Agnes Tachyon", 1400),
-    grandConcertFrom("Mihono Bourbon", 1400),
-    grandConcertFrom("Mihono Bourbon (CODE: ICING)", 1400),
-    // Sprint and Mile: where the 1600 Speed cap actually pays.
-    grandConcertFrom("Sakura Bakushin O", 1600),
-    grandConcertFrom("King Halo", 1600),
-    grandConcertFrom("Maruzensky (Formula R)", 1600),
-    grandConcertFrom("Daiwa Scarlet", 1600),
-    grandConcertFrom("Daiwa Scarlet (Nuit Étoilée de Scarlet)", 1400),
+    grandConcertFrom("Agnes Tachyon"),
+    grandConcertFrom("Mihono Bourbon"),
+    grandConcertFrom("Mihono Bourbon (CODE: ICING)"),
+    // Sprint and Mile.
+    grandConcertFrom("Sakura Bakushin O"),
+    grandConcertFrom("King Halo"),
+    grandConcertFrom("Maruzensky (Formula R)"),
+    grandConcertFrom("Daiwa Scarlet"),
+    grandConcertFrom("Daiwa Scarlet (Nuit Étoilée de Scarlet)"),
     // Dirt: the surface no Grand Concert career has run yet.
-    grandConcertFrom("Copano Rickey", 1600),
+    grandConcertFrom("Copano Rickey"),
     // Medium.
-    grandConcertFrom("Vodka", 1400),
-    grandConcertFrom("Vodka (Fiery Aqua Vitae)", 1400),
-    // Long stayers: deliberately no Speed raise (see above).
+    grandConcertFrom("Vodka"),
+    grandConcertFrom("Vodka (Fiery Aqua Vitae)"),
+    // Long stayers.
     grandConcertFrom("Super Creek"),
     grandConcertFrom("Super Creek (Chiffon-Wrapped Mummy)"),
     grandConcertFrom("Gold Ship"),
 
-    // Full-roster port. Sprint, Speed-primary: the full 1600 cap.
-    grandConcertFrom("Aston Machan", 1600),
-    grandConcertFrom("Curren Chan", 1600),
-    grandConcertFrom("Curren Chan (Ma Chérie of the New Moon)", 1600),
-    grandConcertFrom("King Halo (Cheerleader in Noble White)", 1600),
-    grandConcertFrom("Nishino Flower", 1600),
-    // Sprint, tempered builds (URA Speed target below the 1200 norm).
-    grandConcertFrom("Haru Urara", 1400),
-    grandConcertFrom("Haru Urara (New Year ♪ New Urara!)", 1400),
-    grandConcertFrom("Hishi Akebono", 1400),
-    // Mile, Speed-primary.
-    grandConcertFrom("Bamboo Memory", 1600),
-    grandConcertFrom("El Condor Pasa", 1600),
-    grandConcertFrom("Maruzensky (Hot☆Summer Night)", 1600),
-    grandConcertFrom("Oguri Cap", 1600),
-    grandConcertFrom("Oguri Cap (Ashen Miracle)", 1600),
-    grandConcertFrom("Seeking the Pearl", 1600),
-    grandConcertFrom("Taiki Shuttle (Bubblegum☆Memories)", 1600),
-    grandConcertFrom("Wonder Acute", 1600),
-    grandConcertFrom("Hokko Tarumae", 1600),
-    grandConcertFrom("Yamanin Zephyr", 1600),
-    // Mile, tempered builds.
-    grandConcertFrom("Agnes Digital", 1400),
-    grandConcertFrom("Agnes Digital (Fanatic♡Jiangshi)", 1400),
-    grandConcertFrom("Fuji Kiseki", 1400),
-    grandConcertFrom("Fuji Kiseki (Succès Étoilé)", 1400),
+    // Full-roster port. Sprint.
+    grandConcertFrom("Aston Machan"),
+    grandConcertFrom("Curren Chan"),
+    grandConcertFrom("Curren Chan (Ma Chérie of the New Moon)"),
+    grandConcertFrom("King Halo (Cheerleader in Noble White)"),
+    grandConcertFrom("Nishino Flower"),
+    grandConcertFrom("Haru Urara"),
+    grandConcertFrom("Haru Urara (New Year ♪ New Urara!)"),
+    grandConcertFrom("Hishi Akebono"),
+    // Mile.
+    grandConcertFrom("Bamboo Memory"),
+    grandConcertFrom("El Condor Pasa"),
+    grandConcertFrom("Maruzensky (Hot☆Summer Night)"),
+    grandConcertFrom("Oguri Cap"),
+    grandConcertFrom("Oguri Cap (Ashen Miracle)"),
+    grandConcertFrom("Seeking the Pearl"),
+    grandConcertFrom("Taiki Shuttle (Bubblegum☆Memories)"),
+    grandConcertFrom("Wonder Acute"),
+    grandConcertFrom("Hokko Tarumae"),
+    grandConcertFrom("Yamanin Zephyr"),
+    grandConcertFrom("Agnes Digital"),
+    grandConcertFrom("Agnes Digital (Fanatic♡Jiangshi)"),
+    grandConcertFrom("Fuji Kiseki"),
+    grandConcertFrom("Fuji Kiseki (Succès Étoilé)"),
     goldCityGrandConcertFrom("Gold City (Autumn Cosmos)"),
     goldCityGrandConcertFrom("Gold City (Authentic / 1928)"),
-    grandConcertFrom("Smart Falcon", 1400),
-    grandConcertFrom("Smart Falcon (Twilight Triumph)", 1400),
-    // Medium: the uniform 1400 headroom raise.
-    grandConcertFrom("Admire Vega", 1400),
-    grandConcertFrom("Air Groove", 1400),
-    grandConcertFrom("Air Groove (Quercus Civilis)", 1400),
-    grandConcertFrom("Air Shakur", 1400),
-    grandConcertFrom("Eishin Flash", 1400),
-    grandConcertFrom("Eishin Flash (Precise Chocolatier)", 1400),
-    grandConcertFrom("El Condor Pasa (Kukulkan Warrior)", 1400),
-    grandConcertFrom("Fine Motion", 1400),
-    grandConcertFrom("Fine Motion (Titania)", 1400),
-    grandConcertFrom("Hishi Amazon", 1400),
-    grandConcertFrom("Inari One", 1400),
-    grandConcertFrom("Inari One (Golden Dream)", 1400),
-    grandConcertFrom("Ines Fujin", 1400),
-    grandConcertFrom("Kawakami Princess", 1400),
-    grandConcertFrom("Kitasan Black", 1400),
-    grandConcertFrom("Kitasan Black (Crane's Ambition)", 1400),
-    grandConcertFrom("Meisho Doto", 1400),
-    grandConcertFrom("Meisho Doto (Dot-o'-Lantern)", 1400),
-    grandConcertFrom("Mejiro Ardan", 1400),
-    grandConcertFrom("Mejiro Dober", 1400),
-    grandConcertFrom("Mejiro Dober (Sapphire Sojourn)", 1400),
-    grandConcertFrom("Mejiro Ryan", 1400),
-    grandConcertFrom("Nakayama Festa", 1400),
-    grandConcertFrom("Narita Taishin", 1400),
-    grandConcertFrom("Narita Taishin (Difference Engineer)", 1400),
-    grandConcertFrom("Nice Nature", 1400),
-    grandConcertFrom("Nice Nature (Run & Win)", 1400),
-    grandConcertFrom("Sakura Chiyono O", 1400),
-    grandConcertFrom("Seiun Sky", 1400),
-    grandConcertFrom("Seiun Sky (Soirée des Chatons)", 1400),
-    grandConcertFrom("Silence Suzuka", 1400),
-    grandConcertFrom("Special Week", 1400),
-    grandConcertFrom("Special Week (Ruler of Japan)", 1400),
-    grandConcertFrom("Special Week (Hopp'n♪Happy Heart)", 1400),
-    grandConcertFrom("Sweep Tosho", 1400),
-    grandConcertFrom("Symboli Rudolf (Emperor's Path)", 1400),
-    grandConcertFrom("Symboli Rudolf (Archer by Moonlight)", 1400),
-    grandConcertFrom("T.M. Opera O (New Year, Same Radiance!)", 1400),
-    grandConcertFrom("T.M. Opera O (O Sole Suo!)", 1400),
-    grandConcertFrom("Tokai Teio", 1400),
-    grandConcertFrom("Tokai Teio (Beyond the Horizon)", 1400),
-    grandConcertFrom("Tosen Jordan", 1400),
-    grandConcertFrom("Winning Ticket (Get to Winning!)", 1400),
-    grandConcertFrom("Winning Ticket (Dream Deliverer)", 1400),
-    grandConcertFrom("Yaeno Muteki", 1400),
-    grandConcertFrom("Yukino Bijin", 1400),
-    grandConcertFrom("Zenno Rob Roy", 1400),
-    // Long stayers: no Speed raise, exactly like Super Creek and Gold Ship above.
+    grandConcertFrom("Smart Falcon"),
+    grandConcertFrom("Smart Falcon (Twilight Triumph)"),
+    // Medium.
+    grandConcertFrom("Admire Vega"),
+    grandConcertFrom("Air Groove"),
+    grandConcertFrom("Air Groove (Quercus Civilis)"),
+    grandConcertFrom("Air Shakur"),
+    grandConcertFrom("Eishin Flash"),
+    grandConcertFrom("Eishin Flash (Precise Chocolatier)"),
+    grandConcertFrom("El Condor Pasa (Kukulkan Warrior)"),
+    grandConcertFrom("Fine Motion"),
+    grandConcertFrom("Fine Motion (Titania)"),
+    grandConcertFrom("Hishi Amazon"),
+    grandConcertFrom("Inari One"),
+    grandConcertFrom("Inari One (Golden Dream)"),
+    grandConcertFrom("Ines Fujin"),
+    grandConcertFrom("Kawakami Princess"),
+    grandConcertFrom("Kitasan Black"),
+    grandConcertFrom("Kitasan Black (Crane's Ambition)"),
+    grandConcertFrom("Meisho Doto"),
+    grandConcertFrom("Meisho Doto (Dot-o'-Lantern)"),
+    grandConcertFrom("Mejiro Ardan"),
+    grandConcertFrom("Mejiro Dober"),
+    grandConcertFrom("Mejiro Dober (Sapphire Sojourn)"),
+    grandConcertFrom("Mejiro Ryan"),
+    grandConcertFrom("Nakayama Festa"),
+    grandConcertFrom("Narita Taishin"),
+    grandConcertFrom("Narita Taishin (Difference Engineer)"),
+    grandConcertFrom("Nice Nature"),
+    grandConcertFrom("Nice Nature (Run & Win)"),
+    grandConcertFrom("Sakura Chiyono O"),
+    grandConcertFrom("Seiun Sky"),
+    grandConcertFrom("Seiun Sky (Soirée des Chatons)"),
+    grandConcertFrom("Silence Suzuka"),
+    grandConcertFrom("Special Week"),
+    grandConcertFrom("Special Week (Ruler of Japan)"),
+    grandConcertFrom("Special Week (Hopp'n♪Happy Heart)"),
+    grandConcertFrom("Sweep Tosho"),
+    grandConcertFrom("Symboli Rudolf (Emperor's Path)"),
+    grandConcertFrom("Symboli Rudolf (Archer by Moonlight)"),
+    grandConcertFrom("T.M. Opera O (New Year, Same Radiance!)"),
+    grandConcertFrom("T.M. Opera O (O Sole Suo!)"),
+    grandConcertFrom("Tokai Teio"),
+    grandConcertFrom("Tokai Teio (Beyond the Horizon)"),
+    grandConcertFrom("Tosen Jordan"),
+    grandConcertFrom("Winning Ticket (Get to Winning!)"),
+    grandConcertFrom("Winning Ticket (Dream Deliverer)"),
+    grandConcertFrom("Yaeno Muteki"),
+    grandConcertFrom("Yukino Bijin"),
+    grandConcertFrom("Zenno Rob Roy"),
+    // Long stayers.
     grandConcertFrom("Biwa Hayahide"),
     grandConcertFrom("Biwa Hayahide (Rouge Caroler)"),
     grandConcertFrom("Gold Ship (RUN! RUIN! LAUNCHER!)"),

@@ -136,12 +136,14 @@ Grand Concert twins stay pinned to her Mile targets.
 Three things change in the derivation:
 
 - The scenario is set, so applying the preset switches to Grand Concert with it.
-- The Speed target rises for Speed-primary Sprint and Mile builds, to the scenario's higher Speed
-  cap. The handful of tempered Sprint/Mile builds, whose URA Speed target already sits below the
-  normal baseline, get a smaller raise instead, matching Medium builds. Stayers keep their URA
-  weighting and take **no** raised Speed target. A stat target is a weight, not a ceiling: training
-  scores a stat by how far behind its target it sits, so raising Speed on a stayer would pull
-  training away from the Stamina her longest goal races need.
+- The stat targets for her own distance follow the scenario's rating, which scores every stat the
+  same way. Sprint, Mile and Medium builds aim Speed at the 1600 cap with Wit and Power close behind
+  (1600 Speed, at least 450 Stamina, 1250 Power, 300 Guts, 1300 Wit) and train in the order
+  Speed, Wit, Power, Stamina, Guts. They keep a higher Stamina target where their URA build has one.
+  Stayers keep their URA weighting and priority, Speed and Stamina included, and only raise Wit to
+  1100. A stat target is a weight, not a ceiling: training scores a stat by how far behind its
+  target it sits, so raising Speed on a stayer would pull training away from the Stamina her
+  longest goal races need.
 - Any curated race plan and any declared skill-spend objective are dropped, matching every other
   non-URA preset. A curated plan is tuned to the URA goal chain, and in mandatory-plan mode
   voluntary races happen only on planned turns, so a plan that does not fit the scenario cannot

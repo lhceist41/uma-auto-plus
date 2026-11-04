@@ -477,7 +477,6 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
             goals: [37, 42, 48, 51, 57, 60, 69, 71, 72],
             ownSkills: [202302, 201532, 201072],
             gated: [201032, 201071, 202332, 202301],
-            gcSpeed: 1600,
         },
         {
             name: "Nakayama Festa",
@@ -490,7 +489,6 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
             goals: [25, 31, 34, 44, 47, 60, 70],
             ownSkills: [202442, 201702],
             gated: [201382, 202031, 201102, 202441],
-            gcSpeed: 1400,
         },
     ]
 
@@ -560,10 +558,10 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
             }
         })
 
-        it("raises the Grand Concert Speed target to the policy value for her distance", () => {
+        it("aims the Grand Concert Speed target at the 1600 cap for her distance", () => {
             const gc = all.find((p) => p.scenario === "Grand Concert")!
             const key = t.override === "Mile" ? "trainingMileStatTarget_speedStatTarget" : "trainingMediumStatTarget_speedStatTarget"
-            expect((gc.settings.trainingStatTarget as any)[key]).toBe(t.gcSpeed)
+            expect((gc.settings.trainingStatTarget as any)[key]).toBe(1600)
         })
 
         it("is advisory-covered with no recommended badge until her own careers complete", () => {
@@ -691,7 +689,6 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
             goals: [21, 23, 29, 31, 42, 54, 66],
             ownSkills: [200162, 200532, 202042],
             gated: [200972, 200531, 201601, 202041, 200971],
-            gcSpeed: 1600,
             trackblazerAvoid: /Medium and Long/,
         },
         {
@@ -706,7 +703,6 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
             goals: [34, 44, 45, 53, 57, 60, 69],
             ownSkills: [200492, 200612, 201072],
             gated: [201382, 200491, 200132, 200611, 201381, 200131],
-            gcSpeed: 1400,
             trackblazerAvoid: null,
         },
         {
@@ -721,7 +717,6 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
             goals: [21, 23, 31, 33, 41, 46, 54, 59, 66, 70],
             ownSkills: [200152, 200962, 201072],
             gated: [202042, 200963, 201902, 201071, 202041, 201901],
-            gcSpeed: 1600,
             trackblazerAvoid: /Medium=E and Long=G/,
         },
         {
@@ -736,7 +731,6 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
             goals: [31, 34, 48, 56, 60, 70, 72],
             ownSkills: [200142, 200582, 200722],
             gated: [200362, 200581, 200562, 200721, 200361, 200561],
-            gcSpeed: 1400,
             trackblazerAvoid: null,
         },
         {
@@ -751,7 +745,6 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
             goals: [31, 34, 42, 46, 59, 66, 68],
             ownSkills: [200302, 201052, 202412],
             gated: [201042, 201051, 200342, 202411, 201041, 200341],
-            gcSpeed: 1600,
             trackblazerAvoid: null,
         },
         {
@@ -766,7 +759,6 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
             goals: [23, 31, 34, 38, 44, 54, 57, 69, 70],
             ownSkills: [200492, 201102, 201342],
             gated: [200242, 200491, 201322, 201341, 200241, 201321],
-            gcSpeed: 1400,
             trackblazerAvoid: null,
         },
     ]
@@ -849,9 +841,9 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
             }
         })
 
-        it("raises the Grand Concert Speed target to the policy value for her distance", () => {
+        it("aims the Grand Concert Speed target at the 1600 cap for her distance", () => {
             const gc = all.find((p) => p.scenario === "Grand Concert")!
-            expect((gc.settings.trainingStatTarget as any)[`training${t.override}StatTarget_speedStatTarget`]).toBe(t.gcSpeed)
+            expect((gc.settings.trainingStatTarget as any)[`training${t.override}StatTarget_speedStatTarget`]).toBe(1600)
         })
 
         it("carries her advisory with no recommended badge until her own careers complete", () => {
@@ -1017,7 +1009,7 @@ describe("Zenno Rob Roy presets", () => {
             if (p.scenario !== "Trackblazer") expect(p.settings.scenarioOverrides).toBeUndefined()
             else for (const item of ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone"]) expect(p.settings.scenarioOverrides!.trackblazerExcludedItems).toContain(item)
         }
-        expect((all.find((p) => p.scenario === "Grand Concert")!.settings.trainingStatTarget as any).trainingMediumStatTarget_speedStatTarget).toBe(1400)
+        expect((all.find((p) => p.scenario === "Grand Concert")!.settings.trainingStatTarget as any).trainingMediumStatTarget_speedStatTarget).toBe(1600)
     })
 
     it("carries her advisory with no recommended badge and no avoid", () => {
@@ -1366,11 +1358,11 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
             }
         })
 
-        it("takes the base outfit's Grand Concert Speed target, or the Medium policy value when re-aimed at Medium", () => {
+        it("takes the base outfit's Grand Concert Speed target, or the Medium value when re-aimed at Medium", () => {
             const key = (p: (typeof characterPresets)[number]) => `training${p.settings.training!.preferredDistanceOverride}StatTarget_speedStatTarget`
             const twin = find(t.name, "Grand Concert")
             const baseTwin = find(t.base, "Grand Concert")
-            const expected = REAIMED.has(t.name) ? 1400 : (baseTwin.settings.trainingStatTarget as any)[key(baseTwin)]
+            const expected = REAIMED.has(t.name) ? 1600 : (baseTwin.settings.trainingStatTarget as any)[key(baseTwin)]
             expect((twin.settings.trainingStatTarget as any)[key(twin)]).toBe(expected)
         })
     })
@@ -1493,137 +1485,128 @@ describe("skill spend objective (Phase 2A)", () => {
 })
 
 describe("Grand Concert derived presets", () => {
-    // Intended Speed target per twin. Sprint/Mile Speed-primary builds take the scenario's full
-    // 1600 cap, Sprint/Mile builds whose URA Speed target sits below the 1200 norm are tempered
-    // to 1400, Medium takes 1400, and Long stayers take no raise at all: a stat target is a
-    // WEIGHT, not a ceiling, so lifting Speed on a stayer starves the Stamina its 3000m+ goals
-    // need. The three Legacy Farm arms are deliberately absent (URA-only farm specializations).
-    const EXPECTED_SPEED: Record<string, number | undefined> = {
-        "Agnes Tachyon": 1400,
-        "Mihono Bourbon": 1400,
-        "Mihono Bourbon (CODE: ICING)": 1400,
-        Vodka: 1400,
-        "Vodka (Fiery Aqua Vitae)": 1400,
-        "Sakura Bakushin O": 1600,
-        "King Halo": 1600,
-        "Maruzensky (Formula R)": 1600,
-        "Daiwa Scarlet": 1600,
-        "Daiwa Scarlet (Nuit Étoilée de Scarlet)": 1400,
-        "Copano Rickey": 1600,
-        "Super Creek": undefined,
-        "Super Creek (Chiffon-Wrapped Mummy)": undefined,
-        "Gold Ship": undefined,
+    // Every derived twin. The three Legacy Farm arms are deliberately absent (URA-only farm specializations).
+    const derived = [
+        "Agnes Tachyon",
+        "Mihono Bourbon",
+        "Mihono Bourbon (CODE: ICING)",
+        "Vodka",
+        "Vodka (Fiery Aqua Vitae)",
+        "Sakura Bakushin O",
+        "King Halo",
+        "Maruzensky (Formula R)",
+        "Daiwa Scarlet",
+        "Daiwa Scarlet (Nuit Étoilée de Scarlet)",
+        "Copano Rickey",
+        "Super Creek",
+        "Super Creek (Chiffon-Wrapped Mummy)",
+        "Gold Ship",
         // Full-roster port: Sprint.
-        "Aston Machan": 1600,
-        "Curren Chan": 1600,
-        "Curren Chan (Ma Chérie of the New Moon)": 1600,
-        "King Halo (Cheerleader in Noble White)": 1600,
-        "Nishino Flower": 1600,
-        "Haru Urara": 1400,
-        "Haru Urara (New Year ♪ New Urara!)": 1400,
-        "Hishi Akebono": 1400,
+        "Aston Machan",
+        "Curren Chan",
+        "Curren Chan (Ma Chérie of the New Moon)",
+        "King Halo (Cheerleader in Noble White)",
+        "Nishino Flower",
+        "Haru Urara",
+        "Haru Urara (New Year ♪ New Urara!)",
+        "Hishi Akebono",
         // Mile.
-        "Bamboo Memory": 1600,
-        "El Condor Pasa": 1600,
-        "Maruzensky (Hot☆Summer Night)": 1600,
-        "Oguri Cap": 1600,
-        "Oguri Cap (Ashen Miracle)": 1600,
-        "Taiki Shuttle (Bubblegum☆Memories)": 1600,
-        "Wonder Acute": 1600,
-        "Hokko Tarumae": 1600,
-        "Seeking the Pearl": 1600,
-        "Yamanin Zephyr": 1600,
-        "Agnes Digital": 1400,
-        "Agnes Digital (Fanatic♡Jiangshi)": 1400,
-        "Fuji Kiseki": 1400,
-        "Fuji Kiseki (Succès Étoilé)": 1400,
-        "Gold City (Autumn Cosmos)": 1400,
-        "Gold City (Authentic / 1928)": 1400,
-        "Smart Falcon": 1400,
-        "Smart Falcon (Twilight Triumph)": 1400,
+        "Bamboo Memory",
+        "El Condor Pasa",
+        "Maruzensky (Hot☆Summer Night)",
+        "Oguri Cap",
+        "Oguri Cap (Ashen Miracle)",
+        "Taiki Shuttle (Bubblegum☆Memories)",
+        "Wonder Acute",
+        "Hokko Tarumae",
+        "Seeking the Pearl",
+        "Yamanin Zephyr",
+        "Agnes Digital",
+        "Agnes Digital (Fanatic♡Jiangshi)",
+        "Fuji Kiseki",
+        "Fuji Kiseki (Succès Étoilé)",
+        "Gold City (Autumn Cosmos)",
+        "Gold City (Authentic / 1928)",
+        "Smart Falcon",
+        "Smart Falcon (Twilight Triumph)",
         // Medium.
-        "Admire Vega": 1400,
-        "Air Groove": 1400,
-        "Air Groove (Quercus Civilis)": 1400,
-        "Air Shakur": 1400,
-        "Eishin Flash": 1400,
-        "Eishin Flash (Precise Chocolatier)": 1400,
-        "El Condor Pasa (Kukulkan Warrior)": 1400,
-        "Fine Motion": 1400,
-        "Fine Motion (Titania)": 1400,
-        "Hishi Amazon": 1400,
-        "Inari One": 1400,
-        "Inari One (Golden Dream)": 1400,
-        "Ines Fujin": 1400,
-        "Kawakami Princess": 1400,
-        "Kitasan Black": 1400,
-        "Kitasan Black (Crane's Ambition)": 1400,
-        "Meisho Doto": 1400,
-        "Meisho Doto (Dot-o'-Lantern)": 1400,
-        "Mejiro Ardan": 1400,
-        "Mejiro Dober": 1400,
-        "Mejiro Dober (Sapphire Sojourn)": 1400,
-        "Mejiro Ryan": 1400,
-        "Nakayama Festa": 1400,
-        "Narita Taishin": 1400,
-        "Narita Taishin (Difference Engineer)": 1400,
-        "Nice Nature": 1400,
-        "Nice Nature (Run & Win)": 1400,
-        "Sakura Chiyono O": 1400,
-        "Seiun Sky": 1400,
-        "Seiun Sky (Soirée des Chatons)": 1400,
-        "Silence Suzuka": 1400,
-        "Special Week": 1400,
-        "Special Week (Ruler of Japan)": 1400,
-        "Special Week (Hopp'n♪Happy Heart)": 1400,
-        "Sweep Tosho": 1400,
-        "Symboli Rudolf (Emperor's Path)": 1400,
-        "Symboli Rudolf (Archer by Moonlight)": 1400,
-        "T.M. Opera O (New Year, Same Radiance!)": 1400,
-        "T.M. Opera O (O Sole Suo!)": 1400,
-        "Tokai Teio": 1400,
-        "Tokai Teio (Beyond the Horizon)": 1400,
-        "Tosen Jordan": 1400,
-        "Winning Ticket (Get to Winning!)": 1400,
-        "Winning Ticket (Dream Deliverer)": 1400,
-        "Yaeno Muteki": 1400,
-        "Yukino Bijin": 1400,
-        "Zenno Rob Roy": 1400,
+        "Admire Vega",
+        "Air Groove",
+        "Air Groove (Quercus Civilis)",
+        "Air Shakur",
+        "Eishin Flash",
+        "Eishin Flash (Precise Chocolatier)",
+        "El Condor Pasa (Kukulkan Warrior)",
+        "Fine Motion",
+        "Fine Motion (Titania)",
+        "Hishi Amazon",
+        "Inari One",
+        "Inari One (Golden Dream)",
+        "Ines Fujin",
+        "Kawakami Princess",
+        "Kitasan Black",
+        "Kitasan Black (Crane's Ambition)",
+        "Meisho Doto",
+        "Meisho Doto (Dot-o'-Lantern)",
+        "Mejiro Ardan",
+        "Mejiro Dober",
+        "Mejiro Dober (Sapphire Sojourn)",
+        "Mejiro Ryan",
+        "Nakayama Festa",
+        "Narita Taishin",
+        "Narita Taishin (Difference Engineer)",
+        "Nice Nature",
+        "Nice Nature (Run & Win)",
+        "Sakura Chiyono O",
+        "Seiun Sky",
+        "Seiun Sky (Soirée des Chatons)",
+        "Silence Suzuka",
+        "Special Week",
+        "Special Week (Ruler of Japan)",
+        "Special Week (Hopp'n♪Happy Heart)",
+        "Sweep Tosho",
+        "Symboli Rudolf (Emperor's Path)",
+        "Symboli Rudolf (Archer by Moonlight)",
+        "T.M. Opera O (New Year, Same Radiance!)",
+        "T.M. Opera O (O Sole Suo!)",
+        "Tokai Teio",
+        "Tokai Teio (Beyond the Horizon)",
+        "Tosen Jordan",
+        "Winning Ticket (Get to Winning!)",
+        "Winning Ticket (Dream Deliverer)",
+        "Yaeno Muteki",
+        "Yukino Bijin",
+        "Zenno Rob Roy",
         // Long stayers.
-        "Biwa Hayahide": undefined,
-        "Biwa Hayahide (Rouge Caroler)": undefined,
-        "Gold Ship (RUN! RUIN! LAUNCHER!)": undefined,
-        "Grass Wonder": undefined,
-        "Grass Wonder (Saintly Jade Cleric)": undefined,
-        "Manhattan Cafe": undefined,
-        Matikanefukukitaru: undefined,
-        "Matikanefukukitaru (Lucky Tidings)": undefined,
-        Matikanetannhauser: undefined,
-        "Mayano Top Gun": undefined,
-        "Mayano Top Gun (Sunlight Bouquet)": undefined,
-        "Mejiro Bright": undefined,
-        "Mejiro McQueen (Fair Lady of the Waves)": undefined,
-        "Mejiro McQueen (Frontline Elegance)": undefined,
-        "Mejiro McQueen (End of the Skies)": undefined,
-        "Mejiro Palmer": undefined,
-        "Narita Brian": undefined,
-        "Narita Brian (Ravenous Wolf)": undefined,
-        "Rice Shower": undefined,
-        "Rice Shower (Vampire Makeover!)": undefined,
-        "Satono Diamond": undefined,
-        "Satono Diamond (Jade's Prosperity)": undefined,
-        "Tamamo Cross": undefined,
-        "Tamamo Cross (Raging Thunder)": undefined,
-    }
-    const SPEED_KEY: Record<string, string> = {
-        Sprint: "trainingSprintStatTarget_speedStatTarget",
-        Mile: "trainingMileStatTarget_speedStatTarget",
-        Medium: "trainingMediumStatTarget_speedStatTarget",
-        Long: "trainingLongStatTarget_speedStatTarget",
-    }
+        "Biwa Hayahide",
+        "Biwa Hayahide (Rouge Caroler)",
+        "Gold Ship (RUN! RUIN! LAUNCHER!)",
+        "Grass Wonder",
+        "Grass Wonder (Saintly Jade Cleric)",
+        "Manhattan Cafe",
+        "Matikanefukukitaru",
+        "Matikanefukukitaru (Lucky Tidings)",
+        "Matikanetannhauser",
+        "Mayano Top Gun",
+        "Mayano Top Gun (Sunlight Bouquet)",
+        "Mejiro Bright",
+        "Mejiro McQueen (Fair Lady of the Waves)",
+        "Mejiro McQueen (Frontline Elegance)",
+        "Mejiro McQueen (End of the Skies)",
+        "Mejiro Palmer",
+        "Narita Brian",
+        "Narita Brian (Ravenous Wolf)",
+        "Rice Shower",
+        "Rice Shower (Vampire Makeover!)",
+        "Satono Diamond",
+        "Satono Diamond (Jade's Prosperity)",
+        "Tamamo Cross",
+        "Tamamo Cross (Raging Thunder)",
+    ]
+    const STATS = ["speed", "stamina", "power", "guts", "wit"]
+    const statKey = (distance: string, stat: string) => `training${distance}StatTarget_${stat}StatTarget`
     const gc = (name: string) => characterPresets.find((p) => p.name === name && p.scenario === "Grand Concert")!
     const ura = (name: string) => characterPresets.find((p) => p.name === name && p.scenario === "URA Finale")!
-    const derived = Object.keys(EXPECTED_SPEED)
 
     it("ships a Grand Concert twin for every trainee in the batch, plus the hand-written Taiki build", () => {
         for (const name of derived) expect(gc(name)).toBeDefined()
@@ -1659,14 +1642,43 @@ describe("Grand Concert derived presets", () => {
         for (const name of derived) expect((gc(name).settings as any).skills?.skillSpendObjective).toBeUndefined()
     })
 
-    it("raises Speed exactly as intended and leaves stayers alone", () => {
+    const SHAPE_PRIORITY = ["Speed", "Wit", "Power", "Stamina", "Guts"]
+    const expectedTargets = (name: string, distance: string) => {
+        const source = ura(name).settings.trainingStatTarget as any
+        const own = Object.fromEntries(STATS.map((stat) => [stat, source[statKey(distance, stat)]]))
+        if (distance === "Long") return { ...own, wit: 1100 }
+        return { speed: 1600, stamina: Math.max(own.stamina, 450), power: 1250, guts: 300, wit: 1300 }
+    }
+
+    it("sets the Grand Concert stat shape for her distance and keeps stayers' weighting", () => {
+        const distances = new Set<string>()
         for (const name of derived) {
             const distance = gc(name).settings.training!.preferredDistanceOverride as string
-            const key = SPEED_KEY[distance]
-            const got = (gc(name).settings.trainingStatTarget as any)[key]
-            const uraValue = (ura(name).settings.trainingStatTarget as any)[key]
-            expect(got).toBe(EXPECTED_SPEED[name] ?? uraValue)
+            distances.add(distance)
+            const targets = gc(name).settings.trainingStatTarget as any
+            const got = Object.fromEntries(STATS.map((stat) => [stat, targets[statKey(distance, stat)]]))
+            expect({ name, got }).toEqual({ name, got: expectedTargets(name, distance) })
+            const priority = distance === "Long" ? ura(name).settings.training!.statPrioritization : SHAPE_PRIORITY
+            expect({ name, priority: gc(name).settings.training!.statPrioritization }).toEqual({ name, priority })
         }
+        expect([...distances].sort()).toEqual(["Long", "Medium", "Mile", "Sprint"])
+    })
+
+    it("keeps a Stamina target above 450 and raises a lower one to 450", () => {
+        expect(gc("Kitasan Black").settings.trainingStatTarget!.trainingMediumStatTarget_staminaStatTarget).toBe(1200)
+        expect(gc("Vodka").settings.trainingStatTarget!.trainingMediumStatTarget_staminaStatTarget).toBe(450)
+        expect(gc("Oguri Cap (Ashen Miracle)").settings.trainingStatTarget!.trainingMileStatTarget_staminaStatTarget).toBe(800)
+        expect(gc("Hishi Akebono").settings.trainingStatTarget!.trainingSprintStatTarget_staminaStatTarget).toBe(500)
+        expect(ura("King Halo").settings.trainingStatTarget!.trainingSprintStatTarget_staminaStatTarget).toBe(400)
+        expect(gc("King Halo").settings.trainingStatTarget!.trainingSprintStatTarget_staminaStatTarget).toBe(450)
+        expect(gc("Super Creek").settings.trainingStatTarget!.trainingLongStatTarget_staminaStatTarget).toBe(1200)
+    })
+
+    it("gives the hand-written Taiki Shuttle build the same Mile shape", () => {
+        const taiki = characterPresets.find((p) => p.name === "Taiki Shuttle" && p.scenario === "Grand Concert")!
+        const targets = taiki.settings.trainingStatTarget as any
+        expect(STATS.map((stat) => targets[statKey("Mile", stat)])).toEqual([1600, 450, 1250, 300, 1300])
+        expect(taiki.settings.training!.statPrioritization).toEqual(SHAPE_PRIORITY)
     })
 
     it("never sets a target above a Grand Concert stat cap", () => {
@@ -1681,21 +1693,21 @@ describe("Grand Concert derived presets", () => {
 
     const SCENARIO_FIELDS = ["general.scenario", "racing.enableRacingPlan", "racing.enableMandatoryRacingPlan", "racing.racingPlan", "skills.skillSpendObjective"]
     const PINNED_MILE_TWINS = ["Gold City (Autumn Cosmos)", "Gold City (Authentic / 1928)"]
-    const expectOnlyDiffers = (name: string, allowed: Set<string>, speedKey: string) => {
+    const expectOnlyDiffers = (name: string, allowed: Set<string>, distance: string) => {
         const a = ura(name).settings as any
         const b = gc(name).settings as any
         for (const category of new Set([...Object.keys(a), ...Object.keys(b)])) {
             for (const key of new Set([...Object.keys(a[category] ?? {}), ...Object.keys(b[category] ?? {})])) {
                 const path = `${category}.${key}`
-                if (allowed.has(path) || (category === "trainingStatTarget" && key === speedKey)) continue
+                if (allowed.has(path) || (category === "trainingStatTarget" && STATS.some((stat) => key === statKey(distance, stat)))) continue
                 expect({ path, value: JSON.stringify(b[category]?.[key]) }).toEqual({ path, value: JSON.stringify(a[category]?.[key]) })
             }
         }
     }
 
-    it("differs from its URA source ONLY in the scenario, racing and Speed-target fields", () => {
+    it("differs from its URA source ONLY in the scenario, racing, priority and own-distance target fields", () => {
         for (const name of derived.filter((n) => !PINNED_MILE_TWINS.includes(n))) {
-            expectOnlyDiffers(name, new Set(SCENARIO_FIELDS), SPEED_KEY[ura(name).settings.training!.preferredDistanceOverride as string])
+            expectOnlyDiffers(name, new Set([...SCENARIO_FIELDS, "training.statPrioritization"]), ura(name).settings.training!.preferredDistanceOverride as string)
         }
     })
 
@@ -1704,10 +1716,11 @@ describe("Grand Concert derived presets", () => {
             expect(ura(name).settings.training!.preferredDistanceOverride).toBe("Long")
             expect(gc(name).settings.training!.preferredDistanceOverride).toBe("Mile")
             const targets = gc(name).settings.trainingStatTarget!
-            expect(targets.trainingMileStatTarget_speedStatTarget).toBe(1400)
+            expect(targets.trainingMileStatTarget_speedStatTarget).toBe(1600)
             expect(targets.trainingLongStatTarget_speedStatTarget).toBe(1000)
             expect(targets.trainingLongStatTarget_staminaStatTarget).toBe(600)
-            expectOnlyDiffers(name, new Set([...SCENARIO_FIELDS, "training.preferredDistanceOverride", "trainingStatTarget.trainingLongStatTarget_staminaStatTarget"]), SPEED_KEY.Mile)
+            const pinnedFields = ["training.preferredDistanceOverride", "training.statPrioritization", "trainingStatTarget.trainingLongStatTarget_staminaStatTarget", "trainingStatTarget.trainingLongStatTarget_witStatTarget"]
+            expectOnlyDiffers(name, new Set([...SCENARIO_FIELDS, ...pinnedFields]), "Mile")
         }
     })
 

@@ -146,19 +146,18 @@ test suite asserts every declared objective is one of them.
 
 ### Grand Concert entries
 
-Prefer derivation over hand-writing. Call `grandConcertFrom("<URA preset name>", speedTarget?)` from
+Prefer derivation over hand-writing. Call `grandConcertFrom("<URA preset name>")` from
 `grandConcertPresets` rather than adding a fourth literal. The helper throws if no URA Finale preset
 of that name exists, sets the scenario in both places, drops any curated racing plan and any
-skill-spend objective, and raises the Speed target only where a target was passed. Taiki Shuttle's
-Grand Concert entry is an existing hand-written literal predating this pattern; treat it as a
-one-off, not a template for new entries.
+skill-spend objective, and sets the stat targets for the preset's own distance through
+`applyGrandConcertTargets`. Taiki Shuttle's Grand Concert entry is an existing hand-written literal
+predating this pattern; treat it as a one-off, not a template for new entries.
 
-Speed targets follow the scenario's caps: Speed-primary Sprint and Mile builds go to the higher
-Speed cap, the handful of tempered Sprint/Mile builds whose URA Speed target already sits below the
-normal baseline go to the middle value instead, Medium builds go to that same middle value, and
-**stayers keep their URA weighting** and take no `speedTarget` argument. A stat target is a weight,
-not a ceiling: raising Speed on a stayer pulls training away from the Stamina her goal races need.
-The test asserts no derived target exceeds a Grand Concert stat cap.
+Sprint, Mile and Medium twins get 1600/450/1250/300/1300 (Speed/Stamina/Power/Guts/Wit) with the
+priority Speed, Wit, Power, Stamina, Guts; a URA Stamina target above 450 is kept. **Stayers
+keep their URA weighting** and priority and only raise Wit to 1100. A stat target is a weight, not
+a ceiling: raising Speed on a stayer pulls training away from the Stamina her goal races need. The
+test asserts no derived target exceeds a Grand Concert stat cap.
 
 ## Roster counts
 
