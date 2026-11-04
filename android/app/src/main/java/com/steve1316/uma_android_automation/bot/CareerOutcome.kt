@@ -69,16 +69,25 @@ internal fun lastKnownLedgerKeys(notAccepted: Set<StatName>, reportedUnread: Set
 /** GC careers ended at 1.62x to 2.34x their last in-career count, while one inserted digit gives at least 5.5x. */
 private const val CAREER_END_FAN_FALLBACK_MAX_RATIO = 5L
 
+/** Lookalikes inside a group: ML Kit has read 0 as O and 1 as ]; o is O's lowercase form. */
+private val CAREER_END_FAN_LOOKALIKES = mapOf('O' to '0', 'o' to '0', ']' to '1')
+private const val FAN_DIGIT = """[\dOo\]]"""
+private val CAREER_END_FANS_GROUPED = Regex("""\d{1,3}(?:(?:\s*[,.]\s*$FAN_DIGIT ?$FAN_DIGIT ?$FAN_DIGIT)+(?:\s*[,.-])?)?""")
+
 /**
- * The result screen groups the fan total in threes ("225,250"), so a read that broke the grouping lost or misread a character ("225,25o" would
- * strip to 22525). A total below the in-career count [heldFans] cannot be the final one. A space-grouped or plain digit run lost its separator, and
- * a lost separator can hide an inserted digit ("2251250"), so it counts only between a real [heldFans] (not the default 1 or unknown) and
- * [CAREER_END_FAN_FALLBACK_MAX_RATIO] times it. Anything else gives null. toIntOrNull: an overlong read must not throw, which would end the run.
+ * The result screen groups the fan total in threes ("225,250"), so a read that broke the grouping lost or misread a character ("225,25" would
+ * strip to 22525). After a separator each group still pins its three digits, so a lookalike there is that digit, one space is a split glyph
+ * ("265,17 1"), and one mark after the last group is a stray mark ("295,418,"; petals fall across this screen). A total below the in-career
+ * count [heldFans] cannot be the final one. A space-grouped or plain digit run lost its separator, and a lost separator can hide an inserted
+ * digit ("2251250"), so it counts only between a real [heldFans] (not the default 1 or unknown) and [CAREER_END_FAN_FALLBACK_MAX_RATIO]
+ * times it. Anything else gives null. toIntOrNull: an overlong read must not throw, which would end the run.
  */
 internal fun parseCareerEndFans(raw: String, heldFans: Int): Int? {
     val text = raw.trim().removePrefix("+").trim()
+    if (CAREER_END_FANS_GROUPED.matches(text)) {
+        return text.map { CAREER_END_FAN_LOOKALIKES[it] ?: it }.filter { it.isDigit() }.joinToString("").toIntOrNull()?.takeIf { it >= heldFans }
+    }
     val value = text.filter { it.isDigit() }.toIntOrNull() ?: return null
-    if (Regex("""\d{1,3}(\s*[,.]\s*\d{3})*""").matches(text)) return value.takeIf { it >= heldFans }
     if (!Regex("""\d+|\d{1,3}(\s+\d{3})+""").matches(text)) return null
     return value.takeIf { heldFans > 1 && it >= heldFans && it.toLong() < CAREER_END_FAN_FALLBACK_MAX_RATIO * heldFans }
 }

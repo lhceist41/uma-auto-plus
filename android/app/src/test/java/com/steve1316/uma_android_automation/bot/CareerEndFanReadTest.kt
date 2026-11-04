@@ -46,9 +46,49 @@ class CareerEndFanReadTest {
     }
 
     @Test
+    fun `a misread glyph inside a group reads as the digit the group pins`() {
+        // Every unusable read logged on MuMu so far, with its in-career count. Frames showed 265,171, 270,711 and 295,418 (a stray mark after the 8).
+        listOf(
+            Triple("265,17 1", 174210, 265171),
+            Triple("270,71 1", 179665, 270711),
+            Triple("295,418,", 142662, 295418),
+            Triple("236,29 ]", 138313, 236291),
+            Triple("318,02 1", 191112, 318021),
+            Triple("280,27 1", 147395, 280271),
+            Triple("330,47O", 202735, 330470),
+            Triple("209,77O", 117704, 209770),
+            Triple("162,46O", 83877, 162460),
+            Triple("278,558 -", 206712, 278558),
+        ).forEach { (read, held, shown) -> assertEquals(shown, parseCareerEndFans(read, held), read) }
+        assertEquals(265171, parseCareerEndFans("265,17 1", heldFans = 1))
+        // An example string for Rice Shower's frame, which showed 225,250 (her raw read was not logged).
+        assertEquals(225250, parseCareerEndFans("225,25o", heldFans = 101394))
+        // A live read whose frame shows 175,719: the split falls after a group's first digit.
+        assertEquals(175719, parseCareerEndFans("175,7 19", heldFans = 80023))
+        assertEquals(265171, parseCareerEndFans("265,1 7 1", heldFans = 1))
+        assertEquals(330470, parseCareerEndFans("330.47O", heldFans = 1), "a lookalike after a dot separator")
+        assertEquals(1225250, parseCareerEndFans("1,225,250.", heldFans = 1))
+    }
+
+    @Test
+    fun `a misread glyph that leaves the digit count open is still unknown`() {
+        assertNull(parseCareerEndFans("295,418 1", heldFans = 1), "a digit-like mark after the last group")
+        assertNull(parseCareerEndFans("278,558 --", heldFans = 1), "two marks")
+        assertNull(parseCareerEndFans("295,41 8 1", heldFans = 1), "four digits in a group")
+        assertNull(parseCareerEndFans("265,1  7 1", heldFans = 1), "two spaces")
+        assertNull(parseCareerEndFans("265,17\n1", heldFans = 1), "a line break")
+        assertNull(parseCareerEndFans("295,", heldFans = 1), "a separator with no group before it")
+        assertNull(parseCareerEndFans("295,,", heldFans = 1))
+        assertNull(parseCareerEndFans("2 65,171", heldFans = 1), "a space in the leading group is a stray mark")
+        assertNull(parseCareerEndFans("O65,171", heldFans = 1), "a lookalike in the leading group")
+        assertNull(parseCareerEndFans("265,1B1", heldFans = 1), "an unmapped letter")
+        listOf("265,17|", "265,17l", "265,17I").forEach { assertNull(parseCareerEndFans(it, heldFans = 1), "an unlogged 1-lookalike: $it") }
+        assertNull(parseCareerEndFans("265,17 1", heldFans = 265172), "below the in-career count")
+        assertNull(parseCareerEndFans("295,418,", heldFans = 295419))
+    }
+
+    @Test
     fun `a read that lost a character is unknown, not a shorter number`() {
-        // Rice Shower's 225,250 was logged as fans=22525 over a held in-career 101394.
-        assertNull(parseCareerEndFans("225,25o", heldFans = 101394))
         assertNull(parseCareerEndFans("225,25", heldFans = 1))
         assertNull(parseCareerEndFans("22525", heldFans = 1))
         assertNull(parseCareerEndFans("2,25250", heldFans = 1))
