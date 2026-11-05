@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
 import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.FrozenFrameTracker
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.GameReopen
@@ -24,9 +25,16 @@ abstract class MiscTask(game: Game) : Task(game) {
     companion object {
         const val MAX_ITERATIONS_SAFETY: Int = 300
 
-        /** A dangerous dialog met by a follow-up's shared handler ends the run as an error, as in the mode's own loop; a user Stop leaves the mode's result. */
-        internal fun followUpStopResult(e: InterruptedException): TaskResult? =
-            if (e.message?.startsWith(DialogUtils.DANGEROUS_DIALOG_STOP) == true) TaskResult.Error(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, e.message!!) else null
+        /**
+         * A dangerous dialog met by a follow-up's shared handler ends the run as an error, and a stop the bot requested ([botStopReason]) as that stop,
+         * as in the mode's own loop; a user Stop leaves the mode's result.
+         */
+        internal fun followUpStopResult(e: InterruptedException, botStopReason: String? = null): TaskResult? =
+            when {
+                e.message?.startsWith(DialogUtils.DANGEROUS_DIALOG_STOP) == true -> TaskResult.Error(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, e.message!!)
+                botStopReason != null -> TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, botStopReason)
+                else -> null
+            }
 
         const val MAX_CONSECUTIVE_UNKNOWNS: Int = 5
 
@@ -57,7 +65,7 @@ abstract class MiscTask(game: Game) : Task(game) {
         val stop =
             runFollowUp("[LEGEND_RACE]") { GameLegendDevice.runFromSettings(game, ::handleIncidentalPopups) }
                 ?: runFollowUp("[DAILY_EXTRAS]") { GameExtrasDevice.runFromSettings(game)?.let { "${it.joinToString("; ")}." } }
-        return stop?.let { followUpStopResult(it) } ?: result
+        return stop?.let { followUpStopResult(it, StartModule.queueStopReason) } ?: result
     }
 
     /** Runs one Home follow-up and logs its note; a plain failure leaves the mode's own result. Returns the interrupt that stopped it, if any. */
@@ -136,6 +144,8 @@ abstract class MiscTask(game: Game) : Task(game) {
      * title screen and the login popups; these modes then start over from Home. False leaves the bailout as it was.
      */
     private fun recoverFrozenGame(): Boolean {
+        // A restart only brings the forced update prompt back.
+        if (DialogUtils.gameUpdatePromptShown(game.imageUtils)) DialogUtils.stopForGameUpdate()
         // The rails run before this iteration's capture; one fresh frame shows whether the last tap moved the screen.
         frames.record(game.frozenFrameGridOf(game.imageUtils.getSourceBitmap()), actedIterations, System.currentTimeMillis())
         val frozen = frames.frozen(System.currentTimeMillis())

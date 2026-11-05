@@ -23,6 +23,7 @@ import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabM
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabSpecial
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabTitles
 import com.steve1316.uma_android_automation.components.ComponentInterface
+import com.steve1316.uma_android_automation.components.DialogApplicationUpdated
 import com.steve1316.uma_android_automation.components.DialogObjects
 import com.steve1316.uma_android_automation.components.DialogRewardsCollected
 import com.steve1316.uma_android_automation.components.DialogUtils
@@ -227,6 +228,9 @@ internal enum class ExtrasScreen {
     REWARDS_COLLECTED,
     MISSIONS,
     SPENDING_DIALOG,
+
+    /** The game's forced update prompt: the step stops on it, tapping nothing. */
+    GAME_UPDATE_PROMPT,
     UNKNOWN,
 }
 
@@ -472,6 +476,7 @@ internal class DailyExtras(
     private fun awaitAny(vararg screens: ExtrasScreen, polls: Int = SCREEN_POLLS): ExtrasScreen? {
         repeat(polls) {
             val now = device.screen()
+            if (now == ExtrasScreen.GAME_UPDATE_PROMPT) DialogUtils.stopForGameUpdate()
             if (now == ExtrasScreen.SPENDING_DIALOG && ExtrasScreen.SPENDING_DIALOG !in screens) {
                 spendingDialogsCancelled++
                 log("A spending dialog appeared; cancelling it.")
@@ -517,10 +522,11 @@ private const val MAX_PICKER_PAGES = 20
 internal val SPENDING_DIALOG_NAMES =
     setOf("confirm_exchange", "confirm_restore_rp", "daily_sale", "purchase_alarm_clock", "purchase_carats", "purchase_daily_race_ticket", "shop")
 
-/** What a dialog title stands for: the Rewards Collected popup (when its header template missed) or a spending dialog. */
+/** What a dialog title stands for: the Rewards Collected popup (when its header template missed), a spending dialog or the forced update prompt. */
 internal fun extrasDialogScreen(title: String?): ExtrasScreen? =
     when {
         title == null -> null
+        title == DialogApplicationUpdated.title -> ExtrasScreen.GAME_UPDATE_PROMPT
         title == DialogRewardsCollected.title -> ExtrasScreen.REWARDS_COLLECTED
         DialogObjects.items.any { it.title == title && it.name in SPENDING_DIALOG_NAMES } -> ExtrasScreen.SPENDING_DIALOG
         else -> null

@@ -4729,6 +4729,8 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     private fun recoverFromUnknownScreen(count: Int) {
+        // Before every tap and the reopen rung: a restarted game shows the prompt again.
+        if (DialogUtils.gameUpdatePromptShown(game.imageUtils)) DialogUtils.stopForGameUpdate()
         if (count == 1) {
             // First unrecognized tick: clear a notification shade that may be covering the top-region anchors.
             dismissNotificationShade("unknown screen")
@@ -4837,7 +4839,8 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.w(TAG, "[RECOVERY] The game could not be reopened; falling through to the standard stop.")
         }
 
-        if (DialogUtils.check(game.imageUtils)) {
+        val dialogBannerUp = DialogUtils.check(game.imageUtils)
+        if (dialogBannerUp) {
             MessageLog.w(TAG, "[WARN] recoverFromUnknownScreen:: A dialog banner is present but could not be identified (tick $count). Closing it.")
             if (ButtonClose.click(game.imageUtils)) {
                 game.wait(0.5)
@@ -4905,10 +4908,7 @@ abstract class Campaign(game: Game) : Task(game) {
             game.wait(1.0)
             return
         }
-        if (count % 2 == 0) {
-            game.tap(540.0, 1300.0, taps = 1)
-        } else {
-            game.tap(350.0, 450.0, taps = 1)
-        }
+        val (nudgeX, nudgeY) = unknownScreenNudge(count, dialogBannerUp)
+        game.tap(nudgeX, nudgeY, taps = 1)
     }
 }

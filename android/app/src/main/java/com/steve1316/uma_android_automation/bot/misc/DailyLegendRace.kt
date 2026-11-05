@@ -25,6 +25,7 @@ import com.steve1316.uma_android_automation.components.ButtonRaceManual
 import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.ButtonViewResults
 import com.steve1316.uma_android_automation.components.ComponentInterface
+import com.steve1316.uma_android_automation.components.DialogApplicationUpdated
 import com.steve1316.uma_android_automation.components.DialogItemsSelected
 import com.steve1316.uma_android_automation.components.DialogObjects
 import com.steve1316.uma_android_automation.components.DialogUtils
@@ -426,6 +427,7 @@ internal class GameLegendDevice(private val game: Game, private val handlePopup:
     /** Reads the dialog title quietly: most unknown frames are transitions, not dialogs. */
     private fun spendingDialogShown(bitmap: Bitmap): Boolean {
         val title = DialogUtils.getTitle(imageUtils, bitmap, logOnMiss = false) ?: return false
+        if (title == DialogApplicationUpdated.title) DialogUtils.stopForGameUpdate()
         return DialogObjects.items.any { it.title == title && it.name in SPENDING_DIALOG_NAMES }
     }
 

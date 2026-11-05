@@ -117,7 +117,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.GAME_UNRECOVERABLE ->
             ReportText(
                 haltTitle(resumable),
-                "The game froze at run $reached, and UMA Auto+ could not close it. $CLOSE_FROZEN_GAME.",
+                "The game stayed on a screen the bot does not know at run $reached, even after UMA Auto+ tried to reopen it. $CLOSE_FROZEN_GAME.",
                 "Then ${pressStart(resumable)}",
             )
         SessionEnd.RUN_HALTED -> {
@@ -414,8 +414,10 @@ internal val REPORT_REASON_KEYS =
                 "the game asked to download additional data, and the bot could not find the prompt's OK button.",
                 "Answer the game's data prompt (OK, or Title Screen for a data update) and let any download finish",
             ),
+        "GAME_UPDATE_REQUIRED" to
+            KeyText("the game asks to be updated from the store. The bot does not tap the prompt's store button.", "Update the game from the store and open it"),
         "SESSION_EXPIRED" to KeyText("the game ended its session and needs to go back to its title screen.", "Tap Title Screen in the game and wait for its home screen"),
-        "GAME_UNRECOVERABLE" to KeyText("the game froze on a screen the bot could not recognise, and UMA Auto+ could not close it. $CLOSE_FROZEN_GAME.", null),
+        "GAME_UNRECOVERABLE" to KeyText("the game stayed on a screen the bot does not know, even after UMA Auto+ tried to reopen it. $CLOSE_FROZEN_GAME.", null),
         "A11Y_GRANT_MISSING" to
             KeyText(
                 "its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",

@@ -351,6 +351,25 @@
             }
         },
         {
+            "name": "single run: the bot stopped on the game's update prompt",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "totalRuns": 1,
+                "reasonKey": "GAME_UPDATE_REQUIRED",
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_MANUALLY_STOPPED"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Run stopped",
+                "reason": "The bot stopped the run: the game asks to be updated from the store. The bot does not tap the prompt's store button.",
+                "nextAction": "Update the game from the store and open it, then press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "single run: breakpoint",
             "report": {
                 "kind": "SINGLE_RUN_ENDED",
@@ -980,7 +999,7 @@
             },
             "text": {
                 "title": "Queue paused",
-                "reason": "The game froze at run 3, and UMA Auto+ could not close it. Close the game fully (swipe it away in Recent apps) and open it again.",
+                "reason": "The game stayed on a screen the bot does not know at run 3, even after UMA Auto+ tried to reopen it. Close the game fully (swipe it away in Recent apps) and open it again.",
                 "nextAction": "Then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
@@ -1199,7 +1218,7 @@
             },
             "text": {
                 "title": "Queue stopped",
-                "reason": "The queue stopped before run 1 of 2: the game froze on a screen the bot could not recognise, and UMA Auto+ could not close it. Close the game fully (swipe it away in Recent apps) and open it again.",
+                "reason": "The queue stopped before run 1 of 2: the game stayed on a screen the bot does not know, even after UMA Auto+ tried to reopen it. Close the game fully (swipe it away in Recent apps) and open it again.",
                 "nextAction": "Press Start in UMA Auto+."
             }
         },
@@ -1790,6 +1809,22 @@
             }
         },
         {
+            "name": "between runs: GAME_UPDATE_REQUIRED",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "GAME_UPDATE_REQUIRED"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the game asks to be updated from the store. The bot does not tap the prompt's store button.",
+                "nextAction": "Update the game from the store and open it, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
             "name": "bot stop: data download prompt",
             "report": {
                 "kind": "STOPPED_BY_BOT",
@@ -1802,6 +1837,22 @@
                 "title": "Queue stopped",
                 "reason": "The bot stopped the queue with 1 of 4 runs done: the game asked to download additional data, and the bot could not find the prompt's OK button.",
                 "nextAction": "Answer the game's data prompt (OK, or Title Screen for a data update) and let any download finish, then press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "bot stop: forced game update",
+            "report": {
+                "kind": "STOPPED_BY_BOT",
+                "queueEnabled": true,
+                "totalRuns": 4,
+                "completedRuns": 1,
+                "resumable": true,
+                "reasonKey": "GAME_UPDATE_REQUIRED"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The bot stopped the queue with 1 of 4 runs done: the game asks to be updated from the store. The bot does not tap the prompt's store button.",
+                "nextAction": "Update the game from the store and open it, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -1866,7 +1917,7 @@
             },
             "text": {
                 "title": "Queue paused",
-                "reason": "The queue stopped after run 2 of 5: the game froze on a screen the bot could not recognise, and UMA Auto+ could not close it. Close the game fully (swipe it away in Recent apps) and open it again.",
+                "reason": "The queue stopped after run 2 of 5: the game stayed on a screen the bot does not know, even after UMA Auto+ tried to reopen it. Close the game fully (swipe it away in Recent apps) and open it again.",
                 "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },

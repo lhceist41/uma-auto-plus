@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.bot.misc
 
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.CLUB
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.CONFIRM_REQUEST
+import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.GAME_UPDATE_PROMPT
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.HOME
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_ENDED
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_OTHER
@@ -25,10 +26,12 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_M
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_SPECIAL
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_TITLES
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.PRESENTS_BUTTON
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.DialogObjects
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -58,6 +61,8 @@ private class FakeGame(
     val expiredMissed: Boolean = false,
     /** What the second read of the lowest sashes returns; null repeats the scan's counts. */
     val rereads: Map<String, Int?>? = null,
+    /** After this tap a dialog with this title covers the screen, for good. */
+    val dialogAfter: Pair<ExtrasTarget, String>? = null,
 ) : ExtrasDevice {
     val taps = mutableListOf<ExtrasTarget>()
     var requested: String? = null
@@ -71,10 +76,12 @@ private class FakeGame(
     private var spendingShowing = false
     private var rewardsFrom: ExtrasScreen = HOME
     private var picked: String? = null
+    private var dialogTitle: String? = null
 
-    override fun screen(): ExtrasScreen = if (spendingShowing) SPENDING_DIALOG else screen
+    override fun screen(): ExtrasScreen = dialogTitle?.let { extrasDialogScreen(it) ?: UNKNOWN } ?: if (spendingShowing) SPENDING_DIALOG else screen
 
     override fun press(target: ExtrasTarget): Boolean {
+        dialogTitle?.let { error("tapped $target on the \"$it\" dialog") }
         if (spendingShowing) {
             if (target != CANCEL) error("tapped $target on a spending dialog")
             taps += target
@@ -89,6 +96,7 @@ private class FakeGame(
         taps += target
         screen = if (target == unknownAfter) UNKNOWN else next
         if (target == spendingAfter) spendingShowing = true
+        if (target == dialogAfter?.first) dialogTitle = dialogAfter.second
         return true
     }
 
@@ -437,8 +445,26 @@ class DailyExtrasTest {
     fun `a Rewards Collected title counts as that popup and a spending title as a spending dialog`() {
         assertEquals(REWARDS_COLLECTED, extrasDialogScreen("Rewards Collected"))
         assertEquals(SPENDING_DIALOG, extrasDialogScreen(DialogObjects.items.first { it.name == "shop" }.title))
-        assertNull(extrasDialogScreen("Application Updated"))
+        assertEquals(GAME_UPDATE_PROMPT, extrasDialogScreen("Application Updated"))
         assertNull(extrasDialogScreen(null))
+    }
+
+    @Test
+    fun `the forced update prompt during the missions visit stops the run with its own key and gets no tap`() {
+        val game = FakeGame(missionRewards = false, presentBatches = 0, dialogAfter = MISSIONS_BUTTON to "Application Updated")
+        val before = Triple(StartModule.queueStopKey, StartModule.queueStopReason, StartModule.queueStopRequested)
+        try {
+            StartModule.queueStopKey = null
+            StartModule.queueStopRequested = false
+            assertThrows(InterruptedException::class.java) { DailyExtras(game, collectRewards = true, clubRequest = false, requestItem = "Dirt Racing Shoes").run() }
+            assertEquals("GAME_UPDATE_REQUIRED", StartModule.queueStopKey)
+            assertTrue(StartModule.queueStopRequested)
+            assertEquals(listOf(PRESENTS_BUTTON, CLOSE, MISSIONS_BUTTON), game.taps, "no tap once the prompt shows")
+        } finally {
+            StartModule.queueStopKey = before.first
+            StartModule.queueStopReason = before.second
+            StartModule.queueStopRequested = before.third
+        }
     }
 
     @Test

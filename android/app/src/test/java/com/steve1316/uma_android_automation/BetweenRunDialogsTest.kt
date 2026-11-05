@@ -12,6 +12,7 @@ import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRetry
 import com.steve1316.uma_android_automation.components.ButtonTitleScreen
 import com.steve1316.uma_android_automation.components.DialogAgeConfirmation
+import com.steve1316.uma_android_automation.components.DialogApplicationUpdated
 import com.steve1316.uma_android_automation.components.DialogConnectionError
 import com.steve1316.uma_android_automation.components.DialogDataDownload
 import com.steve1316.uma_android_automation.components.DialogDateChanged
@@ -87,6 +88,7 @@ class BetweenRunDialogsTest {
                     BetweenRunDialog.AGE_CONFIRMATION to DialogAgeConfirmation.title,
                     BetweenRunDialog.NEW_SCENARIO to DialogNewScenario.title,
                     BetweenRunDialog.EVENT_HOME to DialogEventHome.title,
+                    BetweenRunDialog.APPLICATION_UPDATED to DialogApplicationUpdated.title,
                 )
             assertEquals(BetweenRunDialog.entries.toSet(), objects.keys)
             for ((dialog, title) in objects) {

@@ -52,6 +52,7 @@ import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.TextUtils
 import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.BaseComponentInterface
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
@@ -319,9 +320,26 @@ object DialogUtils {
      * @param dialog The dialog to check.
      */
     private fun handleDangerousDialogs(dialog: DialogInterface) {
+        if (dialog == DialogApplicationUpdated) stopForGameUpdate()
         if (dialog in dangerousDialogs) {
             throw InterruptedException("$DANGEROUS_DIALOG_STOP${dialog.name}")
         }
+    }
+
+    /** True when the game's forced update prompt is up. The title is read only under a dialog banner. */
+    fun gameUpdatePromptShown(imageUtils: CustomImageUtils, bitmap: Bitmap? = null): Boolean {
+        val bitmap: Bitmap = bitmap ?: imageUtils.getSourceBitmap()
+        return check(imageUtils, sourceBitmap = bitmap) && getTitle(imageUtils, bitmap, logOnMiss = false) == DialogApplicationUpdated.title
+    }
+
+    /** Stops the run on the game's forced update prompt. Its only button opens the store app, so nothing is tapped. */
+    fun stopForGameUpdate(): Nothing {
+        val reason = "The game asks to be updated from the store. Update the game, then press Start again."
+        StartModule.queueStopKey = "GAME_UPDATE_REQUIRED"
+        StartModule.queueStopReason = reason
+        StartModule.queueStopRequested = true
+        MessageLog.e(TAG, "[DIALOG] $reason")
+        throw InterruptedException(reason)
     }
 
     /**
@@ -427,6 +445,7 @@ object DialogObjects {
             DialogActiveConcertBonuses,
             DialogAgeConfirmation,
             DialogAgendaDetails,
+            DialogApplicationUpdated,
             DialogAutoFill,
             DialogAutoSelect,
             DialogAllRewardsEarned,
@@ -589,6 +608,15 @@ object DialogAgendaDetails : DialogInterface {
         listOf(
             ButtonClose,
         )
+}
+
+/** Anywhere: the game's forced update prompt. Its only button, "To Store", opens the store app, so it lists no button to press. */
+object DialogApplicationUpdated : DialogInterface {
+    override val name: String = "application_updated"
+    override val title: String = "Application Updated"
+    override val closeButton = null
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> = emptyList()
 }
 
 /** Career (Unity Cup) */

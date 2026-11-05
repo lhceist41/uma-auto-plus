@@ -333,7 +333,7 @@ class DailyLegendRaceTest {
         val legend = src.indexOf("runFollowUp(\"[LEGEND_RACE]\")")
         val extras = src.indexOf("?: runFollowUp(\"[DAILY_EXTRAS]\")")
         assertTrue(legend in 1 until extras, "the extras run only when the Legend step returned no interrupt")
-        assertTrue(src.contains("return stop?.let { followUpStopResult(it) } ?: result"))
+        assertTrue(src.contains("return stop?.let { followUpStopResult(it, StartModule.queueStopReason) } ?: result"))
         assertTrue(src.indexOf("if (result !is TaskResult.Success) return result") < legend, "only after a successful mode")
     }
 }

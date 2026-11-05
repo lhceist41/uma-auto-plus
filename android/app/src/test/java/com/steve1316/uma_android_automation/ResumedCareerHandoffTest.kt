@@ -156,10 +156,11 @@ class ResumedCareerHandoffTest {
         }
 
         @Test
-        fun `the reason says the game froze and how to close it, since the banner shows only the reason`() {
+        fun `the reason says the game stayed stuck after a reopen try and how to close it, since the banner shows only the reason`() {
             for (text in frozen) {
-                assertTrue(text.reason.contains("froze"), text.reason)
-                assertTrue(text.reason.contains("could not close it"), text.reason)
+                assertTrue(text.reason.contains("stayed on a screen the bot does not know"), text.reason)
+                assertTrue(text.reason.contains("even after UMA Auto+ tried to reopen it"), text.reason)
+                assertFalse(text.reason.contains("could not close it"), "the reopen ladder does close and restart the game")
                 assertTrue(text.reason.contains("Close the game fully (swipe it away in Recent apps) and open it again."), text.reason)
             }
         }

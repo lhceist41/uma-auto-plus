@@ -24,6 +24,12 @@ internal fun shouldRelaunchGame(
 internal fun stopIsGameUnrecoverable(attemptsUsed: Int): Boolean = attemptsUsed > 0
 
 /**
+ * Where the last-resort nudge taps on [count]. Under a dialog banner only (350, 450): the game centres its dialogs, so their button row is
+ * below the screen centre, and (540, 1300) once pressed the only button of the forced update prompt, which opened the store app.
+ */
+internal fun unknownScreenNudge(count: Int, dialogBannerUp: Boolean): Pair<Double, Double> = if (dialogBannerUp || count % 2 != 0) 350.0 to 450.0 else 540.0 to 1300.0
+
+/**
  * Whether UMA Auto+'s own screen is in front, set from MainActivity onResume/onPause. The capture then shows our
  * app, so a blind tap lands in our UI and an unknown-screen streak would relaunch the game over the player.
  * Android pauses an activity before the next resumes and a new process starts false, so outside multi-window
