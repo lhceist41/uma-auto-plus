@@ -20,7 +20,12 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.CONFIRM
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.HOME_TAB
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.ITEM_REQUEST_BUTTON
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_BUTTON
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_DAILY
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_MAIN
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_SPECIAL
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_TITLES
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.PRESENTS_BUTTON
+import com.steve1316.uma_android_automation.components.DialogObjects
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -31,7 +36,14 @@ import org.junit.jupiter.api.Test
 private class FakeGame(
     var screen: ExtrasScreen = HOME,
     var request: String = "none",
+    /** Rewards waiting on the tab Missions opens on. */
     var missionRewards: Boolean = true,
+    /** Rewards waiting on the Titles tab. */
+    var titlesRewards: Boolean = false,
+    /** The tab Missions opens on. */
+    var openTab: ExtrasTarget = MISSIONS_TAB_DAILY,
+    /** Tabs whose template never matches, as when the game draws them differently. */
+    val tabsMissing: Set<ExtrasTarget> = emptySet(),
     var presentBatches: Int = 1,
     val sashes: PickerScan = PickerScan(listOf(PickerRow("Kawasaki Kinen Winner's Sash", 12), PickerRow("Japan Cup Winner's Sash", 40)), complete = true),
     /** Overrides what the Confirm Request dialog names; null shows the picked item. */
@@ -53,6 +65,8 @@ private class FakeGame(
     val rereadAsked = mutableListOf<List<String>>()
     var shoesTab: Boolean? = null
     var collectedMissions = false
+    val collectedTabs = mutableListOf<ExtrasTarget>()
+    private var tab: ExtrasTarget = openTab
     var collectedPresents = 0
     private var spendingShowing = false
     private var rewardsFrom: ExtrasScreen = HOME
@@ -81,7 +95,7 @@ private class FakeGame(
     private fun transition(target: ExtrasTarget): ExtrasScreen? =
         when (screen to target) {
             HOME to CLUB_BUTTON -> CLUB
-            HOME to MISSIONS_BUTTON -> MISSIONS
+            HOME to MISSIONS_BUTTON -> MISSIONS.also { tab = openTab }
             HOME to PRESENTS_BUTTON -> PRESENTS
             CLUB to HOME_TAB -> HOME
             CLUB to ITEM_REQUEST_BUTTON ->
@@ -99,15 +113,20 @@ private class FakeGame(
                     requested = picked
                     request = "running"
                 }
-            MISSIONS to COLLECT_ALL -> if (missionRewards) REWARDS_COLLECTED.also { rewardsFrom = MISSIONS } else MISSIONS
+            MISSIONS to COLLECT_ALL -> if (rewardsOn(tab)) REWARDS_COLLECTED.also { rewardsFrom = MISSIONS } else MISSIONS
+            // A tab template is the unselected look: it matches only on the other tabs.
+            MISSIONS to MISSIONS_TAB_DAILY, MISSIONS to MISSIONS_TAB_MAIN, MISSIONS to MISSIONS_TAB_TITLES, MISSIONS to MISSIONS_TAB_SPECIAL ->
+                if (target == tab || target in tabsMissing) null else MISSIONS.also { tab = target }
             MISSIONS to BACK -> HOME
             PRESENTS to COLLECT_ALL -> if (presentBatches > 0) REWARDS_COLLECTED.also { rewardsFrom = PRESENTS } else PRESENTS
             PRESENTS to CLOSE -> HOME
             REWARDS_COLLECTED to CLOSE ->
                 rewardsFrom.also {
                     if (it == MISSIONS) {
-                        missionRewards = false
+                        if (tab == openTab) missionRewards = false
+                        if (tab == MISSIONS_TAB_TITLES) titlesRewards = false
                         collectedMissions = true
+                        collectedTabs += tab
                     } else {
                         presentBatches--
                         collectedPresents++
@@ -141,10 +160,12 @@ private class FakeGame(
 
     override fun collectAllEnabled(): Boolean? =
         when (screen) {
-            MISSIONS -> missionRewards
+            MISSIONS -> rewardsOn(tab)
             PRESENTS -> presentBatches > 0
             else -> null
         }
+
+    private fun rewardsOn(on: ExtrasTarget): Boolean = (on == openTab && missionRewards) || (on == MISSIONS_TAB_TITLES && titlesRewards)
 
     override fun pause(seconds: Double) {}
 }
@@ -370,8 +391,54 @@ class DailyExtrasTest {
         assertTrue(game.collectedMissions)
         assertEquals(2, game.collectedPresents)
         assertEquals(HOME, game.screen)
-        assertEquals(listOf("Presents: collected", "Missions: collected"), notes)
+        assertEquals(listOf("Presents: collected", "Missions: collected on the opened tab"), notes)
         assertFalse(CLUB_BUTTON in game.taps)
+    }
+
+    private fun runMissions(game: FakeGame) = DailyExtras(game, collectRewards = true, clubRequest = false, requestItem = "Dirt Racing Shoes").run().single { it.startsWith("Missions: ") }
+
+    @Test
+    fun `rewards on the Titles tab are collected when the opened tab has none`() {
+        val game = FakeGame(missionRewards = false, titlesRewards = true, presentBatches = 0)
+        val note = runMissions(game)
+        assertEquals(listOf(MISSIONS_TAB_TITLES), game.collectedTabs)
+        val taps = game.taps.dropWhile { it != MISSIONS_TAB_TITLES }
+        assertEquals(listOf(MISSIONS_TAB_TITLES, COLLECT_ALL, CLOSE), taps.take(3))
+        assertEquals("Missions: collected on Titles", note)
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `rewards on the opened tab and on Titles are both collected and named`() {
+        val game = FakeGame(titlesRewards = true, presentBatches = 0)
+        val note = runMissions(game)
+        assertEquals(listOf(MISSIONS_TAB_DAILY, MISSIONS_TAB_TITLES), game.collectedTabs)
+        assertEquals("Missions: collected on the opened tab, Titles", note)
+    }
+
+    @Test
+    fun `a tab that cannot be opened is named, never reported as nothing to collect`() {
+        val game = FakeGame(missionRewards = false, presentBatches = 0, tabsMissing = setOf(MISSIONS_TAB_SPECIAL))
+        val note = runMissions(game)
+        assertEquals("Missions: Special tab not found", note)
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `the tab Missions opens on is reached again once another tab is selected`() {
+        val game = FakeGame(missionRewards = false, presentBatches = 0, openTab = MISSIONS_TAB_MAIN, titlesRewards = true)
+        val note = runMissions(game)
+        assertEquals(listOf(MISSIONS_TAB_TITLES), game.collectedTabs)
+        assertEquals(MISSIONS_TAB_MAIN, game.taps.filter { it == MISSIONS_TAB_MAIN }.single())
+        assertEquals("Missions: collected on Titles", note)
+    }
+
+    @Test
+    fun `a Rewards Collected title counts as that popup and a spending title as a spending dialog`() {
+        assertEquals(REWARDS_COLLECTED, extrasDialogScreen("Rewards Collected"))
+        assertEquals(SPENDING_DIALOG, extrasDialogScreen(DialogObjects.items.first { it.name == "shop" }.title))
+        assertNull(extrasDialogScreen("Application Updated"))
+        assertNull(extrasDialogScreen(null))
     }
 
     @Test
@@ -379,7 +446,7 @@ class DailyExtrasTest {
         val game = FakeGame(missionRewards = false, presentBatches = 0)
         val notes = DailyExtras(game, collectRewards = true, clubRequest = false, requestItem = "Dirt Racing Shoes").run()
         assertFalse(COLLECT_ALL in game.taps)
-        assertEquals(listOf(PRESENTS_BUTTON, CLOSE, MISSIONS_BUTTON, BACK), game.taps)
+        assertEquals(listOf(PRESENTS_BUTTON, CLOSE, MISSIONS_BUTTON, MISSIONS_TAB_MAIN, MISSIONS_TAB_TITLES, MISSIONS_TAB_SPECIAL, MISSIONS_TAB_DAILY, BACK), game.taps)
         assertEquals(listOf("Presents: nothing to collect", "Missions: nothing to collect"), notes)
         assertEquals(HOME, game.screen)
     }

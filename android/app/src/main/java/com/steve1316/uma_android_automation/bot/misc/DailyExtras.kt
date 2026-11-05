@@ -18,8 +18,13 @@ import com.steve1316.uma_android_automation.components.ButtonHomeSpecialMissions
 import com.steve1316.uma_android_automation.components.ButtonItemRequestSashTab
 import com.steve1316.uma_android_automation.components.ButtonItemRequestShoesTab
 import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeSelected
+import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabDaily
+import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabMain
+import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabSpecial
+import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabTitles
 import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.DialogObjects
+import com.steve1316.uma_android_automation.components.DialogRewardsCollected
 import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.LabelClubMenu
 import com.steve1316.uma_android_automation.components.LabelConfirmRequestHeader
@@ -225,7 +230,22 @@ internal enum class ExtrasScreen {
     UNKNOWN,
 }
 
-internal enum class ExtrasTarget { CLUB_BUTTON, ITEM_REQUEST_BUTTON, MISSIONS_BUTTON, PRESENTS_BUTTON, COLLECT_ALL, CLOSE, CANCEL, CONFIRM, BACK, HOME_TAB }
+internal enum class ExtrasTarget {
+    CLUB_BUTTON,
+    ITEM_REQUEST_BUTTON,
+    MISSIONS_BUTTON,
+    PRESENTS_BUTTON,
+    MISSIONS_TAB_DAILY,
+    MISSIONS_TAB_MAIN,
+    MISSIONS_TAB_TITLES,
+    MISSIONS_TAB_SPECIAL,
+    COLLECT_ALL,
+    CLOSE,
+    CANCEL,
+    CONFIRM,
+    BACK,
+    HOME_TAB,
+}
 
 /** The game side of [DailyExtras]. One implementation drives the game; the tests drive a scripted fake. */
 internal interface ExtrasDevice {
@@ -277,6 +297,14 @@ internal class DailyExtras(
 
         /** Home shows before its buttons finish drawing; polls of about a second for a Home button. */
         const val HOME_BUTTON_POLLS = 6
+
+        private val MISSION_TABS =
+            listOf(
+                "Daily" to ExtrasTarget.MISSIONS_TAB_DAILY,
+                "Main" to ExtrasTarget.MISSIONS_TAB_MAIN,
+                "Titles" to ExtrasTarget.MISSIONS_TAB_TITLES,
+                "Special" to ExtrasTarget.MISSIONS_TAB_SPECIAL,
+            )
     }
 
     private var spendingDialogsCancelled = 0
@@ -306,12 +334,26 @@ internal class DailyExtras(
         return notes
     }
 
+    /** Collect All covers the visible tab only: collects the opened tab, then each tab by its template. */
     private fun missions(): String {
         if (!pressOnHome(ExtrasTarget.MISSIONS_BUTTON)) return "Missions button not found"
         if (awaitScreen(ExtrasScreen.MISSIONS) != ExtrasScreen.MISSIONS) return "Missions screen did not appear"
-        val note = collect(ExtrasScreen.MISSIONS)
+        val results = mutableListOf("the opened tab" to collect(ExtrasScreen.MISSIONS))
+        // A tab template is the unselected look, so the selected tab misses it: a second pass reaches it once another tab is selected.
+        var pending = MISSION_TABS
+        repeat(2) {
+            val missed = mutableListOf<Pair<String, ExtrasTarget>>()
+            for ((name, target) in pending) {
+                if (device.press(target)) results += name to collect(ExtrasScreen.MISSIONS) else missed += name to target
+            }
+            pending = missed
+        }
         device.press(ExtrasTarget.BACK)
-        return note
+        val collected = results.filter { it.second == "collected" }.map { it.first }
+        val problems = results.filter { it.second != "collected" && it.second != "nothing to collect" }.map { "${it.first}: ${it.second}" }
+        val notFound = pending.map { "${it.first} tab not found" }
+        val parts = listOfNotNull(if (collected.isEmpty()) null else "collected on ${collected.joinToString()}") + problems + notFound
+        return if (parts.isEmpty()) "nothing to collect" else parts.joinToString("; ")
     }
 
     private fun presents(): String {
@@ -475,6 +517,15 @@ private const val MAX_PICKER_PAGES = 20
 internal val SPENDING_DIALOG_NAMES =
     setOf("confirm_exchange", "confirm_restore_rp", "daily_sale", "purchase_alarm_clock", "purchase_carats", "purchase_daily_race_ticket", "shop")
 
+/** What a dialog title stands for: the Rewards Collected popup (when its header template missed) or a spending dialog. */
+internal fun extrasDialogScreen(title: String?): ExtrasScreen? =
+    when {
+        title == null -> null
+        title == DialogRewardsCollected.title -> ExtrasScreen.REWARDS_COLLECTED
+        DialogObjects.items.any { it.title == title && it.name in SPENDING_DIALOG_NAMES } -> ExtrasScreen.SPENDING_DIALOG
+        else -> null
+    }
+
 /** Drives [DailyExtras] on the game. Templates and offsets come from 1080x1920 Global frames. */
 internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
     private val imageUtils get() = game.imageUtils
@@ -491,18 +542,14 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
             bitmap.shows(LabelMissionsHeader) -> ExtrasScreen.MISSIONS
             bitmap.shows(LabelClubMenu) -> ExtrasScreen.CLUB
             ButtonHomePresents.check(imageUtils, sourceBitmap = bitmap, confidence = 0.9) && bitmap.shows(ButtonMenuBarHomeSelected) -> ExtrasScreen.HOME
-            spendingDialogShown(bitmap) -> ExtrasScreen.SPENDING_DIALOG
-            else -> ExtrasScreen.UNKNOWN
+            else -> dialogScreen(bitmap) ?: ExtrasScreen.UNKNOWN
         }
     }
 
     private fun Bitmap.shows(component: ComponentInterface): Boolean = component.check(imageUtils, sourceBitmap = this)
 
     /** Reads the dialog title quietly: most unknown frames are transitions, not dialogs. */
-    private fun spendingDialogShown(bitmap: Bitmap): Boolean {
-        val title = DialogUtils.getTitle(imageUtils, bitmap, logOnMiss = false) ?: return false
-        return DialogObjects.items.any { it.title == title && it.name in SPENDING_DIALOG_NAMES }
-    }
+    private fun dialogScreen(bitmap: Bitmap): ExtrasScreen? = extrasDialogScreen(DialogUtils.getTitle(imageUtils, bitmap, logOnMiss = false))
 
     override fun press(target: ExtrasTarget): Boolean {
         val clicked =
@@ -511,6 +558,10 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
                 ExtrasTarget.ITEM_REQUEST_BUTTON -> ButtonClubItemRequest.click(imageUtils)
                 ExtrasTarget.MISSIONS_BUTTON -> ButtonHomeSpecialMissions.click(imageUtils, confidence = 0.9)
                 ExtrasTarget.PRESENTS_BUTTON -> ButtonHomePresents.click(imageUtils, confidence = 0.9)
+                ExtrasTarget.MISSIONS_TAB_DAILY -> ButtonSpecialMissionsTabDaily.click(imageUtils)
+                ExtrasTarget.MISSIONS_TAB_MAIN -> ButtonSpecialMissionsTabMain.click(imageUtils)
+                ExtrasTarget.MISSIONS_TAB_TITLES -> ButtonSpecialMissionsTabTitles.click(imageUtils)
+                ExtrasTarget.MISSIONS_TAB_SPECIAL -> ButtonSpecialMissionsTabSpecial.click(imageUtils)
                 ExtrasTarget.COLLECT_ALL -> ButtonCollectAll.click(imageUtils)
                 ExtrasTarget.CLOSE -> ButtonClose.click(imageUtils)
                 ExtrasTarget.CANCEL -> ButtonCancel.click(imageUtils)
