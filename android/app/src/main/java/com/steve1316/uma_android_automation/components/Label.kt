@@ -371,7 +371,7 @@ object LabelMultiRacePopup : ComponentInterface {
     override val template = Template("components/label/multi_race_popup", region = Region.middle)
 }
 
-/** "Daily Sale" green header on the shop popup that appears after daily races finish. Bot always taps Cancel (user shops manually). */
+/** "Daily Sale" green header on the shop popup that appears after daily races finish. Team Trials and Daily Races tap Cancel; the Daily Sales part of the Home extras buys from the Shop. */
 object LabelDailySale : ComponentInterface {
     override val template = Template("components/label/daily_sale", region = Region.middle)
 }
@@ -447,4 +447,19 @@ object LabelPresentsHeader : ComponentInterface {
 
 object LabelMissionsHeader : ComponentInterface {
     override val template = Template("components/label/missions_header", region = Region.topQuarter)
+}
+
+/** The red "Daily" badge over Home's Shop button while a Daily Sales line-up is on offer. */
+object LabelHomeShopDailyBadge : ComponentInterface {
+    override val template = Template("components/label/home_shop_daily_badge", region = Region.bottomHalf)
+}
+
+/** "Select an item to purchase." above the Daily Sales Select All button. */
+object LabelDailySalesPrompt : ComponentInterface {
+    override val template = Template("components/label/daily_sales_prompt", region = Region.bottomHalf)
+}
+
+/** The grey "Cost" pill on every Daily Sales row, sold out or not. No region: the list reaches above the screen's middle. */
+object LabelDailySalesCostPill : ComponentInterface {
+    override val template = Template("components/label/daily_sales_cost_pill")
 }

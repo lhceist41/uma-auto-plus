@@ -1,7 +1,10 @@
 package com.steve1316.uma_android_automation.bot.misc
 
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.CLUB
+import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.CONFIRM_EXCHANGE
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.CONFIRM_REQUEST
+import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.DAILY_SALES
+import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.EXCHANGE_COMPLETE
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.GAME_UPDATE_PROMPT
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.HOME
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_ENDED
@@ -10,6 +13,7 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_P
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.MISSIONS
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.PRESENTS
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.REWARDS_COLLECTED
+import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.SHOP_MENU
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.SPENDING_DIALOG
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.UNKNOWN
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.BACK
@@ -18,6 +22,8 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.CLOSE
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.CLUB_BUTTON
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.COLLECT_ALL
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.CONFIRM
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.DAILY_SALES_BANNER
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.EXCHANGE
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.HOME_TAB
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.ITEM_REQUEST_BUTTON
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_BUTTON
@@ -26,6 +32,9 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_M
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_SPECIAL
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_TITLES
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.PRESENTS_BUTTON
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.RESET
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.SELECT_ALL
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.SHOP_BUTTON
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.DialogObjects
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -63,6 +72,16 @@ private class FakeGame(
     val rereads: Map<String, Int?>? = null,
     /** After this tap a dialog with this title covers the screen, for good. */
     val dialogAfter: Pair<ExtrasTarget, String>? = null,
+    /** What [spendingAfter] shows. */
+    val spendingScreen: ExtrasScreen = SPENDING_DIALOG,
+    /** Home's Shop button: true with the "Daily" badge, false without, null while it is not drawn. */
+    var shopBadge: Boolean? = false,
+    val sale: SaleScan = SaleScan(LIVE_SALE, complete = true),
+    /** What the cost bar shows after Select All; null shows the sum of the buyable rows. */
+    val barTotal: Int? = null,
+    val balance: Int? = 5_683_820,
+    /** After this tap a dialog the step does not know shows instead; its Close returns to the Daily Sales list. */
+    val errorAfter: ExtrasTarget? = null,
 ) : ExtrasDevice {
     val taps = mutableListOf<ExtrasTarget>()
     var requested: String? = null
@@ -77,8 +96,11 @@ private class FakeGame(
     private var rewardsFrom: ExtrasScreen = HOME
     private var picked: String? = null
     private var dialogTitle: String? = null
+    private var selected = false
+    var bought = false
+    private var errorShowing = false
 
-    override fun screen(): ExtrasScreen = dialogTitle?.let { extrasDialogScreen(it) ?: UNKNOWN } ?: if (spendingShowing) SPENDING_DIALOG else screen
+    override fun screen(): ExtrasScreen = dialogTitle?.let { extrasDialogScreen(it) ?: UNKNOWN } ?: if (spendingShowing) spendingScreen else screen
 
     override fun press(target: ExtrasTarget): Boolean {
         dialogTitle?.let { error("tapped $target on the \"$it\" dialog") }
@@ -97,6 +119,10 @@ private class FakeGame(
         screen = if (target == unknownAfter) UNKNOWN else next
         if (target == spendingAfter) spendingShowing = true
         if (target == dialogAfter?.first) dialogTitle = dialogAfter.second
+        if (target == errorAfter) {
+            screen = UNKNOWN
+            errorShowing = true
+        }
         return true
     }
 
@@ -128,6 +154,22 @@ private class FakeGame(
             MISSIONS to BACK -> HOME
             PRESENTS to COLLECT_ALL -> if (presentBatches > 0) REWARDS_COLLECTED.also { rewardsFrom = PRESENTS } else PRESENTS
             PRESENTS to CLOSE -> HOME
+            HOME to SHOP_BUTTON -> if (shopBadge != null) SHOP_MENU else null
+            SHOP_MENU to DAILY_SALES_BANNER -> DAILY_SALES
+            SHOP_MENU to BACK -> HOME.also { if (bought) shopBadge = false }
+            DAILY_SALES to SELECT_ALL -> DAILY_SALES.also { selected = true }
+            DAILY_SALES to RESET -> DAILY_SALES.also { selected = false }
+            // Confirm stays greyed out until something is selected.
+            DAILY_SALES to CONFIRM -> if (selected) CONFIRM_EXCHANGE else DAILY_SALES
+            DAILY_SALES to BACK -> SHOP_MENU.also { selected = false }
+            CONFIRM_EXCHANGE to CANCEL -> DAILY_SALES
+            CONFIRM_EXCHANGE to EXCHANGE ->
+                EXCHANGE_COMPLETE.also {
+                    bought = errorAfter != EXCHANGE
+                    selected = false
+                }
+            EXCHANGE_COMPLETE to CLOSE -> DAILY_SALES
+            UNKNOWN to CLOSE -> if (errorShowing) DAILY_SALES.also { errorShowing = false } else null
             REWARDS_COLLECTED to CLOSE ->
                 rewardsFrom.also {
                     if (it == MISSIONS) {
@@ -173,6 +215,12 @@ private class FakeGame(
             else -> null
         }
 
+    override fun shopBadge(): Boolean? = if (screen == HOME) shopBadge else null
+
+    override fun readSaleRows(): SaleScan = if (screen == DAILY_SALES) sale else SaleScan(emptyList(), complete = false)
+
+    override fun costBar(): Pair<Int?, Int?> = (if (selected) barTotal ?: sale.buyable.sumOf { it.cost ?: 0 } else 0) to balance
+
     private fun rewardsOn(on: ExtrasTarget): Boolean = (on == openTab && missionRewards) || (on == MISSIONS_TAB_TITLES && titlesRewards)
 
     override fun pause(seconds: Double) {}
@@ -216,6 +264,29 @@ private val LIVE_SASHES =
         "Kashiwa Kinen" to 4,
         "M.C. Nambu Hai" to 2,
     ).map { (race, held) -> "$race Winner's Sash" to held.toString() }
+
+/** Daily Sales rows seen on the 2026-11-05 account 1 frames, in list order (not the whole list). */
+private val LIVE_SALE =
+    listOf(
+        "[LOVE☆4EVER] Smart Falcon Star Piece" to 15_000,
+        "[RUN! RUIN! LAUNCHER!] Gold Ship Star Piece" to 15_000,
+        "[Wild Top Gear] Vodka Star Piece" to 10_000,
+        "[King of Emeralds] King Halo Star Piece" to 5_000,
+        "[Down the Line] Mejiro Ryan Star Piece" to 5_000,
+        "[El☆Número 1] El Condor Pasa Star Piece" to 10_000,
+        "Pleasing Parfait" to 5_000,
+        "Support Points" to 3_000,
+        "Takamatsunomiya Kinen Winner's Sash" to 5_000,
+        "Kikuka Sho Winner's Sash" to 5_000,
+        "Mile Ch. Winner's Sash" to 5_000,
+    ).map { (title, cost) -> SaleRow(title, monies = true, cost = cost) }
+
+private val LIVE_SALE_TOTAL = LIVE_SALE.sumOf { it.cost!! }
+
+/** Screenfuls of [size] rows starting at [firsts], the way the bot reads them after each one-row swipe. */
+private fun salePages(vararg firsts: Int, size: Int = 2, rows: List<SaleRow> = LIVE_SALE): List<List<SaleRow>> = firsts.map { rows.subList(it, minOf(it + size, rows.size)) }
+
+private fun runSales(game: FakeGame): List<String> = DailyExtras(game, collectRewards = false, clubRequest = false, requestItem = "Dirt Racing Shoes", buyDailySales = true).run()
 
 /** Screenfuls of six rows starting at [firsts] (row indexes), the way the bot reads them after each swipe. */
 private fun livePages(vararg firsts: Int): List<PickerPage> = firsts.map { LIVE_SASHES.subList(it, minOf(it + 6, LIVE_SASHES.size)) }
@@ -794,5 +865,186 @@ class DailyExtrasTest {
         assertEquals(6322, parseHeldCount("6,322"))
         assertNull(parseHeldCount(""))
         assertNull(parseHeldCount("Held"))
+    }
+
+    @Test
+    fun `with Buy the Daily Sales off the Shop is never opened`() {
+        val game = FakeGame(shopBadge = true)
+        val notes = DailyExtras(game, collectRewards = true, clubRequest = false, requestItem = "Dirt Racing Shoes").run()
+        assertFalse(SHOP_BUTTON in game.taps)
+        assertFalse(notes.any { it.startsWith("Daily Sales") })
+    }
+
+    @Test
+    fun `without the Daily badge the Shop is not opened`() {
+        val game = FakeGame(shopBadge = false)
+        assertEquals(listOf("Daily Sales: no Daily badge on the Shop"), runSales(game))
+        assertTrue(game.taps.isEmpty())
+    }
+
+    @Test
+    fun `a Shop button that never draws ends the part without a tap`() {
+        val game = FakeGame(shopBadge = null)
+        assertEquals(listOf("Daily Sales: Shop button not found"), runSales(game))
+        assertTrue(game.taps.isEmpty())
+    }
+
+    @Test
+    fun `with the badge every row is bought for Monies and the step ends on Home, after the other parts`() {
+        val game = FakeGame(shopBadge = true, missionRewards = false, presentBatches = 0)
+        val notes = DailyExtras(game, collectRewards = true, clubRequest = false, requestItem = "Dirt Racing Shoes", buyDailySales = true).run()
+        assertEquals(listOf("Presents: nothing to collect", "Missions: nothing to collect", "Daily Sales: bought 11 item(s) for $LIVE_SALE_TOTAL Monies"), notes)
+        assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, CONFIRM, EXCHANGE, CLOSE, BACK, BACK), game.taps.dropWhile { it != SHOP_BUTTON })
+        assertTrue(game.bought)
+        assertEquals(HOME, game.screen)
+        assertEquals(false, game.shopBadge)
+    }
+
+    @Test
+    fun `a sold-out row is left out of the total and does not block the purchase`() {
+        val rows = LIVE_SALE + SaleRow("Medium Racing Shoes", monies = true, cost = 4_000, buyable = false)
+        val game = FakeGame(shopBadge = true, sale = SaleScan(rows, complete = true))
+        assertEquals(listOf("Daily Sales: bought 11 item(s) for $LIVE_SALE_TOTAL Monies"), runSales(game))
+        assertTrue(game.bought)
+    }
+
+    @Test
+    fun `a Carats row whose checkbox was missed still buys nothing`() {
+        val rows = LIVE_SALE + SaleRow("Carat Pack", monies = false, cost = 500, buyable = false)
+        val game = FakeGame(shopBadge = true, sale = SaleScan(rows, complete = true))
+        assertEquals(listOf("Daily Sales: nothing bought: a row is not priced in Monies"), runSales(game))
+        assertFalse(SELECT_ALL in game.taps)
+        assertFalse(game.bought)
+    }
+
+    @Test
+    fun `a row not priced in Monies leaves the whole list unselected`() {
+        val rows = LIVE_SALE.mapIndexed { i, row -> if (i == 3) row.copy(monies = false) else row }
+        val game = FakeGame(shopBadge = true, sale = SaleScan(rows, complete = true))
+        assertEquals(listOf("Daily Sales: nothing bought: a row is not priced in Monies"), runSales(game))
+        assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, BACK, BACK), game.taps)
+        assertFalse(game.bought)
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `a list not read to its end, an unread price or an all sold-out list selects nothing`() {
+        val cases =
+            listOf(
+                SaleScan(LIVE_SALE, complete = false, gap = true) to "the list was not read to its end",
+                SaleScan(LIVE_SALE.mapIndexed { i, row -> if (i == 5) row.copy(cost = null) else row }, complete = true) to "a row could not be read",
+                SaleScan(LIVE_SALE.map { it.copy(buyable = false) }, complete = true) to "every row is sold out",
+                SaleScan(emptyList(), complete = true) to "no row was read",
+            )
+        for ((scan, reason) in cases) {
+            val game = FakeGame(shopBadge = true, sale = scan)
+            assertEquals(listOf("Daily Sales: nothing bought: $reason"), runSales(game))
+            assertFalse(SELECT_ALL in game.taps, reason)
+            assertFalse(game.bought, reason)
+        }
+    }
+
+    @Test
+    fun `a cost bar that disagrees with the rows is reset and never confirmed`() {
+        val game = FakeGame(shopBadge = true, barTotal = LIVE_SALE_TOTAL + 500)
+        assertEquals(listOf("Daily Sales: nothing bought: the cost bar shows ${LIVE_SALE_TOTAL + 500}, the rows add up to $LIVE_SALE_TOTAL"), runSales(game))
+        assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, RESET, BACK, BACK), game.taps)
+        assertFalse(game.bought)
+    }
+
+    @Test
+    fun `too few Monies or an unreadable cost bar is never confirmed`() {
+        for ((balance, reason) in listOf(50_000 to "it costs $LIVE_SALE_TOTAL Monies and 50000 are held", null to "the cost bar could not be read")) {
+            val game = FakeGame(shopBadge = true, balance = balance)
+            assertEquals(listOf("Daily Sales: nothing bought: $reason"), runSales(game))
+            assertFalse(CONFIRM in game.taps, reason)
+            assertFalse(game.bought, reason)
+        }
+    }
+
+    @Test
+    fun `an unknown dialog after Confirm is closed and nothing is claimed as bought`() {
+        val game = FakeGame(shopBadge = true, errorAfter = CONFIRM)
+        assertEquals(listOf("Daily Sales: nothing bought: no Confirm Exchange dialog after Confirm"), runSales(game))
+        assertFalse(EXCHANGE in game.taps)
+        assertFalse(game.bought)
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `an unknown dialog after Exchange is reported as unconfirmed, never as bought`() {
+        val game = FakeGame(shopBadge = true, errorAfter = EXCHANGE)
+        val note = runSales(game).single()
+        assertEquals("Daily Sales: Exchange pressed for $LIVE_SALE_TOTAL Monies, but no Exchange Complete was seen", note)
+        assertFalse(note.contains("bought "))
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `a Confirm Exchange dialog outside the Daily Sales part is cancelled like any spending dialog`() {
+        val game = FakeGame(spendingAfter = MISSIONS_BUTTON, spendingScreen = CONFIRM_EXCHANGE, presentBatches = 0)
+        val notes = DailyExtras(game, collectRewards = true, clubRequest = false, requestItem = "Dirt Racing Shoes").run()
+        assertEquals(CANCEL, game.taps[game.taps.indexOf(MISSIONS_BUTTON) + 1])
+        assertEquals("cancelled 1 spending dialog(s)", notes.last())
+    }
+
+    @Test
+    fun `the forced update prompt in the Shop stops the run with no tap on it`() {
+        val game = FakeGame(shopBadge = true, dialogAfter = DAILY_SALES_BANNER to "Application Updated")
+        val before = Triple(StartModule.queueStopKey, StartModule.queueStopReason, StartModule.queueStopRequested)
+        try {
+            StartModule.queueStopKey = null
+            StartModule.queueStopRequested = false
+            assertThrows(InterruptedException::class.java) { runSales(game) }
+            assertEquals("GAME_UPDATE_REQUIRED", StartModule.queueStopKey)
+            assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER), game.taps)
+        } finally {
+            StartModule.queueStopKey = before.first
+            StartModule.queueStopReason = before.second
+            StartModule.queueStopRequested = before.third
+        }
+    }
+
+    @Test
+    fun `the Daily Sales dialogs are told apart by their titles`() {
+        assertEquals(CONFIRM_EXCHANGE, extrasDialogScreen("Confirm Exchange"))
+        assertEquals(EXCHANGE_COMPLETE, extrasDialogScreen("Exchange Complete"))
+    }
+
+    @Test
+    fun `one-row swipes read the whole list, and a repeated page is its end`() {
+        val scan = mergeSalePages(salePages(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9))
+        assertTrue(scan.complete)
+        assertEquals(LIVE_SALE, scan.rows)
+        val three = mergeSalePages(salePages(0, 1, 3, 4, 6, 8, 8, size = 3))
+        assertTrue(three.complete)
+        assertEquals(LIVE_SALE, three.rows)
+    }
+
+    @Test
+    fun `a swipe that skips past every row on screen leaves the read incomplete`() {
+        val scan = mergeSalePages(salePages(0, 1, 4, 5))
+        assertFalse(scan.complete)
+        assertTrue(scan.gap)
+        assertEquals(LIVE_SALE.take(3), scan.rows)
+        assertFalse(mergeSalePages(salePages(0, 1, 2)).complete, "never reached the end")
+        assertFalse(mergeSalePages(emptyList()).complete)
+    }
+
+    @Test
+    fun `sold-out rows keep pages overlapping`() {
+        val rows = LIVE_SALE.mapIndexed { i, row -> if (i in 3..6) row.copy(buyable = false) else row }
+        val scan = mergeSalePages(salePages(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, rows = rows))
+        assertTrue(scan.complete)
+        assertEquals(7, scan.buyable.size)
+        assertEquals(rows, scan.rows)
+    }
+
+    @Test
+    fun `Monies amounts keep every digit and drop separators`() {
+        assertEquals(5_683_820, parseMonies("5,683,820"))
+        assertEquals(108_000, parseMonies("108,000"))
+        assertNull(parseMonies(""))
+        assertNull(parseMonies("Monies"))
     }
 }

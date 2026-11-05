@@ -12,23 +12,35 @@ import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonClubItemRequest
 import com.steve1316.uma_android_automation.components.ButtonCollectAll
 import com.steve1316.uma_android_automation.components.ButtonConfirm
+import com.steve1316.uma_android_automation.components.ButtonDailySales
+import com.steve1316.uma_android_automation.components.ButtonDailySalesReset
+import com.steve1316.uma_android_automation.components.ButtonExchange
 import com.steve1316.uma_android_automation.components.ButtonHomeClub
 import com.steve1316.uma_android_automation.components.ButtonHomePresents
+import com.steve1316.uma_android_automation.components.ButtonHomeShop
 import com.steve1316.uma_android_automation.components.ButtonHomeSpecialMissions
 import com.steve1316.uma_android_automation.components.ButtonItemRequestSashTab
 import com.steve1316.uma_android_automation.components.ButtonItemRequestShoesTab
 import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeSelected
+import com.steve1316.uma_android_automation.components.ButtonSelectAll
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabDaily
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabMain
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabSpecial
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabTitles
+import com.steve1316.uma_android_automation.components.CheckboxShopItem
 import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.DialogApplicationUpdated
+import com.steve1316.uma_android_automation.components.DialogConfirmExchange
+import com.steve1316.uma_android_automation.components.DialogExchangeComplete
 import com.steve1316.uma_android_automation.components.DialogObjects
 import com.steve1316.uma_android_automation.components.DialogRewardsCollected
 import com.steve1316.uma_android_automation.components.DialogUtils
+import com.steve1316.uma_android_automation.components.IconMonies
 import com.steve1316.uma_android_automation.components.LabelClubMenu
 import com.steve1316.uma_android_automation.components.LabelConfirmRequestHeader
+import com.steve1316.uma_android_automation.components.LabelDailySalesCostPill
+import com.steve1316.uma_android_automation.components.LabelDailySalesPrompt
+import com.steve1316.uma_android_automation.components.LabelHomeShopDailyBadge
 import com.steve1316.uma_android_automation.components.LabelItemRequestExpired
 import com.steve1316.uma_android_automation.components.LabelItemRequestHeader
 import com.steve1316.uma_android_automation.components.LabelItemRequestHeld
@@ -215,6 +227,61 @@ internal fun lowestAfterReread(scan: PickerScan, reread: (List<String>) -> Map<S
     return (lowestHeldItem(settled.copy(rows = fixed)) ?: first) to lines
 }
 
+/** Digits of a Monies amount, ignoring thousands separators, or null when no plausible number was read. */
+internal fun parseMonies(ocr: String): Int? {
+    val digits = ocr.filter(Char::isDigit)
+    return if (digits.length in 1..9) digits.toInt() else null
+}
+
+/** One Daily Sales row as read: its title, whether its price shows the Monies coin, the price, and whether it has a checkbox (a sold-out row has none). */
+internal data class SaleRow(val title: String, val monies: Boolean, val cost: Int?, val buyable: Boolean = true)
+
+/** The rows of the Daily Sales list. [complete] once a swipe showed no new row; [gap] when a page shared no row with the one before. */
+internal data class SaleScan(val rows: List<SaleRow>, val complete: Boolean, val gap: Boolean = false) {
+    val buyable: List<SaleRow> get() = rows.filter { it.buyable }
+}
+
+internal fun saleRowText(row: SaleRow): String = "${row.title}=${row.cost ?: "?"}" + (if (row.monies) "" else " (not Monies)") + (if (row.buyable) "" else " (sold out)")
+
+private fun saleKeys(page: List<SaleRow>): List<Pair<String, Int?>> = page.map { normalizeItemName(it.title) to it.cost }
+
+/** Joins screenfuls read top to bottom: each page must repeat the last rows of the one before, and a page equal to the one before is the end. */
+internal fun mergeSalePages(pages: List<List<SaleRow>>): SaleScan {
+    if (pages.isEmpty()) return SaleScan(emptyList(), complete = false)
+    val rows = pages.first().toMutableList()
+    for (i in 1 until pages.size) {
+        val before = saleKeys(pages[i - 1])
+        val page = saleKeys(pages[i])
+        if (page == before) return SaleScan(rows, complete = true)
+        val shared = (minOf(before.size, page.size) downTo 1).firstOrNull { before.takeLast(it) == page.take(it) } ?: return SaleScan(rows, complete = false, gap = true)
+        rows += pages[i].drop(shared)
+    }
+    return SaleScan(rows, complete = false)
+}
+
+/** Why the read list must not be bought, or null when it can be paid for in Monies. Sold-out rows are checked too: a missed checkbox must not hide another currency. */
+internal fun saleRowsProblem(scan: SaleScan): String? =
+    when {
+        !scan.complete -> "the list was not read to its end"
+        scan.rows.isEmpty() -> "no row was read"
+        scan.rows.any { it.title.isBlank() || it.cost == null } -> "a row could not be read"
+        scan.rows.any { !it.monies } -> "a row is not priced in Monies"
+        scan.buyable.isEmpty() -> "every row is sold out"
+        else -> null
+    }
+
+/** Why the selection must not be confirmed, or null when the cost bar's [total] is the sum of the buyable [rows] and the held [balance] covers it. */
+internal fun saleTotalProblem(rows: List<SaleRow>, total: Int?, balance: Int?): String? {
+    val sum = rows.sumOf { it.cost ?: 0 }
+    return when {
+        total == null || balance == null -> "the cost bar could not be read"
+        total != sum -> "the cost bar shows $total, the rows add up to $sum"
+        total <= 0 -> "the selection costs nothing"
+        total > balance -> "it costs $total Monies and $balance are held"
+        else -> null
+    }
+}
+
 internal enum class ExtrasScreen {
     HOME,
     CLUB,
@@ -228,6 +295,12 @@ internal enum class ExtrasScreen {
     REWARDS_COLLECTED,
     MISSIONS,
     SPENDING_DIALOG,
+    SHOP_MENU,
+    DAILY_SALES,
+
+    /** The Daily Sales purchase dialog: accepted only by the Daily Sales part, cancelled like a spending dialog everywhere else. */
+    CONFIRM_EXCHANGE,
+    EXCHANGE_COMPLETE,
 
     /** The game's forced update prompt: the step stops on it, tapping nothing. */
     GAME_UPDATE_PROMPT,
@@ -249,6 +322,11 @@ internal enum class ExtrasTarget {
     CONFIRM,
     BACK,
     HOME_TAB,
+    SHOP_BUTTON,
+    DAILY_SALES_BANNER,
+    SELECT_ALL,
+    RESET,
+    EXCHANGE,
 }
 
 /** The game side of [DailyExtras]. One implementation drives the game; the tests drive a scripted fake. */
@@ -275,18 +353,28 @@ internal interface ExtrasDevice {
     /** False when Collect All is greyed out, null when that cannot be told. */
     fun collectAllEnabled(): Boolean?
 
+    /** Whether Home's Shop button shows the "Daily" badge; null while the button is not drawn. */
+    fun shopBadge(): Boolean?
+
+    /** Every buyable row of the Daily Sales list, read from where it opened down to its end. */
+    fun readSaleRows(): SaleScan
+
+    /** The cost bar under the Daily Sales list: the selection's total and the Monies held. */
+    fun costBar(): Pair<Int?, Int?>
+
     fun pause(seconds: Double)
 }
 
 /**
- * Collects Daily Missions and the present box and makes the Club item request, from Home and back to Home.
- * It never donates and never confirms anything but the item request; any spending dialog is cancelled.
+ * Collects Daily Missions and the present box, makes the Club item request and buys the Daily Sales, from Home and back to Home.
+ * It never donates and confirms only the item request and a Daily Sales purchase paid in Monies; any other spending dialog is cancelled.
  */
 internal class DailyExtras(
     private val device: ExtrasDevice,
     private val collectRewards: Boolean,
     private val clubRequest: Boolean,
     private val requestItem: String,
+    private val buyDailySales: Boolean = false,
     private val log: (String) -> Unit = {},
 ) {
     companion object {
@@ -309,6 +397,8 @@ internal class DailyExtras(
                 "Titles" to ExtrasTarget.MISSIONS_TAB_TITLES,
                 "Special" to ExtrasTarget.MISSIONS_TAB_SPECIAL,
             )
+
+        private val SPENDING_SCREENS = setOf(ExtrasScreen.SPENDING_DIALOG, ExtrasScreen.CONFIRM_EXCHANGE)
     }
 
     private var spendingDialogsCancelled = 0
@@ -323,6 +413,7 @@ internal class DailyExtras(
             parts += "Presents" to ::presents
             parts += "Missions" to ::missions
         }
+        if (buyDailySales) parts += "Daily Sales" to ::dailySales
         val notes = mutableListOf<String>()
         for ((name, body) in parts) {
             val note = body()
@@ -442,6 +533,43 @@ internal class DailyExtras(
         return if (awaitScreen(ExtrasScreen.CLUB) == ExtrasScreen.CLUB) "requested $item" else "confirmed $item, then lost the screen"
     }
 
+    /** Buys the whole Daily Sales list when Home's Shop shows the "Daily" badge, only when every row is priced in Monies and the cost bar agrees. */
+    private fun dailySales(): String {
+        val badge = awaitShopBadge() ?: return "Shop button not found"
+        if (!badge) return "no Daily badge on the Shop"
+        if (!device.press(ExtrasTarget.SHOP_BUTTON)) return "Shop button not found"
+        if (awaitScreen(ExtrasScreen.SHOP_MENU) != ExtrasScreen.SHOP_MENU) return "the Shop did not open"
+        if (!device.press(ExtrasTarget.DAILY_SALES_BANNER) || awaitScreen(ExtrasScreen.DAILY_SALES) != ExtrasScreen.DAILY_SALES) return "Daily Sales did not open"
+        // Read before Select All, so a list that fails the checks is never selected.
+        val scan = device.readSaleRows()
+        log("Daily Sales rows: " + scan.rows.joinToString(transform = ::saleRowText))
+        saleRowsProblem(scan)?.let { return "nothing bought: $it" }
+        if (!device.press(ExtrasTarget.SELECT_ALL)) return "nothing bought: Select All not found"
+        val (total, balance) = device.costBar()
+        saleTotalProblem(scan.buyable, total, balance)?.let {
+            device.press(ExtrasTarget.RESET)
+            return "nothing bought: $it"
+        }
+        if (!device.press(ExtrasTarget.CONFIRM)) {
+            device.press(ExtrasTarget.RESET)
+            return "nothing bought: Confirm not found"
+        }
+        if (awaitScreen(ExtrasScreen.CONFIRM_EXCHANGE, polls = 5) != ExtrasScreen.CONFIRM_EXCHANGE) return "nothing bought: no Confirm Exchange dialog after Confirm"
+        if (!device.press(ExtrasTarget.EXCHANGE)) return "nothing bought: Exchange not found"
+        if (awaitScreen(ExtrasScreen.EXCHANGE_COMPLETE) != ExtrasScreen.EXCHANGE_COMPLETE) return "Exchange pressed for $total Monies, but no Exchange Complete was seen"
+        device.press(ExtrasTarget.CLOSE)
+        return "bought ${scan.buyable.size} item(s) for $total Monies"
+    }
+
+    /** Home draws its buttons late: waits for the Shop button, then reads its badge. */
+    private fun awaitShopBadge(): Boolean? {
+        repeat(HOME_BUTTON_POLLS) {
+            device.shopBadge()?.let { return it }
+            device.pause(1.0)
+        }
+        return null
+    }
+
     private fun cancelPicker(reason: String): String {
         if (awaitScreen(ExtrasScreen.ITEM_REQUEST_PICKER, polls = 3) == ExtrasScreen.ITEM_REQUEST_PICKER) device.press(ExtrasTarget.CANCEL)
         return "no request: $reason"
@@ -453,8 +581,8 @@ internal class DailyExtras(
             when (awaitAny(*ExtrasScreen.entries.filter { it != ExtrasScreen.UNKNOWN }.toTypedArray(), polls = 3)) {
                 ExtrasScreen.HOME -> return true
                 ExtrasScreen.CLUB -> device.press(ExtrasTarget.HOME_TAB)
-                ExtrasScreen.MISSIONS -> device.press(ExtrasTarget.BACK)
-                ExtrasScreen.CONFIRM_REQUEST, ExtrasScreen.ITEM_REQUEST_PICKER, ExtrasScreen.SPENDING_DIALOG -> device.press(ExtrasTarget.CANCEL)
+                ExtrasScreen.MISSIONS, ExtrasScreen.SHOP_MENU, ExtrasScreen.DAILY_SALES -> device.press(ExtrasTarget.BACK)
+                ExtrasScreen.CONFIRM_REQUEST, ExtrasScreen.ITEM_REQUEST_PICKER, ExtrasScreen.SPENDING_DIALOG, ExtrasScreen.CONFIRM_EXCHANGE -> device.press(ExtrasTarget.CANCEL)
                 // Close, Cancel and Back never accept anything; an unknown screen gets nothing else.
                 else -> device.press(ExtrasTarget.CLOSE) || device.press(ExtrasTarget.CANCEL) || device.press(ExtrasTarget.BACK)
             }
@@ -477,7 +605,7 @@ internal class DailyExtras(
         repeat(polls) {
             val now = device.screen()
             if (now == ExtrasScreen.GAME_UPDATE_PROMPT) DialogUtils.stopForGameUpdate()
-            if (now == ExtrasScreen.SPENDING_DIALOG && ExtrasScreen.SPENDING_DIALOG !in screens) {
+            if (now in SPENDING_SCREENS && now !in screens) {
                 spendingDialogsCancelled++
                 log("A spending dialog appeared; cancelling it.")
                 if (!device.press(ExtrasTarget.CANCEL)) device.press(ExtrasTarget.CLOSE)
@@ -518,16 +646,53 @@ private const val SWIPE_TO_PROMPT = -1040
 private const val SWIPE_MS = 1200L
 private const val MAX_PICKER_PAGES = 20
 
+/** Measured on 1080x1920 Daily Sales frames, rows 240 px apart: from the "Select an item" prompt, a "Cost" pill in this band has its title and price in view. */
+private const val SALE_ROWS_TOP_FROM_PROMPT = -604
+private const val SALE_ROWS_BOTTOM_FROM_PROMPT = -73
+private const val SALE_SWIPE_FROM = -250
+private const val SALE_SWIPE_TO = -490
+private const val MAX_SALE_PAGES = 30
+
+/** From a row's "Cost" pill centre: the price coin, the checkbox, the price digits and the one- or two-line title. */
+private const val SALE_COIN_DX = 36
+private const val SALE_COIN_DY = -41
+private const val SALE_COIN_SIZE = 80
+private const val SALE_BOX_DX = 574
+private const val SALE_BOX_DY = -85
+private const val SALE_BOX_SIZE = 120
+private const val SALE_COST_DX = 122
+private const val SALE_COST_DY = -27
+private const val SALE_COST_W = 160
+private const val SALE_COST_H = 52
+private const val SALE_TITLE_DX = -58
+private const val SALE_TITLE_DY = -125
+private const val SALE_TITLE_W = 575
+private const val SALE_TITLE_H = 88
+
+/** From the prompt's centre: the selection total and the Monies held in the cost bar. */
+private const val COST_BAR_DY = 49
+private const val COST_BAR_H = 50
+private const val COST_BAR_W = 300
+private const val COST_BAR_TOTAL_DX = -305
+private const val COST_BAR_HELD_DX = 210
+
+/** From the Home Shop button's centre: the band its "Daily" badge sits in. */
+private const val SHOP_BADGE_HALF_W = 90
+private const val SHOP_BADGE_TOP = -130
+private const val SHOP_BADGE_H = 100
+
 /** Dialogs that would spend RP, money or items; the Home steps cancel them. */
 internal val SPENDING_DIALOG_NAMES =
     setOf("confirm_exchange", "confirm_restore_rp", "daily_sale", "purchase_alarm_clock", "purchase_carats", "purchase_daily_race_ticket", "shop")
 
-/** What a dialog title stands for: the Rewards Collected popup (when its header template missed), a spending dialog or the forced update prompt. */
+/** What a dialog title stands for: the Rewards Collected popup (when its header template missed), a Daily Sales purchase dialog, a spending dialog or the forced update prompt. */
 internal fun extrasDialogScreen(title: String?): ExtrasScreen? =
     when {
         title == null -> null
         title == DialogApplicationUpdated.title -> ExtrasScreen.GAME_UPDATE_PROMPT
         title == DialogRewardsCollected.title -> ExtrasScreen.REWARDS_COLLECTED
+        title == DialogConfirmExchange.title -> ExtrasScreen.CONFIRM_EXCHANGE
+        title == DialogExchangeComplete.title -> ExtrasScreen.EXCHANGE_COMPLETE
         DialogObjects.items.any { it.title == title && it.name in SPENDING_DIALOG_NAMES } -> ExtrasScreen.SPENDING_DIALOG
         else -> null
     }
@@ -547,6 +712,8 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
             bitmap.shows(LabelPresentsHeader) -> ExtrasScreen.PRESENTS
             bitmap.shows(LabelMissionsHeader) -> ExtrasScreen.MISSIONS
             bitmap.shows(LabelClubMenu) -> ExtrasScreen.CLUB
+            bitmap.shows(LabelDailySalesPrompt) -> ExtrasScreen.DAILY_SALES
+            bitmap.shows(ButtonDailySales) -> ExtrasScreen.SHOP_MENU
             ButtonHomePresents.check(imageUtils, sourceBitmap = bitmap, confidence = 0.9) && bitmap.shows(ButtonMenuBarHomeSelected) -> ExtrasScreen.HOME
             else -> dialogScreen(bitmap) ?: ExtrasScreen.UNKNOWN
         }
@@ -574,6 +741,11 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
                 ExtrasTarget.CONFIRM -> ButtonConfirm.click(imageUtils)
                 ExtrasTarget.BACK -> ButtonBack.click(imageUtils)
                 ExtrasTarget.HOME_TAB -> ButtonMenuBarHomeSelected.click(imageUtils)
+                ExtrasTarget.SHOP_BUTTON -> ButtonHomeShop.click(imageUtils)
+                ExtrasTarget.DAILY_SALES_BANNER -> ButtonDailySales.click(imageUtils)
+                ExtrasTarget.SELECT_ALL -> ButtonSelectAll.click(imageUtils)
+                ExtrasTarget.RESET -> ButtonDailySalesReset.click(imageUtils)
+                ExtrasTarget.EXCHANGE -> ButtonExchange.click(imageUtils)
             }
         if (clicked) game.wait(1.0)
         return clicked
@@ -647,6 +819,98 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
     }
 
     override fun collectAllEnabled(): Boolean? = ButtonCollectAll.checkDisabled(imageUtils)?.not()
+
+    override fun shopBadge(): Boolean? {
+        val bitmap = imageUtils.getSourceBitmap()
+        val shop = ButtonHomeShop.findImageWithBitmap(imageUtils, bitmap) ?: return null
+        val above = intArrayOf(imageUtils.relX(shop.x, -SHOP_BADGE_HALF_W), imageUtils.relY(shop.y, SHOP_BADGE_TOP), imageUtils.relWidth(2 * SHOP_BADGE_HALF_W), imageUtils.relHeight(SHOP_BADGE_H))
+        return LabelHomeShopDailyBadge.check(imageUtils, region = above, sourceBitmap = bitmap)
+    }
+
+    override fun readSaleRows(): SaleScan {
+        val pages = mutableListOf<List<SaleRow>>()
+        while (pages.size < MAX_SALE_PAGES) {
+            pages += readSalePage() ?: break
+            val scan = mergeSalePages(pages)
+            if (scan.complete || scan.gap || !swipeSales()) break
+        }
+        return mergeSalePages(pages)
+    }
+
+    override fun costBar(): Pair<Int?, Int?> {
+        val bitmap = imageUtils.getSourceBitmap()
+        val prompt = LabelDailySalesPrompt.findImageWithBitmap(imageUtils, bitmap) ?: return null to null
+
+        fun read(dx: Int, name: String): Int? =
+            parseMonies(
+                imageUtils.performOCRFromReference(
+                    prompt,
+                    dx,
+                    COST_BAR_DY,
+                    imageUtils.relWidth(COST_BAR_W),
+                    imageUtils.relHeight(COST_BAR_H),
+                    useThreshold = false,
+                    ocrEngine = "tesseract_digits",
+                    debugName = name,
+                    sourceBitmap = bitmap,
+                ),
+            )
+        return read(COST_BAR_TOTAL_DX, "daily_sales_total") to read(COST_BAR_HELD_DX, "daily_sales_held")
+    }
+
+    /** The rows whose title and price are in view, top to bottom, each found by its "Cost" pill. Null when the list is not on screen. */
+    private fun readSalePage(): List<SaleRow>? {
+        val bitmap = imageUtils.getSourceBitmap()
+        val prompt = LabelDailySalesPrompt.findImageWithBitmap(imageUtils, bitmap) ?: return null
+        val top = imageUtils.relY(prompt.y, SALE_ROWS_TOP_FROM_PROMPT)
+        val bottom = imageUtils.relY(prompt.y, SALE_ROWS_BOTTOM_FROM_PROMPT)
+        val pills = LabelDailySalesCostPill.findAll(imageUtils, sourceBitmap = bitmap).filter { it.y.toInt() in top..bottom }.sortedBy { it.y }
+        val page =
+            pills.map { pill ->
+                fun near(dx: Int, dy: Int, size: Int) = intArrayOf(imageUtils.relX(pill.x, dx), imageUtils.relY(pill.y, dy), imageUtils.relWidth(size), imageUtils.relHeight(size))
+                val title =
+                    imageUtils.performOCRFromReference(
+                        pill,
+                        SALE_TITLE_DX,
+                        SALE_TITLE_DY,
+                        imageUtils.relWidth(SALE_TITLE_W),
+                        imageUtils.relHeight(SALE_TITLE_H),
+                        useThreshold = false,
+                        debugName = "daily_sales_title",
+                        sourceBitmap = bitmap,
+                    )
+                val cost =
+                    imageUtils.performOCRFromReference(
+                        pill,
+                        SALE_COST_DX,
+                        SALE_COST_DY,
+                        imageUtils.relWidth(SALE_COST_W),
+                        imageUtils.relHeight(SALE_COST_H),
+                        useThreshold = false,
+                        ocrEngine = "tesseract_digits",
+                        debugName = "daily_sales_cost",
+                        sourceBitmap = bitmap,
+                    )
+                SaleRow(
+                    title.replace('\n', ' ').trim(),
+                    monies = IconMonies.check(imageUtils, region = near(SALE_COIN_DX, SALE_COIN_DY, SALE_COIN_SIZE), sourceBitmap = bitmap),
+                    cost = parseMonies(cost),
+                    buyable = CheckboxShopItem.check(imageUtils, region = near(SALE_BOX_DX, SALE_BOX_DY, SALE_BOX_SIZE), sourceBitmap = bitmap),
+                )
+            }
+        MessageLog.d(TAG, "[DAILY_EXTRAS] Daily Sales page: " + page.joinToString(transform = ::saleRowText))
+        return page
+    }
+
+    /** Drags the Daily Sales list up by one row, so each page repeats a row of the one before. False when the list is not on screen. */
+    private fun swipeSales(): Boolean {
+        val prompt = LabelDailySalesPrompt.findImageWithBitmap(imageUtils, imageUtils.getSourceBitmap()) ?: return false
+        val x = prompt.x.toFloat()
+        OwnUiForeground.waitForGame()
+        game.gestureUtils.swipe(x, imageUtils.relY(prompt.y, SALE_SWIPE_FROM).toFloat(), x, imageUtils.relY(prompt.y, SALE_SWIPE_TO).toFloat(), SWIPE_MS)
+        game.wait(1.0)
+        return true
+    }
 
     override fun pause(seconds: Double) = game.wait(seconds)
 
@@ -722,10 +986,11 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
         fun runFromSettings(game: Game): List<String>? {
             val collectRewards = SettingsHelper.getBooleanSetting("misc", "collectDailyRewards", false)
             val clubRequest = SettingsHelper.getBooleanSetting("misc", "enableClubItemRequest", false)
-            if (!collectRewards && !clubRequest) return null
+            val buyDailySales = SettingsHelper.getBooleanSetting("misc", "buyDailySales", false)
+            if (!collectRewards && !clubRequest && !buyDailySales) return null
             val item = SettingsHelper.getStringSetting("misc", "clubRequestItem", ClubRequestItems.LOWEST_HELD_SASH)
-            MessageLog.i(TAG, "[DAILY_EXTRAS] Rewards=$collectRewards, Club request=$clubRequest ($item).")
-            return DailyExtras(GameExtrasDevice(game), collectRewards, clubRequest, item) { MessageLog.i(TAG, "[DAILY_EXTRAS] $it") }.run()
+            MessageLog.i(TAG, "[DAILY_EXTRAS] Rewards=$collectRewards, Club request=$clubRequest ($item), Daily Sales=$buyDailySales.")
+            return DailyExtras(GameExtrasDevice(game), collectRewards, clubRequest, item, buyDailySales) { MessageLog.i(TAG, "[DAILY_EXTRAS] $it") }.run()
         }
     }
 }

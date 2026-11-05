@@ -441,7 +441,7 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         }
     }
 
-    /** Daily Sale is dismissed; buying is not automated yet. */
+    /** Daily Sale is dismissed; the offer stays in Home's Shop, where the Daily Sales extras part buys it. */
     private fun handleDailySalePopup() {
         MessageLog.i(TAG, "[TEAM_TRIALS] Daily Sale shown; dismissing via Cancel.")
         if (ButtonCancel.click(game.imageUtils, region = Region.bottomHalf)) {

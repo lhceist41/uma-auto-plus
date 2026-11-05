@@ -759,3 +759,22 @@ object ButtonItemRequestShoesTab : ButtonInterface {
 object ButtonItemRequestSashTab : ButtonInterface {
     override val template = Template("components/button/item_request_sash_tab", region = Region.topQuarter, confidence = 0.9)
 }
+
+/** The Shop button on Home. Cropped inside its white circle, so the "Daily" badge above it and the art behind it do not change the match. */
+object ButtonHomeShop : ButtonInterface {
+    override val template = Template("components/button/home_shop", region = Region.bottomHalf)
+}
+
+/** The Daily Sales banner on the Shop menu. */
+object ButtonDailySales : ButtonInterface {
+    override val template = Template("components/button/daily_sales", region = Region.bottomHalf)
+}
+
+object ButtonSelectAll : ButtonInterface {
+    override val template = Template("components/button/select_all", region = Region.bottomHalf)
+}
+
+/** Reset under the Daily Sales list; the older Reset asset scores about 0.5 on it. */
+object ButtonDailySalesReset : ButtonInterface {
+    override val template = Template("components/button/daily_sales_reset", region = Region.bottomHalf)
+}

@@ -27,6 +27,7 @@ import com.steve1316.uma_android_automation.bot.misc.LegendTarget.TAP_PROMPT
 import com.steve1316.uma_android_automation.bot.misc.LegendTarget.TOP_RACE_ROW
 import com.steve1316.uma_android_automation.bot.misc.LegendTarget.VIEW_RESULTS
 import com.steve1316.uma_android_automation.bot.misc.LegendTarget.WATCH_RACE
+import com.steve1316.uma_android_automation.components.DialogObjects
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -325,6 +326,12 @@ class DailyLegendRaceTest {
         assertEquals(listOf(DailyLegendRace.ANY_LEGEND) + logos.map { it.first }, offered)
         val defaults = repoFile("src/context/BotStateContext.tsx").readText()
         assertTrue(defaults.contains("dailyLegendRaceLegend: \"${DailyLegendRace.ANY_LEGEND}\","), "the default is the sentinel the Kotlin side knows")
+    }
+
+    @Test
+    fun `a Confirm Exchange dialog is a spending dialog for the Legend Race step`() {
+        val confirmExchange = DialogObjects.items.single { it.title == "Confirm Exchange" }
+        assertTrue(confirmExchange.name in SPENDING_DIALOG_NAMES)
     }
 
     @Test

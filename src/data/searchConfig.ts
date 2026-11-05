@@ -140,7 +140,7 @@ const searchConfig: SearchOption[] = [
     {
         id: "settings-collect-daily-rewards",
         title: "Collect Missions and Presents",
-        description: "After Daily Races, Team Trials or the last career, taps Collect All in the present box and on the Missions tab that opens.",
+        description: "After Daily Races, Team Trials or the last career, taps Collect All in the present box and on every Missions tab.",
         page: "SettingsMain",
     },
     {
@@ -153,6 +153,12 @@ const searchConfig: SearchOption[] = [
         id: "settings-club-request-item",
         title: "Item To Request",
         description: "Which shoes or Winner's Sash to ask the Club for, or the Winner's Sash you hold fewest of.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-buy-daily-sales",
+        title: "Buy the Daily Sales",
+        description: "After Daily Races, Team Trials or the last career, buys every Daily Sales item for Monies when the Shop shows the Daily badge.",
         page: "SettingsMain",
     },
     {

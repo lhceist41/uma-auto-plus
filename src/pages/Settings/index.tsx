@@ -522,7 +522,10 @@ const Settings = () => {
 
                 <Separator style={{ marginVertical: 16 }} />
 
-                <CustomTitle title="Rewards and Club" description="Runs on Home after Daily Races, Team Trials or the bot's last career finish. It never donates items and never spends anything." />
+                <CustomTitle
+                    title="Rewards and Club"
+                    description="Runs on Home after Daily Races, Team Trials or the bot's last career finish. It never donates items. Only Buy the Daily Sales spends anything, and only Monies."
+                />
 
                 <CustomCheckbox
                     searchId="settings-collect-daily-rewards"
@@ -531,7 +534,7 @@ const Settings = () => {
                         bsc.setSettings({ ...bsc.settings, misc: { ...bsc.settings.misc, collectDailyRewards: checked } })
                     }}
                     label="Collect Missions and Presents"
-                    description="Taps Collect All in the present box and on the Missions tab that opens, then returns to Home."
+                    description="Taps Collect All in the present box and on every Missions tab, then returns to Home."
                     className="mt-4"
                 />
 
@@ -560,6 +563,17 @@ const Settings = () => {
                     label="Item To Request"
                     description="Lowest held reads every Winner's Sash count and asks for the one you hold fewest of. If any count cannot be read, nothing is requested on that run."
                     style={{ marginTop: 16 }}
+                />
+
+                <CustomCheckbox
+                    searchId="settings-buy-daily-sales"
+                    checked={bsc.settings.misc.buyDailySales}
+                    onCheckedChange={(checked) => {
+                        bsc.setSettings({ ...bsc.settings, misc: { ...bsc.settings.misc, buyDailySales: checked } })
+                    }}
+                    label="Buy the Daily Sales"
+                    description="When the Shop on Home shows the Daily badge, opens Daily Sales, selects every item and pays with Monies. If an item costs anything other than Monies, or the total does not add up, nothing is bought."
+                    className="mt-4"
                 />
             </View>
         )

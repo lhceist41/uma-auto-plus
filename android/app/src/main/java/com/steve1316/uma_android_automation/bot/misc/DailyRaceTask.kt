@@ -599,7 +599,7 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         game.wait(2.0)
     }
 
-    /** Buying is not automated yet: Cancel, so the session spends nothing but tickets. */
+    /** Cancel, so the session spends nothing but tickets; the offer stays in Home's Shop, where the Daily Sales extras part buys it. */
     private fun handleDailySalePopup() {
         MessageLog.i(TAG, "[DAILY_RACES] Daily Sale shown; dismissing via Cancel.")
         if (ButtonCancel.click(game.imageUtils, region = Region.bottomHalf)) {
