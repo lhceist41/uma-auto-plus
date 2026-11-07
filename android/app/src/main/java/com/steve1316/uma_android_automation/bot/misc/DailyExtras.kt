@@ -233,7 +233,7 @@ internal fun parseMonies(ocr: String): Int? {
     return if (digits.length in 1..9) digits.toInt() else null
 }
 
-/** One Daily Sales row as read: its title, whether its price shows the Monies coin, the price, and whether it has a checkbox (a sold-out row has none). */
+/** One Daily Sales row as read: its title (any "[epithet]" line, then the name line), whether its price shows the Monies coin, the price, and whether it has a checkbox (a sold-out row has none). */
 internal data class SaleRow(val title: String, val monies: Boolean, val cost: Int?, val buyable: Boolean = true)
 
 /** The rows of the Daily Sales list. [complete] once a swipe showed no new row; [gap] when a page shared no row with the one before. */
@@ -241,9 +241,10 @@ internal data class SaleScan(val rows: List<SaleRow>, val complete: Boolean, val
     val buyable: List<SaleRow> get() = rows.filter { it.buyable }
 }
 
-internal fun saleRowText(row: SaleRow): String = "${row.title}=${row.cost ?: "?"}" + (if (row.monies) "" else " (not Monies)") + (if (row.buyable) "" else " (sold out)")
+internal fun saleRowText(row: SaleRow): String = "${row.title.replace('\n', ' ')}=${row.cost ?: "?"}" + (if (row.monies) "" else " (not Monies)") + (if (row.buyable) "" else " (sold out)")
 
-private fun saleKeys(page: List<SaleRow>): List<Pair<String, Int?>> = page.map { normalizeItemName(it.title) to it.cost }
+/** OCR reads a row's "[epithet]" line unreliably (dropped, "Lunsigned]", "Winning!l"), so rows compare by the name line after it. */
+private fun saleKeys(page: List<SaleRow>): List<Pair<String, Int?>> = page.map { normalizeItemName(it.title.substringAfterLast('\n').substringAfter(']')) to it.cost }
 
 /** Joins screenfuls read top to bottom: each page must repeat the last rows of the one before, and a page equal to the one before is the end. */
 internal fun mergeSalePages(pages: List<List<SaleRow>>): SaleScan {
@@ -892,7 +893,7 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
                         sourceBitmap = bitmap,
                     )
                 SaleRow(
-                    title.replace('\n', ' ').trim(),
+                    title.trim(),
                     monies = IconMonies.check(imageUtils, region = near(SALE_COIN_DX, SALE_COIN_DY, SALE_COIN_SIZE), sourceBitmap = bitmap),
                     cost = parseMonies(cost),
                     buyable = CheckboxShopItem.check(imageUtils, region = near(SALE_BOX_DX, SALE_BOX_DY, SALE_BOX_SIZE), sourceBitmap = bitmap),
