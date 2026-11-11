@@ -3,8 +3,8 @@
 // (src/data/character_objectives.json + src/data/races.json), NOT of any live source, so the root
 // files stay the single authority and this asset is a strip-down of what native runtime actually
 // needs: per-character GC fan goals (target + deadline turn), mandatory race entry gates (turn +
-// per-option fansNeeded, choice turns preserved), and the universal completed-race fan floor
-// derived from the payout curves.
+// per-option fansNeeded and course length, choice turns preserved), and the universal
+// completed-race fan floor derived from the payout curves.
 //
 // Usage:
 //   node scripts/generate-gc-fan-runtime-data.mjs            # write the asset
@@ -74,14 +74,38 @@ export function computeUniversalFloor(races) {
 }
 
 /**
+ * Course length per race name. The native training floor keys on metres (a 2500m Arima Kinen is
+ * typed Long but passes on far less Stamina than a 3000m Kikuka Sho). Throws when one name maps to
+ * two lengths, so a venue split can never ship an ambiguous figure.
+ *
+ * @param {Record<string, any>} races The parsed races.json object.
+ * @returns {Map<string, number>} Race name to distanceMeters.
+ */
+export function raceDistances(races) {
+    const byName = new Map()
+    for (const [key, race] of Object.entries(races)) {
+        if (!Number.isInteger(race.distanceMeters) || race.distanceMeters <= 0) {
+            throw new GenerateError(`race "${key}" has a bad distanceMeters: ${JSON.stringify(race.distanceMeters)}`)
+        }
+        const known = byName.get(race.name)
+        if (known !== undefined && known !== race.distanceMeters) {
+            throw new GenerateError(`race "${race.name}" has two lengths (${known}m and ${race.distanceMeters}m)`)
+        }
+        byName.set(race.name, race.distanceMeters)
+    }
+    return byName
+}
+
+/**
  * Builds one character's compact fan facts, or null when the character carries nothing native
  * runtime needs (no GC fan goal and no gated mandatory race). Validates the shapes it consumes.
  *
  * @param {string} name The canonical character name (the objective map key).
  * @param {any} char The character's objective entry.
+ * @param {Map<string, number>} distanceByRace Race name to distanceMeters, from raceDistances().
  * @returns {object | null} The compact facts, or null to omit the character.
  */
-export function buildCharacter(name, char) {
+export function buildCharacter(name, char, distanceByRace) {
     const fanGoals = []
     for (const g of char.fanGoals ?? []) {
         if (!Array.isArray(g.appliesToScenarioIds)) {
@@ -111,7 +135,11 @@ export function buildCharacter(name, char) {
             if (typeof o.raceName !== "string" || o.raceName.length === 0) {
                 throw new GenerateError(`"${name}" turn ${m.turn} option missing raceName: ${JSON.stringify(o)}`)
             }
-            return { raceName: o.raceName, fansNeeded: o.fansNeeded }
+            const distanceMeters = distanceByRace.get(o.raceName)
+            if (distanceMeters === undefined) {
+                throw new GenerateError(`"${name}" turn ${m.turn} option "${o.raceName}" is not in races.json`)
+            }
+            return { raceName: o.raceName, fansNeeded: o.fansNeeded, distanceMeters }
         })
         // Only keep gates that actually gate on fans; a turn whose every option needs 0 fans carries
         // no runtime pressure. Preserve the option set (choice turns) for the ones that do.
@@ -133,9 +161,10 @@ export function buildCharacter(name, char) {
  */
 export function buildPayload(objectives, races) {
     const universalFloor = computeUniversalFloor(races)
+    const distanceByRace = raceDistances(races)
     const characters = {}
     for (const name of Object.keys(objectives).sort()) {
-        const built = buildCharacter(name, objectives[name])
+        const built = buildCharacter(name, objectives[name], distanceByRace)
         if (built !== null) characters[name] = built
     }
     return {

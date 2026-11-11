@@ -91,7 +91,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     /**
      * Committed fan facts, loaded once; null when missing or malformed (fan-pressure telemetry then reports UNKNOWN).
      */
-    private val fanFacts: GrandConcertFanFacts? by lazy { GrandConcertFanFacts.loadFromAssets(game.myContext) }
+    private val fanFacts: GrandConcertFanFacts?
+        get() = goalChainFacts
 
     private var lessonVisitsThisRun = 0
 

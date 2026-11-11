@@ -9,7 +9,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
-import { buildCharacter, buildPayload, computeUniversalFloor, serialize, GenerateError, ASSET_PATH } from "./generate-gc-fan-runtime-data.mjs"
+import { buildCharacter, buildPayload, computeUniversalFloor, raceDistances, serialize, GenerateError, ASSET_PATH } from "./generate-gc-fan-runtime-data.mjs"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = join(HERE, "..")
@@ -19,6 +19,12 @@ const races = JSON.parse(readFileSync(join(REPO, "src", "data", "races.json"), "
 // A tiny 18-place monotone curve whose minimum is `min`.
 const curve = (first, min) => Array.from({ length: 18 }, (_, i) => ({ place: i + 1, fans: i === 17 ? min : Math.max(min, first - i * 10) }))
 const racesFixture = { "A (x)": { fanPayoutsByPlace: curve(500, 7) }, "B (y)": { fanPayoutsByPlace: curve(300, 9) } }
+const distancesFixture = new Map([
+    ["R", 2000],
+    ["Spring", 1600],
+    ["Mainichi", 1800],
+    ["Debut", 1600],
+])
 
 test("computeUniversalFloor returns the global minimum across all curves", () => {
     assert.equal(computeUniversalFloor(racesFixture), 7)
@@ -40,7 +46,7 @@ test("buildCharacter keeps only Grand-Concert-applicable fan goals, sorted", () 
             { turn: 20, targetFans: 1000, scenarioGroupId: 4, appliesToScenarioIds: [4] }, // Trackblazer-only -> excluded
         ],
         mandatoryRaces: [{ turn: 40, options: [{ raceName: "R", fansNeeded: 12000 }] }],
-    })
+    }, distancesFixture)
     assert.deepEqual(built.fanGoals, [
         { turn: 24, targetFans: 3000 },
         { turn: 30, targetFans: 5000 },
@@ -51,19 +57,43 @@ test("buildCharacter preserves choice-turn options and flags isChoice", () => {
     const built = buildCharacter("Test", {
         fanGoals: [],
         mandatoryRaces: [{ turn: 30, options: [{ raceName: "Spring", fansNeeded: 1750 }, { raceName: "Mainichi", fansNeeded: 1250 }] }],
-    })
+    }, distancesFixture)
     assert.equal(built.mandatoryRaces[0].isChoice, true)
-    assert.deepEqual(built.mandatoryRaces[0].options, [{ raceName: "Spring", fansNeeded: 1750 }, { raceName: "Mainichi", fansNeeded: 1250 }])
+    assert.deepEqual(built.mandatoryRaces[0].options, [
+        { raceName: "Spring", fansNeeded: 1750, distanceMeters: 1600 },
+        { raceName: "Mainichi", fansNeeded: 1250, distanceMeters: 1800 },
+    ])
 })
 
 test("buildCharacter drops a turn whose every option needs 0 fans, and drops an empty character", () => {
-    const built = buildCharacter("Test", { fanGoals: [], mandatoryRaces: [{ turn: 12, options: [{ raceName: "Debut", fansNeeded: 0 }] }] })
+    const built = buildCharacter("Test", { fanGoals: [], mandatoryRaces: [{ turn: 12, options: [{ raceName: "Debut", fansNeeded: 0 }] }] }, distancesFixture)
     assert.equal(built, null)
 })
 
 test("buildCharacter throws on an absent or malformed fansNeeded (absent is not 0)", () => {
-    assert.throws(() => buildCharacter("Test", { fanGoals: [], mandatoryRaces: [{ turn: 40, options: [{ raceName: "R" }] }] }), GenerateError)
-    assert.throws(() => buildCharacter("Test", { fanGoals: [], mandatoryRaces: [{ turn: 40, options: [{ raceName: "R", fansNeeded: -1 }] }] }), GenerateError)
+    assert.throws(() => buildCharacter("Test", { fanGoals: [], mandatoryRaces: [{ turn: 40, options: [{ raceName: "R" }] }] }, distancesFixture), GenerateError)
+    assert.throws(() => buildCharacter("Test", { fanGoals: [], mandatoryRaces: [{ turn: 40, options: [{ raceName: "R", fansNeeded: -1 }] }] }, distancesFixture), GenerateError)
+})
+
+test("buildCharacter throws on a goal race that races.json does not know, instead of guessing a length", () => {
+    assert.throws(() => buildCharacter("Test", { fanGoals: [], mandatoryRaces: [{ turn: 40, options: [{ raceName: "Nowhere", fansNeeded: 100 }] }] }, distancesFixture), GenerateError)
+})
+
+test("raceDistances maps every committed race name to one length and rejects a name with two", () => {
+    const distances = raceDistances(races)
+    assert.equal(distances.get("Kikuka Sho"), 3000)
+    assert.equal(distances.get("Tenno Sho (Spring)"), 3200)
+    assert.equal(distances.get("Arima Kinen"), 2500)
+    assert.throws(() => raceDistances({ a: { name: "X", distanceMeters: 1600 }, b: { name: "X", distanceMeters: 2000 } }), GenerateError)
+    assert.throws(() => raceDistances({ a: { name: "X", distanceMeters: 0 } }), GenerateError)
+})
+
+test("buildPayload from committed data: Mejiro Ryan's two 3000m+ goals carry their lengths", () => {
+    const ryan = buildPayload(objectives, races).characters["Mejiro Ryan"]
+    const gate = (t) => ryan.mandatoryRaces.find((m) => m.turn === t).options[0]
+    assert.deepEqual(gate(44), { raceName: "Kikuka Sho", fansNeeded: 7500, distanceMeters: 3000 })
+    assert.deepEqual(gate(56), { raceName: "Tenno Sho (Spring)", fansNeeded: 20000, distanceMeters: 3200 })
+    assert.equal(gate(48).distanceMeters, 2500)
 })
 
 test("buildPayload from committed data: Copano fan facts are exactly as expected", () => {
@@ -97,9 +127,14 @@ test("Yamanin Zephyr preserves all seven entry gates independently of race rewar
     ]
     const payload = buildPayload(objectives, races)
     const zephyr = payload.characters["Yamanin Zephyr"]
+    const distances = raceDistances(races)
     assert.deepEqual(zephyr, {
         fanGoals: [],
-        mandatoryRaces: expected.map(([turn, raceName, fansNeeded]) => ({ turn, isChoice: false, options: [{ raceName, fansNeeded }] })),
+        mandatoryRaces: expected.map(([turn, raceName, fansNeeded]) => ({
+            turn,
+            isChoice: false,
+            options: [{ raceName, fansNeeded, distanceMeters: distances.get(raceName) }],
+        })),
     })
     for (const [turn, raceName, fansNeeded] of expected) {
         const matches = Object.values(races).filter((race) => race.name === raceName && race.turnNumber === turn)
@@ -116,11 +151,11 @@ test("Yamanin Zephyr rejects unknown or invalid gates and never substitutes rewa
     for (const fansNeeded of [undefined, -1, 1.5, "1750", NaN]) {
         const character = structuredClone(objectives["Yamanin Zephyr"])
         character.mandatoryRaces[0].options[0].fansNeeded = fansNeeded
-        assert.throws(() => buildCharacter("Yamanin Zephyr", character), GenerateError)
+        assert.throws(() => buildCharacter("Yamanin Zephyr", character, raceDistances(races)), GenerateError)
     }
     const character = structuredClone(objectives["Yamanin Zephyr"])
     character.mandatoryRaces[0].options[0].fansNeeded = 0
-    const built = buildCharacter("Yamanin Zephyr", character)
+    const built = buildCharacter("Yamanin Zephyr", character, raceDistances(races))
     assert.equal(built.mandatoryRaces.length, 6)
     assert.ok(built.mandatoryRaces.every((race) => race.turn !== 31))
 })

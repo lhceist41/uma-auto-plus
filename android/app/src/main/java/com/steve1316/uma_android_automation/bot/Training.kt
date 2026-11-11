@@ -331,6 +331,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val enablePrioritizeNearMaxFriendship: Boolean = true,
         val statsTrainedOverBuffer: Set<StatName> = emptySet(),
         val grandConcertPoints: GrandConcertPointContext? = null,
+        val longGoalStaminaFloor: LongGoalStaminaFloor? = null,
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -353,6 +354,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             if (enablePrioritizeNearMaxFriendship != other.enablePrioritizeNearMaxFriendship) return false
             if (statsTrainedOverBuffer != other.statsTrainedOverBuffer) return false
             if (grandConcertPoints != other.grandConcertPoints) return false
+            if (longGoalStaminaFloor != other.longGoalStaminaFloor) return false
 
             return true
         }
@@ -373,6 +375,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             result = 31 * result + enablePrioritizeNearMaxFriendship.hashCode()
             result = 31 * result + statsTrainedOverBuffer.hashCode()
             result = 31 * result + (grandConcertPoints?.hashCode() ?: 0)
+            result = 31 * result + (longGoalStaminaFloor?.hashCode() ?: 0)
             return result
         }
     }
@@ -764,6 +767,30 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val scoreString: String = String.format("%.2f", score)
             MessageLog.v(TAG, "[TRAINING] [${training.name}] Training has a Unity Cup score of $scoreString.")
             return score
+        }
+
+        /** Smallest STAMINA main gain the goal floor will take; below it a Rest or another stat serves the goal better. */
+        const val GOAL_FLOOR_MIN_GAIN: Int = 10
+
+        /** Mirrors the scoring-mode branch in [analyzeTrainings]: Year 2+ ratio scoring, not the Junior friendship or the Unity Cup gauge mode. */
+        fun usesStatEfficiencyScoring(scenario: String, date: GameDate): Boolean =
+            !(scenario == "Unity Cup" && date.year < DateYear.SENIOR) && !(date.bIsPreDebut || date.year == DateYear.JUNIOR)
+
+        /**
+         * The STAMINA option to take instead of [best] when [config] carries a long-goal floor the trainee is under, in a
+         * Year-2+ scoring mode, and STAMINA passed the failure gate (it is in [trainingScores]) with a main gain of at least
+         * [GOAL_FLOOR_MIN_GAIN]; null keeps [best]. A post-score rule like the Trackblazer C3 rescue: a deck with Speed
+         * rainbows on most turns doubles the Speed score, which no target ratio outweighs, and a 3000m+ goal reached short
+         * on Stamina ends the career.
+         */
+        fun goalFloorOverride(config: TrainingConfig, trainingScores: Map<TrainingOption, Double>, best: TrainingOption?): TrainingOption? {
+            val floor = config.longGoalStaminaFloor ?: return null
+            if (!usesStatEfficiencyScoring(config.scenario, config.currentDate)) return null
+            if (best?.name == StatName.STAMINA) return null
+            if ((config.currentStats[StatName.STAMINA] ?: 0) >= floor.floor) return null
+            if (StatName.STAMINA in config.blacklist) return null
+            val stamina = trainingScores.keys.firstOrNull { it.name == StatName.STAMINA } ?: return null
+            return stamina.takeIf { (it.statGains[StatName.STAMINA] ?: 0) >= GOAL_FLOOR_MIN_GAIN }
         }
 
         /** Level-based amplifier for a stat's priority weight: 1.0 when disabled, for rank 4-5, or at level 1; at Lvl 5 rank 1 = 1.75x, rank 2 = 1.25x, rank 3 = 1.10x. */
@@ -2445,6 +2472,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 enablePrioritizeNearMaxFriendship = enablePrioritizeNearMaxFriendship,
                 statsTrainedOverBuffer = statsTrainedOverBuffer,
                 grandConcertPoints = grandConcertPoints,
+                longGoalStaminaFloor = campaign.longGoalStaminaFloor(),
             )
 
         // Compute scores and determine the best training option.
@@ -2470,7 +2498,20 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
         // Skill-hint priority is applied after mode scoring so it holds in every mode (the Friendship and Unity Cup scorers don't read hints;
         // Year-2+ adds only a small bonus via calculateMiscScore). trainingScores holds only gate-passing trainings. See issue #372.
-        val best: TrainingOption? = selectBestTrainingWithHintPriority(trainingScores, enablePrioritizeSkillHints)
+        val scored: TrainingOption? = selectBestTrainingWithHintPriority(trainingScores, enablePrioritizeSkillHints)
+        val goalFloorPick: TrainingOption? = goalFloorOverride(trainingConfig, trainingScores, scored)
+        val best: TrainingOption? = goalFloorPick ?: scored
+        if (goalFloorPick != null) {
+            trainingConfig.longGoalStaminaFloor?.let { floor ->
+                MessageLog.i(
+                    TAG,
+                    "[TRAINING] [GOAL_FLOOR] ${floor.raceName} ${floor.distanceMeters}m at turn ${floor.goalTurn}: Stamina " +
+                        "${trainingConfig.currentStats[StatName.STAMINA] ?: 0} is below the floor ${floor.floor} (full ${floor.fullFloor}), " +
+                        "taking STAMINA (+${goalFloorPick.statGains[StatName.STAMINA] ?: 0}) over ${scored?.name} " +
+                        "(+${scored?.let { it.statGains[it.name] } ?: 0}).",
+                )
+            }
+        }
 
         // Build and log training analysis results and selection reasoning.
         val finalScoringMode = if (isIrregularEvaluation) "Trackblazer (Irregular Training)" else scoringMode
@@ -2485,7 +2526,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
             tracer?.recordTrainingSelection(
                 selected = best.name,
                 source = SelectionSource.ANALYSIS,
-                reason = "won analysis ($finalScoringMode) with score ${trainingScores[best]?.let { String.format("%.2f", it) } ?: "?"}",
+                reason =
+                    if (goalFloorPick != null) {
+                        "goal floor: Stamina under ${trainingConfig.longGoalStaminaFloor?.floor} for ${trainingConfig.longGoalStaminaFloor?.raceName}, replaced ${scored?.name}"
+                    } else {
+                        "won analysis ($finalScoringMode) with score ${trainingScores[best]?.let { String.format("%.2f", it) } ?: "?"}"
+                    },
                 runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = best.name),
                 pickedFailureChance = best.failureChance.takeIf { it >= 0 },
                 pickedStatGains = best.statGains,

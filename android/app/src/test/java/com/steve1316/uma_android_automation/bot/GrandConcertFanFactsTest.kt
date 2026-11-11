@@ -88,6 +88,17 @@ class GrandConcertFanFactsTest {
                 { "turn": 24, "isChoice": false, "options": [{ "raceName": "N", "fansNeeded": 1000 }] },
                 { "turn": 31, "isChoice": false, "options": [{ "raceName": "F", "fansNeeded": 4500 }] }
               ]
+            },
+            "Stayer": {
+              "fanGoals": [],
+              "mandatoryRaces": [
+                { "turn": 44, "isChoice": false, "options": [{ "raceName": "Kikuka Sho", "fansNeeded": 7500, "distanceMeters": 3000 }] },
+                { "turn": 48, "isChoice": false, "options": [{ "raceName": "Arima Kinen", "fansNeeded": 25000, "distanceMeters": 2500 }] },
+                { "turn": 56, "isChoice": true, "options": [
+                  { "raceName": "Osaka Hai", "fansNeeded": 20000, "distanceMeters": 2000 },
+                  { "raceName": "Tenno Sho (Spring)", "fansNeeded": 20000, "distanceMeters": 3200 }
+                ] }
+              ]
             }
           }
         }
@@ -118,6 +129,48 @@ class GrandConcertFanFactsTest {
             """{ "schemaVersion": 1, "universalCompletedRaceFanFloor": 7, "characters": {
                 "X": { "fanGoals": [], "mandatoryRaces": [{ "turn": 24, "isChoice": false, "options": [{ "raceName": "R" }] }] } } }"""
         assertNull(GrandConcertFanFacts.parse(missingFansNeeded))
+    }
+
+    @Test
+    @DisplayName("a gate option carries its course length, and an asset without one reads as 0 metres (no floor)")
+    fun parseDistance() {
+        val stayer = (facts().match("Stayer") as GrandConcertFanFacts.Match.Matched).facts
+        assertEquals(3000, stayer.mandatoryGates.first { it.turn == 44 }.options[0].distanceMeters)
+        assertEquals(listOf(2000, 3200), stayer.mandatoryGates.first { it.turn == 56 }.options.map { it.distanceMeters })
+        val copano = (facts().match("Copano Rickey") as GrandConcertFanFacts.Match.Matched).facts
+        assertEquals(0, copano.mandatoryGates.first { it.turn == 31 }.options[0].distanceMeters)
+        assertNull(copano.longGoalStaminaFloor(30))
+    }
+
+    // ---- long-goal Stamina floor ----
+
+    private fun stayer(): GrandConcertCharacterFanFacts = (facts().match("Stayer") as GrandConcertFanFacts.Match.Matched).facts
+
+    @Test
+    @DisplayName("the ramp is zero 20 turns out (no floor), rises linearly, and reaches the full floor the turn before the goal")
+    fun floorRamp() {
+        assertNull(stayer().longGoalStaminaFloor(24))
+        assertEquals(LongGoalStaminaFloor("Kikuka Sho", 3000, 44, 15, 300), stayer().longGoalStaminaFloor(25))
+        assertEquals(LongGoalStaminaFloor("Kikuka Sho", 3000, 44, 157, 300), stayer().longGoalStaminaFloor(34))
+        assertEquals(LongGoalStaminaFloor("Kikuka Sho", 3000, 44, 300, 300), stayer().longGoalStaminaFloor(43))
+    }
+
+    @Test
+    @DisplayName("on the goal turn the next 3000m+ goal takes over; a 2500m goal and a 2000m choice option never set a floor")
+    fun floorNextGoalAndShortRaces() {
+        assertEquals(LongGoalStaminaFloor("Tenno Sho (Spring)", 3200, 56, 189, 450), stayer().longGoalStaminaFloor(44))
+        assertEquals(LongGoalStaminaFloor("Tenno Sho (Spring)", 3200, 56, 260, 450), stayer().longGoalStaminaFloor(47))
+        assertEquals(LongGoalStaminaFloor("Tenno Sho (Spring)", 3200, 56, 450, 450), stayer().longGoalStaminaFloor(55))
+        assertNull(stayer().longGoalStaminaFloor(56))
+        assertNull(stayer().longGoalStaminaFloor(70))
+    }
+
+    @Test
+    @DisplayName("with two 3000m+ goals in range the higher ramped floor wins, and a character without such goals has none")
+    fun floorOverlapAndNone() {
+        assertEquals(LongGoalStaminaFloor("Kikuka Sho", 3000, 44, 252, 300), stayer().longGoalStaminaFloor(40))
+        val nearAndFar = (facts().match("Near And Far") as GrandConcertFanFacts.Match.Matched).facts
+        assertNull(nearAndFar.longGoalStaminaFloor(20))
     }
 
     // ---- identity ----

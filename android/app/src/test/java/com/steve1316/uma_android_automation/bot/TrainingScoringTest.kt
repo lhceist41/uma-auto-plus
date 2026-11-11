@@ -8,10 +8,12 @@ import com.steve1316.uma_android_automation.bot.Training.Companion.calculateStat
 import com.steve1316.uma_android_automation.bot.Training.Companion.getFinaleStatBonus
 import com.steve1316.uma_android_automation.bot.Training.Companion.getRemainingFinaleRaces
 import com.steve1316.uma_android_automation.bot.Training.Companion.getScenarioStatCap
+import com.steve1316.uma_android_automation.bot.Training.Companion.goalFloorOverride
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreFriendshipTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreUnityCupTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.selectBestTrainingWithHintPriority
 import com.steve1316.uma_android_automation.bot.Training.Companion.softCapAdjustedGain
+import com.steve1316.uma_android_automation.bot.Training.Companion.usesStatEfficiencyScoring
 import com.steve1316.uma_android_automation.bot.Training.TrainingConfig
 import com.steve1316.uma_android_automation.bot.Training.TrainingOption
 import com.steve1316.uma_android_automation.types.DateMonth
@@ -139,6 +141,7 @@ class TrainingScoringTest {
         disableTrainingOnMaxedStat: Boolean = false,
         skillHintsPerLocation: Map<StatName, Int> = StatName.entries.associateWith { 0 },
         statsTrainedOverBuffer: Set<StatName> = emptySet(),
+        longGoalStaminaFloor: LongGoalStaminaFloor? = null,
     ): TrainingConfig {
         return TrainingConfig(
             currentStats = currentStats,
@@ -153,6 +156,7 @@ class TrainingScoringTest {
             trainingOptions = trainingOptions,
             skillHintsPerLocation = skillHintsPerLocation,
             statsTrainedOverBuffer = statsTrainedOverBuffer,
+            longGoalStaminaFloor = longGoalStaminaFloor,
         )
     }
 
@@ -347,6 +351,110 @@ class TrainingScoringTest {
         val bestTraining = scores.maxByOrNull { it.value }?.key
         assertEquals(StatName.SPEED, bestTraining?.name, "Speed rainbow training should be selected despite high current stat")
         assertTrue(scores[speedTraining]!! > 0, "Speed training score should be positive")
+    }
+
+    // ============================================================================
+    // goalFloorOverride Tests (Stamina floor before a 3000m+ goal race)
+    // ============================================================================
+
+    private val kikukaFloor = LongGoalStaminaFloor("Kikuka Sho", 3000, 44, 300, 300)
+    private val classicLateJuly = GameDate(year = DateYear.CLASSIC, month = DateMonth.JULY, phase = DatePhase.LATE)
+
+    // A live Mejiro Ryan Grand Concert turn 38: Speed 41 (+12 Power) with two rainbows against Stamina 19 (+9 Guts) without one.
+    private fun goalFloorSpeed(): TrainingOption = createDefaultTrainingOption(name = StatName.SPEED, statGains = statGainsToMap(intArrayOf(41, 0, 12, 0, 0)), numRainbow = 2)
+
+    private fun goalFloorStamina(staminaGain: Int = 19): TrainingOption = createDefaultTrainingOption(name = StatName.STAMINA, statGains = statGainsToMap(intArrayOf(0, staminaGain, 0, 9, 0)))
+
+    private fun goalFloorConfig(
+        options: List<TrainingOption>,
+        stamina: Int = 188,
+        floor: LongGoalStaminaFloor? = kikukaFloor,
+        date: GameDate = classicLateJuly,
+        scenario: String = "URA Finale",
+        blacklist: List<StatName?> = emptyList(),
+    ): TrainingConfig =
+        createDefaultConfig(
+            trainingOptions = options,
+            currentStats = mapOf(StatName.SPEED to 646, StatName.STAMINA to stamina, StatName.POWER to 388, StatName.GUTS to 323, StatName.WIT to 340),
+            preferredDistance = "Medium",
+            currentDate = date,
+            scenario = scenario,
+            focusOnSparkStatTarget = listOf(StatName.SPEED, StatName.STAMINA, StatName.POWER),
+            blacklist = blacklist,
+            longGoalStaminaFloor = floor,
+        )
+
+    private fun scoresOf(config: TrainingConfig): Map<TrainingOption, Double> = config.trainingOptions.associateWith { calculateRawTrainingScore(config, it) }
+
+    @Test
+    @DisplayName("Below the floor, the override takes STAMINA although a double-rainbow Speed wins the score")
+    fun testGoalFloorPicksStaminaOverDoubleRainbowSpeed() {
+        val speed = goalFloorSpeed()
+        val stamina = goalFloorStamina()
+        val config = goalFloorConfig(listOf(speed, stamina))
+        val scores = scoresOf(config)
+        val best = selectBestTrainingWithHintPriority(scores, false)
+        assertEquals(StatName.SPEED, best?.name, "scoring alone must still prefer the rainbow Speed (the failure mode the floor exists for)")
+        assertSame(stamina, goalFloorOverride(config, scores, best))
+    }
+
+    @Test
+    @DisplayName("STAMINA that failed the failure-chance gate is not in the scored map and is never taken")
+    fun testGoalFloorRespectsFailureGate() {
+        val speed = goalFloorSpeed()
+        val config = goalFloorConfig(listOf(speed, goalFloorStamina()))
+        val gatePassing = mapOf(speed to calculateRawTrainingScore(config, speed))
+        assertNull(goalFloorOverride(config, gatePassing, speed))
+    }
+
+    @Test
+    @DisplayName("No floor (no 3000m+ goal within 20 turns) leaves the scored pick alone")
+    fun testGoalFloorAbsentKeepsBest() {
+        val speed = goalFloorSpeed()
+        val config = goalFloorConfig(listOf(speed, goalFloorStamina()), floor = null)
+        assertNull(goalFloorOverride(config, scoresOf(config), speed))
+    }
+
+    @Test
+    @DisplayName("Stamina at or above the ramped floor keeps the scored pick; one point under takes STAMINA")
+    fun testGoalFloorBoundary() {
+        val speed = goalFloorSpeed()
+        val stamina = goalFloorStamina()
+        val atFloor = goalFloorConfig(listOf(speed, stamina), stamina = 300)
+        assertNull(goalFloorOverride(atFloor, scoresOf(atFloor), speed))
+        val underFloor = goalFloorConfig(listOf(speed, stamina), stamina = 299)
+        assertSame(stamina, goalFloorOverride(underFloor, scoresOf(underFloor), speed))
+    }
+
+    @Test
+    @DisplayName("A STAMINA gain under 10, a blacklisted STAMINA, or STAMINA already picked never triggers the override")
+    fun testGoalFloorSmallGainBlacklistAndAlreadyStamina() {
+        val speed = goalFloorSpeed()
+        val weak = goalFloorStamina(staminaGain = 9)
+        val weakConfig = goalFloorConfig(listOf(speed, weak))
+        assertNull(goalFloorOverride(weakConfig, scoresOf(weakConfig), speed))
+        val stamina = goalFloorStamina()
+        val blacklisted = goalFloorConfig(listOf(speed, stamina), blacklist = listOf(StatName.STAMINA))
+        assertNull(goalFloorOverride(blacklisted, scoresOf(blacklisted), speed))
+        val config = goalFloorConfig(listOf(speed, stamina))
+        assertNull(goalFloorOverride(config, scoresOf(config), stamina))
+    }
+
+    @Test
+    @DisplayName("Junior friendship mode and the Unity Cup gauge mode are untouched; Senior Unity Cup and Classic URA are not")
+    fun testGoalFloorOnlyInStatEfficiencyMode() {
+        val speed = goalFloorSpeed()
+        val stamina = goalFloorStamina()
+        val junior = goalFloorConfig(listOf(speed, stamina), date = GameDate(year = DateYear.JUNIOR, month = DateMonth.OCTOBER, phase = DatePhase.EARLY))
+        assertNull(goalFloorOverride(junior, scoresOf(junior), speed))
+        val unityClassic = goalFloorConfig(listOf(speed, stamina), scenario = "Unity Cup")
+        assertNull(goalFloorOverride(unityClassic, scoresOf(unityClassic), speed))
+        val unitySenior = goalFloorConfig(listOf(speed, stamina), scenario = "Unity Cup", date = GameDate(year = DateYear.SENIOR, month = DateMonth.JANUARY, phase = DatePhase.EARLY))
+        assertSame(stamina, goalFloorOverride(unitySenior, scoresOf(unitySenior), speed))
+        assertFalse(usesStatEfficiencyScoring("URA Finale", GameDate(year = DateYear.JUNIOR, month = DateMonth.OCTOBER, phase = DatePhase.EARLY)))
+        assertFalse(usesStatEfficiencyScoring("Unity Cup", classicLateJuly))
+        assertTrue(usesStatEfficiencyScoring("URA Finale", classicLateJuly))
+        assertTrue(usesStatEfficiencyScoring("Grand Concert", classicLateJuly))
     }
 
     // ============================================================================

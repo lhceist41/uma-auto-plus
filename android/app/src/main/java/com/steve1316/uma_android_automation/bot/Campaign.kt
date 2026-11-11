@@ -2319,6 +2319,15 @@ abstract class Campaign(game: Game) : Task(game) {
     /** [balances] is what the training panel showed this turn; non-Grand Concert campaigns return null, which disarms the bias. */
     open fun grandConcertPointContext(balances: Map<PerformancePointType, Int?>?): GrandConcertPointContext? = null
 
+    /** The committed goal-chain facts, loaded once; null when missing or malformed, which disables every reader (fan pressure reports UNKNOWN). */
+    protected val goalChainFacts: GrandConcertFanFacts? by lazy { GrandConcertFanFacts.loadFromAssets(game.myContext) }
+
+    /** The ramped Stamina floor for the trainee's next 3000m+ goal race, or null when none is within range or the trainee is not matched. */
+    fun longGoalStaminaFloor(): LongGoalStaminaFloor? {
+        val match = goalChainFacts?.match(trainee.name) as? GrandConcertFanFacts.Match.Matched ?: return null
+        return match.facts.longGoalStaminaFloor(date.day)
+    }
+
     /** The base returns false (race a fan requirement immediately); Grand Concert overrides with a fail-closed slack policy. Only the fan arm is
      * eligible: trophy and goal-points requirements always race. */
     open fun considerFanRaceDeferral(): Boolean = false

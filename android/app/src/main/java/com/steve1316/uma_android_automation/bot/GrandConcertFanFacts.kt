@@ -11,8 +11,22 @@ import org.json.JSONObject
  */
 data class GrandConcertFanGoal(val deadlineTurn: Int, val targetFans: Int)
 
-/** One enterable race at a mandatory-race turn and the [fansNeeded] before it may be entered. */
-data class GrandConcertGateOption(val raceName: String, val fansNeeded: Int)
+/** One enterable race at a mandatory-race turn, the [fansNeeded] before it may be entered and its course length (0 when the asset predates it). */
+data class GrandConcertGateOption(val raceName: String, val fansNeeded: Int, val distanceMeters: Int = 0)
+
+/** The Stamina a trainee should hold this turn for the mandatory goal race [raceName] of [distanceMeters] at [goalTurn], ramped toward [fullFloor]. */
+data class LongGoalStaminaFloor(val raceName: String, val distanceMeters: Int, val goalTurn: Int, val floor: Int, val fullFloor: Int) {
+    companion object {
+        /** Turns before a goal over which the floor ramps up from zero. */
+        const val LOOKAHEAD_TURNS: Int = 20
+
+        /** Shortest goal that gets a floor: a 2500m Arima Kinen passes at about 300 Stamina, a 3000m Kikuka Sho does not. */
+        const val MIN_DISTANCE_METERS: Int = 3000
+
+        /** Live boundaries (Kyoto 3000m and 3200m, Late Surger and Pace Chaser): 0-retry passes from these values, losses below. */
+        fun fullFloorFor(distanceMeters: Int): Int = if (distanceMeters >= 3200) 450 else 300
+    }
+}
 
 /**
  * A mandatory-race turn's fan entry gate. A choice turn ([isChoice]) can carry options with different fan requirements,
@@ -36,12 +50,34 @@ data class GrandConcertMandatoryGate(val turn: Int, val isChoice: Boolean, val o
 data class GrandConcertCharacterFanFacts(
     val fanGoals: List<GrandConcertFanGoal>,
     val mandatoryGates: List<GrandConcertMandatoryGate>,
-)
+) {
+    /**
+     * The highest ramped Stamina floor among the 3000m+ goal races within [LongGoalStaminaFloor.LOOKAHEAD_TURNS] turns
+     * after [currentTurn]: zero at goalTurn-20, the full floor at goalTurn-1, so the Stamina picks spread over the run-up
+     * instead of clustering. Null when no such goal is in range or the ramp is still zero. A choice turn counts its
+     * longest option. Pure.
+     */
+    fun longGoalStaminaFloor(currentTurn: Int): LongGoalStaminaFloor? {
+        val lookahead = LongGoalStaminaFloor.LOOKAHEAD_TURNS
+        return mandatoryGates
+            .mapNotNull { gate ->
+                val turnsUntil = gate.turn - currentTurn
+                if (turnsUntil !in 1..lookahead) return@mapNotNull null
+                val option = gate.options.maxByOrNull { it.distanceMeters } ?: return@mapNotNull null
+                if (option.distanceMeters < LongGoalStaminaFloor.MIN_DISTANCE_METERS) return@mapNotNull null
+                val full = LongGoalStaminaFloor.fullFloorFor(option.distanceMeters)
+                val ramped = full * (lookahead - turnsUntil) / (lookahead - 1)
+                if (ramped <= 0) null else LongGoalStaminaFloor(option.raceName, option.distanceMeters, gate.turn, ramped, full)
+            }
+            .maxByOrNull { it.floor }
+    }
+}
 
 /**
  * Read-only, deterministic parse of the generated `gc_fan_runtime.json` asset (see
- * `scripts/generate-gc-fan-runtime-data.mjs`): fan targets and deadlines, mandatory-race entry gates, and the
- * completed-race payout floor. Makes no defer/force decision.
+ * `scripts/generate-gc-fan-runtime-data.mjs`): fan targets and deadlines, mandatory-race entry gates with course
+ * lengths, and the completed-race payout floor. Makes no defer/force decision. The goal chain is the character's,
+ * not the scenario's, so every campaign reads the gates for the training Stamina floor.
  * Trainee identity is matched conservatively: an exact canonical-name hit, then a normalization that accepts only a
  * UNIQUE canonical match, otherwise UNKNOWN. No fuzzy best guess is used for fan safety, so the caller keeps its
  * fail-safe behaviour.
@@ -134,7 +170,7 @@ class GrandConcertFanFacts private constructor(
                             val options =
                                 (0 until optionsArray.length()).map { j ->
                                     val option = optionsArray.getJSONObject(j)
-                                    GrandConcertGateOption(option.getString("raceName"), option.getInt("fansNeeded"))
+                                    GrandConcertGateOption(option.getString("raceName"), option.getInt("fansNeeded"), option.optInt("distanceMeters", 0))
                                 }
                             // A gate with no options is malformed (minFansNeeded/maxFansNeeded would throw): fail the
                             // whole parse closed to null. The generator never emits one.
