@@ -100,6 +100,14 @@ class UnresponsiveGameTest {
         }
 
         @Test
+        fun `closing Android's not-responding dialog spends a closing try, so a game that hangs on every launch still stops`() {
+            assertTrue(closesAnrDialog(reopensThisRun = 0))
+            assertTrue(closesAnrDialog(reopensThisRun = MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN - 1))
+            assertFalse(closesAnrDialog(reopensThisRun = MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN), "past the cap the dialog is left and the ladder runs to its stop")
+            assertFalse(reopensUnresponsiveGame(GAME_NOT_RESPONDING, careerObserved = true, reopensThisRun = MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN), "two closes spend the stuck-input restarts too")
+        }
+
+        @Test
         fun `on Android 14 and later a re-front is the run's last try, since the game can never be closed`() {
             for (sdk in 34..36) {
                 assertEquals(MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN, unresponsiveReopensAfter(GameReopen.REFRONTED, used = 1, sdk = sdk), "sdk $sdk")
@@ -241,6 +249,41 @@ class UnresponsiveGameTest {
             assertTrue(game.contains("gestureUtils.rootInActiveWindow?.packageName?.toString()"))
             assertTrue(game.contains("ownInputReachesScreen(myContext, runCatching { gestureUtils }.getOrNull(), MyAccessibilityService.isGestureAllowed)"))
             assertTrue(game.contains("val gestureUtils: MyAccessibilityService get() = MyAccessibilityService.getInstance()"), "still a per-access getter")
+        }
+
+        @Test
+        fun `the unknown-screen ladder closes Android's dialog first, counts the close as a try and relaunches before it logs`() {
+            val body = campaign.substringAfter("    private fun recoverFromUnknownScreen(count: Int) {").substringBefore("\n    }\n")
+            val check = body.indexOf("if (closesAnrDialog(unresponsiveGameReopens) && game.closeAnrDialog()) {")
+            assertTrue(check > body.indexOf("DialogUtils.gameUpdatePromptShown(game.imageUtils)"), "after the update-prompt check")
+            for (later in listOf("isEventCutsceneSkipPillVisible()", "if (count in gestureRebindThresholds) {", "if (shouldRelaunchGame(", "unknownScreenNudge(")) {
+                assertTrue(check < body.indexOf(later), "before $later")
+            }
+            val block = body.substring(check).substringBefore("\n        }\n")
+            val counted = block.indexOf("unresponsiveGameReopens++")
+            val relaunch = block.indexOf("val reopen = game.relaunchAfterAnrClose()")
+            assertTrue(counted in 0 until relaunch && relaunch < block.indexOf("MessageLog"), "counted, relaunched, then logged")
+            assertTrue(block.contains("consecutiveUnknownScreenCount = 0") && block.contains("lobbyReentryAttempts = 0") && block.endsWith("return"))
+        }
+
+        @Test
+        fun `Close app is clicked through a fresh window read before anything is logged, and Wait is never named`() {
+            val close = game.substringAfter("internal fun closeAnrDialog(): Boolean {").substringBefore("\n    }\n")
+            assertTrue(close.indexOf("performAction(AccessibilityNodeInfo.ACTION_CLICK)") in 0 until close.indexOf("Log.w("))
+            val read = game.substringAfter("private fun frontWindowNodes()").substringBefore("\n        }\n\n")
+            assertTrue(read.contains("gestureUtils.rootInActiveWindow"), "gestureUtils taken per access")
+            for (body in listOf(close, read, game.substringAfter("internal fun relaunchAfterAnrClose(): GameReopen {").substringBefore("\n    }\n"))) {
+                assertFalse(body.contains("MessageLog"))
+            }
+            assertFalse(game.substringAfter("internal fun anrCheckReport(): String {").substringBefore("\n    }\n").contains("performAction"), "the diagnostic only reads")
+            assertFalse(game.contains("aerr_wait"))
+            assertTrue(game.contains("closeAnr = { closeAnrDialog().also { if (it) anrClosed = true } },"), "the restart's title wait closes the dialog")
+        }
+
+        @Test
+        fun `the restart test reports the not-responding check before it touches anything`() {
+            val body = campaign.substringAfter("open fun startGameRestartTest() {").substringBefore("\n    }\n")
+            assertTrue(body.indexOf("game.anrCheckReport()") in 0 until body.indexOf("if (front != Game.GAME_PACKAGE) {"))
         }
 
         @Test

@@ -88,13 +88,17 @@ class GameRestartTest {
         val leavesGame: Boolean = true,
         val keepsAnimating: Boolean = false,
         val front: String? = null,
-        val launchDispatches: List<Boolean> = listOf(true, true),
+        val launchDispatches: List<Boolean> = listOf(true, true, true),
         val titleAfterLaunch: Int? = 1,
         val titleAfterPolls: Int = 1,
+        /** Android's "isn't responding" dialog is up from this not-responding check on, until Close app is pressed. */
+        val anrFromCheck: Int? = null,
     ) {
         var now = 0.0
         val steps = mutableListOf<String>()
         val killTimes = mutableListOf<Double>()
+        var anrChecks = 0
+            private set
         private var launches = 0
         private var homeAt = -1.0
         private var titleFrom = -1
@@ -131,6 +135,12 @@ class GameRestartTest {
                 titleShowing = {
                     polls++
                     titleFrom in 1..polls
+                },
+                closeAnr = {
+                    anrChecks++
+                    val up = anrFromCheck != null && anrChecks >= anrFromCheck && "close-anr" !in steps
+                    if (up) steps += "close-anr"
+                    up
                 },
                 sleep = { now += it },
             )
@@ -229,6 +239,98 @@ class GameRestartTest {
         @Test
         fun `no launch dispatched at all is reported as such`() {
             assertEquals(FrozenGameRestart.NOT_DISPATCHED, Script(launchDispatches = listOf(false, false), titleAfterLaunch = null).run())
+        }
+    }
+
+    @Nested
+    @DisplayName("Android's \"isn't responding\" dialog during the title wait")
+    inner class AnrDuringTitleWait {
+        private val launches = { s: Script -> s.steps.filter { it.startsWith("launch") || it == "close-anr" } }
+
+        @Test
+        fun `the title wait closes the dialog once, launches fresh again and then sees the title`() {
+            val s = Script(titleAfterLaunch = 2, anrFromCheck = 3)
+            assertEquals(FrozenGameRestart.RESTARTED, s.run())
+            assertEquals(listOf("launch-fresh", "close-anr", "launch-fresh"), launches(s))
+            assertEquals(GAME_LAUNCH_SECONDS_AFTER_HOME + 3 * GAME_TITLE_POLL_SECONDS + ANR_CLOSE_SETTLE_SECONDS + GAME_TITLE_POLL_SECONDS, s.now, 1e-9)
+        }
+
+        @Test
+        fun `a dialog that comes up during the plain launch's wait is closed there`() {
+            val polls = (GAME_TITLE_WAIT_SECONDS / GAME_TITLE_POLL_SECONDS).toInt()
+            val s = Script(titleAfterLaunch = 3, anrFromCheck = polls + 1)
+            assertEquals(FrozenGameRestart.RESTARTED_ON_PLAIN_LAUNCH, s.run())
+            assertEquals(listOf("launch-fresh", "launch-plain", "close-anr", "launch-fresh"), launches(s))
+        }
+
+        @Test
+        fun `a closed dialog and still no title is not a restart, the waits are bounded and the dialog is closed only once`() {
+            val s = Script(titleAfterLaunch = null, anrFromCheck = 3)
+            assertEquals(FrozenGameRestart.NOT_RESTARTED, s.run())
+            assertEquals(listOf("launch-fresh", "close-anr", "launch-fresh", "launch-plain"), launches(s))
+            assertEquals(3, s.anrChecks, "no check after the close: a second dialog is left to the unknown-screen ladder")
+            assertEquals(GAME_LAUNCH_SECONDS_AFTER_HOME + 3 * GAME_TITLE_POLL_SECONDS + ANR_CLOSE_SETTLE_SECONDS + 2 * GAME_TITLE_WAIT_SECONDS, s.now, 1e-9)
+        }
+
+        @Test
+        fun `without the dialog the launches and waits are unchanged`() {
+            val s = Script(titleAfterLaunch = null)
+            assertEquals(FrozenGameRestart.NOT_RESTARTED, s.run())
+            assertEquals(listOf("launch-fresh", "launch-plain"), launches(s))
+            assertEquals(2 * (GAME_TITLE_WAIT_SECONDS / GAME_TITLE_POLL_SECONDS).toInt(), s.anrChecks)
+        }
+
+        @Test
+        fun `after Close app one fresh launch and the title wait decide the outcome`() {
+            fun relaunch(dispatched: Boolean, titleAt: Int?): Triple<GameReopen, List<Boolean>, Double> {
+                var now = 0.0
+                var polls = 0
+                val launched = mutableListOf<Boolean>()
+                val reopen = relaunchClosedGame(launch = { launched += it; dispatched }, titleShowing = { ++polls == titleAt }, sleep = { now += it })
+                return Triple(reopen, launched, now)
+            }
+            assertEquals(Triple(GameReopen.RESTARTED, listOf(true), ANR_CLOSE_SETTLE_SECONDS + GAME_TITLE_POLL_SECONDS), relaunch(true, 1))
+            assertEquals(Triple(GameReopen.NOT_RESTARTED, listOf(true), ANR_CLOSE_SETTLE_SECONDS + GAME_TITLE_WAIT_SECONDS), relaunch(true, null))
+            assertEquals(Triple(GameReopen.NOT_DISPATCHED, listOf(true), ANR_CLOSE_SETTLE_SECONDS), relaunch(false, 1))
+        }
+    }
+
+    @Nested
+    @DisplayName("which node closes Android's \"isn't responding\" dialog")
+    inner class AnrCloseNode {
+        private val names = listOf("Umamusume", Game.GAME_PACKAGE)
+        private val dialog =
+            listOf(
+                WindowNode(null, null),
+                WindowNode("android:id/alertTitle", "Umamusume isn't responding"),
+                WindowNode("android:id/aerr_close", "Close app"),
+                WindowNode("android:id/aerr_wait", "Wait"),
+            )
+
+        private fun titled(title: String) = dialog.map { if (it.viewId == "android:id/alertTitle") it.copy(text = title) else it }
+
+        @Test
+        fun `the game's dialog is closed by its Close app button, never Wait`() {
+            assertEquals(2, anrCloseNode("android", dialog, names))
+        }
+
+        @Test
+        fun `a dialog of another app, this one included, is never clicked`() {
+            for (app in listOf("Chrome", "UMA Auto+")) assertEquals(null, anrCloseNode("android", titled("$app isn't responding"), names), app)
+            assertEquals(null, anrCloseNode(Game.GAME_PACKAGE, dialog, names), "the game's own window")
+            assertEquals(null, anrCloseNode(null, dialog, names), "an unreadable window")
+        }
+
+        @Test
+        fun `without the Close app id only its exact label is clicked`() {
+            val renamed = dialog.map { it.copy(viewId = null) }
+            assertEquals(2, anrCloseNode("android", renamed, names))
+            assertEquals(null, anrCloseNode("android", renamed.filter { it.text != "Close app" }, names), "Wait alone is never pressed")
+        }
+
+        @Test
+        fun `an unreadable game label leaves the dialog alone`() {
+            assertEquals(null, anrCloseNode("android", dialog, listOf(Game.GAME_PACKAGE)))
         }
     }
 

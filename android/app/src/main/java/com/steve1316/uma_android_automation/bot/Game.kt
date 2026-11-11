@@ -10,6 +10,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.DiscordUtils
@@ -820,6 +821,8 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             return GameReopen.REFRONTED
         }
 
+        var anrClosed = false
+        var lastLaunchFresh = false
         val result =
             restartFrozenGame(
                 captureGrid = { imageUtils.getSourceBitmap().let { b -> homeLumaGrid(b.width, b.height) { x, y -> b.getPixel(x, y) } } },
@@ -834,26 +837,35 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                     front
                 },
                 killGame = { killGameProcess() },
-                launch = { clearTask -> launchGame(clearTask) },
-                titleShowing = {
-                    imageUtils.getSourceBitmap().let { b -> TitleScreenProbe.isTitleScreen(SparkPixelSampler { x, y -> b.getPixel(x, y) }, b.width, b.height) }
-                },
+                launch = { clearTask -> launchGame(clearTask).also { lastLaunchFresh = clearTask } },
+                titleShowing = { titleScreenShowing() },
+                closeAnr = { closeAnrDialog().also { if (it) anrClosed = true } },
                 sleep = { wait(it, skipWaitingForLoading = true) },
             )
         return when (result) {
             FrozenGameRestart.RESTARTED, FrozenGameRestart.RESTARTED_ON_PLAIN_LAUNCH -> {
                 SessionTally.gameRelaunches.incrementAndGet()
-                val launch = if (result == FrozenGameRestart.RESTARTED) "a launch into a fresh task" else "a second, plain launch"
+                val launch =
+                    when {
+                        lastLaunchFresh && anrClosed -> "a launch into a fresh task after Close app on Android's \"isn't responding\" dialog"
+                        lastLaunchFresh -> "a launch into a fresh task"
+                        anrClosed -> "a plain launch after Close app on Android's \"isn't responding\" dialog and a fresh launch that showed no title"
+                        else -> "a second, plain launch"
+                    }
                 MessageLog.w(TAG, "[RECOVERY] The game restarted: it was sent Home, asked to close and brought up by $launch, and its title screen came up. A career in progress resumes via Continue Career.")
                 GameReopen.RESTARTED
             }
             FrozenGameRestart.NOT_RESTARTED -> {
                 SessionTally.gameRelaunches.incrementAndGet()
-                MessageLog.w(
-                    TAG,
-                    "[RECOVERY] The game was sent Home, asked to close and launched again, but its title screen did not come up within " +
-                        "${GAME_TITLE_WAIT_SECONDS.toInt()} s of a launch. Android does not show whether it closed; it was not restarted.",
-                )
+                if (anrClosed) {
+                    MessageLog.w(TAG, "[RECOVERY] Android reported the game as not responding; Close app was pressed and the relaunch still showed no title. It was not restarted.")
+                } else {
+                    MessageLog.w(
+                        TAG,
+                        "[RECOVERY] The game was sent Home, asked to close and launched again, but its title screen did not come up within " +
+                            "${GAME_TITLE_WAIT_SECONDS.toInt()} s of a launch. Android does not show whether it closed; it was not restarted.",
+                    )
+                }
                 GameReopen.NOT_RESTARTED
             }
             FrozenGameRestart.SCREEN_UNCHANGED_AFTER_HOME -> {
@@ -896,6 +908,62 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             Log.w(TAG, "[RECOVERY] The window in front could not be read: ${e.javaClass.simpleName}")
             null
         }
+
+    private fun titleScreenShowing(): Boolean = imageUtils.getSourceBitmap().let { b -> TitleScreenProbe.isTitleScreen(SparkPixelSampler { x, y -> b.getPixel(x, y) }, b.width, b.height) }
+
+    /** The window in front and its nodes, or null when unreadable. Asks the window's owner, so a hung game in front can hold the call. */
+    private fun frontWindowNodes(): Pair<String?, List<Pair<AccessibilityNodeInfo, WindowNode>>>? =
+        try {
+            gestureUtils.rootInActiveWindow?.let { root ->
+                // Without flagReportViewIds (the library's service config) every node's id reads null, so the Close app id is looked up instead.
+                val closeById = root.findAccessibilityNodeInfosByViewId(ANR_CLOSE_ID)
+                val nodes = mutableListOf<Pair<AccessibilityNodeInfo, WindowNode>>()
+                val queue = ArrayDeque(listOf(root))
+                while (queue.isNotEmpty() && nodes.size < ANR_DIALOG_MAX_NODES) {
+                    val node = queue.removeFirst()
+                    nodes += node to WindowNode(if (node in closeById) ANR_CLOSE_ID else node.viewIdResourceName, node.text?.toString())
+                    for (i in 0 until node.childCount) node.getChild(i)?.let { queue += it }
+                }
+                root.packageName?.toString() to nodes
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[RECOVERY] The window in front could not be read: ${e.javaClass.simpleName}")
+            null
+        }
+
+    /** The game as Android's dialogs name it: its label, which needs the manifest's package query, and its package as a fallback. */
+    private val gameNames: List<String> by lazy {
+        val pm = myContext.packageManager
+        listOfNotNull(runCatching { pm.getApplicationLabel(pm.getApplicationInfo(GAME_PACKAGE, 0)).toString() }.getOrNull(), GAME_PACKAGE)
+    }
+
+    /** Presses Close app on Android's "isn't responding" dialog when it names the game ([anrCloseNode]); never Wait. True when the click was performed. */
+    internal fun closeAnrDialog(): Boolean {
+        val (windowPackage, nodes) = frontWindowNodes() ?: return false
+        val target = anrCloseNode(windowPackage, nodes.map { it.second }, gameNames) ?: return false
+        val clicked = nodes[target].first.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        Log.w(TAG, "[RECOVERY] Pressed Close app on Android's \"isn't responding\" dialog for the game (performed=$clicked).")
+        return clicked
+    }
+
+    /** After [closeAnrDialog]: one launch into a fresh task and the title wait. Acts first, logs with [Log]. */
+    internal fun relaunchAfterAnrClose(): GameReopen {
+        val reopen = relaunchClosedGame(launch = { clearTask -> launchGame(clearTask) }, titleShowing = { titleScreenShowing() }, sleep = { wait(it, skipWaitingForLoading = true) })
+        if (reopen != GameReopen.NOT_DISPATCHED) SessionTally.gameRelaunches.incrementAndGet()
+        return reopen
+    }
+
+    /** What the not-responding check sees in the window in front, for the restart diagnostic. Reads only; clicks nothing. */
+    internal fun anrCheckReport(): String {
+        val started = SystemClock.uptimeMillis()
+        val read = frontWindowNodes()
+        val ms = SystemClock.uptimeMillis() - started
+        if (read == null) return "window unreadable ($ms ms)"
+        val (windowPackage, nodes) = read
+        val rows = nodes.map { it.second }
+        return "package ${windowPackage ?: "unknown"}, ${rows.size} nodes, Close app node ${rows.any { it.viewId == ANR_CLOSE_ID }}, " +
+            "would click ${anrCloseNode(windowPackage, rows, gameNames) != null}, game names $gameNames ($ms ms)"
+    }
 
     /** The capture as [frozenFrameGrid] compares it, without the floating button and the status bar. */
     internal fun frozenFrameGridOf(bitmap: Bitmap): IntArray =

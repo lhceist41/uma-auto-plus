@@ -1018,6 +1018,7 @@ abstract class Campaign(game: Game) : Task(game) {
         // The Home check trusts the window in front, so this proves the read names the game while it is in front.
         val front = game.frontWindowPackage()
         MessageLog.i(TAG, "[TEST] [RESTART-TEST] Window in front before Home: ${front ?: "unreadable"}.")
+        MessageLog.i(TAG, "[TEST] [RESTART-TEST] Not-responding check (reads only): ${game.anrCheckReport()}.")
         if (front != Game.GAME_PACKAGE) {
             MessageLog.w(TAG, "[TEST] [RESTART-TEST] Stopping: the game must be in front, and the window read named ${front ?: "nothing"}. Nothing was tapped or closed.")
             return
@@ -4740,6 +4741,19 @@ abstract class Campaign(game: Game) : Task(game) {
     private fun recoverFromUnknownScreen(count: Int) {
         // Before every tap and the reopen rung: a restarted game shows the prompt again.
         if (DialogUtils.gameUpdatePromptShown(game.imageUtils)) DialogUtils.stopForGameUpdate()
+        // Android's "isn't responding" dialog is a system window: no tap, nudge or rebind below reaches it.
+        if (closesAnrDialog(unresponsiveGameReopens) && game.closeAnrDialog()) {
+            unresponsiveGameReopens++
+            val reopen = game.relaunchAfterAnrClose()
+            MessageLog.w(
+                TAG,
+                "[RECOVERY] Android reported the game as not responding; pressed Close app and relaunched it " +
+                    "(closing try $unresponsiveGameReopens/$MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN): ${reopenOutcomeWords(reopen)}.",
+            )
+            consecutiveUnknownScreenCount = 0
+            lobbyReentryAttempts = 0
+            return
+        }
         if (count == 1) {
             // First unrecognized tick: clear a notification shade that may be covering the top-region anchors.
             dismissNotificationShade("unknown screen")

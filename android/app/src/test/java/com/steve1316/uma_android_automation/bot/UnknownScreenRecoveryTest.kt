@@ -75,16 +75,29 @@ class UnknownScreenRecoveryTest {
                 "the navigator's single relaunch stays the first-attempt re-front",
             )
             // CLEAR_TASK against a live game killed it: it exists only behind launchGame's clearTask flag, and only the restart sequence passes true,
-            // after its kill window.
+            // after its kill window or after Close app on Android's "isn't responding" dialog.
             assertEquals(1, Regex("FLAG_ACTIVITY_CLEAR_TASK").findAll(game).count())
             assertTrue(game.contains("if (clearTask) Intent.FLAG_ACTIVITY_CLEAR_TASK else Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED"))
             assertFalse(game.contains("launchGame(clearTask = true)") || game.contains("launchGame(true)"))
-            assertTrue(game.contains("launch = { clearTask -> launchGame(clearTask) }"))
+            assertTrue(game.contains("launch = { clearTask -> launchGame(clearTask).also { lastLaunchFresh = clearTask } },"))
             val restart = sourceFile("bot/GameRestart.kt").readText().replace("\r\n", "\n").substringAfter("internal fun restartFrozenGame(")
             val lastKill = restart.indexOf("        killGame()\n    }\n    sleep(GAME_LAUNCH_SECONDS_AFTER_HOME - elapsed)")
             assertTrue(lastKill > restart.indexOf("pressHome()"), "the kill calls come after Home")
             assertTrue(restart.indexOf("launch(true)") > lastKill, "the fresh-task launch comes after the whole kill window")
             assertEquals(1, Regex("""launch\(true\)""").findAll(restart).count())
+        }
+
+        @Test
+        fun `the fresh-task launch after Android's not-responding dialog follows only a performed Close app`() {
+            val restart = sourceFile("bot/GameRestart.kt").readText().replace("\r\n", "\n")
+            val relaunch = restart.substringAfter("internal fun relaunchClosedGame(").substringBefore("\n}\n")
+            assertTrue(relaunch.indexOf("sleep(ANR_CLOSE_SETTLE_SECONDS)") in 0 until relaunch.indexOf("launch(true)"))
+            val frozen = restart.substringAfter("internal fun restartFrozenGame(")
+            assertEquals(1, Regex(Regex.escape("relaunchClosedGame(")).findAll(frozen).count())
+            assertTrue(frozen.contains("TitleWait.ANR_CLOSED -> {\n                anrClosed = true\n                relaunchClosedGame(launch, titleShowing, sleep)"))
+            val campaign = sourceFile("bot/Campaign.kt").readText().replace("\r\n", "\n")
+            assertEquals(1, Regex(Regex.escape("relaunchAfterAnrClose()")).findAll(campaign).count())
+            assertTrue(campaign.contains("&& game.closeAnrDialog()) {\n            unresponsiveGameReopens++\n            val reopen = game.relaunchAfterAnrClose()"))
         }
 
         @Test

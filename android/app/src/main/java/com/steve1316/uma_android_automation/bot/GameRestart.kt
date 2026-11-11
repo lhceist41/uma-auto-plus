@@ -70,12 +70,47 @@ internal const val GAME_HOME_SETTLE_SECONDS = 2.0
 
 internal const val GAME_HOME_STILL_SECONDS = 1.0
 
+/** AOSP's id for the Close app button of the "isn't responding" dialog (Android 7+); its Wait button is aerr_wait. */
+internal const val ANR_CLOSE_ID = "android:id/aerr_close"
+
+internal const val ANR_CLOSE_SETTLE_SECONDS = 2.0
+
+internal const val ANR_DIALOG_MAX_NODES = 200
+
+/** One node of the window in front, as the not-responding check reads it. */
+internal data class WindowNode(val viewId: String?, val text: String?)
+
+/**
+ * The node to click to close Android's "isn't responding" dialog, or null. Only a system window (package "android") whose text names
+ * the game qualifies, so another app's dialog, this app's included, is never touched; only its Close app button, by id or by its exact
+ * label where an OEM renamed the id. Wait only hides the dialog and leaves the hung process.
+ */
+internal fun anrCloseNode(windowPackage: String?, nodes: List<WindowNode>, gameNames: List<String>): Int? {
+    if (windowPackage != "android") return null
+    if (nodes.none { node -> gameNames.any { name -> node.text?.contains(name, ignoreCase = true) == true } }) return null
+    val byId = nodes.indexOfFirst { it.viewId == ANR_CLOSE_ID }
+    if (byId >= 0) return byId
+    return nodes.indexOfFirst { it.text.equals("Close app", ignoreCase = true) }.takeIf { it >= 0 }
+}
+
+/** Close app has ended the hung process, so one launch into a fresh task cold-starts the game; the title screen proves it. */
+internal fun relaunchClosedGame(
+    launch: (clearTask: Boolean) -> Boolean,
+    titleShowing: () -> Boolean,
+    sleep: (seconds: Double) -> Unit,
+): GameReopen {
+    sleep(ANR_CLOSE_SETTLE_SECONDS)
+    if (!launch(true)) return GameReopen.NOT_DISPATCHED
+    return if (titleWithin(titleShowing, null, sleep) == TitleWait.TITLE) GameReopen.RESTARTED else GameReopen.NOT_RESTARTED
+}
+
 /**
  * Nothing is closed unless Home is confirmed to have left the game: a kill is a no-op on a game in front, and
  * clearing its task would tear it down. The launch clears the task because a plain launch after a kill
  * re-entered the surviving task and hung at the splash on MuMu; it waits for the kill window because clearing
  * a task whose process is alive left nothing relaunched. A missing title gets one plain launch, which
- * cold-starts a dead game. The title screen is the only proof a kill landed.
+ * cold-starts a dead game. The title screen is the only proof a kill landed. A relaunched game can hang at its splash until Android
+ * shows its "isn't responding" dialog over it: [closeAnr] presses Close app once per restart, and a fresh launch follows.
  */
 internal fun restartFrozenGame(
     captureGrid: () -> IntArray,
@@ -84,6 +119,7 @@ internal fun restartFrozenGame(
     killGame: () -> Unit,
     launch: (clearTask: Boolean) -> Boolean,
     titleShowing: () -> Boolean,
+    closeAnr: () -> Boolean,
     sleep: (seconds: Double) -> Unit,
 ): FrozenGameRestart {
     val before = captureGrid()
@@ -106,21 +142,40 @@ internal fun restartFrozenGame(
     }
     sleep(GAME_LAUNCH_SECONDS_AFTER_HOME - elapsed)
 
+    var anrClosed = false
+
+    fun titleShows(): Boolean =
+        when (titleWithin(titleShowing, closeAnr.takeUnless { anrClosed }, sleep)) {
+            TitleWait.TITLE -> true
+            TitleWait.ANR_CLOSED -> {
+                anrClosed = true
+                relaunchClosedGame(launch, titleShowing, sleep) == GameReopen.RESTARTED
+            }
+            TitleWait.NONE -> false
+        }
+
     val freshLaunched = launch(true)
-    if (freshLaunched && titleWithin(titleShowing, sleep)) return FrozenGameRestart.RESTARTED
+    if (freshLaunched && titleShows()) return FrozenGameRestart.RESTARTED
     val plainLaunched = launch(false)
-    if (plainLaunched && titleWithin(titleShowing, sleep)) return FrozenGameRestart.RESTARTED_ON_PLAIN_LAUNCH
+    if (plainLaunched && titleShows()) return FrozenGameRestart.RESTARTED_ON_PLAIN_LAUNCH
     return if (freshLaunched || plainLaunched) FrozenGameRestart.NOT_RESTARTED else FrozenGameRestart.NOT_DISPATCHED
 }
 
-private fun titleWithin(titleShowing: () -> Boolean, sleep: (Double) -> Unit): Boolean {
+private enum class TitleWait {
+    TITLE,
+    ANR_CLOSED,
+    NONE,
+}
+
+private fun titleWithin(titleShowing: () -> Boolean, closeAnr: (() -> Boolean)?, sleep: (Double) -> Unit): TitleWait {
     var waited = 0.0
     while (waited < GAME_TITLE_WAIT_SECONDS) {
         sleep(GAME_TITLE_POLL_SECONDS)
         waited += GAME_TITLE_POLL_SECONDS
-        if (titleShowing()) return true
+        if (titleShowing()) return TitleWait.TITLE
+        if (closeAnr?.invoke() == true) return TitleWait.ANR_CLOSED
     }
-    return false
+    return TitleWait.NONE
 }
 
 /** A restart is named only when the title screen proved it. */

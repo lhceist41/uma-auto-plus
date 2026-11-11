@@ -66,6 +66,9 @@ internal const val MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN = 2
 internal fun unresponsiveReopensAfter(reopen: GameReopen, used: Int, sdk: Int): Int =
     if (reopen == GameReopen.REFRONTED && !reopenClosesGame(attempt = 2, sdk = sdk)) MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN else used
 
+/** Closing Android's "isn't responding" dialog relaunches the game, so it spends a closing try: a game that hangs on every launch still stops. */
+internal fun closesAnrDialog(reopensThisRun: Int): Boolean = reopensThisRun < MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN
+
 internal fun reopensUnresponsiveGame(key: String?, careerObserved: Boolean, reopensThisRun: Int): Boolean =
     key == GAME_NOT_RESPONDING && careerObserved && reopensThisRun < MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN
 
