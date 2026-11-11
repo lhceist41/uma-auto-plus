@@ -50,6 +50,7 @@ import com.steve1316.uma_android_automation.components.LabelMissionsHeader
 import com.steve1316.uma_android_automation.components.LabelPresentsHeader
 import com.steve1316.uma_android_automation.components.LabelRewardsCollectedHeader
 import org.opencv.core.Point
+import kotlin.math.abs
 
 /** The Club item request picker offers only these: five shoes and the Winner's Sashes. */
 object ClubRequestItems {
@@ -236,34 +237,96 @@ internal fun parseMonies(ocr: String): Int? {
 /** One Daily Sales row as read: its title (any "[epithet]" line, then the name line), whether its price shows the Monies coin, the price, and whether it has a checkbox (a sold-out row has none). */
 internal data class SaleRow(val title: String, val monies: Boolean, val cost: Int?, val buyable: Boolean = true)
 
-/** The rows of the Daily Sales list. [complete] once a swipe showed no new row; [gap] when a page shared no row with the one before. */
-internal data class SaleScan(val rows: List<SaleRow>, val complete: Boolean, val gap: Boolean = false) {
+/** The rows of the Daily Sales list. [complete] once the scroll bar reached its end; [gap] and [reason] when the pages could not be placed in the list. */
+internal data class SaleScan(val rows: List<SaleRow>, val complete: Boolean, val gap: Boolean = false, val reason: String? = null) {
     val buyable: List<SaleRow> get() = rows.filter { it.buyable }
 }
 
+/** The list's scroll bar thumb: its top within the track, its length, and whether it touches the track's end. */
+internal data class SaleScroll(val thumbTop: Int, val thumbLength: Int, val atEnd: Boolean)
+
+/** One screenful: its rows top to bottom, each pill's y measured from where the first row's pill sits with the list at its top, and the scroll bar (null when none was found). */
+internal data class SalePage(val rows: List<SaleRow>, val pillYs: List<Int>, val scroll: SaleScroll?)
+
+/** Daily Sales rows are 240 px apart; a page whose pills land more than 60 px off the row grid the scroll bar predicts is refused. */
+internal const val SALE_ROW_PITCH = 240
+internal const val SALE_ROW_SLACK = 60
+
+/** A thumb length of scroll bar stands for 709 px of list (measured on 7- and 21-row lists at 1080x1920). */
+internal const val SALE_LIST_VIEW_H = 709
+
+/** At the list's end the last row's pill sits 406 px below where the first row's pill sits at the top (every list measured), and the thumb ends within 3 px of the track's end. */
+internal const val SALE_LAST_PILL_AT_END = 406
+internal const val SALE_THUMB_END_SLACK = 3
+
 internal fun saleRowText(row: SaleRow): String = "${row.title.replace('\n', ' ')}=${row.cost ?: "?"}" + (if (row.monies) "" else " (not Monies)") + (if (row.buyable) "" else " (sold out)")
 
-/** OCR reads a row's "[epithet]" line unreliably (dropped, "Lunsigned]", "Winning!l"), so rows compare by the name line after it. */
-private fun saleKeys(page: List<SaleRow>): List<Pair<String, Int?>> = page.map { normalizeItemName(it.title.substringAfterLast('\n').substringAfter(']')) to it.cost }
+/** OCR reads a row's "[epithet]" unreliably (dropped, "Lunsigned]", "Winning!l") and breaks the title into lines differently, so rows compare by the name after it. */
+private fun saleKey(row: SaleRow): Pair<String, Int?> {
+    val flat = row.title.replace('\n', ' ')
+    return normalizeItemName(if (']' in flat) flat.substringAfterLast(']') else row.title.substringAfterLast('\n')) to row.cost
+}
 
-/** Joins screenfuls read top to bottom: each page must repeat the last rows of the one before, and a page equal to the one before is the end. */
-internal fun mergeSalePages(pages: List<List<SaleRow>>): SaleScan {
-    if (pages.isEmpty()) return SaleScan(emptyList(), complete = false)
-    val rows = pages.first().toMutableList()
-    for (i in 1 until pages.size) {
-        val before = saleKeys(pages[i - 1])
-        val page = saleKeys(pages[i])
-        if (page == before) return SaleScan(rows, complete = true)
-        val shared = (minOf(before.size, page.size) downTo 1).firstOrNull { before.takeLast(it) == page.take(it) } ?: return SaleScan(rows, complete = false, gap = true)
-        rows += pages[i].drop(shared)
+/** The thumb of a scroll bar track read top to bottom ([thumb] true where a pixel is the thumb's colour), or null unless it is one run. */
+internal fun saleScroll(thumb: List<Boolean>, endSlack: Int = SALE_THUMB_END_SLACK): SaleScroll? {
+    val top = thumb.indexOf(true)
+    val end = thumb.lastIndexOf(true)
+    if (top < 0 || (top..end).any { !thumb[it] }) return null
+    return SaleScroll(top, end - top + 1, atEnd = end >= thumb.size - 1 - endSlack)
+}
+
+/**
+ * Places every row of the pages read top to bottom at its index in the list: the scroll bar says how far each swipe moved the list,
+ * and the pills snap that onto the row grid. Content alone cannot place rows, because a list repeats identical rows.
+ */
+internal fun mergeSalePages(
+    pages: List<SalePage>,
+    pitch: Int = SALE_ROW_PITCH,
+    slack: Int = SALE_ROW_SLACK,
+    viewHeight: Int = SALE_LIST_VIEW_H,
+    lastPillAtEnd: Int = SALE_LAST_PILL_AT_END,
+): SaleScan {
+    val rows = sortedMapOf<Int, SaleRow>()
+
+    fun refused(reason: String) = SaleScan(rows.values.toList(), complete = false, gap = true, reason = reason)
+    var offset = 0
+    var before: SaleScroll? = null
+    for ((i, page) in pages.withIndex()) {
+        val scroll = page.scroll ?: return refused("page ${i + 1} shows no scroll bar")
+        val last = before
+        if (last != null && scroll.thumbTop == last.thumbTop && !scroll.atEnd) return refused("a swipe did not move the list")
+        val estimate = if (last == null) scroll.thumbTop * viewHeight / scroll.thumbLength else offset + (scroll.thumbTop - last.thumbTop) * viewHeight / scroll.thumbLength
+        before = scroll
+        if (page.pillYs.isEmpty()) return refused("page ${i + 1} shows no row")
+        val first = page.pillYs.first() + estimate
+        val off = first - Math.floorDiv(first + pitch / 2, pitch) * pitch
+        if (abs(off) > slack) return refused("page ${i + 1} is $off px off the row grid")
+        offset = estimate - off
+        for ((row, y) in page.rows.zip(page.pillYs)) {
+            val position = y + offset
+            val index = Math.floorDiv(position + pitch / 2, pitch)
+            if (index < 0 || abs(position - index * pitch) > slack) return refused("page ${i + 1} is off the row grid")
+            val known = rows[index]
+            if (known == null) {
+                rows[index] = row
+            } else if (saleKey(known) != saleKey(row)) {
+                return refused("row ${index + 1} reads \"${saleRowText(known)}\" and \"${saleRowText(row)}\"")
+            }
+        }
     }
-    return SaleScan(rows, complete = false)
+    if (rows.isEmpty()) return SaleScan(emptyList(), complete = false)
+    val missing = (0..rows.lastKey()).firstOrNull { it !in rows }
+    if (missing != null) return refused("row ${missing + 1} was not read")
+    val tail = pages.last()
+    val complete = tail.scroll?.atEnd == true
+    if (complete && abs(tail.pillYs.last() - lastPillAtEnd) > slack) return refused("the last row of the list was not read")
+    return SaleScan(rows.values.toList(), complete = complete)
 }
 
 /** Why the read list must not be bought, or null when it can be paid for in Monies. Sold-out rows are checked too: a missed checkbox must not hide another currency. */
 internal fun saleRowsProblem(scan: SaleScan): String? =
     when {
-        !scan.complete -> "the list was not read to its end"
+        !scan.complete -> "the list was not read to its end" + (scan.reason?.let { ": $it" } ?: "")
         scan.rows.isEmpty() -> "no row was read"
         scan.rows.any { it.title.isBlank() || it.cost == null } -> "a row could not be read"
         scan.rows.any { !it.monies } -> "a row is not priced in Monies"
@@ -650,6 +713,13 @@ private const val MAX_PICKER_PAGES = 20
 /** Measured on 1080x1920 Daily Sales frames, rows 240 px apart: from the "Select an item" prompt, a "Cost" pill in this band has its title and price in view. */
 private const val SALE_ROWS_TOP_FROM_PROMPT = -604
 private const val SALE_ROWS_BOTTOM_FROM_PROMPT = -73
+
+/** From the prompt: the first row's pill with the list at its top, and the scroll bar's track column (thumb grey under 170, track over it). */
+private const val SALE_FIRST_PILL_FROM_PROMPT = -574
+private const val SALE_TRACK_DX = 512
+private const val SALE_TRACK_TOP_FROM_PROMPT = -699
+private const val SALE_TRACK_BOTTOM_FROM_PROMPT = -74
+private const val SALE_THUMB_MAX_GREY = 170
 private const val SALE_SWIPE_FROM = -250
 private const val SALE_SWIPE_TO = -490
 private const val MAX_SALE_PAGES = 30
@@ -829,13 +899,22 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
     }
 
     override fun readSaleRows(): SaleScan {
-        val pages = mutableListOf<List<SaleRow>>()
+        val pages = mutableListOf<SalePage>()
+
+        fun merge() =
+            mergeSalePages(
+                pages,
+                imageUtils.relHeight(SALE_ROW_PITCH),
+                imageUtils.relHeight(SALE_ROW_SLACK),
+                imageUtils.relHeight(SALE_LIST_VIEW_H),
+                imageUtils.relHeight(SALE_LAST_PILL_AT_END),
+            )
         while (pages.size < MAX_SALE_PAGES) {
             pages += readSalePage() ?: break
-            val scan = mergeSalePages(pages)
+            val scan = merge()
             if (scan.complete || scan.gap || !swipeSales()) break
         }
-        return mergeSalePages(pages)
+        return merge()
     }
 
     override fun costBar(): Pair<Int?, Int?> {
@@ -859,8 +938,8 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
         return read(COST_BAR_TOTAL_DX, "daily_sales_total") to read(COST_BAR_HELD_DX, "daily_sales_held")
     }
 
-    /** The rows whose title and price are in view, top to bottom, each found by its "Cost" pill. Null when the list is not on screen. */
-    private fun readSalePage(): List<SaleRow>? {
+    /** The rows whose title and price are in view, top to bottom, each found by its "Cost" pill, with the scroll bar. Null when the list is not on screen. */
+    private fun readSalePage(): SalePage? {
         val bitmap = imageUtils.getSourceBitmap()
         val prompt = LabelDailySalesPrompt.findImageWithBitmap(imageUtils, bitmap) ?: return null
         val top = imageUtils.relY(prompt.y, SALE_ROWS_TOP_FROM_PROMPT)
@@ -899,8 +978,35 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
                     buyable = CheckboxShopItem.check(imageUtils, region = near(SALE_BOX_DX, SALE_BOX_DY, SALE_BOX_SIZE), sourceBitmap = bitmap),
                 )
             }
-        MessageLog.d(TAG, "[DAILY_EXTRAS] Daily Sales page: " + page.joinToString(transform = ::saleRowText))
-        return page
+        val firstPill = imageUtils.relY(prompt.y, SALE_FIRST_PILL_FROM_PROMPT)
+        val scroll = readSaleScroll(bitmap, prompt)
+        val pillYs = pills.map { it.y.toInt() - firstPill }
+        val where =
+            if (scroll == null) {
+                "no scroll bar"
+            } else {
+                val offset = scroll.thumbTop * imageUtils.relHeight(SALE_LIST_VIEW_H) / scroll.thumbLength
+                val pitch = imageUtils.relHeight(SALE_ROW_PITCH)
+                val first = pillYs.firstOrNull()?.let { Math.floorDiv(it + offset + pitch / 2, pitch) + 1 }
+                "thumb ${scroll.thumbTop}/${scroll.thumbLength}${if (scroll.atEnd) " at the end" else ""}, first row ~${first ?: "-"}"
+            }
+        MessageLog.d(TAG, "[DAILY_EXTRAS] Daily Sales page ($where): " + page.joinToString(transform = ::saleRowText))
+        return SalePage(page, pillYs, scroll)
+    }
+
+    /** Reads the list's scroll bar down its track column; the thumb is a dark grey (about 125,120,142) on a light track (211,209,219). */
+    private fun readSaleScroll(bitmap: Bitmap, prompt: Point): SaleScroll? {
+        val x = imageUtils.relX(prompt.x, SALE_TRACK_DX)
+        val top = imageUtils.relY(prompt.y, SALE_TRACK_TOP_FROM_PROMPT)
+        val bottom = imageUtils.relY(prompt.y, SALE_TRACK_BOTTOM_FROM_PROMPT)
+        if (x !in 0 until bitmap.width || top < 0 || bottom >= bitmap.height) return null
+        return saleScroll(
+            (top..bottom).map { y ->
+                val pixel = bitmap.getPixel(x, y)
+                ((pixel shr 16 and 0xFF) + (pixel shr 8 and 0xFF) + (pixel and 0xFF)) / 3 < SALE_THUMB_MAX_GREY
+            },
+            imageUtils.relHeight(SALE_THUMB_END_SLACK),
+        )
     }
 
     /** Drags the Daily Sales list up by one row, so each page repeats a row of the one before. False when the list is not on screen. */
