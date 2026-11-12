@@ -1242,6 +1242,30 @@ describe("Daitaku Helios presets", () => {
     })
 })
 
+describe("Ines Fujin base presets plan their own card's kit", () => {
+    const planKeys = ["skillPointCheck", "preFinals", "careerComplete"] as const
+    // Lv1 kits from master data (available_skill_set): base card 103101, and Melt Your Heart 103102.
+    const baseKit = [201651, 201282, 202132]
+    const meltKit = [201601, 200432, 201252]
+    const presets = characterPresets.filter((p) => p.name === "Ines Fujin")
+
+    it("covers all four scenarios", () => {
+        expect(presets.map((p) => p.scenario).sort()).toEqual(["Grand Concert", "Trackblazer", "URA Finale", "Unity Cup"])
+    })
+
+    it.each(["URA Finale", "Unity Cup", "Trackblazer", "Grand Concert"])("%s plans the base card's kit and none of the Melt Your Heart kit", (scenario) => {
+        const p = presets.find((x) => x.scenario === scenario)!
+        for (const planKey of planKeys) {
+            const ids = String((p.settings.skills!.plans as any)[planKey].plan)
+                .split(",")
+                .filter(Boolean)
+                .map(Number)
+            expect(ids.filter((id) => baseKit.includes(id)).length).toBeGreaterThan(0)
+            expect(ids.filter((id) => meltKit.includes(id))).toEqual([])
+        }
+    })
+})
+
 describe("Alternate-outfit presets built from their base outfit's preset", () => {
     const planKeys = ["skillPointCheck", "preFinals", "careerComplete"] as const
     const planIds = (p: (typeof characterPresets)[number], planKey: (typeof planKeys)[number]) =>
