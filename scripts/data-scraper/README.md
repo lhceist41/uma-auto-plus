@@ -49,8 +49,8 @@ The data JSONs ship inside the JS bundle, so a refresh reaches devices via a nor
 python update.py --master-db <copy of master.mdb>
 yarn test                   # data-shape canaries
 yarn build:bundle           # rebundle + release APK
-# bump the version, commit, tag - CI builds and publishes the release,
-# and the in-app update checker notifies installed apps.
+# bump the version, update android/app/update.xml, commit, tag - CI builds and publishes the release;
+# installed apps are notified once update.xml reaches main.
 ```
 
 ## When it breaks

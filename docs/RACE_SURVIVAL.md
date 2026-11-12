@@ -1,7 +1,7 @@
-# Race Survival Shadow Model (STAM-1)
+# Race Survival Shadow Model
 
-Offline, read-only, shadow. Nothing here is read by the bot at runtime: no training choice, no lesson
-purchase, no skill buy, no career launch and no deck or parent recommendation depends on it.
+Offline, read-only, shadow. The bot never reads it at runtime. Its only consumer is the offline Build
+Budget Planner ([BUILD_BUDGET.md](BUILD_BUDGET.md)), which ranks parents, decks and borrows against it.
 
 It answers exactly one question:
 
@@ -26,7 +26,7 @@ real requirement is higher than the estimate, never lower.
 
 ## Evidence audit
 
-| Mechanic | Source | Status | Used in STAM-1 |
+| Mechanic | Source | Status | Used by the model |
 |---|---|---|---|
 | Race identity, distance, surface, track | `src/data/compiled/races.json` | VERIFIED | yes |
 | Course set (track, distance, ground, inner/outer) | `master.mdb` `race_course_set` (121 rows) | VERIFIED | yes |
@@ -207,13 +207,13 @@ G..S row mapping. A target type it does not recognise is a hard failure, not a s
 Tests: `node --test scripts/generate-race-survival-data.test.mjs` for the extractor,
 `yarn test` for the model.
 
-## STAM-2 handoff
+## Build Budget handoff
 
 `buildSurvivalConstraint()` emits a `SurvivalConstraint`: the minimum Stamina, the preferred range
 across the decoded band, the recovery skill ids that minimum assumes, the risk policy it was solved
-under, the confidence, and the unpriced mechanics. Nothing consumes it yet. The Build Budget Planner
-that will combine it with inheritance, deck, trainee growth, scenario bonuses and recovery access is a
-later phase, and it should read this contract rather than a number copied out of a report.
+under, the confidence, and the unpriced mechanics. The Build Budget Planner
+([BUILD_BUDGET.md](BUILD_BUDGET.md)) combines it with inheritance, deck, trainee growth, scenario
+bonuses and recovery access, and reads this contract rather than a number copied out of a report.
 
 ## Known limits
 

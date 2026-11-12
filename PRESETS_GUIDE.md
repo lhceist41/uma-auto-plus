@@ -58,12 +58,12 @@ The picker gives you five signals per row.
 
 **Outfit text.** Each row shows the outfit the way the game titles the card, in brackets, such as
 [Rouge Caroler]. Some original outfits have code-like titles, such as [MB-19890425]; that is the
-real in-game title. A farm variant reads "Legacy Farm build" because the game has no such outfit.
+real in-game title. A farm variant reads "Legacy Farm build" or "Blue Farm build" because the game has no such outfit.
 
 **Favorites.** Star a row and it pins to the top. Favorites are per outfit, so starring one card
 does not star the character's other cards.
 
-**Scenario chips.** Each row shows a chip per scenario the trainee has a preset for, colored by fit:
+**Scenario chips.** Each row shows a chip for each of the four scenarios, colored by fit (an outlined chip means no preset for that scenario):
 
 - Green: a good pick. The trainee's aptitudes suit the scenario. An alternate outfit shows the
   chip only when its own aptitudes and growth bonuses were rated; it does not inherit the
@@ -124,7 +124,7 @@ goal chain and would not survive being pointed at another scenario; Blue Farm is
 
 ## Grand Concert presets are derived
 
-Grand Concert differs from URA Finale in exactly one way a preset cares about: its stat caps. So
+Grand Concert differs from URA Finale in two ways a preset cares about: its stat caps and its own fan goals. So
 nearly every Grand Concert preset is generated from that trainee's URA Finale build rather than
 written out a second time (Taiki Shuttle's is an early hand-written exception). For a generated
 entry, fixing the URA build fixes its Grand Concert twin automatically, instead of leaving a
@@ -193,14 +193,14 @@ message, press Start again.
 Change it after applying, not before. The exceptions listed under "Applying a preset" are the only
 values guaranteed to survive.
 
-**Its race plan did not run.** Check that the racing plan and mandatory-plan switches are still on
-in Racing Settings. The bot warns at career start when the live settings have drifted from what the
+**Its race plan did not run.** Check that **Enable Racing Plan** and **Treat Planned Races as Mandatory**
+are still on (Racing Settings, Go to Racing Plan Settings). The bot warns at career start when the live settings have drifted from what the
 preset applied.
 
 **Its event picks look wrong.** Support-card and scenario event picks are yours, not the preset's,
 because they follow your deck. A preset ships the character's own event picks, plus, for most
-Trackblazer presets, a few Trackblazer scenario events tuned for its running style. A few trainees
-ship character picks for one scenario and fall back to the automatic option reader for the others.
+Trackblazer presets, a few Trackblazer scenario events tuned for its running style. About a third of
+trainees ship no character picks and use the automatic option reader in every scenario.
 
 **It force-ended at a goal race.** Almost always stamina against a Long goal, or a fan or
 result-point checkpoint the schedule could not reach in time. Check the trainee's advisory chip for

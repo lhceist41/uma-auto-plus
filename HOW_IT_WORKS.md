@@ -121,11 +121,11 @@ gantt
 ```
 
 > [!NOTE]
-> Sections highlighted in red are **special periods** where normal gameplay rules change — Summer blocks racing entirely, and Finale forces mandatory back-to-back races.
+> Sections highlighted in red are **special periods** where normal gameplay rules change: Summer is a training-only period for the bot, and Finale forces mandatory back-to-back races.
 
 **Key periods:**
 - **Pre-Debut (turns 1–11):** No races are available yet. The bot focuses on training and building relationships.
-- **Summer (turns 37–40 and 61–64):** Training-only period. No races can be entered (unless using the in-game race agenda override).
+- **Summer (turns 37-40 and 61-64):** The bot trains instead of racing: racing requirements and extra races are skipped, unless the in-game race agenda is on with Skip Summer Training for Agenda.
 - **Finale (turns 73–75):** Three mandatory back-to-back races. Injury and consecutive race checks are skipped.
 
 **Date detection:** The bot reads the date string from the screen via OCR (e.g., "Classic Year Early Feb") and converts it to an internal turn number. During Pre-Debut, it reads a "turns remaining" countdown instead. During Finale, it detects the goal text or Trackblazer's "X/3" indicator.
@@ -155,7 +155,7 @@ flowchart TD
     HandleRace --> Return
     RacingScreen -->|No| EndScreen{"Career End\nscreen?"}
     EndScreen -->|Yes| FinalUpdate["Purchase career-end skills\nRead final fan count\nLog final stats"]
-    FinalUpdate --> Complete["Return Success\n(bot stops)"]
+    FinalUpdate --> Complete["Return Success\n(career task ends)"]
     EndScreen -->|No| CampaignSpecific{"Campaign-specific\ncondition?"}
     CampaignSpecific -->|Yes| HandleCampaign["Handle scenario logic\n(e.g. Unity Cup race)"]
     HandleCampaign --> Return
@@ -170,11 +170,11 @@ flowchart TD
 - **Dialogs are always checked first.** Any popup (confirmation, warning, tutorial) is handled before any other logic runs.
 - **Main Screen handling** is where the core turn logic lives — stat updates, decision-making, and action execution all happen here.
 - **Training Events** appear after a training or race completes and offer reward choices.
-- **Campaign-specific conditions** (`checkCampaignSpecificConditions()`) allow each scenario to inject custom screen detection: Unity Cup's opponent selection screen, or Grand Concert's concert-pending and Complete Career screens.
-- If no known screen is detected, the bot taps the screen to try to progress past any intermediate animation or transition.
+- **Campaign-specific conditions** (`checkCampaignSpecificConditions()`) allow each scenario to inject custom screen detection: URA Finale's Duel screen, Unity Cup's opponent selection screen, or Grand Concert's concert-pending screen.
+- If no known screen is detected, the bot escalates: it closes an unidentified dialog, nudges the screen, saves diagnostic captures, and stops the run after 25 consecutive unknown ticks.
 
 > [!TIP]
-> The main loop is designed to be **idempotent** — each call to `process()` handles exactly one screen transition. If the game is between screens or in an animation, the bot simply taps and waits for the next tick.
+> The main loop is designed to be **idempotent**: each call to `process()` handles exactly one screen transition. If the game is between screens or in an animation, the bot waits and re-checks on the next tick.
 
 ---
 
@@ -233,16 +233,17 @@ Every time the date changes, the bot reads the trainee's current state using **9
 Thread 8 (racing requirements) is **skipped during summer** since no races are available, leaving 8 threads. The one exception is a user in-game race agenda with summer training skipped: that combination can still race in summer, so the thread stays. Logging output is temporarily disabled during parallel reads to avoid garbled messages, then re-enabled after all threads complete.
 
 > [!WARNING]
-> If any thread fails to complete within the 5-second timeout, the bot logs an error and continues with whatever data it managed to read. Stat values that timed out retain their previous values. The bound exists only to cap a hung thread; the whole set normally finishes in well under two seconds.
+> If any thread is still running after the 5-second wait, the bot continues silently with whatever data it managed to read. Values not yet updated keep their previous turn's value, and a late thread can still update them afterwards. The bound exists only to cap a hung thread; the whole set normally finishes in well under two seconds.
 
 ### 4.2 Global Checks
 
 After stat updates, the bot performs several global checks that can stop or pause the campaign:
 
 1. **Pre-Finals Skill Shopping (turn 72):** If the `preFinals` skill plan is enabled, the bot opens the skill shop and purchases skills before entering the finale.
-2. **Skill Point Threshold:** If skill points reach the configured threshold, the bot either runs the `skillPointCheck` skill plan or stops entirely.
-3. **Stop Before Finals:** If `enableStopBeforeFinals` is on and the bot reaches turn 72, it stops so the user can take over for the finals.
-4. **Stop at Date:** If the current date matches any user-configured stop dates, the bot stops.
+2. **Adaptive skill triggers:** In Adaptive skill mode, a critical race one or two turns away, or an affordable planned skill, can open the skill screen before the threshold check (see section 13).
+3. **Skill Point Threshold:** If skill points reach the configured threshold, the bot either runs the `skillPointCheck` skill plan or stops entirely.
+4. **Stop Before Finals:** If `enableStopBeforeFinals` is on and the bot reaches turn 72, it stops so the user can take over for the finals.
+5. **Stop at Date:** If the current date matches any user-configured stop dates, the bot stops.
 
 ### 4.3 Scenario Hooks
 
@@ -265,7 +266,7 @@ core `Campaign` members, which define the turn itself:
 | `process()` | Called every tick from `Game`. Detects the current screen and dispatches |
 | `handleMainScreen()` | Decides the next action while on the Home training screen |
 | `handleRaceEvents(isScheduledRace)` | Scenario-specific race entry. Trackblazer, for example, restricts which prediction tiers it will enter |
-| `handleDialogs(args)` | Dialog dispatch; cascades to `DialogHandler` for dialogs shared across scenarios |
+| `handleDialogs(dialog, args)` | Dialog dispatch; cascades to `DialogHandler` for dialogs shared across scenarios |
 | `checkCampaignSpecificConditions()` | Screen detection a scenario owns. Unity Cup: the opponent selection screen. Grand Concert: the concert-pending screen (its Complete Career screen is recognised by `checkEndScreen` instead, so the shared career-end path owns it) |
 | `checkEndScreen()` | Career-end detection. The default matches the shared Complete Career button template; Grand Concert also accepts its own pixel probe, because the probe recognises the screen mid-fade before the template clears its confidence gate, and losing that race once stranded a career with every skill point unspent (2026-07-26) |
 | `openCareerEndSkillScreen()` | How the career-end skill screen is reached. The default clicks the shared Learn button; Grand Concert drains leftover performance points first, then uses the Complete Career layout's own Skills button, because the shared template does not exist on that screen. A drain that never saw the Lessons list stays retryable rather than counting as done |
@@ -319,9 +320,9 @@ flowchart TD
 5. **Force Racing:** User setting that bypasses all other logic and forces racing every turn.
 6. **Maiden Race:** The first race of the campaign must be completed before regular training resumes.
 7. **Fan/Trophy/Goal-point Requirements:** If the game requires a minimum fan count, trophy count, or goal race points, the bot prioritizes racing to meet it. This deliberately outranks the pre-summer prep below, because the forced rest or mood turn would otherwise eat the very turn the requirement needed. If no race turns out to be available, the flags reset and the turn falls back to training.
-8. **Pre-Summer Prep (June Late):** On the last turn before Summer training, the bot ensures energy is high (≥70%) and mood is Great. If energy is low, it rests. If mood is low, it recovers mood. If both are fine, it trains Wit (which recovers some energy in preparation for Summer Training).[^1]
+8. **Pre-Summer Prep (June Late):** On the last turn before Summer training, the bot ensures energy is high (≥70%) and mood is Great. If energy is low, it rests. If mood is low, it recovers mood. If both are fine, it trains Wit (which recovers some energy in preparation for Summer Training).[^1] Controlled by Must Rest before Summer (`training.mustRestBeforeSummer`, on by default); skipped when a mandatory Racing Plan race falls on that turn or a fan emergency is active.
 9. **Injury Check:** If an injury is detected, the bot handles it (usually by resting). This check is **skipped during Finale turns** since those races are mandatory.
-10. **Mood Recovery:** If mood has dropped to Normal or below, the bot recovers before training (bad mood penalizes training gains).
+10. **Mood Recovery:** If mood is below the Mood Floor setting (`training.moodFloor`, default Good, so Normal or below), the bot recovers before training (bad mood penalizes training gains).
 11. **Extra Racing:** If the bot is eligible for extra races (based on farming fans, racing plan, or smart racing logic), it races.
 12. **Default: Train.** If nothing else applies, the bot trains.
 
@@ -332,7 +333,7 @@ flowchart TD
 
 ### 5.1 Outcome Measurement
 
-Every career ends with a structured `[CAREER_END]` log line carrying an `outcome=` label: `COMPLETED` (reached the career-end screen with no confirmed force-end), `FORCE_END` (a lost goal race whose Try Again dialog the bot closed, `forceEndReason="MANDATORY_RACE_LOST"`; a lost URA finale race is recorded by the finale win count instead when race retries are on), or `INCOMPLETE` (a non-completion result: user stop, watchdog timeout, or unhandled exception). The game shows the same end screen for a win and an early force-end, so within `COMPLETED` the end turn is the tell: a full arc ends near the scenario's last turn, a force-end ends early.
+Every career ends with a structured `[CAREER_END]` log line carrying an `outcome=` label: `COMPLETED` (reached the career-end screen with no confirmed force-end), `FORCE_END` (a lost goal race whose Try Again dialog the bot closed, `forceEndReason="MANDATORY_RACE_LOST"`, or a career-end screen reached at turn 72 or earlier, `forceEndReason="ENDED_BEFORE_FINALE"`; a lost URA finale race is recorded by the finale win count instead when race retries are on), or `INCOMPLETE` (a non-completion result: user stop, watchdog timeout, or unhandled exception). A separate `quality=` field splits `COMPLETED` by the finale results: `WIN`, `FINALE_LOST`, or `COMPLETED` when no URA-style finale was observed.
 
 Alongside the log line, each career appends one JSON record to an on-device corpus (`files/outcomes/careers.jsonl`) carrying those fields plus the app version and a **config fingerprint** — a stable hash of the tunables that shape play (stat priorities and targets, racing flags, the racing-plan content, skill threshold, mood floor, and the Trackblazer overrides), snapshotted when the campaign is constructed so a rotation switch between runs cannot mislabel the record. A dev-side tool (`scripts/analyze-outcomes.mjs`, backed by `src/lib/outcomeAnalysis.ts`) reads the corpus — and harvests the older ledger lines out of pulled message logs — and reports per-trainee outcome distributions per config arm: how many full arcs versus early exits, fan and stat percentiles, and the turns each arm tends to die at. This is what lets a tuning change be measured across many runs instead of judged one at a time.
 
@@ -378,7 +379,7 @@ When `analyzeTrainings()` is called:
 
 ### 6.2 Scoring Algorithm
 
-Each training option receives a weighted score from `calculateRawTrainingScore()`:
+From Classic Year onward each training option receives a weighted score from `calculateRawTrainingScore()`. During Pre-Debut and Junior Year the bot scores trainings by relationship-bar progress only (`scoreFriendshipTraining`) to build bonds; Unity Cup uses its own mode through Classic Year (10.4), and Grand Concert adds a point-income multiplier (section 12):
 
 $$\text{Score} = \bigl(\text{StatEfficiency} \times w_{\text{stat}} + \text{Relationship} \times w_{\text{rel}} + \text{Misc} \times w_{\text{misc}}\bigr) \times \text{RainbowMultiplier}$$
 
@@ -488,7 +489,7 @@ When the bot decides to race:
 
 Once a race is selected:
 
-1. **Strategy Selection:** The bot selects a running strategy (Front Runner, Pace Chaser, Late Surger, or End Closer) based on the trainee's aptitudes.
+1. **Strategy Selection:** The bot applies the Junior Year Race Strategy setting during Junior Year and the Original Race Strategy setting afterwards. Both default to Default, which keeps the strategy the game already has selected; Auto picks from the trainee's aptitudes, and Front, Pace, Late or End force one.
 2. **Skip or Manual:** If the "skip" button is available, the bot skips the race animation. Otherwise, it watches and fast-forwards.
 3. **Retries:** If a race is lost and retries are enabled, the bot can retry it from the game's Try Again dialog, which the game offers when a career goal race is lost. A retry uses the daily free retry or an Alarm Clock you hold; with neither left, the game offers to buy one for 10 carats and `alarmClockPolicy` decides (`Never` by default; `GoalRaces` buys only to retry a lost goal race; the others go by the race's grade). A lost goal race may use the rest of the career's retry budget (3, or 5 in Trackblazer), because losing it ends the career; once a purchase is declined, the race is not retried again. The bot never retries a race it won or a goal it passed, and never an optional race. Each retry logs what it spends (the daily free retry or an Alarm Clock, and whether `alarmClockPolicy` buys one when none is held) and what this race's limit and the career's retry budget leave; a closed dialog logs the rule that stopped the retry.
 4. **Complete Career on Failure:** Only read when Disable Race Retries is on. If a mandatory race is lost and no daily free retry is used, this setting makes the bot close the Try Again dialog and finish the career instead of stopping. With race retries on, the bot always closes the dialog once its retries run out, and a closed dialog on a goal race records the career as `FORCE_END`.
@@ -514,7 +515,7 @@ The bot checks for overrides in this priority order:
 
 | Priority | Override Type | Description |
 |----------|--------------|-------------|
-| 1 | **Special Event** | Hardcoded overrides for game-critical events (New Year's, Shrine Visit, etc.) |
+| 1 | **Special Event** | Preset choices for game-critical events (New Year's, Shrine Visit, etc.), editable in the training event settings. A character override for the same event takes precedence |
 | 2 | **Character Event** | User-configured choice for a specific character's events |
 | 3 | **Support Event** | User-configured choice for a specific support card's events |
 | 4 | **Scenario Event** | User-configured choice for scenario-specific events |
@@ -533,7 +534,7 @@ When no override applies, each option receives a weight score based on its rewar
 | "(Random)" | -10 | Small penalty for uncertain outcomes |
 | "Randomly" | +50 | Mild bonus for partially random outcomes. A "Randomly either" option then counts what it is likely to give, since only one outcome happens: each outcome at the chance the event states ("or (~70%)"), the rest shared evenly by outcomes that state none, or a plain average when no chance is stated |
 | Energy gain | value × multiplier | Multiplier scales with current energy[^2] (4x at <30%, 3x at <50%, 2x at <70%, 1x at <90%, 0x at ≥90%). If "Prioritize Energy" is enabled, the multiplier is 100x below 50% energy |
-| Mood gain | 80–150 | Higher weight when mood is lower (150 at Awful, 0 at Great). Mood loss: -150 |
+| Mood gain | 0-150 | Higher weight when mood is lower (Awful 150, Bad 120, Normal 100, Good 80, Great 0). Mood loss: -150 |
 | Bond gain | +20 | Bond loss: -20 |
 | Skill hint | +25 | Learning a new skill |
 | Positive status | +25 | Gaining a beneficial condition |
@@ -563,7 +564,7 @@ URA Finale is the **simplest scenario**. It uses the base `Campaign` logic almos
 Everything else, decision logic, training, racing, events, and finale handling, uses the standard base implementation described in sections 3–8.
 
 > [!TIP]
-> If you're new to the bot, URA Finale is the best scenario to start with since its behavior is entirely described by the shared systems in sections 3–8 with no scenario-specific complexity.
+> If you're new to the bot, URA Finale is the best scenario to start with since its behavior is almost entirely described by the shared systems in sections 3-8 (only the URA Duel screen is scenario-specific).
 
 **Finale behavior (turns 73–75):**
 - All 3 finale races (Qualifier, Semi-Final, Finals) are **mandatory**.
@@ -706,6 +707,8 @@ Items are purchased in strict priority order. The bot buys the highest-priority 
 | **7. Other Energy** | Energy Drink MAX | Additional energy item (excluded from buying by default) |
 | **8. Good Conditions** | Pretty Mirror, Reporter's Binoculars, Master Practice Guide, Scholar's Hat | Positive status effects |
 
+In Classic and Senior June (the month before summer camp) the list promotes the Empowering and Motivating Megaphones, the top-3 Ankle Weights, Reset Whistle, Royal Kale Juice and Plain Cupcake to right after Glow Sticks, ahead of the Scrolls.
+
 **Inventory limits:** Most items are capped at 5 copies. Condition-related items (good/bad) are typically capped at 1 (except Rich Hand Cream and Miracle Cure at 5).
 
 > [!WARNING]
@@ -810,9 +813,9 @@ Trackblazer tracks how many races the trainee has performed consecutively:
 
 - **Counter:** Incremented after each race. Reset to 0 when the bot rests or recovers mood.
 - **Warning at 3+:** After 3 consecutive races, the game shows a warning about potential stat penalties.
-- **Energy guard at 3+:** When the counter is ≥ 3 and energy is critically low (0–1%), racing is **blocked** regardless of the configured limit to avoid compounding the -30 stat penalty at zero energy.
+- **Energy guard at 3+:** At 0-1% energy with 3 or more consecutive races, the race is blocked only when Ignore Low Energy Racing Block (`racing.ignoreLowEnergyRacingBlock`) is off. It is on by default, so the race goes ahead. The earlier rest guard in `decideNextAction()` (energy at or below 10%) still applies.
 - **Grade filtering at 3+:** When the counter is ≥ 3, the bot only accepts **G1, G2, or G3** races. Lower-grade races (OP, Pre-OP) are skipped to avoid wasting the consecutive race penalty on low-value races.
-- **Hard limit (default 2):** The bot stops racing entirely when the consecutive count reaches the configured limit (plus 1), unless it's the final turn. With a limit of 2, the bot permits counts 0/1/2 (three races) and aborts at limit+1.
+- **Hard limit (default 2):** The bot stops racing entirely when the consecutive count reaches the configured limit (plus 1), except when only one turn remains before the next goal race or it is Late December. With a limit of 2, the bot permits counts 0/1/2 (three races) and aborts at limit+1.
 - **OCR tracking:** The bot reads the consecutive race count from the warning dialog via OCR to stay synchronized with the game.
 
 > [!IMPORTANT]
@@ -847,7 +850,9 @@ Trackblazer uses a specialized race selection algorithm (`findSuitableTrackblaze
    - Filter by grade based on the current consecutive race count (see [11.5](#115-consecutive-race-system))
 4. **Selection priority:**
    - **Rival races first** (these offer bonus rewards)
+   - Then by **prediction stars** (double before single)
    - Then by **grade:** G1 > G2 > G3 > OP > Pre-OP
+   - Then by the larger **fan reward**
 5. **Second pass:** After selecting the winner, the bot scrolls back through the list to find the winner's current screen position and taps it.
 6. **Fallback:** If `ScrollList` creation fails, the bot falls back to single-page detection.
 
@@ -859,15 +864,16 @@ Three deliberate deviations from the generic engine, all specific to this scenar
   extra relationship-score weight, layered on top of the generic trainer-support bonus. This acts as
   a proxy for the scenario's point gain, because the relevant UI screen has no template asset yet.
   Implemented in `Training.kt`.
-- **Excluded shop items.** `trackblazerExcludedItems` drops four items from buying, by default and in
-  every bundled preset: both Energy Drinks, Yummy Cat Food, and the Coaching Megaphone. This is an
+- **Excluded shop items.** `trackblazerExcludedItems` drops four items from buying by default, and
+  every bundled preset keeps them excluded (most presets also exclude the Scrolls and Manuals of stats
+  the build does not need): both Energy Drinks, Yummy Cat Food, and the Coaching Megaphone. This is an
   outright purchase block, not a reservation: an excluded item is never owned, so it is not being
   saved for the climax. The drinks go because they are the worst energy-per-coin in the shop (and the
-  EX variant has no usage path at all); the Coaching Megaphone goes because its 5-turn skill-point
-  bonus does not pay back in Trackblazer's compressed schedule and burns a shop slot that a stat
-  scroll converts directly into gains.
-- **Shop interaction every turn** (`trackblazerShopCheckFrequency: 1`), unlike other scenarios which
-  visit the shop rarely or not at all.
+  EX variant has no usage path at all); the Coaching Megaphone goes because its +20% training bonus
+  over 4 turns is the weakest megaphone tier and burns a shop slot that a stat scroll converts
+  directly into gains.
+- **Shop check after every qualifying race** (`trackblazerShopCheckFrequency: 1`), unlike other
+  scenarios which visit the shop rarely or not at all.
 
 ---
 
@@ -880,7 +886,8 @@ and the five concerts) are automated on top of that. The launch navigator pages 
 carousel to Grand Concert's logo the same way it does for URA Finale, Unity Cup, and Trackblazer,
 and the shared pre-career sequence (Legacy, Support Deck, the mandatory Quick Mode prompt) is
 implemented for it identically to other scenarios (see the Quick Mode note below for its live-proof
-status). From the first turn to the spark screen, a career runs unattended.
+status). From the first turn to the spark screen, a career runs unattended on a screen 1080 pixels
+wide and at least 1920 tall.
 
 **Canonical key and aliases.** The persistence key is `Grand Concert`. Six spellings normalize
 onto it (`Grand Concert`, `Grand Live`, `Our Grand Concert`, and the three punctuation variants
@@ -902,7 +909,9 @@ onto it.
 **Launch and queueing.** Grand Concert launches and queues like every other scenario: `handleScenarioSelect`
 maps it onto its own logo template alongside URA Finale, Unity Cup, and Trackblazer, and `StartModule`
 honors the user's stored run-queue, trainee-rotation, and TP-restore settings for it exactly as it
-does elsewhere. No scenario-specific capability gate remains.
+does elsewhere. One scenario-specific gate remains: Grand Concert needs a screen 1080 pixels wide and
+at least 1920 tall. On any other size the launch is refused (`GRAND_CONCERT_SCREEN_UNSUPPORTED`) and
+a running career stops, with the career kept in the game.
 
 **What is automated.** Everything shared (date and turn reading, training scoring, the racing plan,
 training events, skills, career end) plus both scenario systems:
@@ -969,7 +978,7 @@ through Start Career, so none of them exercised this prompt.
 **Decision engine.** `GrandConcertPolicy` scores an offer and picks what to buy. A song is valued on
 its immediate mastery bonus, its concert bonus multiplied by the turns that remain *after* the bonus
 activates (a bonus queued near the Grand is worth almost nothing), a per-type scarcity weight
-(Vocal 1.5 on a Speed and Wit build), and a per-cycle deadline term that escalates as a concert
+(Vocal 1.30 on a Speed and Wit build, tuned for a deck running Light Hello), and a per-cycle deadline term that escalates as a concert
 approaches. Two concert-protection rules run ahead of the plain greedy pick, both added after the
 2026-07-26 songs-per-cycle measurement showed roughly two of five concerts missing the three-song
 Great Success condition (one career entered its Grand finale with zero new songs).
@@ -1022,8 +1031,8 @@ songs). It boosts a facility by 4% per effective point its gain feeds into the d
 means clamped to both the remaining deficit and the cap headroom, because income above a type's
 cap is lost. The boost is deadline-shaped: an approaching concert amplifies it (x1.25 within four
 turns, x1.5 within two). Every ceiling stays strictly below a real rainbow's 2.0x so point steering
-never overrules a rainbow: a behind-floor cycle caps at +60% (or +80% at a near concert), the
-total-only arm at a smaller +35%. A gain whose number resists OCR still contributes its pixel-read
+never overrules a rainbow: a behind-floor cycle caps at +60% (or +80% within four turns of a
+concert), and the total-only arm shares the +60% ceiling. A gain whose number resists OCR still contributes its pixel-read
 type at a conservative assumed amount. Every recommendation turn logs a `[GC_POINTS]` line:
 balances against caps, each facility's observed types and amounts, the deficit, whether the bias
 armed and on which arm, and the career-song trajectory.
@@ -1093,7 +1102,8 @@ The committed data the deferral reads:
   Rickey that is 3000 fans by turn 24, reconstructing the observed "Earn 3000 fans / 12 Turns to
   Reach Goal" exactly (turn 24 minus the debut turn 12). The deadline is a per-character turn
   (23-48 across the roster), NOT derived from the concert schedule, so its alignment with the first
-  concert for Copano is a coincidence. The data ships; only the runtime wiring remains a later task.
+  concert for Copano is a coincidence. The data ships, and the runtime reads it through
+  `GrandConcertFanFacts`.
 - **Conservative races-needed.** Every committed race now carries the full placement-to-fans payout
   curve (`fanPayoutsByPlace`, an order-sorted `{place, fans}` list) alongside the scalar first-place
   `fans`. Because every committed race lists all 18 finishing places and the game's maximum field
@@ -1102,9 +1112,8 @@ The committed data the deferral reads:
   minimum across the committed data is 7 fans. A tighter per-race floor would need each race's exact
   field size, which is not mappable from the current manifests (`race.entry_num` lives in
   `master.mdb` under a race-id namespace the GameTora races do not share), but it is unnecessary for
-  the committed data. The race-entry fan GATE for later mandatory races (`single_mode_program.
-  need_fan_count`, a distinct concept from a fan-count goal's target) is also not yet ingested for
-  the same id-mapping reason; both are deferred and neither blocks the conservative floor above.
+  the committed data. The race-entry fan gate for later mandatory races ships separately as
+  `fansNeeded` (see below).
 
 There are two distinct fan mechanisms, and they must never be conflated:
 
@@ -1118,7 +1127,7 @@ There are two distinct fan mechanisms, and they must never be conflated:
   separate numbers and are not interchangeable (Copano Rickey's Champions Cup rewards 10000 fans but
   gates entry at 12000). The 12000-fan entry wall a real Grand Concert career hit late in its run was
   this second mechanism, not the fan goal. The committed data now carries the gate for every
-  mandatory-race option; the runtime does not consume it yet.
+  mandatory-race option, and `GrandConcertFanPressure` uses it as the next mandatory-race entry gate.
 
 The **raceable-slack calendar** (`GrandConcertRaceCalendar`) is corrected to the game's own
 `single_mode_turn.race_entry_type` for the Grand Concert turn set: every career turn 12..72 is
@@ -1444,7 +1453,7 @@ names the set being kept ("You won't be able to change Sparks later."). Each is 
 generic POST_RUN_RESULTS chain -- previously all four fell into that chain and were resolved
 by blind Next/Confirm clicks, which kept whichever page the game showed first and recorded
 nothing. Every probe coordinate and threshold is measured on the live 2026-07-08 capture set,
-mirrored under `src/test/resources/fixtures/sparks` and pinned by replay tests
+mirrored under `android/app/src/test/resources/fixtures/sparks` and pinned by replay tests
 (`SparkScreenProbeFixtureTest`); the detection ordering itself is source-guarded.
 
 Reading a set is a typed complete-list scan (the same completeness discipline as the skill

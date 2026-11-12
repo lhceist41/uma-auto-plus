@@ -4,11 +4,11 @@ Common issues and how to fix them. If none of this helps, open an issue (see [Re
 
 ## The bot stopped or got stuck
 
-Most stops come down to one of these three.
+Most stops come down to one of the cases below.
 
 ### 1. Unsupported screen resolution
 
-The bot supports screens **1080 pixels wide and at least 1920 tall**, such as 1080×1920 or a 1080×2316 phone. Grand Concert works on these screens too, tested on one 1080×2316 phone. On any other width, detection misfires and the bot stalls. If your phone is not 1080 wide, switch its screen resolution to FHD+ (for example on Samsung: **Settings → Display → Screen resolution**), set your emulator to 1080×1920 (see the resolution steps in the [README](README.md#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate)), or use the `Basic Template Matching Test` under **Settings → Go to Debug Settings → Debug Tests** to find a working custom scale.
+The bot supports screens **1080 pixels wide and at least 1920 tall**: 1080×1920 at 240 DPI, or a taller 1080-wide phone such as 1080×2316. Grand Concert works on these screens too, tested on one 1080×2316 phone. On any other width, detection misfires and the bot stalls. If your phone is not 1080 wide, switch its screen resolution to FHD+ (for example on Samsung: **Settings → Display → Screen resolution**), set your emulator to 1080×1920 (see the resolution steps in the [README](README.md#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate)), or use the `Basic Template Matching Test` under **Settings → Go to Debug Settings → Debug Tests** to find a working custom scale.
 
 On a phone, the floating button must not sit over the goal banner at the top of the career screen or over the stats and buttons at the bottom. At Start the bot checks the button's saved position and logs an `[OVERLAY]` line when it may cover them: drag the button to the top right corner, above the goal banner.
 
@@ -36,22 +36,24 @@ If you use the run queue's trainee rotation and it stops with `Trainee '...' not
 - You actually **own** that trainee — the rotation picks from your in-game roster, not from the preset list.
 - The trainee's name in the rotation matches the in-game name.
 
-### 4. "Start again from UMA Auto+ with an explicit launch choice"
+### 4. "Nothing was started: each session needs a fresh Start in UMA Auto+"
 
-Tapping the floating overlay button by itself cannot start a new automation session. If you see this message, or the app otherwise refuses to resume after only tapping the overlay, open UMA Auto+ and press `Start` there first; the overlay button then finishes setting up automation on the training screen as usual.
+Tapping the floating overlay button by itself cannot start a new automation session. If the log shows this line, the notification reads "Not started, and nothing was spent: this start did not come from the Start button in UMA Auto+", or the app otherwise refuses to resume after only tapping the overlay, open UMA Auto+ and press `Start` there first; the overlay button then finishes setting up automation on the training screen as usual.
 
 ### 5. "Not started, and nothing was spent"
 
 UMA Auto+ can refuse a Start rather than risk a career on the wrong settings or a settings file it cannot trust. Either way, nothing is spent and no career is touched.
 
+- **The start did not come from UMA Auto+.** If the notification says the start, or the rotation queue, did not come from the Start button in UMA Auto+, open UMA Auto+ and press Start there, then tap the overlay button.
+
 - **The settings did not reach the bot.** If what the bot is about to use does not match what UMA Auto+ just checked when you pressed Start, it refuses instead of running on the mismatch. This refusal shows no dialog: the notification reads "Not started" and gives the reason, and the app's message log has the same line in red. Force stop UMA Auto+ (Android Settings, Apps, UMA Auto+, Force stop), reopen it, turn its accessibility service back on if it was switched off, then press Start again.
 - **The settings file could not be verified.** If UMA Auto+ cannot safely use its saved settings file, it refuses the same way. If your device's storage is full, free some space first, then force stop and reopen UMA Auto+ as above. Reopening checks the file again and restores it from the last good backup if it is damaged; a damaged file is renamed and kept next to the current one (as `settings.db.corrupt-<time>`) rather than deleted, though reaching it needs a rooted device or a debug build, so it is not something most players can pull themselves. If this message keeps coming back, please report it as a bug with your usual log file attached (see [Reporting a bug](#reporting-a-bug)).
 
-### 6. "The game ended its session" or "reopening the game did not bring it back"
+### 6. "The game ended its session" or "the game stayed on a screen the bot does not know"
 
 When the game sits idle for a long time, for example overnight, it ends its session and shows a **Session Error** whose only button is Title Screen. Between runs, the bot taps Title Screen itself only when no career is in progress: you pressed Start with the game on its home screen and the queue was not resuming a career, or the previous career finished and the game got back to its home screen. It then taps through the title screen, closes the notices the game shows after logging in, and launches the career. It does this once per launch, and a second Session Error stops the queue. With a career in progress the queue stops with "the game ended its session and needs to go back to its title screen": tap Title Screen in the game, wait for its home screen, then press Start in UMA Auto+.
 
-In the same no-career situation, if the bot cannot recognise the game's screen, it brings the game back to the front once (starting it again if it had closed) and starts the launch over. If the game still shows nothing the bot knows, the queue stops with "the game showed a screen the bot could not recognise, and reopening the game did not bring it back": open the game, check what it shows, then press Start in UMA Auto+.
+In the same no-career situation, if the bot cannot recognise the game's screen, it brings the game back to the front once (starting it again if it had closed) and starts the launch over. If the game still shows nothing the bot knows, the queue stops with "the game stayed on a screen the bot does not know, even after UMA Auto+ tried to reopen it": close the game fully (swipe it away in Recent apps), open it again, then press Start in UMA Auto+.
 
 The title screen is recognised only on screens 1080 wide and at least 1920 tall. On taller screens it has been seen working once, on a 1080x2316 phone. Neither recovery has been seen working on a device yet.
 
@@ -95,7 +97,7 @@ spent when that happens.
 
 ## Skills aren't bought, or the wrong event option is picked
 
-Apply a **preset** for the trainee you're running: on **Home**, tap **Select Trainee Preset...**, tap the trainee (and outfit), then tap **Apply** on the scenario you're running; applying a preset also sets the scenario. The presets carry the skill-purchase plans and per-event choices. Without one, the bot falls back to generic scoring.
+Apply a **preset** for the trainee you're running: on **Home**, tap **Select Trainee Preset...**, tap the trainee (and outfit), then tap **Apply** on the scenario you're running; applying a preset also sets the scenario. The presets carry the skill-purchase plans and, for most trainees, per-event choices; the rest use the automatic option reader. Without one, the bot falls back to generic scoring.
 
 ## The Racing Plan is missing information
 

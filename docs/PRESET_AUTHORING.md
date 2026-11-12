@@ -40,7 +40,7 @@ The categories a preset may ship: `general`, `misc`, `training`, `trainingStatTa
 ## How apply works, and what that means for you
 
 Home merges a preset one category at a time with a shallow spread. Within a category the preset's
-keys win and keys it does not ship keep their current values. Three consequences matter when
+keys win and keys it does not ship keep their current values. Four consequences matter when
 authoring:
 
 - **Arrays replace, they do not merge.** A partial `statPrioritization` is a bug, not a tweak.
