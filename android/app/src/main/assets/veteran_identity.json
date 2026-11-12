@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "outfitSource": "gametora character-cards title_en_gl",
-  "characterCount": 70,
-  "outfitCount": 112,
+  "characterCount": 71,
+  "outfitCount": 115,
   "characters": {
     "Admire Vega": {
       "outfits": [
@@ -56,6 +56,11 @@
       "outfits": [
         "Fille Éclair",
         "Ma Chérie of the New Moon"
+      ]
+    },
+    "Daitaku Helios": {
+      "outfits": [
+        "Fun☆Fun☆Party Night"
       ]
     },
     "Daiwa Scarlet": {
@@ -135,7 +140,8 @@
     },
     "Ines Fujin": {
       "outfits": [
-        "Always Electrifying"
+        "Always Electrifying",
+        "Melt Your Heart"
       ]
     },
     "Kawakami Princess": {
@@ -219,7 +225,8 @@
     },
     "Mejiro Ryan": {
       "outfits": [
-        "Down the Line"
+        "Down the Line",
+        "Marguerite Latte"
       ]
     },
     "Mihono Bourbon": {

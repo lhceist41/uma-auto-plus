@@ -153,6 +153,20 @@
         "upgrade": 201421,
         "downgrade": null
     },
+    "A Warm Cup for You": {
+        "id": 110271,
+        "name_en": "A Warm Cup for You",
+        "desc_en": "Slightly increase velocity for a moderate duration when 2nd or worse and within 4 lengths of the lead on a downhill just before late-race. If the race is medium, also very minimally increase acceleration.",
+        "icon_id": 20011,
+        "cost": 200,
+        "eval_pt": 180,
+        "condition": "distance_rate>=60&slope==2&phase==1&order>=2&distance_diff_top<=10&distance_type==3@distance_rate>=60&slope==2&phase==1&order>=2&distance_diff_top<=10&distance_type!=3",
+        "precondition": "",
+        "inherited": true,
+        "community_tier": 1,
+        "upgrade": null,
+        "downgrade": null
+    },
     "Acceleration": {
         "id": 201062,
         "name_en": "Acceleration",
@@ -1343,6 +1357,20 @@
         "upgrade": null,
         "downgrade": null
     },
+    "Crescent Gale": {
+        "id": 201253,
+        "name_en": "Crescent Gale",
+        "desc_en": "Increase velocity on a corner. (Front Runner)",
+        "icon_id": 20012,
+        "cost": 150,
+        "eval_pt": 508,
+        "condition": "running_style==1&all_corner_random==1",
+        "precondition": "",
+        "inherited": false,
+        "community_tier": 0,
+        "upgrade": 201252,
+        "downgrade": null
+    },
     "Crusader": {
         "id": 201501,
         "name_en": "Crusader",
@@ -1606,7 +1634,7 @@
         "precondition": "",
         "inherited": false,
         "community_tier": 2,
-        "upgrade": null,
+        "upgrade": 202171,
         "downgrade": null
     },
     "Dream Run": {
@@ -2463,6 +2491,20 @@
         "upgrade": null,
         "downgrade": null
     },
+    "Fresh☆Parlor": {
+        "id": 110311,
+        "name_en": "Fresh☆Parlor",
+        "desc_en": "Very slightly increase velocity continuously and very slightly recover endurance when positioned toward the front in the early part of mid-race.",
+        "icon_id": 20011,
+        "cost": 200,
+        "eval_pt": 180,
+        "condition": "phase_firsthalf_random==1&order_rate<=30",
+        "precondition": "",
+        "inherited": true,
+        "community_tier": 0,
+        "upgrade": null,
+        "downgrade": null
+    },
     "From the Brink": {
         "id": 202081,
         "name_en": "From the Brink",
@@ -2489,7 +2531,7 @@
         "inherited": false,
         "community_tier": 0,
         "upgrade": 201251,
-        "downgrade": null
+        "downgrade": 201253
     },
     "Front Runner Corners ◎": {
         "id": 201251,
@@ -2869,6 +2911,20 @@
         "upgrade": null,
         "downgrade": 201482
     },
+    "Gonna Be Ur #1 FRFR": {
+        "id": 202511,
+        "name_en": "Gonna Be Ur #1 FRFR",
+        "desc_en": "Press coverage goes to the skill user's head, moderately increasing chance of rushing.",
+        "icon_id": 10054,
+        "cost": 0,
+        "eval_pt": 0,
+        "condition": "always==1",
+        "precondition": "",
+        "inherited": false,
+        "community_tier": null,
+        "upgrade": null,
+        "downgrade": null
+    },
     "Got the Spirit!": {
         "id": 202312,
         "name_en": "Got the Spirit!",
@@ -2994,6 +3050,20 @@
         "community_tier": 3,
         "upgrade": null,
         "downgrade": 200092
+    },
+    "Hands in the Air Like Ya Don't Care!": {
+        "id": 100651,
+        "name_en": "Hands in the Air Like Ya Don't Care!",
+        "desc_en": "Very slightly increase velocity when positioned toward the front sometime upon approaching late-race. If it's a sprint or mile race, very slightly increase velocity continuously.",
+        "icon_id": 20011,
+        "cost": 200,
+        "eval_pt": 180,
+        "condition": "distance_type==1&phase_laterhalf_random==1&order_rate<=50@distance_type==2&phase_laterhalf_random==1&order_rate<=50@distance_type==3&phase_laterhalf_random==1&order_rate<=50@distance_type==4&phase_laterhalf_random==1&order_rate<=50",
+        "precondition": "",
+        "inherited": true,
+        "community_tier": 0,
+        "upgrade": null,
+        "downgrade": null
     },
     "Hanshin Racecourse ×": {
         "id": 200053,
@@ -3467,7 +3537,7 @@
         "condition": "phase==1&change_order_onetime>0",
         "precondition": "",
         "inherited": false,
-        "community_tier": 0,
+        "community_tier": 1,
         "upgrade": null,
         "downgrade": 200472
     },
@@ -3903,7 +3973,7 @@
         "inherited": false,
         "community_tier": 0,
         "upgrade": 201391,
-        "downgrade": null
+        "downgrade": 201393
     },
     "Late Surger Corners ◎": {
         "id": 201391,
@@ -4422,6 +4492,20 @@
         "community_tier": 1,
         "upgrade": null,
         "downgrade": 202342
+    },
+    "Master of Declines": {
+        "id": 202171,
+        "name_en": "Master of Declines",
+        "desc_en": "Increase velocity on a downhill.",
+        "icon_id": 20012,
+        "cost": 170,
+        "eval_pt": 508,
+        "condition": "down_slope_random==1",
+        "precondition": "",
+        "inherited": false,
+        "community_tier": 2,
+        "upgrade": null,
+        "downgrade": 202172
     },
     "Master of the Sands": {
         "id": 202001,
@@ -5455,7 +5539,7 @@
         "condition": "phase==1&change_order_onetime>0",
         "precondition": "",
         "inherited": false,
-        "community_tier": 0,
+        "community_tier": 1,
         "upgrade": 200471,
         "downgrade": null
     },
@@ -6099,7 +6183,7 @@
         "condition": "distance_type==2&phase_laterhalf_random==1&order_rate<=50",
         "precondition": "",
         "inherited": false,
-        "community_tier": null,
+        "community_tier": 1,
         "upgrade": null,
         "downgrade": 202502
     },
@@ -6591,6 +6675,20 @@
         "inherited": false,
         "community_tier": 3,
         "upgrade": null,
+        "downgrade": null
+    },
+    "Sharp Arc": {
+        "id": 201393,
+        "name_en": "Sharp Arc",
+        "desc_en": "Increase velocity on a corner. (Late Surger)",
+        "icon_id": 20012,
+        "cost": 150,
+        "eval_pt": 508,
+        "condition": "running_style==3&all_corner_random==1",
+        "precondition": "",
+        "inherited": false,
+        "community_tier": 0,
+        "upgrade": 201392,
         "downgrade": null
     },
     "Sharp Gaze": {

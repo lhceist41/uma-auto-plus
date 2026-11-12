@@ -52,7 +52,7 @@
         2
       ]
     },
-    "hpRecoveryWitnessCount": 71,
+    "hpRecoveryWitnessCount": 72,
     "hpSelfDrainWitnessCount": 16,
     "hpOpponentEffectWitnessCount": 21
   },
@@ -1822,6 +1822,26 @@
           "hpValueRaw": -50,
           "targetType": 9,
           "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 110311,
+      "name": "Fresh\u2606Parlor",
+      "desc": "Moderately increase velocity continuously when positioned toward the front in the early part of mid-race. Oh, and have a dollop of moderate endurance recovery too!",
+      "rarity": 5,
+      "condition1": "phase_firsthalf_random==1&order_rate<=30",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
         }
       ]
     },
@@ -3900,6 +3920,26 @@
           "hpValueRaw": -25,
           "targetType": 9,
           "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 910311,
+      "name": "Fresh\u2606Parlor",
+      "desc": "Very slightly increase velocity continuously and very slightly recover endurance when positioned toward the front in the early part of mid-race.",
+      "rarity": 1,
+      "condition1": "phase_firsthalf_random==1&order_rate<=30",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 50,
+          "targetType": 1,
+          "targetValue": 0
         }
       ]
     },

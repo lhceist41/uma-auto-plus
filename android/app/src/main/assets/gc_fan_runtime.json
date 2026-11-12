@@ -890,6 +890,99 @@
         }
       ]
     },
+    "Daitaku Helios": {
+      "fanGoals": [],
+      "mandatoryRaces": [
+        {
+          "turn": 23,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Hanshin Juvenile Fillies",
+              "fansNeeded": 1000,
+              "distanceMeters": 1600
+            }
+          ]
+        },
+        {
+          "turn": 34,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Aoi Stakes",
+              "fansNeeded": 1250,
+              "distanceMeters": 1200
+            }
+          ]
+        },
+        {
+          "turn": 46,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Mile Championship",
+              "fansNeeded": 15000,
+              "distanceMeters": 1600
+            }
+          ]
+        },
+        {
+          "turn": 54,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Takamatsunomiya Kinen",
+              "fansNeeded": 15000,
+              "distanceMeters": 1200
+            }
+          ]
+        },
+        {
+          "turn": 56,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Milers Cup",
+              "fansNeeded": 1900,
+              "distanceMeters": 1600
+            }
+          ]
+        },
+        {
+          "turn": 59,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Yasuda Kinen",
+              "fansNeeded": 15000,
+              "distanceMeters": 1600
+            }
+          ]
+        },
+        {
+          "turn": 70,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Mile Championship",
+              "fansNeeded": 15000,
+              "distanceMeters": 1600
+            }
+          ]
+        },
+        {
+          "turn": 72,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Arima Kinen",
+              "fansNeeded": 25000,
+              "distanceMeters": 2500
+            }
+          ]
+        }
+      ]
+    },
     "Daiwa Scarlet": {
       "fanGoals": [],
       "mandatoryRaces": [

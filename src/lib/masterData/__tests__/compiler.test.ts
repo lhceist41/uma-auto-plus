@@ -406,13 +406,13 @@ describe("real committed dataset", () => {
 
     it("current snapshot counts (update intentionally when the scrape changes)", () => {
         const r = compileMasterData(inputs())
-        expect(r.stats.skillCompiledCount).toBe(626)
-        expect(r.stats.uniqueSkillIdCount).toBe(626)
+        expect(r.stats.skillCompiledCount).toBe(633)
+        expect(r.stats.uniqueSkillIdCount).toBe(633)
         expect(r.stats.raceCompiledCount).toBe(402)
         expect(r.stats.uniqueRaceKeyCount).toBe(402)
         expect(r.stats.distinctBareRaceNameCount).toBe(296)
         expect(r.stats.bareNameCollisionCount).toBe(106)
-        expect(r.stats.objectiveReferencesChecked).toBe(553)
+        expect(r.stats.objectiveReferencesChecked).toBe(561)
     })
 
     // Event names and ordered outcomes from steve1316/uma-android-automation src/data/supports.json,

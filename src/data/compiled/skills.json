@@ -1066,6 +1066,20 @@
       "downgrade": null
     },
     {
+      "id": 100651,
+      "name": "Hands in the Air Like Ya Don't Care!",
+      "desc": "Very slightly increase velocity when positioned toward the front sometime upon approaching late-race. If it's a sprint or mile race, very slightly increase velocity continuously.",
+      "iconId": 20011,
+      "cost": 200,
+      "evalPt": 180,
+      "condition": "distance_type==1&phase_laterhalf_random==1&order_rate<=50@distance_type==2&phase_laterhalf_random==1&order_rate<=50@distance_type==3&phase_laterhalf_random==1&order_rate<=50@distance_type==4&phase_laterhalf_random==1&order_rate<=50",
+      "precondition": "",
+      "inherited": true,
+      "tier": 0,
+      "upgrade": null,
+      "downgrade": null
+    },
+    {
       "id": 100671,
       "name": "Eternal Encompassing Shine",
       "desc": "If well-positioned at the start of the final straight, slightly increase velocity. If positioned near the front, moderately increase velocity instead.",
@@ -1542,6 +1556,20 @@
       "downgrade": null
     },
     {
+      "id": 110271,
+      "name": "A Warm Cup for You",
+      "desc": "Slightly increase velocity for a moderate duration when 2nd or worse and within 4 lengths of the lead on a downhill just before late-race. If the race is medium, also very minimally increase acceleration.",
+      "iconId": 20011,
+      "cost": 200,
+      "evalPt": 180,
+      "condition": "distance_rate>=60&slope==2&phase==1&order>=2&distance_diff_top<=10&distance_type==3@distance_rate>=60&slope==2&phase==1&order>=2&distance_diff_top<=10&distance_type!=3",
+      "precondition": "",
+      "inherited": true,
+      "tier": 1,
+      "upgrade": null,
+      "downgrade": null
+    },
+    {
       "id": 110301,
       "name": "Every Rose Has Its Fangs",
       "desc": "Slightly drain endurance from runners in front and very slightly increase velocity when well-positioned mid-race.",
@@ -1552,6 +1580,20 @@
       "precondition": "",
       "inherited": true,
       "tier": 1,
+      "upgrade": null,
+      "downgrade": null
+    },
+    {
+      "id": 110311,
+      "name": "Fresh☆Parlor",
+      "desc": "Very slightly increase velocity continuously and very slightly recover endurance when positioned toward the front in the early part of mid-race.",
+      "iconId": 20011,
+      "cost": 200,
+      "evalPt": 180,
+      "condition": "phase_firsthalf_random==1&order_rate<=30",
+      "precondition": "",
+      "inherited": true,
+      "tier": 0,
       "upgrade": null,
       "downgrade": null
     },
@@ -3483,7 +3525,7 @@
       "condition": "phase==1&change_order_onetime>0",
       "precondition": "",
       "inherited": false,
-      "tier": 0,
+      "tier": 1,
       "upgrade": null,
       "downgrade": 200472
     },
@@ -3497,7 +3539,7 @@
       "condition": "phase==1&change_order_onetime>0",
       "precondition": "",
       "inherited": false,
-      "tier": 0,
+      "tier": 1,
       "upgrade": 200471,
       "downgrade": null
     },
@@ -5487,6 +5529,20 @@
       "inherited": false,
       "tier": 0,
       "upgrade": 201251,
+      "downgrade": 201253
+    },
+    {
+      "id": 201253,
+      "name": "Crescent Gale",
+      "desc": "Increase velocity on a corner. (Front Runner)",
+      "iconId": 20012,
+      "cost": 150,
+      "evalPt": 508,
+      "condition": "running_style==1&all_corner_random==1",
+      "precondition": "",
+      "inherited": false,
+      "tier": 0,
+      "upgrade": 201252,
       "downgrade": null
     },
     {
@@ -5879,6 +5935,20 @@
       "inherited": false,
       "tier": 0,
       "upgrade": 201391,
+      "downgrade": 201393
+    },
+    {
+      "id": 201393,
+      "name": "Sharp Arc",
+      "desc": "Increase velocity on a corner. (Late Surger)",
+      "iconId": 20012,
+      "cost": 150,
+      "evalPt": 508,
+      "condition": "running_style==3&all_corner_random==1",
+      "precondition": "",
+      "inherited": false,
+      "tier": 0,
+      "upgrade": 201392,
       "downgrade": null
     },
     {
@@ -7142,6 +7212,20 @@
       "downgrade": null
     },
     {
+      "id": 202171,
+      "name": "Master of Declines",
+      "desc": "Increase velocity on a downhill.",
+      "iconId": 20012,
+      "cost": 170,
+      "evalPt": 508,
+      "condition": "down_slope_random==1",
+      "precondition": "",
+      "inherited": false,
+      "tier": 2,
+      "upgrade": null,
+      "downgrade": 202172
+    },
+    {
       "id": 202172,
       "name": "Downhill Speedster",
       "desc": "Slightly increase velocity on downhills.",
@@ -7152,7 +7236,7 @@
       "precondition": "",
       "inherited": false,
       "tier": 2,
-      "upgrade": null,
+      "upgrade": 202171,
       "downgrade": null
     },
     {
@@ -8173,7 +8257,7 @@
       "condition": "distance_type==2&phase_laterhalf_random==1&order_rate<=50",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": 202502
     },
@@ -8189,6 +8273,20 @@
       "inherited": false,
       "tier": 1,
       "upgrade": 202501,
+      "downgrade": null
+    },
+    {
+      "id": 202511,
+      "name": "Gonna Be Ur #1 FRFR",
+      "desc": "Press coverage goes to the skill user's head, moderately increasing chance of rushing.",
+      "iconId": 10054,
+      "cost": 0,
+      "evalPt": 0,
+      "condition": "always==1",
+      "precondition": "",
+      "inherited": false,
+      "tier": null,
+      "upgrade": null,
       "downgrade": null
     },
     {

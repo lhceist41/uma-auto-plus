@@ -103,7 +103,7 @@ class SharedCourseRaceLookupTest {
                 resolved++
             }
         }
-        assertEquals(85, resolved, "recount after a game-data refresh")
+        assertEquals(86, resolved, "recount after a game-data refresh")
     }
 
     @Test

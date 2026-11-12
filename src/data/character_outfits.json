@@ -129,6 +129,16 @@
             }
         ]
     },
+    "Daitaku Helios": {
+        "name": "Daitaku Helios",
+        "outfits": [
+            {
+                "title": "Fun☆Fun☆Party Night",
+                "cardId": 106501,
+                "releasedEn": "2026-11-05"
+            }
+        ]
+    },
     "Daiwa Scarlet": {
         "name": "Daiwa Scarlet",
         "outfits": [
@@ -325,7 +335,7 @@
             {
                 "title": "Melt Your Heart",
                 "cardId": 103102,
-                "releasedEn": null
+                "releasedEn": "2026-11-09"
             }
         ]
     },
@@ -535,7 +545,7 @@
             {
                 "title": "Marguerite Latte",
                 "cardId": 102702,
-                "releasedEn": null
+                "releasedEn": "2026-11-09"
             }
         ]
     },

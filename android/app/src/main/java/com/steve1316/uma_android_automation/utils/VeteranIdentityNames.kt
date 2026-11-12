@@ -31,6 +31,7 @@ object VeteranIdentityNames {
             "Biwa Hayahide",
             "Copano Rickey",
             "Curren Chan",
+            "Daitaku Helios",
             "Daiwa Scarlet",
             "Eishin Flash",
             "El Condor Pasa",
