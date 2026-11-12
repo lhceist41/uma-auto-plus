@@ -41,6 +41,7 @@ import com.steve1316.uma_android_automation.components.IconStatSupportYayoiAkika
 import com.steve1316.uma_android_automation.components.IconUnityCupSpiritExplosion
 import com.steve1316.uma_android_automation.components.IconUnityCupSpiritTraining
 import com.steve1316.uma_android_automation.components.LabelEnergy
+import com.steve1316.uma_android_automation.components.LabelHomeMenu
 import com.steve1316.uma_android_automation.components.LabelRivalRacer
 import com.steve1316.uma_android_automation.components.LabelStatMaxed
 import com.steve1316.uma_android_automation.components.LabelStatTableHeaderSkillPoints
@@ -523,8 +524,8 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     private val textScaleFallback = TextScaleFallback()
 
     /**
-     * The library's match, then for a [TextScaleFallback.LABELS] template that missed at 1.0 the same frame at the
-     * fallback scales. Only the default single-scale lookup of a 1080-wide screen; scale tests and custom scales are unchanged.
+     * The library's match, then for a [TextScaleFallback] template that missed at 1.0 the same frame at the fallback
+     * scales. Only the default single-scale lookup of a 1080-wide screen; scale tests and custom scales are unchanged.
      */
     override fun match(
         sourceBitmap: Bitmap,
@@ -542,13 +543,82 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             return result
         }
         val hit =
-            textScaleFallback.afterMiss(templateName) { scale ->
-                super.match(sourceBitmap, templateBitmap, templateName, region, useSingleScale, customConfidence, scale).takeIf { it.first }
+            textScaleFallback.afterMiss(templateName) { scale, minConfidence ->
+                val retryConfidence = minConfidence?.let { maxOf(if (customConfidence == 0.0) confidence else customConfidence, it) } ?: customConfidence
+                super.match(sourceBitmap, templateBitmap, templateName, region, useSingleScale, retryConfidence, scale).takeIf { it.first }
             } ?: return result
         if (hit.firstOfRun) {
             MessageLog.i(TAG, "[LAYOUT] Text scale ${hit.scale}: \"${templateName.substringAfterLast('/')}\" matched only below full size, so this screen draws some text smaller than 1080x1920.")
         }
+        if (hit.opensGate) {
+            MessageLog.i(TAG, "[LAYOUT] Text draws smaller here, scaled retries on for ${TextScaleFallback.ALLOWED.size} text templates.")
+        }
         return hit.value
+    }
+
+    /**
+     * Measures on the current frame whether this device draws text smaller than 1080x1920, sets
+     * [TextScaleFallback.textShrinks] for this run, and returns the log line. Only where [match] retries at all.
+     */
+    fun measureTextScale(): String {
+        if (customScale != 1.0 || !is1080p) {
+            TextScaleFallback.resetGate()
+            return "[LAYOUT] Text scale not measured: scaled retries only run on 1080-wide screens without a manual scale."
+        }
+        val anchors = listOf(LabelHomeMenu.template, LabelStatTableHeaderSkillPoints.template).associateBy { it.path }
+        return try {
+            val frame = getSourceBitmap()
+            TextScaleFallback.measureAtStart(confidence) { path -> anchors[path]?.let { textScaleScores(frame, it.path, it.region) } }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "measureTextScale failed", e)
+            TextScaleFallback.resetGate()
+            TextScaleFallback.NOT_MEASURED
+        }
+    }
+
+    /** The best TM_CCOEFF_NORMED score of [templateName] in [region] at each of [TextScaleFallback.GATE_SCALES], scaled like the library's match. */
+    private fun textScaleScores(
+        sourceBitmap: Bitmap,
+        templateName: String,
+        region: IntArray,
+    ): Map<Double, Double>? {
+        val template = getTemplateBitmap(templateName.substringAfterLast('/'), "images/" + templateName.substringBeforeLast('/')) ?: return null
+        val crop =
+            if (region.contentEquals(intArrayOf(0, 0, 0, 0))) {
+                sourceBitmap
+            } else {
+                createSafeBitmap(sourceBitmap, region[0], region[1], region[2], region[3], "text scale region")
+            }
+        if (crop == null) {
+            template.recycle()
+            return null
+        }
+        val sourceMat = Mat()
+        try {
+            Utils.bitmapToMat(crop, sourceMat)
+            Imgproc.cvtColor(sourceMat, sourceMat, Imgproc.COLOR_BGR2GRAY)
+            return TextScaleFallback.GATE_SCALES.associateWith { scale ->
+                val scaled = if (scale == 1.0) template else template.scale((template.width * scale).toInt(), (template.height * scale).toInt())
+                val templateMat = Mat()
+                try {
+                    Utils.bitmapToMat(scaled, templateMat)
+                    Imgproc.cvtColor(templateMat, templateMat, Imgproc.COLOR_BGR2GRAY)
+                    if (templateMat.cols() > sourceMat.cols() || templateMat.rows() > sourceMat.rows()) return@associateWith 0.0
+                    val resultMat = Mat()
+                    Imgproc.matchTemplate(sourceMat, templateMat, resultMat, Imgproc.TM_CCOEFF_NORMED)
+                    Core.minMaxLoc(resultMat).maxVal.also { resultMat.release() }
+                } finally {
+                    templateMat.release()
+                    if (scaled !== template) scaled.recycle()
+                }
+            }
+        } finally {
+            sourceMat.release()
+            if (crop !== sourceBitmap) crop.recycle()
+            template.recycle()
+        }
     }
 
     /** Converts this bitmap to a new OpenCV [Mat]. */

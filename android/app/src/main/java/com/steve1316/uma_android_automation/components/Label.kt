@@ -30,6 +30,11 @@ object LabelStatTableHeaderSkillPoints : ComponentInterface {
     override val template = Template("components/label/stat_table_header_skill_points", region = Region.bottomHalf)
 }
 
+/** The top bar's "Menu" button text outside a career; only the Start text-scale measurement reads it. */
+object LabelHomeMenu : ComponentInterface {
+    override val template = Template("components/label/home_menu", region = Region.topQuarter)
+}
+
 object LabelTrainingFailureChance : ComponentInterface {
     override val template = Template("components/label/training_failure_chance", region = Region.bottomHalf)
 }

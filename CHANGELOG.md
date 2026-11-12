@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **New presets:** Daitaku Helios and the newly released Mejiro Ryan (Marguerite Latte) and Ines Fujin (Melt Your Heart) outfits have research-graded presets for all four scenarios (464 presets across 115 trainee cards). Daitaku Helios runs as a turf Mile Pace Chaser, and her URA Finale preset races Mile and Sprint races in her first two years for the 15000 fans her Classic Mile Championship needs. Marguerite Latte races and buys skills as a Pace Chaser, the card's own style.
 - **Ines Fujin presets:** the base Ines Fujin presets now plan her own card's skills (With All My Soul, Slipstream, Moxie) instead of the ones from her Melt Your Heart outfit.
 - **Skill plans:** the Sweep Tosho and Hishi Akebono presets, and the Sakura Bakushin O Trackblazer presets, now plan a top-rated skill from their own card that they left out (it replaces their weakest plain skill).
+- **Screens that draw text smaller:** when you press Start on the Home screen or in a career, the bot checks whether the game draws text smaller than on MuMu at 240 DPI. If it does (seen on a 1080x1920 emulator at 480 DPI and on a Galaxy A13), more labels and buttons, such as Legacy Select's Auto-Select and Details, are also found at slightly smaller sizes. On MuMu at 240 DPI nothing changes. Tested on screenshots only so far.
 
 ## [1.8.0] - 2026-10-29
 

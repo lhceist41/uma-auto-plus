@@ -49,6 +49,7 @@ import com.steve1316.uma_android_automation.utils.ProgressNotification
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.SaveToPhone
 import com.steve1316.uma_android_automation.utils.StatusBoard
+import com.steve1316.uma_android_automation.utils.TextScaleFallback
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
 import kotlinx.coroutines.runBlocking
@@ -2235,6 +2236,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 launchStoppedByPlayer = false
                 secureSettingsGrant = secureSettingsGranted(context)
                 MessageLog.i(TAG, if (secureSettingsGrant) "[A11Y] Self-repair permission granted: stuck taps rebind the accessibility service." else "[A11Y] No self-repair permission: stuck taps are checked with a probe tap instead of a rebind.")
+                TextScaleFallback.resetGate()
                 SessionTally.reset()
                 ProgressTracker.beginWindow()
                 StatusBoard.reset(ledger.startedAt)

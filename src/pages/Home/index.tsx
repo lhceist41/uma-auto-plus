@@ -869,7 +869,7 @@ const Home = () => {
 
 Warning: Performance may be degraded due to ${unsupportedReason}.
 
-Supported screens are 1080 pixels wide and at least 1920 tall. A 1080x1920 screen also needs 240 DPI, set in the emulator's display settings.
+Supported screens are 1080 pixels wide and at least 1920 tall. On a 1080x1920 screen 240 DPI is recommended, set in the emulator's display settings. At other densities the game draws some text smaller: the bot measures this when you press Start on the Home screen or in a career and retries some labels and buttons at smaller sizes, but not every screen has been checked.
 
 If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offers it (for example on Samsung: Settings > Display > Screen resolution).`
 

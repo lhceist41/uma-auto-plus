@@ -1035,6 +1035,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                     "The screen must be 1080 pixels wide and at least 1920 tall. On a phone, switch the screen resolution to FHD+ (1080 wide) if it offers it, for example on Samsung: Settings > Display > Screen resolution.",
             )
         }
+        MessageLog.i(TAG, imageUtils.measureTextScale())
         val coveredAreas =
             runCatching {
                 val (buttonX, buttonY, buttonSize) = floatingButtonRect(myContext)

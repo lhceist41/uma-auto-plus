@@ -5,9 +5,9 @@ describe("unsupportedDisplayReason", () => {
         expect(unsupportedDisplayReason(1080, 1920, 240)).toBeNull()
     })
 
-    it("flags 1080x1920 at any other density", () => {
+    it("flags 1080x1920 at any other density without calling it unsupported", () => {
         for (const dpi of [480, 320, 160, 450]) {
-            expect(unsupportedDisplayReason(1080, 1920, dpi)).toBe("an unsupported display density")
+            expect(unsupportedDisplayReason(1080, 1920, dpi)).toBe("a display density other than 240 DPI")
         }
     })
 
