@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- **New presets:** Daitaku Helios and the newly released Mejiro Ryan (Marguerite Latte) and Ines Fujin (Melt Your Heart) outfits have research-graded presets for all four scenarios (464 presets across 115 trainee cards). Daitaku Helios runs as a turf Mile Pace Chaser, and her URA Finale preset races Mile and Sprint races in her first two years for the 15000 fans her Classic Mile Championship needs. Marguerite Latte races and buys skills as a Pace Chaser, the card's own style.
+
 ## [1.8.0] - 2026-10-29
 
 ### Highlights

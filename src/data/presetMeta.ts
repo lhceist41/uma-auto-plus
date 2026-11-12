@@ -23,6 +23,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Biwa Hayahide": "pf. Winning Equation...",
     "Copano Rickey": "Eightfold☆Fortune",
     "Curren Chan": "Fille Éclair",
+    "Daitaku Helios": "Fun☆Fun☆Party Night",
     "Daiwa Scarlet": "Peak Blue",
     "Eishin Flash": "Meisterschaft",
     "El Condor Pasa": "El☆Número 1",
