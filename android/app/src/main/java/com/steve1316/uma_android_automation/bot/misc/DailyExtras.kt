@@ -102,12 +102,17 @@ object ClubRequestItems {
 /** Lower-case letters and digits only, so OCR that drops punctuation or spaces still compares equal. */
 internal fun normalizeItemName(name: String): String = name.lowercase().replace(Regex("[^a-z0-9]"), "")
 
+private val QUEEN_ELIZABETH_II = normalizeItemName("Queen Elizabeth II Cup Winner's Sash")
+
+/** ML Kit sometimes reads the Queen Elizabeth II Cup sash with its second "I" dropped. */
+private val QUEEN_ELIZABETH_DROPPED_ROMAN = normalizeItemName("Queen Elizabeth I Cup Winner's Sash")
+
 /**
  * Whether an OCR'd row title is [target]. Two dropped leading characters still match (a crop edge can cut a first letter),
  * but not a read that is also a front crop of three or more letters of another catalog name ("ka Sho" fits Oka, Shuka and Kikuka).
  */
 internal fun matchItemName(ocr: String, target: String): Boolean {
-    val read = normalizeItemName(ocr)
+    val read = normalizeItemName(ocr).let { if (it == QUEEN_ELIZABETH_DROPPED_ROMAN) QUEEN_ELIZABETH_II else it }
     val wanted = normalizeItemName(target)
     if (read.isEmpty() || !wanted.endsWith(read) || wanted.length - read.length > 2) return false
     if (read == wanted) return true

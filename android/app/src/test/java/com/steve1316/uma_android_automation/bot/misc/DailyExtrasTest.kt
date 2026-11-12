@@ -737,6 +737,30 @@ class DailyExtrasTest {
     }
 
     @Test
+    fun `the Queen Elizabeth II Cup sash read without its second I still names that sash`() {
+        val sash = "Queen Elizabeth II Cup Winner's Sash"
+        assertEquals(sash, itemNameFromTitle("Queen Elizabeth I Cup Winner's Sash"))
+        assertEquals(sash, itemNameFromTitle("Queen Elizabeth I Cup Winners Sash"))
+        assertEquals(sash, itemNameFromTitle(sash))
+        assertTrue(matchItemName("Queen Elizabeth I Cup Winner's Sash", sash))
+        assertFalse(matchItemName("Queen Elizabeth I Cup Winner's Sash", "Japan Cup Winner's Sash"))
+        assertNull(itemNameFromTitle("Queen Elizabeth Cup Winner's Sash"))
+        assertNull(itemNameFromTitle("Queen Elizabeth III Cup Winner's Sash"))
+    }
+
+    @Test
+    fun `no read of a catalog name, with an OCR alias or lost leading letters, is shared by two catalog names`() {
+        val names = ClubRequestItems.SHOES + ClubRequestItems.SASHES
+        val reads = names + "Queen Elizabeth I Cup Winner's Sash"
+        for (read in reads) {
+            for (lost in 0..2) {
+                val matches = names.filter { matchItemName(read.drop(lost), it) }
+                assertTrue(matches.size <= 1, "$read minus $lost matched $matches")
+            }
+        }
+    }
+
+    @Test
     fun `a front crop of Shuka or Kikuka that is also the tail of another sash name reads as unknown`() {
         for (crop in listOf("uka Sho", "ka Sho")) assertNull(itemNameFromTitle("$crop Winner's Sash"), crop)
         assertFalse(matchItemName("ka Sho Winner's Sash", "Oka Sho Winner's Sash"))
@@ -826,7 +850,7 @@ class DailyExtrasTest {
     @Test
     fun `a title misread on one page does not veto a read that holds every sash`() {
         val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).toMutableList()
-        pages[5] = pages[5].toMutableList().also { it[2] = "Queen Elizabeth I Cup Winner's Sash" to "666" }
+        pages[5] = pages[5].toMutableList().also { it[2] = "Queen Elisabeth Cup Winner's Sash" to "666" }
         val scan = mergePickerPages(pages)
         assertTrue(scan.complete)
         assertEquals(34, scan.rows.size)
@@ -846,7 +870,7 @@ class DailyExtrasTest {
     fun `33 of 34 sashes with a misread title stay incomplete and request nothing`() {
         val missing = "Yasuda Kinen Winner's Sash"
         val pages = livePages(0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 28, 28, 28).map { page -> page.filter { it.first != missing } }.toMutableList()
-        pages[5] = pages[5].toMutableList().also { it[2] = "Queen Elizabeth I Cup Winner's Sash" to "666" }
+        pages[5] = pages[5].toMutableList().also { it[2] = "Queen Elisabeth Cup Winner's Sash" to "666" }
         val scan = mergePickerPages(pages)
         assertEquals(33, scan.rows.size)
         assertFalse(scan.complete)
@@ -948,9 +972,9 @@ class DailyExtrasTest {
     @Test
     fun `the page line names the counts, the shared rows and a title that is no known item`() {
         val previous = livePages(0)[0]
-        val page = livePages(3)[0].toMutableList().also { it[1] = "Queen Elizabeth I Cup Winner's Sash" to "666" }
+        val page = livePages(3)[0].toMutableList().also { it[1] = "Queen Elisabeth Cup Winner's Sash" to "666" }
         assertEquals(
-            "rows [Oka Sho=64, ?=666, Tenno Sho (Spring)=35, NHK Mile C.=113, Victoria Mile=249, Japanese Oaks=38], overlap 2, unknown \"Queen Elizabeth I Cup Winner's Sash\"",
+            "rows [Oka Sho=64, ?=666, Tenno Sho (Spring)=35, NHK Mile C.=113, Victoria Mile=249, Japanese Oaks=38], overlap 2, unknown \"Queen Elisabeth Cup Winner's Sash\"",
             pickerPageSummary(page, previous),
         )
         assertEquals("rows [February S.=65, Takamatsunomiya Kinen=21, Osaka Hai=487, Oka Sho=64, Satsuki Sho=317, Tenno Sho (Spring)=35]", pickerPageSummary(previous, null))

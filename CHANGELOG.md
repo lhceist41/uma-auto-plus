@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- **Club item request:** the picker row for the Queen Elizabeth II Cup Winner's Sash is still read correctly when the game text is read without its second "I", so the request is no longer skipped over it.
 - **New presets:** Daitaku Helios and the newly released Mejiro Ryan (Marguerite Latte) and Ines Fujin (Melt Your Heart) outfits have research-graded presets for all four scenarios (464 presets across 115 trainee cards). Daitaku Helios runs as a turf Mile Pace Chaser, and her URA Finale preset races Mile and Sprint races in her first two years for the 15000 fans her Classic Mile Championship needs. Marguerite Latte races and buys skills as a Pace Chaser, the card's own style.
 - **Ines Fujin presets:** the base Ines Fujin presets now plan her own card's skills (With All My Soul, Slipstream, Moxie) instead of the ones from her Melt Your Heart outfit.
 - **Skill plans:** the Sweep Tosho and Hishi Akebono presets, and the Sakura Bakushin O Trackblazer presets, now plan a top-rated skill from their own card that they left out (it replaces their weakest plain skill).
