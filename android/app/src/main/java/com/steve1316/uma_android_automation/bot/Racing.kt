@@ -219,6 +219,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Indicates that a fan requirement has been detected on the main screen. */
     var hasFanRequirement = false
 
+    /**
+     * Set when the current decision deferred the fan arm to training: its racing then follows the user's settings. Not keyed to
+     * the live date, because race paths re-read it (smart racing's updateDate) before reading the fan arm.
+     */
+    var fanRequirementDeferred = false
+
+    /** The fan requirement still forces racing: set, and not deferred by the current decision. */
+    val fanRequirementForcesRace: Boolean
+        get() = forcesFanRace(hasFanRequirement, fanRequirementDeferred)
+
     /** Indicates that a trophy requirement has been detected on the main screen. */
     var hasTrophyRequirement = false
 
@@ -323,13 +333,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     var popupForcedTurn: Int? = null
 
     private val requirementActive: Boolean
-        get() = hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement || bFanEmergencyActive
+        get() = fanRequirementForcesRace || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement || bFanEmergencyActive
 
     /** Why a race is being entered when no race-specific reason applies, from the requirement flags and settings as they stand now. */
     private fun requirementReason(): String =
         plainRequirementReason(
             scenarioFanReason = campaign.fanRaceReasonForLine(),
-            hasFanRequirement = hasFanRequirement,
+            hasFanRequirement = fanRequirementForcesRace,
             fanEmergency = bFanEmergencyActive,
             fanGoalTarget = goalFanTargetRead,
             turnsToGoal = goalDeadlineTurnsRemaining.takeIf { it != Int.MAX_VALUE },
@@ -387,8 +397,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** A control flag used between the dialog handler and [selectRaceStrategy]. Only set when a strategy is selected in the dialog handler and unset at the beginning of [selectRaceStrategy]. */
     var bHasSetTemporaryRunningStyle: Boolean = false
 
-    /** The complete race database loaded at initialization. */
-    private val raceData: Map<String, RaceData> = loadRaceData()
+    /** Every race row of the bulk race data (the same races.json rows the races table holds), all turns. */
+    val raceCalendar: List<RaceData> = loadRaceCalendar()
+
+    /** The complete race database loaded at initialization, by race name. */
+    private val raceData: Map<String, RaceData> = raceCalendar.associateBy { it.name }
 
     /** Every trainee's goal races by turn; the Grand Concert asset carries all of them, not only that scenario's. */
     private val goalFacts: GrandConcertFanFacts? by lazy { GrandConcertFanFacts.loadFromAssets(game.myContext) }
@@ -570,6 +583,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         /** Expected X of a row's fans icon (1080-wide); the same glyph on the goal banner and fans header must be ignored. */
         internal const val FANS_ICON_ROW_COLUMN_X = 457.0
         internal const val FANS_ICON_ROW_COLUMN_TOLERANCE = 25.0
+
+        internal fun forcesFanRace(hasFanRequirement: Boolean, deferred: Boolean): Boolean = hasFanRequirement && !deferred
 
         internal fun isFanEmergency(hasFanRequirement: Boolean, turnsRemaining: Int): Boolean {
             return hasFanRequirement && turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
@@ -803,11 +818,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             if (fans > unreadAtOrBelow) "you have ${groupedCount(fans)}" else "your fan count is unread"
 
         /**
-         * The Grand Concert fan requirement as the same-turn fan check saw it: its effective target, turn and current fans, plus the later
-         * requirement when that one decided the race (as an upper bound: a choice gate is measured at its highest option). A requirement with no exact target says so instead of naming an older one. The game's
+         * The Grand Concert fan requirement as the same-turn fan check saw it: its effective target, turn and current fans, plus [laterShortfall]
+         * (fans still needed, turn) when a later requirement without slack decided the race (an upper bound: a choice gate counts at its highest option). A requirement with no exact target says so instead of naming an older one. The game's
          * 1 fan sentinel before the first read counts as unread, as the fan check treats it.
          */
-        internal fun plainFanSnapshotReason(snapshot: GrandConcertFanPressure.Snapshot, recentFanRacesPaidLow: Boolean = false): String {
+        internal fun plainFanSnapshotReason(snapshot: GrandConcertFanPressure.Snapshot, laterShortfall: Pair<Int, Int>? = null): String {
             val who = if (snapshot.effectiveType == GrandConcertFanPressure.RequirementType.FAN_GOAL) "the career fan goal" else "Grand Concert"
             val target = snapshot.effectiveTarget
             val turn = snapshot.effectiveTurn
@@ -818,7 +833,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     "a fan requirement armed earlier no longer applies at your current fans; ${plainFansHave(snapshot.currentFans, 1)}"
                 snapshot.effectiveExact && target != null && turn != null ->
                     plainFanReason(who, target, turn, null, snapshot.currentFans, unreadAtOrBelow = 1) +
-                        (GrandConcertFanPressure.bindingLaterRequirement(snapshot, recentFanRacesPaidLow)?.let { (deficit, usable) -> "; a later fan requirement may need up to ${groupedCount(deficit)} more fans with $usable free race turns left" } ?: "")
+                        (laterShortfall?.let { (deficit, turn) -> "; a later fan requirement may need up to ${groupedCount(deficit)} more fans by ${plainDeadlineLabel(turn)}" } ?: "")
                 snapshot.effectiveType == GrandConcertFanPressure.RequirementType.MANDATORY_GATE && minimum != null && gateTurn != null ->
                     "Grand Concert needs at least ${groupedCount(minimum)} fans by ${plainDeadlineLabel(gateTurn)} (the exact figure is not known); ${plainFansHave(snapshot.currentFans, 1)}"
                 else -> "Grand Concert's fan requirement could not be worked out, so the bot races to be safe; ${plainFansHave(snapshot.currentFans, 1)}"
@@ -1088,18 +1103,18 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /**
      * Loads the complete race database from saved settings, including all race metadata such as names, grades, distances, and turn numbers.
      *
-     * @return A map of race names to their [RaceData] or an empty map if racing plan data is missing or invalid.
+     * @return Every race row, or an empty list if racing plan data is missing or invalid.
      */
-    private fun loadRaceData(): Map<String, RaceData> {
+    private fun loadRaceCalendar(): List<RaceData> {
         return try {
             val racingPlanDataJson = SettingsHelper.getStringSetting("racing", "racingPlanData")
             if (racingPlanDataJson.isEmpty()) {
                 MessageLog.i(TAG, "[RACE] Racing plan data is empty, returning empty map.")
-                return emptyMap()
+                return emptyList()
             }
 
             val jsonObject = JSONObject(racingPlanDataJson)
-            val raceDataMap = mutableMapOf<String, RaceData>()
+            val rows = ArrayList<RaceData>()
 
             val keys = jsonObject.keys()
             var skippedRows = 0
@@ -1118,21 +1133,21 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                             turnNumber = raceObj.getInt(RACES_COLUMN_TURN_NUMBER),
                             nameFormatted = raceObj.getString(RACES_COLUMN_NAME_FORMATTED),
                         )
-                    raceDataMap[raceData.name] = raceData
+                    rows.add(raceData)
                 } catch (e: Exception) {
                     skippedRows++
                     MessageLog.w(TAG, "[WARN] loadRaceData:: Skipping unparseable race row \"$key\": ${e.message}")
                 }
             }
             if (skippedRows > 0) {
-                MessageLog.w(TAG, "[WARN] loadRaceData:: Skipped $skippedRows unparseable race row(s); loaded ${raceDataMap.size}.")
+                MessageLog.w(TAG, "[WARN] loadRaceData:: Skipped $skippedRows unparseable race row(s); loaded ${rows.size}.")
             }
 
-            MessageLog.i(TAG, "[RACE] Successfully loaded ${raceDataMap.size} race entries from racing plan data.")
-            raceDataMap
+            MessageLog.i(TAG, "[RACE] Successfully loaded ${rows.size} race entries from racing plan data.")
+            rows
         } catch (e: Exception) {
             MessageLog.e(TAG, "[ERROR] loadRaceData:: Failed to parse racing plan data JSON: ${e.message}. Returning empty map.")
-            emptyMap()
+            emptyList()
         }
     }
 
@@ -1464,6 +1479,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private fun scrollRaceListAndRedetect(scrollDown: Boolean = true, includeSingles: Boolean = false, includeStarless: Boolean = false): ArrayList<Point>? {
         return scrollRaceListAndRedetectAnchors(scrollDown, includeSingles, includeStarless)?.let { anchors -> ArrayList(anchors.map { it.location }) }
     }
+
+    /** The worse of the trainee's surface and distance aptitude for [raceData]. */
+    fun worstRaceAptitude(raceData: RaceData): Aptitude =
+        minOf(campaign.trainee.checkTrackSurfaceAptitude(raceData.trackSurface), campaign.trainee.checkTrackDistanceAptitude(raceData.trackDistance))
 
     /**
      * Checks if the racer's aptitudes match the race requirements (both terrain and distance must be B or greater).
@@ -2791,7 +2810,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         val filteredRaces =
             races.filter { race ->
-                val isRequirementActive = hasFanRequirement || hasTrophyRequirement
+                val isRequirementActive = fanRequirementForcesRace || hasTrophyRequirement
                 val meetsFansThreshold = bypassMinFans || isRequirementActive || race.fans >= minFansThreshold
                 val meetsTrackSurfacePreference = isRequirementActive || preferredTrackSurfaceString == "Any" || race.trackSurface == TrackSurface.fromName(preferredTrackSurfaceString)
                 val meetsGradePreference = isRequirementActive || preferredGrades.isEmpty() || preferredGrades.contains(race.grade.name)
@@ -3278,7 +3297,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return handleMaidenRace()
         } else if ((!campaign.date.bIsPreDebut && racesButton.click(game.imageUtils)) || isScheduledRace) {
             var overrideIgnore = false
-            if (isScheduledRace || hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
+            if (isScheduledRace || fanRequirementForcesRace || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
                 MessageLog.v(TAG, "[RACE] Racing requirement is active. Ignoring consecutive race warning.")
                 overrideIgnore = true
             }
@@ -3290,7 +3309,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         mapOf(
                             "overrideIgnoreConsecutiveRaceWarning" to overrideIgnore,
                             "isScheduledRace" to isScheduledRace,
-                            "isMandatoryRace" to (isScheduledRace || hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement),
+                            "isMandatoryRace" to (isScheduledRace || fanRequirementForcesRace || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement),
                         ),
                 )
             if (result is DialogHandlerResult.Handled &&
@@ -3802,7 +3821,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Check for mandatory racing plan mode before any screen detection.
             // Bypass this check if a fan or trophy requirement is active.
             val (_, mandatoryExtraRaceData) =
-                if (hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
+                if (fanRequirementForcesRace || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
                     Pair(null, null)
                 } else {
                     findMandatoryExtraRaceForCurrentTurn()
@@ -3849,7 +3868,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             val maxCount = LabelRaceSelectionFans.findAll(game.imageUtils).size
             if (maxCount == 0) {
                 // If there is a fan/trophy/goal pts requirement but no races available, reset the flags and proceed with training to advance the day.
-                if (hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
+                if (fanRequirementForcesRace || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
                     MessageLog.v(TAG, "[RACE] Requirement detected but no extra races available. Clearing requirement flags and proceeding with training to advance the day.")
                 } else {
                     MessageLog.e(TAG, "[ERROR] handleExtraRace:: Was unable to find any extra races to select. Canceling the racing process and doing something else.")
@@ -3862,7 +3881,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 MessageLog.i(TAG, "[RACE] There are $maxCount extra race options currently on screen.")
             }
 
-            if (hasFanRequirement) MessageLog.v(TAG, "[RACE] Fan requirement criteria detected. This race must be completed to meet the requirement.")
+            if (fanRequirementForcesRace) MessageLog.v(TAG, "[RACE] Fan requirement criteria detected. This race must be completed to meet the requirement.")
             if (hasInsufficientGoalRacePtsRequirement) MessageLog.v(TAG, "[RACE] Goal race result pts requirement criteria detected. This race must be completed to meet the requirement.")
             if (hasTrophyRequirement) {
                 val selectable = goalMinimumGrade?.let { "Only ${goalGradeLabel(it)} races will be selected" } ?: "Any race can be selected"
@@ -3871,7 +3890,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
             // Determine whether to use smart racing with user-selected races or standard racing.
             val useSmartRacing =
-                if (hasFanRequirement || hasInsufficientGoalRacePtsRequirement) {
+                if (fanRequirementForcesRace || hasInsufficientGoalRacePtsRequirement) {
                     // If fan or goal pts requirement is needed, force standard racing to ensure the race proceeds and picks double stars.
                     false
                 } else if (hasTrophyRequirement) {
@@ -3893,7 +3912,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 } else {
                     // Use the standard racing logic.
                     // If needed, print the reason(s) to why the smart racing logic was not started.
-                    if (enableRacingPlan && !hasFanRequirement && !hasTrophyRequirement) {
+                    if (enableRacingPlan && !fanRequirementForcesRace && !hasTrophyRequirement) {
                         MessageLog.i(TAG, "[RACE] Smart racing conditions not met due to current settings, using traditional racing logic...")
                         MessageLog.i(TAG, "[RACE] Reason: One or more conditions failed:")
                         if (campaign.date.year != DateYear.JUNIOR) {
@@ -4242,7 +4261,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Evaluate whether the bot should race now using Opportunity Cost logic.
         // If fan or trophy requirement is active, bypass opportunity cost to prioritize clearing the requirement.
-        if (hasFanRequirement || hasTrophyRequirement) {
+        if (fanRequirementForcesRace || hasTrophyRequirement) {
             MessageLog.i(TAG, "[RACE] Bypassing opportunity cost analysis to prioritize satisfying the current requirement.")
         } else if (!evaluateOpportunityCost(allFilteredRaces, lookAheadDays, bypassQualityBar = bPreferenceFallback)) {
             MessageLog.i(TAG, "[RACE] Smart racing suggests waiting for better opportunities. Canceling racing process.")
@@ -4387,7 +4406,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Pure Grand Concert fan pressure takes the fans-first branch, since its row star is absent/false; other contexts keep the generic tier-gated path.
         if (GrandConcertFanRaceSelector.appliesToForcedRace(
                 scenarioIsGrandConcert = GrandConcertScenario.matches(game.scenario),
-                fanPressureActive = bFanEmergencyActive || hasFanRequirement,
+                fanPressureActive = bFanEmergencyActive || fanRequirementForcesRace,
                 hasTrophyRequirement = hasTrophyRequirement,
                 hasInsufficientGoalRacePtsRequirement = hasInsufficientGoalRacePtsRequirement,
             )
@@ -4408,7 +4427,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // (dead templates), and its weak-prediction trainee's visible rows draw no icon. A trophy goal with an unread tier also scrolls; a graded goal is gated separately.
         if (enterable(anchors).isEmpty() &&
             (campaign.date.year != DateYear.JUNIOR || bFanEmergencyActive) &&
-            (hasFanRequirement || bFanEmergencyActive || (hasTrophyRequirement && minimumGrade == null) || hasInsufficientGoalRacePtsRequirement)
+            (fanRequirementForcesRace || bFanEmergencyActive || (hasTrophyRequirement && minimumGrade == null) || hasInsufficientGoalRacePtsRequirement)
         ) {
             val maxScrollAttempts = 5
             MessageLog.i(TAG, "[RACE] No enterable predictions found on initial screen. Scrolling to find races to satisfy requirements...")
@@ -4454,7 +4473,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val skippedSingles = anchors.size - usableAnchors.size
         if (skippedSingles > 0) {
             MessageLog.i(TAG, "[RACE] $skippedSingles single-star race(s) visible but not enterable (no fan emergency, force racing or graded goal near its deadline).")
-            if (hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
+            if (fanRequirementForcesRace || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
                 for (anchor in anchors.filter { it.tier != PredictionTier.DOUBLE }) {
                     val raceName = game.imageUtils.extractRaceName(anchor.location)
                     val grade = lookupRaceInDatabase(campaign.date.day, raceName).firstOrNull()?.grade
@@ -4643,7 +4662,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Trust DB fans and aptitude only for a unique exact resolution; fuzzy/ambiguous rows stay enterable with unknown fans.
             val trusted = lastLookupTier == LookupTier.EXACT && matches.size == 1
             val fans: Int? = if (trusted) matches[0].fans else null
-            val aptitude: Boolean? = if (trusted) checkRaceAptitudeMatch(matches[0]) else null
+            val aptitude: Aptitude? = if (trusted) worstRaceAptitude(matches[0]) else null
             val isRival = detectRowRival(bitmap, anchor.location)
             candidates.add(GrandConcertFanRaceSelector.Candidate(fans, aptitude, isRival))
             resolvedGrades.add(if (trusted) matches[0].grade else matches.firstOrNull()?.grade)

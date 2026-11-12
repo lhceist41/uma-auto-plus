@@ -1,16 +1,27 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.Aptitude
 import com.steve1316.uma_android_automation.types.GameDate
+import com.steve1316.uma_android_automation.types.RaceGrade
+import java.util.Locale
 
 /**
- * Pure Grand Concert fan-pressure calculation: explains the next fan requirement and remaining room, derives the
- * [GrandConcertFanPolicy] inputs, and formats the [GC_FAN] line. Reads no pixels.
+ * Pure Grand Concert fan-pressure calculation: explains the next fan requirement, measures the fans the remaining race
+ * turns can conservatively earn for every unmet goal and gate, and formats the [GC_FAN] line. Reads no pixels.
  *
- * Concerts do pay fans, but too late before some deadlines to rely on, so only races count toward a requirement.
+ * Concerts do pay fans, but no source gives the amount, so only races count toward a requirement.
  */
 object GrandConcertFanPressure {
-    /** 3rd place (25%) of the cheapest OP win (1600 base, `races.json`) with no Fan Bonus; measured wins pay about 2300+. */
-    const val CONSERVATIVE_FANS_PER_RACE = 400
+    /** Every Junior Make Debut program pays fan set 3: 700 fans for the win (master.mdb `single_mode_fan_count`). */
+    const val DEBUT_WIN_FANS = 700
+
+    // Share of the face value by finishing place, the same for every fan set (master.mdb `single_mode_fan_count`).
+    private const val SECOND_PLACE_SHARE = 0.40
+    private const val THIRD_PLACE_SHARE = 0.25
+    private const val FIFTH_PLACE_SHARE = 0.10
+    private const val SIXTH_PLACE_SHARE = 0.09
+
+    private const val JUNIOR_LAST_TURN = 24
 
     enum class RequirementStatus { NONE, FUTURE, DUE_NOW, OVERDUE, SATISFIED }
 
@@ -52,59 +63,8 @@ object GrandConcertFanPressure {
         val futureRaceOpportunitiesIfTrainNow: Int?,
         // Turns in that window the bot can actually fan-race: not Summer and not the trainee's own mandatory race turns.
         val usableRaceTurnsInWindow: Int?,
-        // The unmet requirement after the effective one with the least slack (a choice gate at its highest threshold):
-        // the same races serve it, so deferring for the nearest must not starve a larger later one. Null when none.
-        val tightestLaterUsableTurns: Int?,
-        val tightestLaterDeficit: Int?,
         val guaranteedRacesUpperBound: Int?,
     )
-
-    data class PolicyInputs(val turnsUntilDeadline: Int?, val racesStillNeeded: Int?)
-
-    /**
-     * Race for the requirement only once the free race turns left before it no longer cover a conservative race count with
-     * room to spare: defer while usable >= ceil(1.5 * ceil(deficit / [CONSERVATIVE_FANS_PER_RACE])) + 2. The 1.5 avoids
-     * back-to-back race warnings, the +2 is margin. The tightest of the effective and later requirements decides. Null
-     * inputs (a fail-safe race) for an unknown or ambiguous requirement, a restart's fan read of 0 or 1, a requirement
-     * due now or overdue, or when [recentFanRacesPaidLow].
-     */
-    fun policyInputs(snapshot: Snapshot, recentFanRacesPaidLow: Boolean): PolicyInputs {
-        val failClosed = PolicyInputs(null, null)
-        if (recentFanRacesPaidLow) return failClosed
-        if (snapshot.matchStatus != MatchStatus.EXACT && snapshot.matchStatus != MatchStatus.NORMALIZED) return failClosed
-        if (!snapshot.effectiveExact || snapshot.currentFans <= 1) return failClosed
-        val turn = snapshot.effectiveTurn ?: return failClosed
-        if (turn <= snapshot.currentTurn) return failClosed
-        var deficit = snapshot.deficit ?: return failClosed
-        var usable = snapshot.usableRaceTurnsInWindow ?: return failClosed
-        val laterUsable = snapshot.tightestLaterUsableTurns
-        val laterDeficit = snapshot.tightestLaterDeficit
-        if (laterUsable != null && laterDeficit != null && laterUsable - racesWithMargin(laterDeficit) < usable - racesWithMargin(deficit)) {
-            usable = laterUsable
-            deficit = laterDeficit
-        }
-        // decide() defers iff turnsUntilDeadline - 1 >= racesStillNeeded.
-        return PolicyInputs(turnsUntilDeadline = usable - 1, racesStillNeeded = racesWithMargin(deficit))
-    }
-
-    /**
-     * The later requirement's (fans still needed, free race turns left) when [policyInputs] weighs it above the effective one, so the
-     * race line can say why the bot raced; null when the effective requirement binds or the inputs are unknown. Read-only.
-     */
-    fun bindingLaterRequirement(snapshot: Snapshot, recentFanRacesPaidLow: Boolean = false): Pair<Int, Int>? {
-        if (recentFanRacesPaidLow) return null
-        if (snapshot.matchStatus != MatchStatus.EXACT && snapshot.matchStatus != MatchStatus.NORMALIZED) return null
-        if (!snapshot.effectiveExact || snapshot.currentFans <= 1) return null
-        val turn = snapshot.effectiveTurn ?: return null
-        if (turn <= snapshot.currentTurn) return null
-        val deficit = snapshot.deficit ?: return null
-        val usable = snapshot.usableRaceTurnsInWindow ?: return null
-        val laterUsable = snapshot.tightestLaterUsableTurns ?: return null
-        val laterDeficit = snapshot.tightestLaterDeficit ?: return null
-        return if (laterUsable - racesWithMargin(laterDeficit) < usable - racesWithMargin(deficit)) laterDeficit to laterUsable else null
-    }
-
-    private fun racesWithMargin(deficit: Int): Int = ceilDiv(ceilDiv(deficit, CONSERVATIVE_FANS_PER_RACE) * 3, 2)
 
     /** The racing requirement is cleared in Summer, so no fan race happens there although the turns are race-entry legal. */
     private val summerTurns: Set<Int> by lazy {
@@ -114,8 +74,135 @@ object GrandConcertFanPressure {
     private fun usableRaceTurns(currentTurn: Int, windowEnd: Int, mandatoryTurns: List<Int>): Int =
         ((currentTurn + 1)..windowEnd).count { GrandConcertRaceCalendar.isRaceableTurn(it) && it !in summerTurns && it !in mandatoryTurns }
 
-    /** The last two fan-pressure races each paid under [CONSERVATIVE_FANS_PER_RACE], so the rule's reward assumption failed for this trainee. */
-    fun recentFanRacesPaidLow(payouts: List<Int>): Boolean = payouts.size >= 2 && payouts.takeLast(2).all { it < CONSERVATIVE_FANS_PER_RACE }
+    /** One calendar race at a turn, with the worse of the trainee's surface and distance aptitude for it. */
+    data class RaceRow(val grade: RaceGrade, val fans: Int, val worstAptitude: Aptitude)
+
+    /** An unmet goal or gate: [target] fans (a choice gate at its highest option) earned by the end of [windowEnd]. */
+    data class Requirement(val type: RequirementType, val target: Int, val turn: Int, val windowEnd: Int)
+
+    /** [capacity] is the conservative fans of the window's race turns minus its two best, the margin for a lost turn or a bad race. */
+    data class RequirementCapacity(val requirement: Requirement, val deficit: Int, val capacity: Double) {
+        val slack: Double get() = capacity - deficit
+        val hasSlack: Boolean get() = capacity >= deficit
+    }
+
+    /**
+     * Every unmet requirement's capacity this turn; [failSafeReason] set means the inputs prove nothing and the bot races.
+     * [todayCapacity] counts today's races whatever their entry fans (the race list shows what is enterable).
+     */
+    data class CapacityCheck(
+        val turn: Int,
+        val failSafeReason: String?,
+        val requirements: List<RequirementCapacity>,
+        val todayCapacity: Double,
+        val laterTurnHasCapacity: Boolean,
+        val fanBonus: Double,
+    ) {
+        /** The requirement with the least slack decides. */
+        val binding: RequirementCapacity? get() = requirements.minByOrNull { it.slack }
+
+        val everyRequirementHasSlack: Boolean get() = requirements.all { it.hasSlack }
+
+        companion object {
+            fun failSafe(turn: Int, reason: String, fanBonus: Double) = CapacityCheck(turn, reason, emptyList(), 0.0, false, fanBonus)
+        }
+    }
+
+    /**
+     * Fan Bonus proven by the debut: the debut must be won before any other race opens, so its payout over 700 measures the
+     * deck's bonus, not placement. 1.0 when unread (a restart, a Maiden race, no clean read).
+     */
+    fun fanBonus(debutFans: Int?): Double = if (debutFans == null) 1.0 else maxOf(1.0, debutFans.toDouble() / DEBUT_WIN_FANS)
+
+    /** B or better assumes 3rd place, C 6th, D or worse nothing, each times the Fan Bonus but never above 2nd or 5th place. */
+    fun placeShare(worstAptitude: Aptitude, fanBonus: Double): Double =
+        when {
+            worstAptitude >= Aptitude.B -> minOf(SECOND_PLACE_SHARE, THIRD_PLACE_SHARE * fanBonus)
+            worstAptitude == Aptitude.C -> minOf(FIFTH_PLACE_SHARE, SIXTH_PLACE_SHARE * fanBonus)
+            else -> 0.0
+        }
+
+    /** Highest entry fans per year and grade in master.mdb `single_mode_program.need_fan_count`; the race data has no entry field. */
+    fun conservativeEntryFans(turn: Int, grade: RaceGrade): Int {
+        val junior = turn <= JUNIOR_LAST_TURN
+        return when (grade) {
+            RaceGrade.PRE_OP, RaceGrade.OP -> 350
+            RaceGrade.G3 -> if (junior) 350 else 1500
+            RaceGrade.G2 -> if (junior) 375 else 2000
+            RaceGrade.G1 -> if (junior) 1000 else 25000
+            else -> Int.MAX_VALUE
+        }
+    }
+
+    /** The best conservative payout among [rows]; with [projectedFans] a race counts only once its entry fans are reached. */
+    fun turnCapacity(turn: Int, rows: List<RaceRow>, projectedFans: Double?, fanBonus: Double): Double {
+        var best = 0.0
+        for (row in rows) {
+            if (projectedFans != null && projectedFans < conservativeEntryFans(turn, row.grade)) continue
+            best = maxOf(best, row.fans * placeShare(row.worstAptitude, fanBonus))
+        }
+        return best
+    }
+
+    /**
+     * Checks EVERY unmet goal and gate, not only the current one: a met early goal must not leave a larger later gate
+     * unprotected. Usable turns skip Summer, the trainee's goal race turns and fan-goal deadline turns. Walking each
+     * window in turn order, projected fans grow by the capacities already counted.
+     */
+    fun capacityCheck(
+        facts: GrandConcertFanFacts?,
+        rawName: String,
+        currentTurn: Int,
+        currentFans: Int,
+        raceRows: Map<Int, List<RaceRow>>,
+        fanBonus: Double,
+    ): CapacityCheck {
+        fun failSafe(reason: String) = CapacityCheck.failSafe(currentTurn, reason, fanBonus)
+        if (facts == null) return failSafe("data-asset-missing-or-malformed")
+        val charFacts =
+            when (val match = facts.match(rawName)) {
+                is GrandConcertFanFacts.Match.Matched -> match.facts
+                is GrandConcertFanFacts.Match.UnknownAmbiguous -> return failSafe("trainee-ambiguous")
+                is GrandConcertFanFacts.Match.UnknownNoMatch -> return failSafe("trainee-unmatched")
+            }
+        if (currentFans <= 1) return failSafe("fans-unread")
+        val dueOrOverdue =
+            charFacts.fanGoals.any { currentFans < it.targetFans && it.deadlineTurn <= currentTurn } ||
+                charFacts.mandatoryGates.any { currentFans < it.minFansNeeded && it.turn <= currentTurn }
+        if (dueOrOverdue) return failSafe("requirement-due-or-overdue")
+        if (raceRows.values.all { it.isEmpty() }) return failSafe("race-data-empty")
+
+        val requirements =
+            charFacts.fanGoals.filter { currentFans < it.targetFans }
+                .map { Requirement(RequirementType.FAN_GOAL, it.targetFans, it.deadlineTurn, it.deadlineTurn) } +
+                charFacts.mandatoryGates.filter { currentFans < it.maxFansNeeded && it.turn > currentTurn }
+                    .map { Requirement(RequirementType.MANDATORY_GATE, it.maxFansNeeded, it.turn, it.turn - 1) }
+        val blocked = (charFacts.mandatoryGates.map { it.turn } + charFacts.fanGoals.map { it.deadlineTurn }).toSet()
+        var laterTurnHasCapacity = false
+        val capacities = ArrayList<RequirementCapacity>()
+        for (requirement in requirements.sortedBy { it.windowEnd }) {
+            val usable =
+                ((currentTurn + 1)..requirement.windowEnd).filter {
+                    GrandConcertRaceCalendar.isRaceableTurn(it) && it !in summerTurns && it !in blocked
+                }
+            if (usable.isNotEmpty() && usable.all { raceRows[it].isNullOrEmpty() }) return failSafe("race-data-window-empty")
+            var projected = currentFans.toDouble()
+            val caps = ArrayList<Double>()
+            for (turn in usable) {
+                val cap = turnCapacity(turn, raceRows[turn].orEmpty(), projected, fanBonus)
+                caps.add(cap)
+                projected += cap
+            }
+            if (caps.any { it > 0.0 }) laterTurnHasCapacity = true
+            caps.sortDescending()
+            capacities.add(RequirementCapacity(requirement, requirement.target - currentFans, caps.drop(2).sum()))
+        }
+        val today = turnCapacity(currentTurn, raceRows[currentTurn].orEmpty(), null, fanBonus)
+        return CapacityCheck(currentTurn, null, capacities, today, laterTurnHasCapacity, fanBonus)
+    }
+
+    /** The last two fan-pressure payouts each fell below the capacity assumed for their turn: the floor is wrong for this trainee. */
+    fun payoutsBelowAssumption(payouts: List<Pair<Int, Double>>): Boolean = payouts.size >= 2 && payouts.takeLast(2).all { (paid, assumed) -> paid < assumed }
 
     /**
      * Never throws: an absent asset, unmatched trainee or ambiguous identity resolves to an UNKNOWN snapshot with a
@@ -163,8 +250,6 @@ object GrandConcertFanPressure {
             turnsUntilRequirement = null,
             futureRaceOpportunitiesIfTrainNow = null,
             usableRaceTurnsInWindow = null,
-            tightestLaterUsableTurns = null,
-            tightestLaterDeficit = null,
             guaranteedRacesUpperBound = null,
         )
 
@@ -221,25 +306,12 @@ object GrandConcertFanPressure {
         var turnsUntilRequirement: Int? = null
         var futureRaceOpportunitiesIfTrainNow: Int? = null
         var usableRaceTurnsInWindow: Int? = null
-        var tightestLaterUsableTurns: Int? = null
-        var tightestLaterDeficit: Int? = null
         if (effectiveTurn != null) {
             turnsUntilRequirement = effectiveTurn - currentTurn
             val windowEnd = if (effectiveType == RequirementType.MANDATORY_GATE) effectiveTurn - 1 else effectiveTurn
             futureRaceOpportunitiesIfTrainNow = GrandConcertRaceCalendar.raceableTurnsBetween(currentTurn, windowEnd)
             val mandatoryTurns = charFacts.mandatoryGates.map { it.turn }.distinct()
             usableRaceTurnsInWindow = usableRaceTurns(currentTurn, windowEnd, mandatoryTurns)
-            // (deadline, target, window end) of each unmet requirement.
-            val later =
-                charFacts.fanGoals.filter { currentFans < it.targetFans }.map { Triple(it.deadlineTurn, it.targetFans, it.deadlineTurn) } +
-                    charFacts.mandatoryGates.filter { currentFans < it.minFansNeeded }.map { Triple(it.turn, it.maxFansNeeded, it.turn - 1) }
-            later.filter { it.first > effectiveTurn }
-                .map { (_, target, end) -> usableRaceTurns(currentTurn, end, mandatoryTurns) to target - currentFans }
-                .minByOrNull { (usable, deficit) -> usable - racesWithMargin(deficit) }
-                ?.let { (usable, deficit) ->
-                    tightestLaterUsableTurns = usable
-                    tightestLaterDeficit = deficit
-                }
         }
         var deficit: Int? = null
         var guaranteedRacesUpperBound: Int? = null
@@ -279,8 +351,6 @@ object GrandConcertFanPressure {
             turnsUntilRequirement = turnsUntilRequirement,
             futureRaceOpportunitiesIfTrainNow = futureRaceOpportunitiesIfTrainNow,
             usableRaceTurnsInWindow = usableRaceTurnsInWindow,
-            tightestLaterUsableTurns = tightestLaterUsableTurns,
-            tightestLaterDeficit = tightestLaterDeficit,
             guaranteedRacesUpperBound = guaranteedRacesUpperBound,
         )
     }
@@ -297,13 +367,14 @@ object GrandConcertFanPressure {
 
     private fun ceilDiv(a: Int, b: Int): Int = (a + b - 1) / b
 
-    /** Formats the diagnostic [GC_FAN] line; null policy inputs render as failClosed. */
+    /** Formats the diagnostic [GC_FAN] line: the snapshot, then the requirement with the least slack and the decision. */
     fun telemetryLine(
         snapshot: Snapshot,
+        check: CapacityCheck,
         concertBehindPace: Boolean,
-        policyInputs: PolicyInputs,
         decision: GrandConcertFanPolicy.FanRaceDecision,
-        recentFanRacesPaidLow: Boolean = false,
+        payoutsLow: Boolean,
+        rearmed: Boolean,
     ): String {
         val goal =
             when (snapshot.goalStatus) {
@@ -333,6 +404,11 @@ object GrandConcertFanPressure {
                     "${snapshot.effectiveType}(target=$target turn=${snapshot.effectiveTurn})"
                 }
             }
+        val binding =
+            check.binding?.let {
+                "${it.requirement.type}(target=${it.requirement.target} turn=${it.requirement.turn}) " +
+                    "capacity=${it.capacity.toInt()} slack=${it.slack.toInt()}"
+            } ?: "none"
         val nameTag = snapshot.canonicalName?.let { "($it)" } ?: ""
         return "[GRAND_CONCERT] [GC_FAN] fanReq=true turn=${snapshot.currentTurn} fans=${snapshot.currentFans} " +
             "match=${snapshot.matchStatus}$nameTag reason=${snapshot.reason} " +
@@ -340,11 +416,11 @@ object GrandConcertFanPressure {
             "eff=$effective deficit=${snapshot.deficit ?: "unknown"} " +
             "futureRaceSlotsIfTrainNow=${snapshot.futureRaceOpportunitiesIfTrainNow ?: "unknown"} " +
             "usableRaceTurns=${snapshot.usableRaceTurnsInWindow ?: "unknown"} " +
-            "later=${snapshot.tightestLaterDeficit?.let { "$it/${snapshot.tightestLaterUsableTurns}turns" } ?: "none"} " +
             "floor=${snapshot.universalFloor} " +
             "guaranteedRacesUB=${snapshot.guaranteedRacesUpperBound ?: "unknown"} " +
-            "concertBehindPace=$concertBehindPace lowPayouts=$recentFanRacesPaidLow " +
-            "policyDeadline=${policyInputs.turnsUntilDeadline ?: "failClosed"} " +
-            "policyRacesNeeded=${policyInputs.racesStillNeeded ?: "failClosed"} decision=$decision"
+            "concertBehindPace=$concertBehindPace lowPayouts=$payoutsLow " +
+            "binding=$binding " +
+            "today=${check.todayCapacity.toInt()} k=${String.format(Locale.US, "%.2f", check.fanBonus)} rearmed=$rearmed " +
+            "failSafe=${check.failSafeReason ?: "none"} decision=$decision"
     }
 }

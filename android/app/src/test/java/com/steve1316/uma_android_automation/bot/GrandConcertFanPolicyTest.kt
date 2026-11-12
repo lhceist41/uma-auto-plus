@@ -1,85 +1,85 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.bot.GrandConcertFanPolicy.FanRaceDecision
+import com.steve1316.uma_android_automation.bot.GrandConcertFanPressure.CapacityCheck
+import com.steve1316.uma_android_automation.bot.GrandConcertFanPressure.Requirement
+import com.steve1316.uma_android_automation.bot.GrandConcertFanPressure.RequirementCapacity
+import com.steve1316.uma_android_automation.bot.GrandConcertFanPressure.RequirementType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import java.io.File
 
 /**
- * The Grand Concert fan-vs-training deferral policy. Every case is a pure decision over synthetic
- * inputs; the point is the fail-closed contract, not a live deadline reader.
+ * The Grand Concert fan-vs-training deferral policy over synthetic capacity checks; the point is the fail-closed
+ * contract, not the capacity arithmetic (GrandConcertFanCapacityTest).
  */
 @DisplayName("Grand Concert fan-vs-training policy")
 class GrandConcertFanPolicyTest {
-    private fun decide(
-        active: Boolean = true,
-        deadline: Int? = 10,
-        racesNeeded: Int? = 1,
-        behindPace: Boolean = true,
-    ) = GrandConcertFanPolicy.decide(active, deadline, racesNeeded, behindPace)
+    private fun req(deficit: Int, capacity: Double, turn: Int = 30) =
+        RequirementCapacity(Requirement(RequirementType.FAN_GOAL, 5000, turn, turn), deficit, capacity)
+
+    private fun check(
+        vararg requirements: RequirementCapacity,
+        today: Double = 400.0,
+        later: Boolean = true,
+        failSafe: String? = null,
+    ) = CapacityCheck(14, failSafe, requirements.toList(), today, later, 1.0)
+
+    private fun decide(check: CapacityCheck, active: Boolean = true, low: Boolean = false) = GrandConcertFanPolicy.decide(active, check, low)
 
     @Test
-    @DisplayName("below fan target with plenty of slack: prefer training, do not force a race")
-    fun deferWhenSlackProven() {
-        // Deadline 10 turns out, one race needed, cycle behind pace: skipping this turn still fits.
-        assertEquals(FanRaceDecision.DEFER_TO_TRAINING, decide(deadline = 10, racesNeeded = 1, behindPace = true))
+    @DisplayName("every requirement with slack trains")
+    fun deferWhenEveryRequirementHasSlack() {
+        assertEquals(FanRaceDecision.DEFER_TO_TRAINING, decide(check(req(3000, 3000.0), req(20000, 21000.0, 48))))
     }
 
     @Test
-    @DisplayName("below fan target with an urgent deadline: force the race")
-    fun forceWhenDeadlineUrgent() {
-        // One race needed but only this turn remains before the deadline: cannot spare it.
-        assertEquals(FanRaceDecision.FORCE_RACE, decide(deadline = 1, racesNeeded = 1, behindPace = true))
-        // Exactly at the deferral margin boundary (need 1, deadline 2) is safe; one tighter is not.
-        assertEquals(FanRaceDecision.DEFER_TO_TRAINING, decide(deadline = 2, racesNeeded = 1, behindPace = true))
+    @DisplayName("one requirement without slack races, even when the nearer one has plenty")
+    fun forceWhenAnyRequirementIsShort() {
+        assertEquals(FanRaceDecision.FORCE_RACE, decide(check(req(3000, 9000.0), req(20000, 19999.0, 48))))
+        assertEquals(FanRaceDecision.FORCE_RACE, decide(check(req(3000, 2999.0))))
     }
 
     @Test
-    @DisplayName("unknown or insufficient deadline data: fail safe to a race")
-    fun failSafeWhenDeadlineUnknown() {
-        assertEquals(FanRaceDecision.FAIL_SAFE_FORCE_RACE, decide(deadline = null, racesNeeded = 1))
-        assertEquals(FanRaceDecision.FAIL_SAFE_FORCE_RACE, decide(deadline = 10, racesNeeded = null))
+    @DisplayName("short with nothing to gain today defers while a later turn can earn fans, races when none can")
+    fun nothingToGainToday() {
+        assertEquals(FanRaceDecision.DEFER_TO_TRAINING, decide(check(req(3000, 0.0), today = 0.0, later = true)))
+        assertEquals(FanRaceDecision.FORCE_RACE, decide(check(req(3000, 0.0), today = 0.0, later = false)))
     }
 
     @Test
-    @DisplayName("fan target already satisfied: nothing to force")
-    fun noRequirementWhenSatisfied() {
-        assertEquals(FanRaceDecision.NO_REQUIREMENT, decide(active = false, deadline = 10, racesNeeded = 1))
+    @DisplayName("a failed capacity check races; low payouts race over slack; nothing unmet at this turn's fans trains")
+    fun failClosed() {
+        assertEquals(FanRaceDecision.FAIL_SAFE_FORCE_RACE, decide(check(failSafe = "aptitudes-unread")))
+        assertEquals(FanRaceDecision.FAIL_SAFE_FORCE_RACE, decide(check(req(3000, 9000.0)), low = true))
+        assertEquals(FanRaceDecision.DEFER_TO_TRAINING, decide(check()))
+        assertEquals(FanRaceDecision.DEFER_TO_TRAINING, decide(check(), low = true))
     }
 
     @Test
-    @DisplayName("severe deficit that cannot be proven safe to defer: force the race")
-    fun forceWhenDeficitSevere() {
-        // Five races still needed but only four turns before the deadline: deferring one loses the
-        // gate, so race now.
-        assertEquals(FanRaceDecision.FORCE_RACE, decide(deadline = 4, racesNeeded = 5, behindPace = true))
-        // Even with generous slack, a null estimate cannot prove safety and fails closed.
-        assertEquals(FanRaceDecision.FAIL_SAFE_FORCE_RACE, decide(deadline = 20, racesNeeded = null, behindPace = true))
+    @DisplayName("no active requirement decides nothing")
+    fun noRequirement() {
+        assertEquals(FanRaceDecision.NO_REQUIREMENT, decide(check(req(3000, 0.0)), active = false))
     }
 
     @Test
-    @DisplayName("no time-sensitive training value: race rather than defer for nothing")
-    fun forceWhenNothingToGain() {
-        // Slack is provable, but the cycle is on pace, so a training turn buys no scenario currency;
-        // clear the requirement instead of sitting on it.
-        assertEquals(FanRaceDecision.FORCE_RACE, decide(deadline = 10, racesNeeded = 1, behindPace = false))
+    @DisplayName("an on-pace concert no longer forces a race over slack: the decision takes no concert pace")
+    fun concertPaceIsNotAnInput() {
+        assertEquals(FanRaceDecision.DEFER_TO_TRAINING, decide(check(req(3000, 3000.0))))
+        val body = source("bot/campaigns/GrandConcert.kt")
+        val call = body.substring(body.indexOf("GrandConcertFanPolicy.decide("), body.indexOf(")", body.indexOf("GrandConcertFanPolicy.decide(")))
+        assertFalse(call.contains("concertBehindPace"), call)
     }
 
     @Test
-    @DisplayName("prior 618-short failure class: never defers indefinitely through the deadline")
+    @DisplayName("prior 618-short failure class: a requirement losing capacity turn by turn stops deferring before it is short")
     fun neverDefersThroughTheDeadline() {
-        // Walk the deadline down turn by turn with the deficit unchanged (one race still needed).
-        // The policy must switch from deferring to forcing BEFORE the deadline can be crossed while
-        // still short, which is the failure mode that ended a career 618 fans short.
-        val decisions = (6 downTo 0).map { turnsLeft -> decide(deadline = turnsLeft, racesNeeded = 1, behindPace = true) }
-        // The last turn that still defers must leave room for the forced race that follows.
-        val lastDeferIndex = decisions.indexOfLast { it == FanRaceDecision.DEFER_TO_TRAINING }
-        val firstForceIndex = decisions.indexOfFirst { GrandConcertFanPolicy.forcesRace(it) }
-        assertTrue(firstForceIndex > lastDeferIndex, "must stop deferring before it can cross the deadline")
-        // At the deadline itself (0 turns) it must force, never defer.
-        assertEquals(FanRaceDecision.FORCE_RACE, decide(deadline = 0, racesNeeded = 1, behindPace = true))
+        // Capacity shrinks as the window closes with the deficit unchanged: the first turn without slack races.
+        val decisions = listOf(5000.0, 3500.0, 3000.0, 2999.0, 1000.0, 0.0).map { decide(check(req(3000, it))) }
+        assertEquals(List(3) { FanRaceDecision.DEFER_TO_TRAINING } + List(3) { FanRaceDecision.FORCE_RACE }, decisions)
     }
 
     @Test
@@ -89,5 +89,17 @@ class GrandConcertFanPolicyTest {
         assertTrue(GrandConcertFanPolicy.forcesRace(FanRaceDecision.FAIL_SAFE_FORCE_RACE))
         assertFalse(GrandConcertFanPolicy.forcesRace(FanRaceDecision.DEFER_TO_TRAINING))
         assertFalse(GrandConcertFanPolicy.forcesRace(FanRaceDecision.NO_REQUIREMENT))
+    }
+
+    private fun source(relative: String): String {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".")
+        repeat(5) {
+            val a = File(dir, "src/main/java/com/steve1316/uma_android_automation/$relative")
+            if (a.isFile) return a.readText()
+            val b = File(dir, "android/app/src/main/java/com/steve1316/uma_android_automation/$relative")
+            if (b.isFile) return b.readText()
+            dir = dir?.parentFile
+        }
+        error("could not locate $relative")
     }
 }

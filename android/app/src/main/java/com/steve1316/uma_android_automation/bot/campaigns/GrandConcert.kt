@@ -122,10 +122,24 @@ class GrandConcert(game: Game) : Campaign(game) {
      */
     private var concertEscortAttempts = 0
 
-    /** Turn and fans of the last race forced by fan pressure, measured on the next turn once the fans are re-read. */
+    /**
+     * Turn, fans and assumed capacity of the last race forced by fan pressure; its payout is measured on the next turn
+     * once the fans are re-read.
+     */
     private var fanPressureRaceTurn: Int? = null
     private var fansBeforeFanPressureRace = 0
-    private val fanPressureRacePayouts = ArrayDeque<Int>()
+    private var assumedFanPressurePayout = 0.0
+    private val fanPressureRacePayouts = ArrayDeque<Pair<Int, Double>>()
+
+    // The turn-start requirement thread reads these and can outlive its 5 s latch: written payouts stay on the main thread.
+    @Volatile private var fanPayoutsBelowAssumption = false
+
+    /** The fan count read on turn 13 or 14, before any race but the debut can open: the debut payout. */
+    @Volatile private var debutFans: Int? = null
+
+    @Volatile private var fanRequirementRearmedTurn = -1
+
+    @Volatile private var lastCapacityCheck: GrandConcertFanPressure.CapacityCheck? = null
 
     /**
      * Cheapest unscheduled song with a readable cost, kept across turns so the training scorer can steer point income.
@@ -743,59 +757,85 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * A fan requirement may yield to a training turn when [GrandConcertFanPressure.policyInputs] shows the free race turns
-     * left before it still cover a conservative race count; anything unknown races. Concerts pay fans but are not
-     * counted. Only the fan arm is eligible; [GC_FAN] logs the snapshot and decision every turn.
+     * A fan requirement may yield to a training turn while the remaining race turns still cover every unmet goal and gate
+     * on a conservative payout ([GrandConcertFanPressure.capacityCheck]); anything unknown races. Only the fan arm is
+     * eligible; [GC_FAN] logs the snapshot and decision every turn.
      */
     override fun considerFanRaceDeferral(): Boolean {
         if (!racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement) return false
         val concertBehindPace = grandConcertPointContext(null)?.behindPace ?: false
-
-        // A payout is read only on the next turn after a fan re-read: a later or stale read would mix in other races.
-        val raceTurn = fanPressureRaceTurn
-        if (raceTurn != null && date.day != raceTurn) {
-            if (date.day == raceTurn + 1 && !bNeedToCheckFans) {
-                fanPressureRacePayouts.addLast(trainee.fans - fansBeforeFanPressureRace)
-                if (fanPressureRacePayouts.size > 2) fanPressureRacePayouts.removeFirst()
-            }
-            fanPressureRaceTurn = null
-        }
-        val paidLow = GrandConcertFanPressure.recentFanRacesPaidLow(fanPressureRacePayouts)
+        recordFanPressurePayout()
+        val paidLow = GrandConcertFanPressure.payoutsBelowAssumption(fanPressureRacePayouts)
+        fanPayoutsBelowAssumption = paidLow
 
         val snapshot = GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
         lastFanSnapshot = snapshot
-        val policyInputs = GrandConcertFanPressure.policyInputs(snapshot, paidLow)
-        val decision =
-            GrandConcertFanPolicy.decide(
-                fanRequirementActive = true,
-                turnsUntilDeadline = policyInputs.turnsUntilDeadline,
-                racesStillNeeded = policyInputs.racesStillNeeded,
-                concertBehindPace = concertBehindPace,
-            )
-        MessageLog.i(TAG, GrandConcertFanPressure.telemetryLine(snapshot, concertBehindPace, policyInputs, decision, paidLow))
+        val check = fanCapacityCheck()
+        val decision = GrandConcertFanPolicy.decide(fanRequirementActive = true, check, paidLow)
+        MessageLog.i(TAG, GrandConcertFanPressure.telemetryLine(snapshot, check, concertBehindPace, decision, paidLow, rearmed = fanRequirementRearmedTurn == date.day))
         if (GrandConcertFanPolicy.forcesRace(decision) && fanPressureRaceTurn == null) {
             fanPressureRaceTurn = date.day
             fansBeforeFanPressureRace = trainee.fans
+            assumedFanPressurePayout = check.todayCapacity
         }
         return decision == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
+    }
+
+    /**
+     * Records the last forced race's payout against its assumed capacity once this turn's fans are re-read; a later or
+     * stale read would mix in other races. Main thread only: the turn-start re-arm reads [fanPayoutsBelowAssumption].
+     */
+    private fun recordFanPressurePayout() {
+        val raceTurn = fanPressureRaceTurn ?: return
+        if (date.day == raceTurn || (date.day == raceTurn + 1 && bNeedToCheckFans)) return
+        if (date.day == raceTurn + 1 && assumedFanPressurePayout > 0.0) {
+            fanPressureRacePayouts.addLast(trainee.fans - fansBeforeFanPressureRace to assumedFanPressurePayout)
+            if (fanPressureRacePayouts.size > 2) fanPressureRacePayouts.removeFirst()
+        }
+        fanPressureRaceTurn = null
+    }
+
+    /** Capacity of every unmet fan requirement from the race data and the trainee's aptitudes; fails safe while aptitudes are unread. */
+    private fun fanCapacityCheck(): GrandConcertFanPressure.CapacityCheck {
+        if (debutFans == null && date.day in 13..14 && !bNeedToCheckFans && trainee.fans > 1) debutFans = trainee.fans
+        val fanBonus = GrandConcertFanPressure.fanBonus(debutFans)
+        val check =
+            if (!trainee.bHasUpdatedAptitudes) {
+                GrandConcertFanPressure.CapacityCheck.failSafe(date.day, "aptitudes-unread", fanBonus)
+            } else {
+                val rows =
+                    racing.raceCalendar.groupBy({ it.turnNumber }) {
+                        GrandConcertFanPressure.RaceRow(it.grade, it.fans, racing.worstRaceAptitude(it))
+                    }
+                GrandConcertFanPressure.capacityCheck(fanFacts, trainee.name, date.day, trainee.fans, rows, fanBonus)
+            }
+        lastCapacityCheck = check
+        return check
     }
 
     /** The fan snapshot the last [considerFanRaceDeferral] decided on, kept so the race line names that turn's target and not an older one. */
     private var lastFanSnapshot: GrandConcertFanPressure.Snapshot? = null
 
     /** A turn that raced without the fan check (a popup or Force Racing) reads the same pure snapshot from the facts now. */
-    override fun fanRaceReasonForLine(): String =
-        Racing.plainFanSnapshotReason(
-            lastFanSnapshot?.takeIf { it.currentTurn == date.day } ?: GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans),
-            GrandConcertFanPressure.recentFanRacesPaidLow(fanPressureRacePayouts),
-        )
+    override fun fanRaceReasonForLine(): String {
+        val snapshot = lastFanSnapshot?.takeIf { it.currentTurn == date.day } ?: GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
+        val binding = (lastCapacityCheck?.takeIf { it.turn == date.day } ?: fanCapacityCheck()).binding
+        val laterShortfall = binding?.takeIf { !it.hasSlack && it.requirement.turn != snapshot.effectiveTurn }?.let { it.deficit to it.requirement.turn }
+        return Racing.plainFanSnapshotReason(snapshot, laterShortfall)
+    }
 
     /**
      * Fan requirement from the committed route facts, not the dead race_criteria_fans template: the earliest
-     * goal-or-gate period at or after this turn, active while its threshold is unmet. No screen reads.
+     * goal-or-gate period at or after this turn, active while its threshold is unmet, or re-armed when a later
+     * requirement has lost its slack. No screen reads.
      */
-    override fun currentFanRequirementFromScenarioFacts(): GrandConcertFanRequirement.Result =
-        GrandConcertFanRequirement.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
+    override fun currentFanRequirementFromScenarioFacts(): GrandConcertFanRequirement.Result {
+        val scope = GrandConcertFanRequirement.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
+        if (scope !is GrandConcertFanRequirement.Result.Inactive) return scope
+        val result = GrandConcertFanRequirement.rearm(scope, fanCapacityCheck(), fanPayoutsBelowAssumption)
+        if (result is GrandConcertFanRequirement.Result.Active) fanRequirementRearmedTurn = date.day
+        return result
+    }
 
     /**
      * Greedy spend loop with a stop rule over an open lesson list. Two concert protections precede the greedy pick:

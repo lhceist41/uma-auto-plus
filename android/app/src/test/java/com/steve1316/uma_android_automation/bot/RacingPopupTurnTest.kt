@@ -107,18 +107,23 @@ class RacingPopupTurnTest {
         assertTrue(popupOnRestartTurn.decideRaces())
     }
 
+    /** A requirement short of [deficit] fans with [capacity] fans of conservative race capacity left. */
     private fun grandConcertDefers(
-        deadline: Int,
-        racesNeeded: Int,
-    ): Boolean = GrandConcertFanPolicy.decide(true, deadline, racesNeeded, true) == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
+        deficit: Int,
+        capacity: Double,
+    ): Boolean {
+        val requirement = GrandConcertFanPressure.Requirement(GrandConcertFanPressure.RequirementType.FAN_GOAL, 5000, 30, 30)
+        val check = GrandConcertFanPressure.CapacityCheck(14, null, listOf(GrandConcertFanPressure.RequirementCapacity(requirement, deficit, capacity)), 400.0, true, 1.0)
+        return GrandConcertFanPolicy.decide(true, check, false) == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
+    }
 
     @Test
     @DisplayName("Grand Concert: a popup does not force the race when the fan policy defers, and races when it does not")
     fun grandConcertFanPolicyStaysInCharge() {
-        assertTrue(grandConcertDefers(deadline = 10, racesNeeded = 1))
-        assertFalse(RacingPopupTurn.forcesRace(armed = true) { grandConcertDefers(deadline = 10, racesNeeded = 1) })
-        assertFalse(grandConcertDefers(deadline = 1, racesNeeded = 1))
-        assertTrue(RacingPopupTurn.forcesRace(armed = true) { grandConcertDefers(deadline = 1, racesNeeded = 1) })
+        assertTrue(grandConcertDefers(deficit = 3000, capacity = 6000.0))
+        assertFalse(RacingPopupTurn.forcesRace(armed = true) { grandConcertDefers(deficit = 3000, capacity = 6000.0) })
+        assertFalse(grandConcertDefers(deficit = 3000, capacity = 1000.0))
+        assertTrue(RacingPopupTurn.forcesRace(armed = true) { grandConcertDefers(deficit = 3000, capacity = 1000.0) })
     }
 
     @Test

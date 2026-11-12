@@ -378,127 +378,15 @@ class GrandConcertFanFactsTest {
         assertEquals(MatchStatus.UNKNOWN_AMBIGUOUS, snapshot("tmopera o", 10, 100).matchStatus)
     }
 
-    // ---- the slack rule: race for a requirement only when time runs short ----
-
-    private fun decision(s: GrandConcertFanPressure.Snapshot, paidLow: Boolean = false): GrandConcertFanPolicy.FanRaceDecision {
-        val inputs = GrandConcertFanPressure.policyInputs(s, paidLow)
-        return GrandConcertFanPolicy.decide(true, inputs.turnsUntilDeadline, inputs.racesStillNeeded, concertBehindPace = true)
-    }
-
-    private fun narita(turn: Int, fans: Int): GrandConcertFanPressure.Snapshot {
-        val parsed = GrandConcertFanFacts.parse(assetFile("gc_fan_runtime.json").readText()) ?: error("shipped asset should parse")
-        return GrandConcertFanPressure.evaluate(parsed, "Narita Taishin", turn, fans)
-    }
-
-    @Test
-    @DisplayName("Narita Taishin: the Arima gate 44 turns out trains, the Satsuki gate 8 turns out races")
-    fun naritaPlayerTurns() {
-        // 25000 @ 72: 43 raceable turns minus 8 Summer and 6 mandatory leaves 29 >= ceil(10 * 1.5) + 2.
-        val t28 = narita(28, 21052)
-        assertEquals(29, t28.usableRaceTurnsInWindow)
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING, decision(t28))
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING, decision(narita(47, 21052)))
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.FORCE_RACE, decision(narita(48, 21052)))
-        // 1114 fans: the 4500 @ 31 gate alone would allow turn 13, but the later 25000 @ 72 gate has no room yet.
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.FORCE_RACE, decision(narita(13, 1114)))
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.FORCE_RACE, decision(narita(23, 1114)))
-        // 15124 fans: 25000 @ 72 needs 38 + 2 turns but has 32 outside Summer and mandatory races.
-        val t25 = narita(25, 15124)
-        assertEquals(9876, t25.tightestLaterDeficit)
-        assertEquals(32, t25.tightestLaterUsableTurns)
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.FORCE_RACE, decision(t25))
-    }
-
-    @Test
-    @DisplayName("Summer turns are not race turns: Nishino Flower races at turn 36 for a gate at turn 42")
-    fun summerTurnsAreNotRaceTurns() {
-        val parsed = GrandConcertFanFacts.parse(assetFile("gc_fan_runtime.json").readText()) ?: error("shipped asset should parse")
-        // 15000 @ 42 from 14400 fans: turns 37-40 are Summer, so only turn 41 is left for the 2 races needed.
-        val s = GrandConcertFanPressure.evaluate(parsed, "Nishino Flower", 36, 14400)
-        assertEquals(15000, s.effectiveTarget)
-        assertEquals(42, s.effectiveTurn)
-        assertEquals(5, s.futureRaceOpportunitiesIfTrainNow)
-        assertEquals(1, s.usableRaceTurnsInWindow)
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.FORCE_RACE, decision(s))
-    }
-
-    @Test
-    @DisplayName("a mandatory race turn inside the window is one fewer usable race turn")
-    fun mandatoryTurnInWindowCountsOneFewer() {
-        // Gate 9600 @ 40 from 6000 fans at turn 20: 9 races needed, so 16 usable turns are required. Of the 19
-        // raceable turns 21-39, 37-39 are Summer.
-        val free = snapshot("Window Free", turn = 20, fans = 6000)
-        val busy = snapshot("Window Busy", turn = 20, fans = 6000)
-        assertEquals(19, free.futureRaceOpportunitiesIfTrainNow)
-        assertEquals(16, free.usableRaceTurnsInWindow)
-        assertEquals(15, busy.usableRaceTurnsInWindow)
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING, decision(free))
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.FORCE_RACE, decision(busy))
-    }
-
-    @Test
-    @DisplayName("deferring for a near small requirement waits until a larger later one also has room")
-    fun laterRequirementCanForceTheRace() {
-        // 500 fans at turn 13: 1000 @ 24 needs 2 races in 10 turns, 4500 @ 31 needs 10 in 16 turns (one is mandatory).
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING, decision(snapshot("Near Only", 13, 500)))
-        val both = snapshot("Near And Far", 13, 500)
-        assertEquals(4000, both.tightestLaterDeficit)
-        assertEquals(16, both.tightestLaterUsableTurns)
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.FORCE_RACE, decision(both))
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING, decision(snapshot("Near And Far", 13, 900)))
-    }
-
-    @Test
-    @DisplayName("anything unknown still races: no asset, an unmatched or empty name, a choice gate, a fan read of 0 or 1, a due or overdue requirement")
-    fun failsClosedOnUnknowns() {
-        val failSafe = GrandConcertFanPolicy.FanRaceDecision.FAIL_SAFE_FORCE_RACE
-        assertEquals(failSafe, decision(GrandConcertFanPressure.evaluate(null, "Narita Taishin", 28, 21052)))
-        assertEquals(failSafe, decision(snapshot("Nobody", 28, 21052)))
-        assertEquals(failSafe, decision(snapshot("", 28, 21052)))
-        assertEquals(failSafe, decision(snapshot("tmopera o", 10, 100)))
-        assertEquals(failSafe, decision(snapshot("Choice Char", 12, 500)))
-        assertEquals(failSafe, decision(narita(28, 1)))
-        assertEquals(failSafe, decision(narita(28, 0)))
-        assertEquals(failSafe, decision(snapshot("Copano Rickey", 24, 2100)))
-        assertEquals(failSafe, decision(snapshot("Copano Rickey", 25, 2100)))
-        // Nothing unknown here, so the same rule defers.
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING, decision(narita(28, 21052)))
-    }
-
-    @Test
-    @DisplayName("two fan-pressure races in a row that paid under the assumed reward force the race again")
-    fun twoLowPayoutsForceTheRace() {
-        val limit = GrandConcertFanPressure.CONSERVATIVE_FANS_PER_RACE
-        assertTrue(GrandConcertFanPressure.recentFanRacesPaidLow(listOf(limit - 1, 0)))
-        assertFalse(GrandConcertFanPressure.recentFanRacesPaidLow(listOf(limit - 1, limit)))
-        assertFalse(GrandConcertFanPressure.recentFanRacesPaidLow(listOf(limit - 1)))
-        assertFalse(GrandConcertFanPressure.recentFanRacesPaidLow(listOf(50, 100, 2300)))
-        assertEquals(GrandConcertFanPolicy.FanRaceDecision.FAIL_SAFE_FORCE_RACE, decision(narita(28, 21052), paidLow = true))
-    }
-
-    @Test
-    @DisplayName("the production deferral takes its inputs only through policyInputs and records forced races")
-    fun productionPathUsesPolicyInputs() {
-        val src = source("bot/campaigns/GrandConcert.kt")
-        val body = src.substring(src.indexOf("override fun considerFanRaceDeferral"), src.indexOf("private fun spendVisit"))
-        assertTrue(body.contains("GrandConcertFanPressure.policyInputs(snapshot, paidLow)"))
-        assertTrue(body.contains("turnsUntilDeadline = policyInputs.turnsUntilDeadline"))
-        assertTrue(body.contains("racesStillNeeded = policyInputs.racesStillNeeded"))
-        assertFalse(body.contains("turnsUntilDeadline = snapshot"), "snapshot figures must not bypass the fail-closed checks")
-        assertFalse(body.contains("racesStillNeeded = snapshot"), "snapshot figures must not bypass the fail-closed checks")
-        // A payout is only read on the turn right after the race, once the fans were re-read.
-        assertTrue(body.contains("date.day == raceTurn + 1 && !bNeedToCheckFans"))
-        assertTrue(body.contains("GrandConcertFanPolicy.forcesRace(decision) && fanPressureRaceTurn == null"))
-    }
-
     // ---- telemetry ----
 
+    private fun failSafeCheck(turn: Int) = GrandConcertFanPressure.CapacityCheck.failSafe(turn, "aptitudes-unread", 1.0)
+
     @Test
-    @DisplayName("the GC_FAN line renders the facts, the window and fail-closed policy inputs")
+    @DisplayName("the GC_FAN line renders the facts, the window and a fail-closed capacity check")
     fun telemetry() {
         val s = snapshot("Copano Rickey", turn = 15, fans = 2100)
-        val inputs = GrandConcertFanPressure.policyInputs(s, recentFanRacesPaidLow = true)
-        val line = GrandConcertFanPressure.telemetryLine(s, concertBehindPace = true, inputs, GrandConcertFanPolicy.FanRaceDecision.FAIL_SAFE_FORCE_RACE, true)
+        val line = GrandConcertFanPressure.telemetryLine(s, failSafeCheck(15), true, GrandConcertFanPolicy.FanRaceDecision.FAIL_SAFE_FORCE_RACE, payoutsLow = true, rearmed = false)
         assertTrue(line.contains("[GRAND_CONCERT] [GC_FAN]"))
         assertTrue(line.contains("match=EXACT(Copano Rickey)"))
         assertTrue(line.contains("eff=FAN_GOAL"))
@@ -506,10 +394,9 @@ class GrandConcertFanFactsTest {
         assertTrue(line.contains("floor=7"))
         assertTrue(line.contains("futureRaceSlotsIfTrainNow=9"))
         assertTrue(line.contains("usableRaceTurns=9"))
-        assertTrue(line.contains("later=9900/26turns"), "line was: $line")
         assertTrue(line.contains("lowPayouts=true"))
-        assertTrue(line.contains("policyDeadline=failClosed"))
-        assertTrue(line.contains("policyRacesNeeded=failClosed"))
+        assertTrue(line.contains("binding=none"), "line was: $line")
+        assertTrue(line.contains("failSafe=aptitudes-unread"))
         assertTrue(line.contains("decision=FAIL_SAFE_FORCE_RACE"))
     }
 
@@ -517,10 +404,23 @@ class GrandConcertFanFactsTest {
     @DisplayName("an ambiguous choice gate is rendered as a min/max range, not a false exact target")
     fun telemetryAmbiguous() {
         val s = snapshot("Choice Char", turn = 20, fans = 500)
-        val inputs = GrandConcertFanPressure.policyInputs(s, recentFanRacesPaidLow = false)
-        val line = GrandConcertFanPressure.telemetryLine(s, concertBehindPace = true, inputs, GrandConcertFanPolicy.FanRaceDecision.FAIL_SAFE_FORCE_RACE)
+        val line = GrandConcertFanPressure.telemetryLine(s, failSafeCheck(20), true, GrandConcertFanPolicy.FanRaceDecision.FAIL_SAFE_FORCE_RACE, payoutsLow = false, rearmed = false)
         assertTrue(line.contains("ambiguous"), "line was: $line")
         assertTrue(line.contains("min1250/max1750"))
+    }
+
+    @Test
+    @DisplayName("the production deferral decides from the capacity check and records forced races with their assumed capacity")
+    fun productionPathUsesTheCapacityCheck() {
+        val src = source("bot/campaigns/GrandConcert.kt")
+        val body = src.substring(src.indexOf("override fun considerFanRaceDeferral"), src.indexOf("private fun spendVisit"))
+        assertTrue(body.contains("GrandConcertFanPolicy.decide(fanRequirementActive = true, check, paidLow)"))
+        assertTrue(body.contains("GrandConcertFanPolicy.forcesRace(decision) && fanPressureRaceTurn == null"))
+        assertTrue(body.contains("assumedFanPressurePayout = check.todayCapacity"))
+        // A payout is only read on the turn right after the race, once the fans were re-read.
+        assertTrue(body.contains("date.day == raceTurn + 1 && bNeedToCheckFans)) return"))
+        // The debut payout is read only before any other race can open.
+        assertTrue(body.contains("date.day in 13..14 && !bNeedToCheckFans"))
     }
 
     // ---- the shipped asset parses and carries the expected committed facts ----

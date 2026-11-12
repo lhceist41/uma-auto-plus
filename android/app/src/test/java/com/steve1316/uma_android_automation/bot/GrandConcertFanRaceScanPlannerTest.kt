@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.bot.GrandConcertFanRaceScanPlanner.LookupTier
 import com.steve1316.uma_android_automation.bot.GrandConcertFanRaceScanPlanner.ScanCandidate
+import com.steve1316.uma_android_automation.types.Aptitude
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -24,7 +25,7 @@ class GrandConcertFanRaceScanPlannerTest {
         tier: LookupTier = LookupTier.EXACT,
         matchCount: Int = 1,
         dbFans: Int? = 0,
-        apt: Boolean? = null,
+        apt: Aptitude? = null,
         rival: Boolean = false,
         page: Int = 0,
     ) = ScanCandidate(name, canonical, tier, matchCount, dbFans, apt, rival, page)
@@ -43,9 +44,9 @@ class GrandConcertFanRaceScanPlannerTest {
     @Test
     @DisplayName("aptitude is trusted only for a unique exact resolution")
     fun aptitudeTrust() {
-        assertEquals(true, c(apt = true, tier = LookupTier.EXACT, matchCount = 1).trustedAptitudeCompatible)
-        assertNull(c(apt = true, tier = LookupTier.FUZZY, matchCount = 1).trustedAptitudeCompatible)
-        assertNull(c(apt = true, tier = LookupTier.EXACT, matchCount = 2).trustedAptitudeCompatible)
+        assertEquals(Aptitude.A, c(apt = Aptitude.A, tier = LookupTier.EXACT, matchCount = 1).trustedWorstAptitude)
+        assertNull(c(apt = Aptitude.A, tier = LookupTier.FUZZY, matchCount = 1).trustedWorstAptitude)
+        assertNull(c(apt = Aptitude.A, tier = LookupTier.EXACT, matchCount = 2).trustedWorstAptitude)
     }
 
     @Test
@@ -96,21 +97,21 @@ class GrandConcertFanRaceScanPlannerTest {
     @Test
     @DisplayName("aptitude-first: a compatible smaller-face trusted race beats an incompatible larger-face one")
     fun aptitudeFirstAmongTrusted() {
-        val cands = listOf(c(canonical = "Big", dbFans = 3100, apt = false), c(canonical = "Small", dbFans = 1600, apt = true))
+        val cands = listOf(c(canonical = "Big", dbFans = 3100, apt = Aptitude.E), c(canonical = "Small", dbFans = 1600, apt = Aptitude.A))
         assertEquals(1, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex)
     }
 
     @Test
     @DisplayName("fail-open: with no compatible trusted row, the larger trusted fan value still wins")
     fun aptitudeFailOpenMatchesFansFirst() {
-        val cands = listOf(c(canonical = "Big", dbFans = 3100, apt = false), c(canonical = "Small", dbFans = 1600, apt = false))
+        val cands = listOf(c(canonical = "Big", dbFans = 3100, apt = Aptitude.E), c(canonical = "Small", dbFans = 1600, apt = Aptitude.E))
         assertEquals(0, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex)
     }
 
     @Test
     @DisplayName("within one aptitude class the larger trusted fan value wins")
     fun higherFansWithinClass() {
-        val cands = listOf(c(canonical = "Plain", dbFans = 3000, apt = false), c(canonical = "Fit", dbFans = 3000, apt = true))
+        val cands = listOf(c(canonical = "Plain", dbFans = 3000, apt = Aptitude.E), c(canonical = "Fit", dbFans = 3000, apt = Aptitude.A))
         assertEquals(1, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex) // tie -> aptitude
     }
 

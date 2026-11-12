@@ -3752,6 +3752,7 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return The decided [MainScreenAction].
      */
     open fun decideNextAction(): MainScreenAction {
+        racing.fanRequirementDeferred = false
         // DecisionTracer: accumulate ruled-out alternatives down the priority cascade and record the chosen action where it wins.
         val tracerRejected = mutableListOf<DecisionTracer.RejectedAlternative>()
 
@@ -3812,6 +3813,8 @@ abstract class Campaign(game: Game) : Task(game) {
             if (fanRaceDeferred) {
                 // A scenario fan policy proved enough slack to train instead of racing the fan requirement; the base never defers.
                 fanRequirementDeferredThisTurn = true
+                // The rest of this turn's racing reads the fan arm as off, so a race the user's settings allow is chosen by those settings.
+                racing.fanRequirementDeferred = true
                 MessageLog.i(TAG, "[INFO] Fan requirement deferred for a training turn by the scenario policy.")
             } else {
                 MessageLog.i(TAG, "[INFO] Racing requirement is active. Bypassing health and mood checks.")

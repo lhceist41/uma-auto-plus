@@ -1070,22 +1070,40 @@ parsed from the generated `gc_fan_runtime.json` asset) and a pure calculation
 mandatory-race entry gate, the fan deficit, the future race slots if training now, and a conservative
 completed-race bound. That reader is reviewed and its calendar windows are corrected: the race-slot
 count for a mandatory gate now ends at the turn BEFORE the gated race, because the gated race cannot
-earn the fans needed to enter itself, while a fan goal's deadline turn is currently counted as usable
--- an empirical assumption that a future activation must prove against the game's check timing, or
-conservatively drop. Those figures are
-logged every turn in `[GC_FAN]` and reach the policy through `GrandConcertFanPressure.policyInputs`.
-The rule counts the free race turns before the requirement (the raceable window minus Summer turns,
-where the racing requirement is cleared so the bot never races for fans, and minus the trainee's own
-mandatory race turns) and defers only while they are at least ceil(1.5 x races needed) + 2,
-where races needed is the deficit divided by 400 fans, rounded up: 3rd place in the cheapest OP race
-with no Fan Bonus, while measured wins pay about 2300 or more. The 1.5 leaves room to avoid
-back-to-back race warnings and the +2 is margin. The rule runs while the nearest requirement is unmet,
-and the same check then also covers every later unmet requirement (a choice gate at its highest
-threshold), because the same races serve them all. Concerts do pay fans, but they are not counted,
-because one can come too late before a deadline. Everything unknown still races: a missing asset, an
-unmatched or ambiguous trainee, a choice gate without one shared threshold, a fan read of 0 or 1 (a
-restart), a requirement due now or overdue, and the case where the last two races forced by fan
-pressure each paid under 400 fans (measured from the fan count re-read on the next turn). The
+earn the fans needed to enter itself, while a fan goal's deadline turn is counted as usable in the
+logged slot count (unproven against the game's check timing; the capacity check below drops it). Those
+figures are logged every turn in `[GC_FAN]`.
+
+The decision comes from a capacity floor (`GrandConcertFanPressure.capacityCheck`). Each usable turn
+in a requirement's window (the raceable window minus Summer turns, where the racing requirement is
+cleared, the trainee's goal race turns and fan-goal deadline turns) is worth the best calendar race
+that turn times a place share by the trainee's worse of surface and distance aptitude: B or better
+assumes 3rd place (25% of the face value), C 6th place (9%), D or worse nothing. Both shares are
+multiplied by the Fan Bonus the debut proved (debut fans over the 700 a debut win pays, at least 1.0;
+the debut must be won before any other race opens, so it measures the deck, not placement) and capped
+at 2nd place (40%) and 5th place (10%). master.mdb `single_mode_fan_count` pays every fan set the same
+curve by place. Walking the window in turn order, a race counts only once the fans projected so far
+reach the highest entry fans for its grade and year (master.mdb `single_mode_program.need_fan_count`,
+for example 25,000 for a Classic or Senior G1). A requirement has slack while the window's capacity
+minus its two best turns covers the deficit; the two spare turns absorb a lost turn or a bad race.
+
+The check runs every turn over every unmet goal and gate (a choice gate at its highest threshold),
+not only the current one. When the current scope is met but a later requirement has no slack, the
+requirement re-arms (`GrandConcertFanRequirement.rearm`) and `hasFanRequirement` is set exactly as
+for an unmet current scope, so a met early goal no longer leaves a large later gate unchecked until a
+few turns before it. The bot defers while every requirement has slack, whatever the concert pace, so
+the turn trains and the user's racing settings and in-game agenda apply: for the rest of a deferred
+turn every racing read sees the fan arm as off (`Racing.fanRequirementForcesRace`), so a race the
+settings allow keeps the user's filters, racing plan, smart racing and consecutive-race warning.
+A requirement without slack still defers when today offers no race the trainee places in (C or
+better) but a later window turn does; otherwise it races, and the forced race takes the best aptitude tier before the higher face
+value (`GrandConcertFanRaceSelector`: S, A and B are one tier, then C, D, E, F, G). Concerts do pay
+fans, but no source gives the amount, so they are not counted. For an active requirement,
+everything unknown still races (a met current scope stays off, as before): a
+missing asset, an unmatched or ambiguous trainee, a fan read of 0 or 1 (a restart), unread
+aptitudes, no race data, a requirement due now or overdue, and the case where the last two
+races forced by fan pressure each paid less than the capacity assumed for their turn (measured from
+the fan count re-read on the next turn), until one payout meets it. The
 goal-deadline OCR (`determineTurnsRemainingBeforeNextGoal`) remains stood down for the scenario (it
 returns -1) and is not consulted.
 

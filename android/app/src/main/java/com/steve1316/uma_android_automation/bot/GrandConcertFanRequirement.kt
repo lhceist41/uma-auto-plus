@@ -2,9 +2,8 @@ package com.steve1316.uma_android_automation.bot
 
 /**
  * Derives whether the requirement for the CURRENT period (the earliest goal-or-gate turn at or after now,
- * met or not) is still unmet at the current fan count. Unlike [GrandConcertFanPressure.evaluate] it does not
- * look past a satisfied current scope to a later unmet one (the Junior over-racing trap): once the current
- * goal is met the alarm must shut off even if a much larger requirement waits months later.
+ * met or not) is still unmet at the current fan count. A met current scope stays off unless [rearm] finds a later
+ * requirement the remaining race turns no longer cover: a large later gate alone must not force early racing.
  */
 object GrandConcertFanRequirement {
     enum class Type { FAN_GOAL, MANDATORY_GATE }
@@ -17,6 +16,7 @@ object GrandConcertFanRequirement {
     sealed class Result {
         /**
          * Unmet: force racing. [targetFans] is the larger threshold when a same-turn goal and gate are both unmet.
+         * [rearmed] marks a later requirement behind a met current scope.
          */
         data class Active(
             val type: Type,
@@ -26,6 +26,7 @@ object GrandConcertFanRequirement {
             val match: MatchKind,
             val goalUnmet: Boolean,
             val gateUnmet: Boolean,
+            val rearmed: Boolean = false,
         ) : Result()
 
         data class Inactive(val reason: String, val match: MatchKind) : Result()
@@ -60,7 +61,7 @@ object GrandConcertFanRequirement {
         val goalUnmet = unmetGoal != null
         val gateUnmet = unmetGate != null
 
-        // A fully-met current scope stands down: no lookahead to a later unmet requirement (premature over-racing).
+        // A fully-met current scope stands down here; only [rearm] looks at later requirements.
         if (!goalUnmet && !gateUnmet) return Result.Inactive("current-scope-met", match)
 
         // Same-turn goal and gate both unmet: force to the larger threshold; a tie prefers the goal type.
@@ -73,6 +74,19 @@ object GrandConcertFanRequirement {
                 Type.MANDATORY_GATE to gateThreshold!!
             }
         return Result.Active(type, target, scopeTurn, (target - currentFans).coerceAtLeast(0), match, goalUnmet, gateUnmet)
+    }
+
+    /**
+     * Re-arms a met current scope for the [check]'s tightest requirement when it lacks slack, or when payouts fell short
+     * of the assumed capacity: the same races serve every requirement. Anything else, a failed check included, keeps [scope].
+     */
+    fun rearm(scope: Result, check: GrandConcertFanPressure.CapacityCheck, payoutsBelowAssumption: Boolean): Result {
+        if (scope !is Result.Inactive || check.failSafeReason != null) return scope
+        val binding = check.binding ?: return scope
+        if (binding.hasSlack && !payoutsBelowAssumption) return scope
+        val requirement = binding.requirement
+        val type = if (requirement.type == GrandConcertFanPressure.RequirementType.FAN_GOAL) Type.FAN_GOAL else Type.MANDATORY_GATE
+        return Result.Active(type, requirement.target, requirement.turn, binding.deficit, scope.match, goalUnmet = false, gateUnmet = false, rearmed = true)
     }
 
     /**

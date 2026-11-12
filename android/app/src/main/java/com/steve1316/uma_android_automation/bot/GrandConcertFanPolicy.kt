@@ -6,7 +6,7 @@ package com.steve1316.uma_android_automation.bot
  *
  * Grand Concert earns performance points only by training with support, so racing the instant a fan deficit
  * appears starves point income, yet a missed requirement ends the career. Hence FAIL-CLOSED: defer only when a
- * training turn provably still leaves room; race in every uncertain, urgent, or severe-deficit case.
+ * training turn provably still leaves room; race in every uncertain or short case.
  */
 object GrandConcertFanPolicy {
     enum class FanRaceDecision {
@@ -16,31 +16,28 @@ object GrandConcertFanPolicy {
 
         FORCE_RACE,
 
-        /** Missing or insufficient deadline/deficit info: race now (see [GrandConcertFanPressure.policyInputs]). */
+        /** The capacity check proves nothing (see [GrandConcertFanPressure.CapacityCheck.failSafeReason]) or payouts fell short of it: race now. */
         FAIL_SAFE_FORCE_RACE,
     }
 
     /**
-     * Deferral costs one action slot and is re-evaluated every turn, so it is allowed only when skipping this turn
-     * still leaves room for every race the deficit needs. [concertBehindPace] false means training has no
-     * time-sensitive value to protect, so the requirement is simply cleared.
+     * Defers while every unmet requirement keeps slack, whatever the concert pace: training is the turn's normal path, so
+     * the user's racing settings and agenda then apply. A short requirement still defers when today offers no race the
+     * trainee can place in (C or better) but a later window turn does; otherwise it races.
      */
     fun decide(
         fanRequirementActive: Boolean,
-        turnsUntilDeadline: Int?,
-        racesStillNeeded: Int?,
-        concertBehindPace: Boolean,
+        check: GrandConcertFanPressure.CapacityCheck,
+        payoutsBelowAssumption: Boolean,
     ): FanRaceDecision {
         if (!fanRequirementActive) return FanRaceDecision.NO_REQUIREMENT
-        // Fail closed: no proven deadline or deficit means no proven slack.
-        if (turnsUntilDeadline == null || racesStillNeeded == null) return FanRaceDecision.FAIL_SAFE_FORCE_RACE
-        if (turnsUntilDeadline <= 0) return FanRaceDecision.FORCE_RACE
-        val needed = racesStillNeeded.coerceAtLeast(0)
-        // A requirement needing no more races should not still be active; race rather than defer.
-        if (needed == 0) return FanRaceDecision.FORCE_RACE
-        if (turnsUntilDeadline - 1 - needed < 0) return FanRaceDecision.FORCE_RACE
-        if (!concertBehindPace) return FanRaceDecision.FORCE_RACE
-        return FanRaceDecision.DEFER_TO_TRAINING
+        if (check.failSafeReason != null) return FanRaceDecision.FAIL_SAFE_FORCE_RACE
+        // Every requirement is met at the fans read this turn: the flag came from an older read.
+        if (check.requirements.isEmpty()) return FanRaceDecision.DEFER_TO_TRAINING
+        if (payoutsBelowAssumption) return FanRaceDecision.FAIL_SAFE_FORCE_RACE
+        if (check.everyRequirementHasSlack) return FanRaceDecision.DEFER_TO_TRAINING
+        if (check.todayCapacity == 0.0 && check.laterTurnHasCapacity) return FanRaceDecision.DEFER_TO_TRAINING
+        return FanRaceDecision.FORCE_RACE
     }
 
     fun forcesRace(decision: FanRaceDecision): Boolean =

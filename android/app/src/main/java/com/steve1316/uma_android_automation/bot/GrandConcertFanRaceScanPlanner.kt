@@ -1,5 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.Aptitude
+
 /**
  * Inert groundwork for a future below-the-fold fan-race scan; not wired into any production path (live selection uses the visible-page selector only).
  * Lookup keys a row on `(turnNumber, nameFormatted)`: unique for 376 of 402 races, but 13 turns hold two races under one formatted name and
@@ -15,7 +17,7 @@ object GrandConcertFanRaceScanPlanner {
         val lookupTier: LookupTier,
         val matchCount: Int,
         val dbFans: Int?,
-        val aptitudeCompatible: Boolean?,
+        val worstAptitude: Aptitude?,
         val isRival: Boolean,
         val pageOrdinal: Int,
     ) {
@@ -24,7 +26,7 @@ object GrandConcertFanRaceScanPlanner {
         /** A multi-match or fuzzy match is unknown so it can never mis-rank a row. */
         val trustedDbFans: Int? get() = if (isTrusted) dbFans else null
 
-        val trustedAptitudeCompatible: Boolean? get() = if (isTrusted) aptitudeCompatible else null
+        val trustedWorstAptitude: Aptitude? get() = if (isTrusted) worstAptitude else null
     }
 
     /** Null for untrusted rows, which are never merged (dedup by coordinate is forbidden). */
@@ -44,7 +46,7 @@ object GrandConcertFanRaceScanPlanner {
         val deduped = dedupe(turn, candidates)
         val forRanking =
             deduped.map { row ->
-                GrandConcertFanRaceSelector.Candidate(row.trustedDbFans, row.trustedAptitudeCompatible, row.isRival)
+                GrandConcertFanRaceSelector.Candidate(row.trustedDbFans, row.trustedWorstAptitude, row.isRival)
             }
         val selection = GrandConcertFanRaceSelector.select(forRanking)
         return Plan(selection.index, selection.reason, bottomProven, deduped)

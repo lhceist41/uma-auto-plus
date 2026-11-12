@@ -1,0 +1,4 @@
+00:00:30.255 [INFO] [GRAND_CONCERT] [GC_FAN] fanReq=true turn=14 fans=1301 match=EXACT(Kitasan Black) reason=ok goal=5000@30(FUTURE) gate=1750@42(FUTURE) bothSameTurn=false eff=FAN_GOAL(target=5000 turn=30) deficit=3699 futureRaceSlotsIfTrainNow=16 usableRaceTurns=16 later=23699/27turns floor=7 guaranteedRacesUB=529 concertBehindPace=true lowPayouts=false policyDeadline=26 policyRacesNeeded=90 decision=FORCE_RACE
+00:00:31.430 [INFO] [RACE] Looking up race for turn 14 with detected name: "Hakodate Turf 1200m (Sprint) Right".
+00:00:31.463 [INFO] [RACE] Looking up race for turn 14 with detected name: "Chukyo Turf 160Om (Mile) Left".
+00:00:31.464 [INFO] [GRAND_CONCERT] [GC_FAN_RACE_SELECT] turn=14 scope=visible-page candidates=2 [3100/aptN 1600/aptN] winnerIdx=0 winnerFans=3100 winnerApt=N winnerRival=false reason=higher-fans unknownFanFallback=false tierIgnored=true

@@ -30,22 +30,28 @@ class GrandConcertFanActivationGuardTest {
         throw IllegalStateException("could not locate the Kotlin source root from ${System.getProperty("user.dir")}")
     }
 
-    // Replaces the old always-null seam guard: deferral is now allowed, so the guard pins that every unknown is
-    // rejected before any slack arithmetic. The behaviour is tested in GrandConcertFanFactsTest.failsClosedOnUnknowns.
+    // The deferral seam rejects every unknown before any slack arithmetic. The behaviour is tested in
+    // GrandConcertFanCapacityTest.failSafeCases.
     @Test
-    @DisplayName("the deferral seam rejects every unknown before it computes any slack")
+    @DisplayName("the capacity check rejects every unknown before it computes any slack")
     fun deferralSeamFailsClosedFirst() {
         val pressure = source("bot/GrandConcertFanPressure.kt")
-        val body = pressure.substring(pressure.indexOf("fun policyInputs("), pressure.indexOf("fun recentFanRacesPaidLow("))
-        val arithmetic = body.indexOf("var usable")
+        val body = pressure.substring(pressure.indexOf("fun capacityCheck("), pressure.indexOf("fun payoutsBelowAssumption("))
+        val arithmetic = body.indexOf("val requirements =")
         for (check in listOf(
-            "if (recentFanRacesPaidLow) return failClosed",
-            "snapshot.matchStatus != MatchStatus.EXACT && snapshot.matchStatus != MatchStatus.NORMALIZED",
-            "!snapshot.effectiveExact || snapshot.currentFans <= 1",
-            "if (turn <= snapshot.currentTurn) return failClosed",
+            "if (facts == null) return failSafe(",
+            "is GrandConcertFanFacts.Match.UnknownAmbiguous -> return failSafe(",
+            "is GrandConcertFanFacts.Match.UnknownNoMatch -> return failSafe(",
+            "if (currentFans <= 1) return failSafe(",
+            "if (dueOrOverdue) return failSafe(",
+            "if (raceRows.values.all { it.isEmpty() }) return failSafe(",
         )) {
             assertTrue(body.indexOf(check) in 0 until arithmetic, "missing or late fail-closed check: $check")
         }
+        val policy = source("bot/GrandConcertFanPolicy.kt")
+        val decide = policy.substring(policy.indexOf("fun decide("))
+        assertTrue(decide.indexOf("check.failSafeReason != null") < decide.indexOf("everyRequirementHasSlack"), "the policy must fail safe before it weighs slack")
+        assertTrue(decide.indexOf("if (payoutsBelowAssumption)") < decide.indexOf("everyRequirementHasSlack"), "low payouts must race before slack is weighed")
     }
 
     @Test
