@@ -1266,6 +1266,26 @@ describe("Ines Fujin base presets plan their own card's kit", () => {
     })
 })
 
+describe("Presets plan a top-tier skill of their own card's kit", () => {
+    // Game8-tier 0 or 1 Lv1 kit skills (master data, available_skill_set) that fit the preset exactly and were missing from its plans.
+    const gaps = [
+        { name: "Sweep Tosho", skill: 202082, scenarios: ["URA Finale", "Unity Cup", "Trackblazer", "Grand Concert"] },
+        { name: "Hishi Akebono", skill: 201352, scenarios: ["URA Finale", "Unity Cup", "Trackblazer", "Grand Concert"] },
+        { name: "Sakura Bakushin O", skill: 200652, scenarios: ["Trackblazer"] },
+    ]
+
+    it.each(gaps.flatMap((g) => g.scenarios.map((scenario) => ({ ...g, scenario }))))("$name $scenario plans kit skill $skill in every checkpoint", ({ name, skill, scenario }) => {
+        const p = characterPresets.find((x) => x.name === name && x.scenario === scenario)!
+        for (const planKey of ["skillPointCheck", "preFinals", "careerComplete"] as const) {
+            const ids = String((p.settings.skills!.plans as any)[planKey].plan)
+                .split(",")
+                .filter(Boolean)
+                .map(Number)
+            expect(ids).toContain(skill)
+        }
+    })
+})
+
 describe("Alternate-outfit presets built from their base outfit's preset", () => {
     const planKeys = ["skillPointCheck", "preFinals", "careerComplete"] as const
     const planIds = (p: (typeof characterPresets)[number], planKey: (typeof planKeys)[number]) =>
