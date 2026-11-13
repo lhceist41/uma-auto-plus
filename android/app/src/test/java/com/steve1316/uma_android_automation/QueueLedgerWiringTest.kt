@@ -203,7 +203,7 @@ class QueueLedgerWiringTest {
 
         @Test
         fun `the store writes the same record to the app report and the history file`() {
-            val store = after("private fun store(context: Context, report: QueueReport) {", ledgerSource).substringBefore("\n    }\n")
+            val store = after("private fun store(context: Context, report: QueueReport): Boolean {", ledgerSource).substringBefore("\n    }\n")
             assertTrue(store.contains("KEY_LAST_REPORT to report.lastReportValue()"))
             assertTrue(store.contains("OutcomeCorpus.append(context, report.toJson(), OutcomeCorpus.QUEUE_LEDGER_PATH)"))
         }
@@ -241,10 +241,10 @@ class QueueLedgerWiringTest {
 
         @Test
         fun `a finished or dead session's heartbeat is removed, and death detection reads it from the file`() {
-            val store = after("private fun store(context: Context, report: QueueReport) {", ledgerSource).substringBefore("\n    }\n")
+            val store = after("private fun store(context: Context, report: QueueReport): Boolean {", ledgerSource).substringBefore("\n    }\n")
             assertTrue(store.contains("delete = listOf(KEY_OPEN_SESSION)"))
             assertTrue(store.contains("File(context.filesDir, HEARTBEAT_FILE).delete()"))
-            val detect = after("private fun reportDeadSessionLocked(context: Context) {", ledgerSource).substringBefore("\n    }\n")
+            val detect = after("private fun reportDeadSessionLocked(context: Context): QueueReport? {", ledgerSource).substringBefore("\n    }\n")
             assertTrue(detect.contains("val seen = readHeartbeat(context.filesDir, sessionId)"))
         }
 

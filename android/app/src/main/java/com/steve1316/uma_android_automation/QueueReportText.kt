@@ -312,7 +312,7 @@ private fun haltTitle(resumable: Boolean) = if (resumable) "Queue paused" else "
  * (`QUEUE_STATE_STALE_MS`) while Run Queue is on with the same number of runs. The words carry
  * those conditions, so they agree with the Home banner when changed settings rule a resume out.
  */
-private fun pressStart(resumable: Boolean) =
+internal fun pressStart(resumable: Boolean) =
     if (resumable) "press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue." else "press Start in UMA Auto+."
 
 private val RUN_ERROR_CODES = setOf("TASK_RESULT_UNHANDLED_EXCEPTION", "TASK_RESULT_CONNECTION_ERROR", "TASK_RESULT_TIMED_OUT", "TASK_RESULT_QUEUE_NAVIGATION_FAILED")

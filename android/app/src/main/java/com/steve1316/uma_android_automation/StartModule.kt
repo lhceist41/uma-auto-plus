@@ -2211,6 +2211,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 MessageLog.w(TAG, "[START] A bot session is already active; ignoring the duplicate start event.")
                 return
             }
+            DeadSessionNotice.cancel(context)
             // Acquire a PARTIAL_WAKE_LOCK for the entire bot session so Android's OomAdjuster
             // doesn't mark the process as 'empty' and SIGKILL it under memory pressure (TRIM_EMPTY).
             // Released in the finally below regardless of how the session ends.

@@ -51,6 +51,9 @@ class MainApplication : Application(), ReactApplication {
         // again - no bot run and no TP spend. Runs unconditionally at app start and never throws.
         OutcomeCorpus.ensureExistingFilesReadable(this)
 
+        // A session the previous process lost is reported and notified now, not when Home next opens.
+        DeadSessionNotice.postAtProcessStart(this)
+
         // Initialize ML Kit explicitly. The auto-init ContentProvider is removed in
         // AndroidManifest.xml (tools:node="remove") because on quick process restarts the
         // stale static MlKitContext from the prior process can throw an uncatchable

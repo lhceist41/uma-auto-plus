@@ -137,7 +137,7 @@ class LastSessionReportTest {
 
         @Test
         fun `the store asks before replacing the report, and always closes the open record and writes the history`() {
-            val store = source("$main/QueueReport.kt").substringAfter("private fun store(context: Context, report: QueueReport) {").substringBefore("\n    }\n")
+            val store = source("$main/QueueReport.kt").substringAfter("private fun store(context: Context, report: QueueReport): Boolean {").substringBefore("\n    }\n")
             val read = store.indexOf("val current = read(context, listOf(KEY_LAST_REPORT))[KEY_LAST_REPORT]")
             val decide = store.indexOf("if (replacesLastReport(report.kind, current)) mapOf(KEY_LAST_REPORT to report.lastReportValue()) else emptyMap()")
             val write = store.indexOf("write(context, values, delete = listOf(KEY_OPEN_SESSION))")

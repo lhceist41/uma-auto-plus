@@ -963,17 +963,21 @@ object QueueLedger {
         }
     }
 
-    private fun store(context: Context, report: QueueReport) {
+    /** Returns whether [report] became the app's current report. */
+    private fun store(context: Context, report: QueueReport): Boolean {
+        var stored = false
         try {
             val current = read(context, listOf(KEY_LAST_REPORT))[KEY_LAST_REPORT]
             val values = if (replacesLastReport(report.kind, current)) mapOf(KEY_LAST_REPORT to report.lastReportValue()) else emptyMap()
             write(context, values, delete = listOf(KEY_OPEN_SESSION))
+            stored = values.isNotEmpty()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to store the queue report: ${e.message}")
         }
         File(context.filesDir, HEARTBEAT_FILE).delete()
         File(context.filesDir, WATCHDOG_BREADCRUMB_FILE).delete()
         OutcomeCorpus.append(context, report.toJson(), OutcomeCorpus.QUEUE_LEDGER_PATH)
+        return stored
     }
 
     /**
@@ -985,26 +989,29 @@ object QueueLedger {
         OutcomeCorpus.append(context, databaseRefusalReport(java.util.UUID.randomUUID().toString(), appVersion, System.currentTimeMillis()).toJson(), OutcomeCorpus.QUEUE_LEDGER_PATH)
     }
 
-    /** Reports a session that died without its report, if one is recorded. */
-    fun reportDeadSession(context: Context) {
-        synchronized(lock) { reportDeadSessionLocked(context) }
-    }
+    /**
+     * Reports a session that died without its report, if one is recorded. Returns that report only
+     * when this call made it the app's current report, so a caller can act on it exactly once.
+     */
+    internal fun reportDeadSession(context: Context): QueueReport? = synchronized(lock) { reportDeadSessionLocked(context) }
 
-    private fun reportDeadSessionLocked(context: Context) {
+    private fun reportDeadSessionLocked(context: Context): QueueReport? {
         try {
             val stored = read(context, listOf(KEY_OPEN_SESSION, KEY_LAST_REPORT))
-            val open = stored[KEY_OPEN_SESSION]?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return
+            val open = stored[KEY_OPEN_SESSION]?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return null
             val reportedId = stored[KEY_LAST_REPORT]?.let { runCatching { JSONObject(it).optString("sessionId") }.getOrNull() }
             val sessionId = open.optString("sessionId")
-            if (!isOrphanedSession(sessionId, reportedId, liveSessionId)) return
+            if (!isOrphanedSession(sessionId, reportedId, liveSessionId)) return null
             val deadPid = open.optInt("pid")
             val seen = readHeartbeat(context.filesDir, sessionId)
             val records = exitRecordsFor(Build.VERSION.SDK_INT) { readExitRecords(context) }
             val exit = pickExitRecord(records, deadPid, open.optLong("startedAt"))
             val file = if (records == null) readWatchdogBreadcrumbFile(context.filesDir, deadPid, open.optLong("startedAt")) else null
-            store(context, processEndedReport(open, exit, seen, resumable = StartModule.loadQueueState(context) != null, watchdog = watchdogBreadcrumbFor(exit, file)))
+            val report = processEndedReport(open, exit, seen, resumable = StartModule.loadQueueState(context) != null, watchdog = watchdogBreadcrumbFor(exit, file))
+            return report.takeIf { store(context, it) }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to check for a dead session: ${e.message}")
+            return null
         }
     }
 
