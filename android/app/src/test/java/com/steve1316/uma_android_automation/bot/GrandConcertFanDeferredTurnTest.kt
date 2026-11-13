@@ -156,6 +156,42 @@ class GrandConcertFanDeferredTurnTest {
         assertEquals(1, source("bot/Campaign.kt").split("racing.fanRequirementDeferred = true").size - 1)
     }
 
+    @Test
+    @DisplayName("a new turn on the Main screen clears the previous turn's deferral before its facts are refreshed")
+    fun turnStartClearsTheDeferral() {
+        val main = body("handleMainScreen", source("bot/Campaign.kt"))
+        val newTurn = main.indexOf("if (newTurn) {")
+        val reset = main.indexOf("racing.fanRequirementDeferred = false")
+        assertTrue(newTurn >= 0 && reset > newTurn, "newTurn $newTurn, reset $reset")
+        assertTrue(reset < main.indexOf("performTurnStartUpdates(sourceBitmap)", newTurn), "before the turn-start updates")
+    }
+
+    @Test
+    @DisplayName("the mandatory race prep screen, reached with no decision, never races on the previous turn's deferral")
+    fun raceDayPrepClearsTheDeferral() {
+        val process = body("process", source("bot/Campaign.kt"))
+        val prep = process.indexOf("} else if (checkMandatoryRacePrepScreen()) {")
+        val race = process.indexOf("if (!handleRaceEvents() && racing.detectedMandatoryRaceCheck) {", prep)
+        val reset = process.indexOf("racing.fanRequirementDeferred = false", prep)
+        assertTrue(prep >= 0 && reset in prep until race, "prep $prep, reset $reset, race $race")
+        assertTrue(process.indexOf("if (handleMainScreen()) {") in 0 until prep, "the Main screen, where decisions run, is handled first")
+        // A stale deferral from the previous turn would turn the fan arm off; after the reset it follows the requirement again.
+        assertFalse(forcesFanRace(hasFanRequirement = true, deferred = true))
+        assertTrue(forcesFanRace(hasFanRequirement = true, deferred = false))
+    }
+
+    @Test
+    @DisplayName("the deferral is cleared only at a decision, a new Main-screen turn and the race prep screen")
+    fun deferralClearedAtKnownPointsOnly() {
+        assertEquals(3, source("bot/Campaign.kt").split("racing.fanRequirementDeferred = false").size - 1)
+        val racingWrites = source("bot/Racing.kt").split("fanRequirementDeferred = ").size - 1
+        assertEquals(1, racingWrites, "only the declaration")
+        assertTrue(racing.contains("var fanRequirementDeferred = false"))
+        for (file in listOf("bot/campaigns/GrandConcert.kt", "bot/campaigns/Trackblazer.kt", "bot/campaigns/UnityCup.kt")) {
+            assertFalse(source(file).contains("fanRequirementDeferred = "), file)
+        }
+    }
+
     // ---- payouts are recorded on the main thread only ----
 
     @Test

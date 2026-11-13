@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot
 import com.steve1316.uma_android_automation.bot.GrandConcertFanPolicy.FanRaceDecision
 import com.steve1316.uma_android_automation.bot.GrandConcertFanPressure.RaceRow
 import com.steve1316.uma_android_automation.types.Aptitude
+import com.steve1316.uma_android_automation.types.GameDate
 import com.steve1316.uma_android_automation.types.RaceGrade
 import org.json.JSONObject
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -150,6 +151,50 @@ class GrandConcertFanCapacityTest {
             assertEquals(FanRaceDecision.FAIL_SAFE_FORCE_RACE, decide(GrandConcertFanPressure.CapacityCheck.failSafe(14, reason, 1.0)), reason)
         }
         assertEquals(FanRaceDecision.FAIL_SAFE_FORCE_RACE, decide(check(14, 1, null)))
+    }
+
+    /** Two names that collapse to one normalized key ("tmoperao"), and a gate at 49 with a met goal race at 44. */
+    private val syntheticFacts =
+        GrandConcertFanFacts.parse(
+            """
+            { "schemaVersion": 1, "universalCompletedRaceFanFloor": 7, "characters": {
+              "TM Opera O": { "fanGoals": [], "mandatoryRaces": [] },
+              "T.M. Opera O": { "fanGoals": [], "mandatoryRaces": [] },
+              "Window Char": { "fanGoals": [], "mandatoryRaces": [
+                { "turn": 44, "isChoice": false, "options": [{ "raceName": "Goal Race", "fansNeeded": 100 }] },
+                { "turn": 49, "isChoice": false, "options": [{ "raceName": "Gate", "fansNeeded": 50000 }] }
+              ] }
+            } }
+            """.trimIndent(),
+        ) ?: error("synthetic facts should parse")
+
+    @Test
+    @DisplayName("Summer turns and the trainee's own goal race turns are never counted as fan-race turns")
+    fun windowSkipsSummerAndGoalRaceTurns() {
+        // Classic-year Summer is July Early to August Late, turns 37 to 40; the goal race is turn 44; the gate's window ends at 48.
+        val summer = 37..40
+        assertTrue(summer.all { GameDate.isSummer(it) } && !GameDate.isSummer(36) && !GameDate.isSummer(41))
+        val goalRace = 44
+        val excluded = summer.toSet() + goalRace
+        // OP rows with an A aptitude pay 1,000 x 0.25 at a 1.0 bonus on usable turns; the excluded turns carry a huge payout that would dominate if counted.
+        val rows = (31..48).associateWith { turn -> listOf(RaceRow(RaceGrade.OP, if (turn in excluded) 1_000_000 else 1000, Aptitude.A)) }
+        val c = GrandConcertFanPressure.capacityCheck(syntheticFacts, "Window Char", 30, 2000, rows, 1.0)
+        assertNull(c.failSafeReason)
+        val gate = c.requirements.single()
+        assertEquals(48, gate.requirement.windowEnd)
+        val usable = 18 - excluded.size // turns 31..48
+        assertEquals((usable - 2) * 250.0, gate.capacity, "13 usable turns at 250 each, minus the two best")
+        assertEquals(48000, gate.deficit)
+    }
+
+    @Test
+    @DisplayName("a trainee name that matches two characters fails safe as trainee-ambiguous and races")
+    fun ambiguousTraineeFailsSafe() {
+        assertTrue(syntheticFacts.match("tmopera o") is GrandConcertFanFacts.Match.UnknownAmbiguous)
+        val c = GrandConcertFanPressure.capacityCheck(syntheticFacts, "tmopera o", 14, 1301, kitasanRows, 1.0)
+        assertEquals("trainee-ambiguous", c.failSafeReason)
+        assertTrue(c.requirements.isEmpty())
+        assertEquals(FanRaceDecision.FAIL_SAFE_FORCE_RACE, decide(c))
     }
 
     @Test

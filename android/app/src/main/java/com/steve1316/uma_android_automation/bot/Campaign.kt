@@ -3252,6 +3252,7 @@ abstract class Campaign(game: Game) : Task(game) {
             if (newTurn) {
                 // Reset common daily flags.
                 racing.raceRepeatWarningCheck = false
+                racing.fanRequirementDeferred = false
                 bHasTriedCheckingFansToday = false
                 bHasCheckedForMaidenRaceToday = false
                 // The flag only short-circuits re-checks within one recovery sequence; reset it so a fresh icon detection runs every turn.
@@ -4226,6 +4227,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 // without this, a task resumed directly onto a race day never arms the lobby
                 // re-entry or the game-restart net, both gated on this flag.
                 careerScreenObservedThisTask = true
+                // Reached without a decision, and a race day can skip the Main-screen turn start: drop the previous turn's fan
+                // deferral. A deferring decision races only through its extra-race path; this screen follows in that turn only if its fallback fails.
+                racing.fanRequirementDeferred = false
                 if (!handleRaceEvents() && racing.detectedMandatoryRaceCheck) {
                     return TaskResult.Success(
                         TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED,
