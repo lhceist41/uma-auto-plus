@@ -77,6 +77,8 @@ import com.steve1316.uma_android_automation.bot.classifySparkPagerRepaint
 import com.steve1316.uma_android_automation.bot.resolvePagerSide
 import com.steve1316.uma_android_automation.bot.sparkPagerDotSide
 import com.steve1316.uma_android_automation.bot.sparkSelectionDrivable
+import com.steve1316.uma_android_automation.bot.sparkPagerClosing
+import com.steve1316.uma_android_automation.bot.sparkReadsAgree
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.bot.QuickModeAction
 import com.steve1316.uma_android_automation.bot.QuickModePlanner
@@ -315,6 +317,10 @@ class CareerLaunchNavigator(private val context: Context) {
 
         /** Settle beat before a page's single full rescan. */
         private const val SPARK_PAGE_RESCAN_SETTLE_SECONDS = 1.5
+
+        /** Wait per look at a pager still closing after the final Confirm. With the 2.5 s after the Confirm, at most
+         * six looks fit in the 20 s closing window, so the wait ends before STUCK_STATE_REBIND_AT. */
+        private const val SPARK_PAGER_CLOSING_WAIT_SECONDS = 3.0
 
         /** Horizontal center of the spark lists, the swipe axis for the complete read. */
         private const val SPARK_LIST_SCROLL_X = 540f
@@ -2889,6 +2895,19 @@ class CareerLaunchNavigator(private val context: Context) {
             liveTransaction.declineSpend(verdict.reason)
             return confirmSparks(bitmap)
         }
+        // A dropped swipe pair or a list still drawing can make a short read look complete, so a second read must
+        // agree before 30 TP is spent.
+        val firstRead = originalReading!!
+        val recheck = readCompleteSparkSet(SPARKS_SCREEN_GEOMETRY, "original recheck")
+        if (!sparkReadsAgree(firstRead, recheck)) {
+            MessageLog.w(
+                TAG,
+                "[REROLL] The second read of the original set (${recheck.rows.size} rows, ${recheck.termination.name}) does not match the first " +
+                    "(${firstRead.rows.size} rows, ${firstRead.termination.name}). Keeping the original set: no TP spent.",
+            )
+            liveTransaction.declineSpend("original set recheck disagreed")
+            return confirmSparks(bitmap)
+        }
         val approved = liveTransaction.approveSpend(verdict.reason)
         if (!approved.ok) {
             // A spend was already confirmed on this career (or the transaction is out of
@@ -3197,7 +3216,21 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun handleSparkSelectionPager(): TransitionResult {
         val transition = "SPARK_SELECTION_PAGER -> SPARK_SELECTION_CONFIRMATION"
         val transaction = SparkRerollGate.transaction
-        if (!sparkSelectionDrivable(transaction, System.currentTimeMillis())) {
+        val now = System.currentTimeMillis()
+        val sinceFinalConfirm = transaction?.finalConfirmPressedAtMs?.let { now - it }
+        if (sparkPagerClosing(transaction, now)) {
+            MessageLog.i(TAG, "[SPARKS] [CHOOSER] The pager is still up ${sinceFinalConfirm?.div(1000)}s after the final Confirm; waiting for the game to move on.")
+            waitSafe(SPARK_PAGER_CLOSING_WAIT_SECONDS)
+            return TransitionResult.Continue
+        }
+        if (transaction?.state == SparkTxState.COMPLETE && sinceFinalConfirm != null) {
+            return sparkSelectionBlocked(
+                transition,
+                transaction,
+                "the Spark Selection pager is still on screen ${sinceFinalConfirm / 1000}s after the final Confirm; the game did not move on, so the chosen set may not be kept",
+            )
+        }
+        if (!sparkSelectionDrivable(transaction, now)) {
             return sparkSelectionBlocked(
                 transition,
                 transaction,
@@ -3526,6 +3559,7 @@ class CareerLaunchNavigator(private val context: Context) {
             CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CONFIRM_X.toDouble(), gameY(SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), ScreenBand.DIALOG, bitmap.width, bitmap.height), "spark_conf_confirm")
         }
         val completed = transaction.complete()
+        transaction.markFinalConfirmPressed(System.currentTimeMillis())
         if (!completed.ok) {
             MessageLog.w(TAG, "[SPARKS] ${completed.reason}")
         }

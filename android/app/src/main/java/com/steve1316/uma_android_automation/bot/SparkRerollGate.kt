@@ -24,6 +24,12 @@ package com.steve1316.uma_android_automation.bot
  */
 internal const val SPARK_TRANSACTION_MAX_AGE_MS: Long = 30L * 60L * 1000L
 
+/**
+ * How long after the final Confirm a pager still on screen is waited out as closing. The game normally leaves it within
+ * 2.6 s (once it stayed up longer); at the navigator's 3 s pager wait the window ends before the stuck-screen rebind.
+ */
+internal const val SPARK_PAGER_CLOSING_WINDOW_MS: Long = 20_000L
+
 /** The states of one reroll transaction, in flow order. */
 internal enum class SparkTxState {
     /** Career started; nothing read yet. */
@@ -119,6 +125,10 @@ internal class SparkRerollTransaction internal constructor(
     var keptRecorded: Boolean = false
         private set
     var choiceRecorded: Boolean = false
+        private set
+
+    /** When the final Confirm was last pressed on a completed transaction. */
+    var finalConfirmPressedAtMs: Long? = null
         private set
     var blockedReason: String? = null
         private set
@@ -329,6 +339,10 @@ internal class SparkRerollTransaction internal constructor(
         return SparkTxResult(true)
     }
 
+    fun markFinalConfirmPressed(nowMs: Long) {
+        if (state == SparkTxState.COMPLETE) finalConfirmPressedAtMs = nowMs
+    }
+
     fun block(reason: String): SparkTxResult {
         if (state == SparkTxState.BLOCKED) return SparkTxResult(true, "already blocked")
         blockedReason = reason
@@ -365,6 +379,16 @@ internal fun sparkSelectionDrivable(transaction: SparkRerollTransaction?, nowMs:
     if (transaction == null || !transaction.postSpend) return false
     val spentAt = transaction.spendConfirmedAtMs ?: return false
     return (nowMs - spentAt) in 0..SPARK_TRANSACTION_MAX_AGE_MS
+}
+
+/**
+ * Whether a pager on screen is this career's own, still closing after its final Confirm: a COMPLETE transaction whose
+ * final Confirm is at most [SPARK_PAGER_CLOSING_WINDOW_MS] old. Anything else blocks as before.
+ */
+internal fun sparkPagerClosing(transaction: SparkRerollTransaction?, nowMs: Long): Boolean {
+    if (transaction == null || transaction.state != SparkTxState.COMPLETE) return false
+    val pressedAt = transaction.finalConfirmPressedAtMs ?: return false
+    return (nowMs - pressedAt) in 0..SPARK_PAGER_CLOSING_WINDOW_MS
 }
 
 /**

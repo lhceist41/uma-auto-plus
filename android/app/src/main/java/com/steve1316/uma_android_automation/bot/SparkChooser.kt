@@ -615,6 +615,16 @@ private fun sameCatalogName(a: SparkRowFact, b: SparkRowFact, resolveName: (Stri
     return canonical == resolveName(b.name, b.kind)
 }
 
+/**
+ * Two reads of one list agree when both are complete and match row for row in kind and stars. Names are not compared:
+ * the reroll gate does not use them and their OCR varies between frames.
+ */
+fun sparkReadsAgree(first: SparkSetReading, second: SparkSetReading): Boolean =
+    first.complete &&
+        second.complete &&
+        first.rows.size == second.rows.size &&
+        first.rows.zip(second.rows).all { (a, b) -> a.kind == b.kind && a.stars == b.stars }
+
 sealed class SparkPagerResolution {
     data class Resolved(val side: SparkSetSide) : SparkPagerResolution()
 
