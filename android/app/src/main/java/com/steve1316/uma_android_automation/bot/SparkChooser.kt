@@ -20,9 +20,23 @@ enum class SparkRowKind(val wire: String) {
 
 /**
  * Race sparks are always relevant (about 20% regenerate per distinct G1 won, and a specific 3-star race spark rarely
- * survives a redraw); skill whites only when planned; an unreadable name is uncertainty, not neutral value.
+ * survives a redraw); scenario sparks count as races; skill whites only when planned; an unreadable name is
+ * uncertainty, not neutral value.
  */
 enum class SparkWhiteClass { SKILL, RACE, UNKNOWN }
+
+/**
+ * The class of a white row from the family the spark-name catalog resolves its name to. A name the catalog cannot place,
+ * or a missing catalog, is UNKNOWN: fuzzy skill matching alone scores race names into the damaged-skill range.
+ */
+fun sparkWhiteClass(name: String, catalogFamily: ((String) -> String?)?): SparkWhiteClass {
+    if (name == SPARK_UNREADABLE_NAME || name.isBlank() || catalogFamily == null) return SparkWhiteClass.UNKNOWN
+    return when (catalogFamily(name)) {
+        "race", "scenario" -> SparkWhiteClass.RACE
+        "skill" -> SparkWhiteClass.SKILL
+        else -> SparkWhiteClass.UNKNOWN
+    }
+}
 
 data class SparkRowFact(
     val name: String,

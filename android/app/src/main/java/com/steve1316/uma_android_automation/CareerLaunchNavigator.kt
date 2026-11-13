@@ -77,6 +77,7 @@ import com.steve1316.uma_android_automation.bot.classifySparkPagerRepaint
 import com.steve1316.uma_android_automation.bot.resolvePagerSide
 import com.steve1316.uma_android_automation.bot.sparkPagerDotSide
 import com.steve1316.uma_android_automation.bot.sparkSelectionDrivable
+import com.steve1316.uma_android_automation.bot.sparkWhiteClass
 import com.steve1316.uma_android_automation.bot.sparkPagerClosing
 import com.steve1316.uma_android_automation.bot.sparkReadsAgree
 import com.steve1316.uma_android_automation.components.*
@@ -4085,14 +4086,12 @@ class CareerLaunchNavigator(private val context: Context) {
         return rows
     }
 
-    /** Race-vs-skill refinement for a white row, from the packaged skill catalog: a known skill
-     * name is a skill spark; anything else readable is a race spark; unreadable stays unknown
-     * (uncertainty, handled conservatively by the keep policy). */
+    /** Race-vs-skill class of a white row from the packaged spark-name catalog; a name it cannot
+     * place, or an unreadable one, stays unknown (handled conservatively by the keep policy). */
     private fun resolveSparkWhiteClass(kind: SparkRowKind, name: String): SparkWhiteClass? {
         if (kind != SparkRowKind.WHITE) return null
-        if (name == SPARK_UNREADABLE_NAME || name.isBlank()) return SparkWhiteClass.UNKNOWN
-        val known = runCatching { tempGame?.skillDatabase?.getSkillData(name) != null }.getOrDefault(false)
-        return if (known) SparkWhiteClass.SKILL else SparkWhiteClass.RACE
+        val catalog = sparkNameCatalog
+        return sparkWhiteClass(name, catalog?.let { c -> { n: String -> c.resolve(n, SparkRowKind.WHITE).sourceFamily } })
     }
 
     /** One parsed frame of a scrolled spark list read. */
