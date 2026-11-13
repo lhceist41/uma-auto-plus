@@ -213,6 +213,23 @@ internal fun launchesNewCareer(finalizeToHome: Boolean, homeSeen: Boolean): Bool
  */
 internal fun scenarioCarouselPageChecks(knownCards: Int): Int = knownCards + 3
 
+internal enum class ScenarioCarouselStep { ADVANCE, PAGE, WAIT, REDETECT }
+
+/**
+ * One Scenario Select frame. Without the header the game has already moved on (a slow advance), so the screen is detected again before
+ * any tap; a card with no known logo pages only on a settled second read, because a frame mid-transition shows no logo either.
+ */
+internal fun scenarioCarouselStep(headerShown: Boolean, targetShown: Boolean, knownCardShown: Boolean, settled: Boolean): ScenarioCarouselStep =
+    when {
+        !headerShown -> ScenarioCarouselStep.REDETECT
+        targetShown -> ScenarioCarouselStep.ADVANCE
+        knownCardShown || settled -> ScenarioCarouselStep.PAGE
+        else -> ScenarioCarouselStep.WAIT
+    }
+
+/** How long after the first 2 s a Scenario Select Next waits for the screen to change (an advance took about 9 s on a busy host). */
+internal const val SCENARIO_SELECT_LEAVE_WAIT_MS = 10_000L
+
 /**
  * Result of a navigation attempt between runs.
  *
@@ -10040,11 +10057,30 @@ class CareerLaunchNavigator(private val context: Context) {
                     transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
                 )
             }
-            val bitmap = iu.getSourceBitmap()
-            if (targetLogo.check(iu, sourceBitmap = bitmap)) {
+            // The card on screen by name, or null when no known logo matched.
+            var showing: String? = null
+
+            fun readStep(bitmap: Bitmap, settled: Boolean): ScenarioCarouselStep {
+                val header = LabelScenarioSelectHeader.check(iu, sourceBitmap = bitmap)
+                val onTarget = header && targetLogo.check(iu, sourceBitmap = bitmap)
+                showing = if (header && !onTarget) carouselLogos.firstOrNull { (_, logo) -> logo.check(iu, sourceBitmap = bitmap) }?.first else null
+                return scenarioCarouselStep(header, onTarget, showing != null, settled)
+            }
+            var bitmap = iu.getSourceBitmap()
+            var step = readStep(bitmap, settled = false)
+            if (step == ScenarioCarouselStep.WAIT) {
+                waitSafe(1.5)
+                bitmap = iu.getSourceBitmap()
+                step = readStep(bitmap, settled = true)
+            }
+            if (step == ScenarioCarouselStep.REDETECT) {
+                MessageLog.i(TAG, "[NAV] Scenario Select is no longer on screen; detecting the screen again before any carousel tap.")
+                return TransitionResult.Continue
+            }
+            if (step == ScenarioCarouselStep.ADVANCE) {
                 MessageLog.i(TAG, "[NAV] Scenario Select shows \"$target\". Advancing to trainee setup.")
                 if (ButtonNext.click(iu)) {
-                    waitSafe(2.0)
+                    awaitScenarioSelectLeft()
                     return TransitionResult.Continue
                 }
                 // A running story event decorates this Next button with an "Event Underway" banner
@@ -10056,18 +10092,15 @@ class CareerLaunchNavigator(private val context: Context) {
                 // below already uses. y=0.85 is the clean green centre, clear of the top banner.
                 MessageLog.w(TAG, "[NAV] Scenario Select Next template did not match (event banner over the button?). Tapping the fixed Next position.")
                 CoordinateTap.tap(gestureUtils, bitmap.width * 0.5, gameY(1920 * 0.85, ScreenBand.BOTTOM, bitmap.width, bitmap.height), "scenario_select_next_fallback")
-                waitSafe(2.0)
+                awaitScenarioSelectLeft()
                 return TransitionResult.Continue
             }
             // Name the card actually on screen, not just "not the target". A blind miss log hid a
             // swipe that paged two entries at a time for as long as the carousel had three cards;
             // with the page named, the alternation is obvious on the first two lines.
-            val showing =
-                carouselLogos.firstOrNull { (_, logo) -> logo.check(iu, sourceBitmap = bitmap) }?.first
-                    ?: "unrecognised"
             MessageLog.i(
                 TAG,
-                "[NAV] Scenario Select shows \"$showing\", wanted \"$target\" (page check ${attempt + 1}/$pageChecks). " +
+                "[NAV] Scenario Select shows \"${showing ?: "unrecognised"}\", wanted \"$target\" (page check ${attempt + 1}/$pageChecks). " +
                     "Swiping the carousel to the next scenario.",
             )
             // Tap the carousel's own right chevron rather than dragging the card. A drag has to land
@@ -10091,6 +10124,16 @@ class CareerLaunchNavigator(private val context: Context) {
             recommendedAction = "Manually select the scenario in-game and restart the queue. If the scenario logos changed in a patch, recapture the scenario_select_* templates.",
             reasonKey = "SCENARIO_NOT_FOUND",
         )
+    }
+
+    /** After Next, waits for the Scenario Select header to go, so a slow advance gets no second Next on the screen that follows. */
+    private fun awaitScenarioSelectLeft() {
+        waitSafe(2.0)
+        val deadline = SystemClock.elapsedRealtime() + SCENARIO_SELECT_LEAVE_WAIT_MS
+        while (SystemClock.elapsedRealtime() < deadline && BotService.isRunning && !StartModule.queueStopRequested) {
+            if (!LabelScenarioSelectHeader.check(iu, sourceBitmap = iu.getSourceBitmap())) return
+            waitSafe(1.0)
+        }
     }
 
     // ////////////////////////////////////////////////////////////////////////////
