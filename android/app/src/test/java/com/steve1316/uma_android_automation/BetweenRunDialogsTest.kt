@@ -13,7 +13,9 @@ import com.steve1316.uma_android_automation.components.ButtonRetry
 import com.steve1316.uma_android_automation.components.ButtonTitleScreen
 import com.steve1316.uma_android_automation.components.DialogAgeConfirmation
 import com.steve1316.uma_android_automation.components.DialogApplicationUpdated
+import com.steve1316.uma_android_automation.components.ButtonShop
 import com.steve1316.uma_android_automation.components.DialogConnectionError
+import com.steve1316.uma_android_automation.components.DialogDailySale
 import com.steve1316.uma_android_automation.components.DialogDataDownload
 import com.steve1316.uma_android_automation.components.DialogDateChanged
 import com.steve1316.uma_android_automation.components.DialogDownloadError
@@ -24,6 +26,8 @@ import com.steve1316.uma_android_automation.components.DialogNotices
 import com.steve1316.uma_android_automation.components.DialogObjects
 import com.steve1316.uma_android_automation.components.DialogPurchaseCarats
 import com.steve1316.uma_android_automation.components.DialogSessionError
+import com.steve1316.uma_android_automation.components.DialogSessionVerificationError
+import com.steve1316.uma_android_automation.components.DialogUtils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -67,8 +71,16 @@ class BetweenRunDialogsTest {
 
     private fun plan(dialog: BetweenRunDialog) = planBetweenRunDialog(dialog, nothing, StartModule.NAV_DEADLINE_MS)
 
-    private val closing = listOf(BetweenRunDialog.NOTICES, BetweenRunDialog.DATE_CHANGED, BetweenRunDialog.FOLLOW_TRAINER, BetweenRunDialog.NEW_SCENARIO, BetweenRunDialog.EVENT_HOME)
-    private val failing = listOf(BetweenRunDialog.SESSION_ERROR, BetweenRunDialog.PURCHASE_CARATS, BetweenRunDialog.AGE_CONFIRMATION)
+    private val closing =
+        listOf(
+            BetweenRunDialog.NOTICES,
+            BetweenRunDialog.DATE_CHANGED,
+            BetweenRunDialog.FOLLOW_TRAINER,
+            BetweenRunDialog.NEW_SCENARIO,
+            BetweenRunDialog.EVENT_HOME,
+            BetweenRunDialog.DAILY_SALE,
+        )
+    private val failing = listOf(BetweenRunDialog.SESSION_ERROR, BetweenRunDialog.SESSION_VERIFICATION_ERROR, BetweenRunDialog.PURCHASE_CARATS, BetweenRunDialog.AGE_CONFIRMATION)
 
     @Nested
     @DisplayName("reading the dialog")
@@ -84,11 +96,13 @@ class BetweenRunDialogsTest {
                     BetweenRunDialog.DOWNLOAD_ERROR to DialogDownloadError.title,
                     BetweenRunDialog.DATA_DOWNLOAD to DialogDataDownload.title,
                     BetweenRunDialog.SESSION_ERROR to DialogSessionError.title,
+                    BetweenRunDialog.SESSION_VERIFICATION_ERROR to DialogSessionVerificationError.title,
                     BetweenRunDialog.PURCHASE_CARATS to DialogPurchaseCarats.title,
                     BetweenRunDialog.AGE_CONFIRMATION to DialogAgeConfirmation.title,
                     BetweenRunDialog.NEW_SCENARIO to DialogNewScenario.title,
                     BetweenRunDialog.EVENT_HOME to DialogEventHome.title,
                     BetweenRunDialog.APPLICATION_UPDATED to DialogApplicationUpdated.title,
+                    BetweenRunDialog.DAILY_SALE to DialogDailySale.title,
                 )
             assertEquals(BetweenRunDialog.entries.toSet(), objects.keys)
             for ((dialog, title) in objects) {
@@ -184,12 +198,55 @@ class BetweenRunDialogsTest {
             assertEquals(BetweenRunDialogStep.ReturnToTitle, allowed)
             assertEquals(listOf(ButtonTitleScreen), allowed.taps)
             val retry = { ConnectionOutageBudget.Decision.Retry(30_000L, 1, 5_000L) }
-            for (dialog in BetweenRunDialog.entries - BetweenRunDialog.SESSION_ERROR) {
+            for (dialog in BetweenRunDialog.entries - BetweenRunDialog.SESSION_ERROR - BetweenRunDialog.SESSION_VERIFICATION_ERROR) {
                 for (mayReturnToTitle in listOf(true, false)) {
                     val step = planBetweenRunDialog(dialog, retry, StartModule.NAV_DEADLINE_MS, mayReturnToTitle)
                     assertFalse(ButtonTitleScreen in step.taps, "$dialog")
                 }
             }
+        }
+
+        @Test
+        fun `the Daily Sale offer between runs taps only Cancel, never Shop`() {
+            assertEquals(BetweenRunDialog.DAILY_SALE, BetweenRunDialog.forTitle("Daily Sale"))
+            val step = plan(BetweenRunDialog.DAILY_SALE)
+            assertEquals(BetweenRunDialogStep.CancelDailySale, step)
+            assertEquals(listOf(ButtonCancel), step.taps)
+            assertEquals(ButtonCancel, step.taps.firstOrNull { it in setOf(ButtonCancel, ButtonShop) })
+            assertNull(step.taps.firstOrNull { it in setOf<ButtonInterface>(ButtonShop) })
+            val retry = { ConnectionOutageBudget.Decision.Retry(30_000L, 1, 5_000L) }
+            for (dialog in BetweenRunDialog.entries) assertFalse(ButtonShop in planBetweenRunDialog(dialog, retry, StartModule.NAV_DEADLINE_MS).taps, "$dialog")
+        }
+
+        @Test
+        fun `a Session Verification Error is planned exactly like a Session Error`() {
+            assertEquals(BetweenRunDialog.SESSION_VERIFICATION_ERROR, BetweenRunDialog.forTitle("Session Verification Error"))
+            val dialog = BetweenRunDialog.SESSION_VERIFICATION_ERROR
+            assertEquals(BetweenRunDialogStep.Fail("SESSION_EXPIRED"), planBetweenRunDialog(dialog, nothing, StartModule.NAV_DEADLINE_MS, mayReturnToTitle = false))
+            assertEquals(BetweenRunDialogStep.ReturnToTitle, planBetweenRunDialog(dialog, nothing, StartModule.NAV_DEADLINE_MS, mayReturnToTitle = true))
+            for (mayReturnToTitle in listOf(true, false)) {
+                assertEquals(
+                    planBetweenRunDialog(BetweenRunDialog.SESSION_ERROR, nothing, StartModule.NAV_DEADLINE_MS, mayReturnToTitle),
+                    planBetweenRunDialog(BetweenRunDialog.SESSION_VERIFICATION_ERROR, nothing, StartModule.NAV_DEADLINE_MS, mayReturnToTitle),
+                )
+            }
+        }
+
+        @Test
+        fun `its title reads as its own dialog, so getDialog no longer throws on it, and Session Error still reads as itself`() {
+            // "Session Verification Error" is the title ML Kit read on the live run (15:00 event rotation, 2026-11-13).
+            assertEquals(DialogSessionVerificationError.title, DialogUtils.matchDialogTitle("Session Verification Error"))
+            assertEquals(DialogSessionError.title, DialogUtils.matchDialogTitle("Session Error"))
+            assertEquals(listOf(DialogSessionVerificationError), DialogObjects.items.filter { it.title == DialogSessionVerificationError.title })
+            assertEquals(DialogSessionVerificationError, DialogObjects.map["session_verification_error"])
+            assertEquals(listOf(ButtonTitleScreen), DialogSessionVerificationError.buttons)
+        }
+
+        @Test
+        fun `in a run it stops like a Session Error, also under a loading screen`() {
+            val handler = source("$main/bot/DialogHandler.kt")
+            assertTrue(handler.contains("\"session_error\", \"session_verification_error\" -> {\n                throw InterruptedException(\"Session error. Stopping bot...\")"))
+            assertTrue("session_verification_error" in Game.LOADING_ERROR_DIALOGS)
         }
 
         @Test
@@ -446,7 +503,10 @@ class BetweenRunDialogsTest {
                 listOf("import com.steve1316.uma_android_automation.components.ButtonTitleScreen", "    data object ReturnToTitle : BetweenRunDialogStep(listOf(ButtonTitleScreen))"),
                 titleScreen,
             )
-            assertTrue(allowlist.contains("BetweenRunDialog.SESSION_ERROR -> if (mayReturnToTitle) BetweenRunDialogStep.ReturnToTitle else BetweenRunDialogStep.Fail(reasonKey = \"SESSION_EXPIRED\")"))
+            val sessionBranch =
+                "BetweenRunDialog.SESSION_ERROR, BetweenRunDialog.SESSION_VERIFICATION_ERROR ->\n" +
+                    "            if (mayReturnToTitle) BetweenRunDialogStep.ReturnToTitle else BetweenRunDialogStep.Fail(reasonKey = \"SESSION_EXPIRED\")"
+            assertTrue(allowlist.contains(sessionBranch))
             assertEquals(1, Regex("BetweenRunDialogStep\\.ReturnToTitle").findAll(allowlist).count())
         }
 

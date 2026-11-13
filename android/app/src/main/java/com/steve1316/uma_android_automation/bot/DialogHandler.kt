@@ -199,7 +199,7 @@ open class DialogHandler(val game: Game) {
                 dialog.close(game.imageUtils)
             }
 
-            "session_error" -> {
+            "session_error", "session_verification_error" -> {
                 throw InterruptedException("Session error. Stopping bot...")
             }
 

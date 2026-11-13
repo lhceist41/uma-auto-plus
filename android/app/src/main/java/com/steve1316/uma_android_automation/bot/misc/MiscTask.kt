@@ -11,6 +11,7 @@ import com.steve1316.uma_android_automation.bot.GameReopen
 import com.steve1316.uma_android_automation.bot.Task
 import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
+import com.steve1316.uma_android_automation.bot.dismissUmaOutingPopup
 import com.steve1316.uma_android_automation.bot.miscFrozenGameReopens
 import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
 import com.steve1316.uma_android_automation.components.DialogUtils
@@ -83,6 +84,10 @@ abstract class MiscTask(game: Game) : Task(game) {
 
     /** Dismisses incidental popups (login bonus, gift, announcement) that can interrupt any misc flow; subclasses may override. */
     protected open fun handleIncidentalPopups(): Boolean {
+        if (dismissUmaOutingPopup(game.imageUtils, game.imageUtils.getSourceBitmap())) {
+            game.wait(1.5)
+            return true
+        }
         return try {
             tryHandleAllDialogs(timeoutMs = 5000)
         } catch (e: IllegalStateException) {

@@ -22,6 +22,7 @@ import com.steve1316.uma_android_automation.bot.A11Y_TAPS_STOPPED
 import com.steve1316.uma_android_automation.bot.RebindStep
 import com.steve1316.uma_android_automation.bot.rebindStep
 import com.steve1316.uma_android_automation.bot.CoordinateTap
+import com.steve1316.uma_android_automation.bot.dismissUmaOutingPopup
 import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
 import com.steve1316.uma_android_automation.bot.misc.GameExtrasDevice
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
@@ -628,6 +629,9 @@ class CareerLaunchNavigator(private val context: Context) {
 
         /** The game's title screen ("TAP TO START") between runs, pixel-probed ([TitleScreenProbe]). */
         TITLE_SCREEN,
+
+        /** An Uma Outing popup after the game-day reset (Login Bonus or Gauge MAX), by its banner ([dismissUmaOutingPopup]). */
+        UMA_OUTING_POPUP,
 
         /** The in-career Training selection screen, pixel-probed ([TrainingSelectionProbe]): a
          * career left there by a stop or restart. Its Skip pill is never the launch prompt. */
@@ -1857,6 +1861,11 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.TITLE_SCREEN
         }
 
+        // The Uma Outing popups have no dialog title and the Login Bonus one has no button, only a TAP bar.
+        if (!careerLaunchInitiated && LabelUmaOutingBanner.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.UMA_OUTING_POPUP
+        }
+
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
         // or Close (wide or compact-pill style) as the primary advance button. This is the most
         // common state during between-run navigation (10-20 iterations per career), so we check it early.
@@ -2175,6 +2184,11 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.DIALOG_HANDLED -> handleBetweenRunDialog()
             LaunchScreenState.GAME_LOADING -> handleGameLoading()
             LaunchScreenState.TITLE_SCREEN -> handleTitleScreen()
+            LaunchScreenState.UMA_OUTING_POPUP -> {
+                if (!dismissUmaOutingPopup(iu, iu.getSourceBitmap())) MessageLog.w(TAG, "[NAV] The Uma Outing banner was gone before the tap.")
+                waitSafe(1.5)
+                TransitionResult.Continue
+            }
             LaunchScreenState.TRAINING_SELECTION_SCREEN -> handleTrainingSelectionScreen()
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()

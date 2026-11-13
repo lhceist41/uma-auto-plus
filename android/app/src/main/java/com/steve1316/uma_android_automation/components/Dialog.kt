@@ -523,6 +523,7 @@ object DialogObjects {
             DialogScheduledRaces,
             DialogScheduleSettings,
             DialogSessionError,
+            DialogSessionVerificationError,
             DialogShop,
             DialogSkillDetails,
             DialogSkillListConfirmation,
@@ -1653,6 +1654,18 @@ object DialogScheduleSettings : DialogInterface {
 object DialogSessionError : DialogInterface {
     override val name: String = "session_error"
     override val title: String = "Session Error"
+    override val closeButton = null
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> =
+        listOf(
+            ButtonTitleScreen,
+        )
+}
+
+/** Anywhere: the game failed its session check (seen at an event rotation). Same single Title Screen button as Session Error. */
+object DialogSessionVerificationError : DialogInterface {
+    override val name: String = "session_verification_error"
+    override val title: String = "Session Verification Error"
     override val closeButton = null
     override val okButton = null
     override val buttons: List<BaseComponentInterface> =

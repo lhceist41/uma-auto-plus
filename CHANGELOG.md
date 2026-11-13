@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- **Daily reset popups:** the bot no longer stops on the popups the game shows after its daily reset. Between careers it closes the Daily Sale offer with Cancel (it never opens the Shop), and it taps through the Uma Outing Login Bonus and Gauge MAX popups, also during Daily Races. A Session Verification Error is now handled like a Session Error: between careers the bot can return to the title screen and carry on; in a career or during the daily modes it stops with a clear reason.
 - **Race names:** the bot now matches races whose distance the game text reads with an extra letter ("2000Om" for 2000m, seen on Nakayama, Fukushima and Morioka races), so it picks the right race and, in Grand Concert, uses that race's fans instead of ignoring it.
 - **Grand Concert fans:** the bot now trains instead of racing for fans while there is still time to earn them later, so it no longer races from the first Junior turns, and on those turns it follows your racing settings. When it must race for fans, it picks a race the trainee suits over one that only pays more on paper, and it keeps an eye on later fan requirements after an earlier fan goal is met.
 - **Spark lists at career end:** a long spark list (12 or more sparks) is only treated as fully read after two swipes in a row move nothing, so one swipe the game ignores no longer cuts the list short and stops the queue on the Keep Sparks screen.

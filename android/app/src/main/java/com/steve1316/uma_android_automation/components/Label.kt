@@ -381,6 +381,11 @@ object LabelDailySale : ComponentInterface {
     override val template = Template("components/label/daily_sale", region = Region.middle)
 }
 
+/** "Uma Outing!" lettering of the banner shared by the Uma Outing campaign popups, which have no dialog title. */
+object LabelUmaOutingBanner : ComponentInterface {
+    override val template = Template("components/label/uma_outing_banner", region = Region.topQuarter)
+}
+
 /** The gold "1st" laurel: unlike the "Congratulations!" banner, it also appears on the finale Qualifier/Semi-Final wins ("You did it!"). */
 object LabelFirstPlace : ComponentInterface {
     override val template = Template("components/label/first_place", region = Region.topHalf)

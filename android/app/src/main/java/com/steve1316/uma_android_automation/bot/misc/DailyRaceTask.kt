@@ -7,6 +7,7 @@ import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
+import com.steve1316.uma_android_automation.bot.dismissUmaOutingPopup
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
@@ -30,6 +31,7 @@ import com.steve1316.uma_android_automation.components.LabelMultiRacePopup
 import com.steve1316.uma_android_automation.components.LabelRaceDetails
 import com.steve1316.uma_android_automation.components.LabelRaceResultsHeader
 import com.steve1316.uma_android_automation.components.LabelRunnerSelection
+import com.steve1316.uma_android_automation.components.LabelUmaOutingBanner
 import com.steve1316.uma_android_automation.components.Region
 import com.steve1316.uma_android_automation.utils.DailyRaceGeometry
 import com.steve1316.uma_android_automation.utils.ScreenBand
@@ -69,6 +71,9 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         RACE_RESULTS,
 
         DAILY_SALE_POPUP,
+
+        /** An Uma Outing popup after the game-day reset (Login Bonus or Gauge MAX). */
+        UMA_OUTING_POPUP,
 
         /** Back on Home once the session is over. */
         COMPLETE,
@@ -209,7 +214,8 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             currentState == DailyRaceScreenState.RACE_DETAILS ||
                 currentState == DailyRaceScreenState.MULTI_RACE_POPUP ||
                 currentState == DailyRaceScreenState.RACE_RESULTS ||
-                currentState == DailyRaceScreenState.DAILY_SALE_POPUP
+                currentState == DailyRaceScreenState.DAILY_SALE_POPUP ||
+                currentState == DailyRaceScreenState.UMA_OUTING_POPUP
         if (!ownDialog) {
             if (raceSequenceCommitted && !resultsSeen && ++framesAwaitingResults == RESULTS_WAIT_FRAMES + 1) {
                 MessageLog.w(TAG, "[DAILY_RACES] No Race Results recognised in $RESULTS_WAIT_FRAMES frames after the commit; the shared dialog handler may look now.")
@@ -269,6 +275,12 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
                 null
             }
 
+            DailyRaceScreenState.UMA_OUTING_POPUP -> {
+                if (!dismissUmaOutingPopup(game.imageUtils, sourceBitmap)) MessageLog.w(TAG, "[WARN] Uma Outing banner gone before the tap.")
+                game.wait(1.5)
+                null
+            }
+
             DailyRaceScreenState.COMPLETE -> {
                 val races = if (raceSequenceCommitted) ticketsHeld ?: 0 else 0
                 val reason = finishReason ?: "Multi-race done."
@@ -298,6 +310,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
 
         if (LabelDailySale.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             return DailyRaceScreenState.DAILY_SALE_POPUP
+        }
+
+        // Ahead of the screen headers below: the popup covers Home or a race screen.
+        if (LabelUmaOutingBanner.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
+            return DailyRaceScreenState.UMA_OUTING_POPUP
         }
 
         if (LabelMultiRacePopup.check(game.imageUtils, sourceBitmap = sourceBitmap)) {

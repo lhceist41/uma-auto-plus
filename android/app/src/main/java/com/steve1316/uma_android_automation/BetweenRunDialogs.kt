@@ -26,11 +26,13 @@ internal enum class BetweenRunDialog(val title: String) {
     DOWNLOAD_ERROR("Download Error"),
     DATA_DOWNLOAD("Data Download"),
     SESSION_ERROR("Session Error"),
+    SESSION_VERIFICATION_ERROR("Session Verification Error"),
     PURCHASE_CARATS("Purchase Carats"),
     AGE_CONFIRMATION("Age Confirmation"),
     NEW_SCENARIO("New Scenario"),
     EVENT_HOME("Event Home"),
     APPLICATION_UPDATED("Application Updated"),
+    DAILY_SALE("Daily Sale"),
     ;
 
     companion object {
@@ -71,6 +73,9 @@ internal sealed class BetweenRunDialogStep(val taps: List<ButtonInterface>) {
 
     /** Cancel only, never Event Home: that leaves for the story event's own screens. */
     data object CancelEventHome : BetweenRunDialogStep(listOf(ButtonCancel))
+
+    /** Cancel only, never Shop: the Daily Sales step owns buying. */
+    data object CancelDailySale : BetweenRunDialogStep(listOf(ButtonCancel))
 
     /** OK only, never Cancel: the game downloads its data (no spend), waited out by [BetweenRunRecovery.acceptedDataDownload]. */
     data object AcceptDataDownload : BetweenRunDialogStep(listOf(ButtonOk))
@@ -118,12 +123,14 @@ internal fun planBetweenRunDialog(
         BetweenRunDialog.DATE_CHANGED -> BetweenRunDialogStep.ConfirmDateChanged
         BetweenRunDialog.NEW_SCENARIO -> BetweenRunDialogStep.CloseNewScenario
         BetweenRunDialog.EVENT_HOME -> BetweenRunDialogStep.CancelEventHome
+        BetweenRunDialog.DAILY_SALE -> BetweenRunDialogStep.CancelDailySale
         BetweenRunDialog.FOLLOW_TRAINER -> BetweenRunDialogStep.DismissFollowTrainer
         BetweenRunDialog.CONNECTION_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "CONNECTION_LOST")
         BetweenRunDialog.DOWNLOAD_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "DOWNLOAD_FAILED")
         BetweenRunDialog.DATA_DOWNLOAD ->
             if (dataDownloadOkMisses >= Game.DATA_DOWNLOAD_OK_MISS_LIMIT) BetweenRunDialogStep.Fail(reasonKey = "DATA_DOWNLOAD_PROMPT") else BetweenRunDialogStep.AcceptDataDownload
-        BetweenRunDialog.SESSION_ERROR -> if (mayReturnToTitle) BetweenRunDialogStep.ReturnToTitle else BetweenRunDialogStep.Fail(reasonKey = "SESSION_EXPIRED")
+        BetweenRunDialog.SESSION_ERROR, BetweenRunDialog.SESSION_VERIFICATION_ERROR ->
+            if (mayReturnToTitle) BetweenRunDialogStep.ReturnToTitle else BetweenRunDialogStep.Fail(reasonKey = "SESSION_EXPIRED")
         BetweenRunDialog.PURCHASE_CARATS, BetweenRunDialog.AGE_CONFIRMATION -> BetweenRunDialogStep.Fail(reasonKey = "PURCHASE_PROMPT")
         BetweenRunDialog.APPLICATION_UPDATED -> BetweenRunDialogStep.Fail(reasonKey = "GAME_UPDATE_REQUIRED")
     }

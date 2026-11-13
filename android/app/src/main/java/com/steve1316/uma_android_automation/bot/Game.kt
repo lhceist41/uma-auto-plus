@@ -162,7 +162,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         /** Loading this long with no error dialog is treated as a lost connection (no legitimate load comes near it). */
         internal const val LOADING_HARD_LIMIT_MS: Long = 10 * 60_000L
 
-        internal val LOADING_ERROR_DIALOGS: Set<String> = setOf("connection_error", "download_error", "session_error")
+        internal val LOADING_ERROR_DIALOGS: Set<String> = setOf("connection_error", "download_error", "session_error", "session_verification_error")
 
         /** Whether a data download accepted at [acceptedAtMs] may still be running. Its screens are not recognised, so for [limitMs] they are waited out, tapping nothing. */
         internal fun dataDownloadActive(acceptedAtMs: Long?, nowMs: Long, limitMs: Long = LOADING_HARD_LIMIT_MS): Boolean =
