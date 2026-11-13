@@ -3545,7 +3545,12 @@ class CareerLaunchNavigator(private val context: Context) {
             transaction.verifyFinalConfirmation()
             if (!transaction.keptRecorded) {
                 // The winner's complete pager read IS the kept set; the dialog may clip.
-                val keptRows = if (expectedRows.size >= dialogRows.size) expectedRows else dialogRows
+                val keptRows =
+                    if (expectedRows.size >= dialogRows.size) {
+                        SparkReadReconcile.keptRows(expectedRows, transaction.recordedReadAuthorities[winner])
+                    } else {
+                        dialogRows
+                    }
                 recordSparkRows(keptRows, "kept", winnerRead)
                 transaction.markKeptRecorded()
             }

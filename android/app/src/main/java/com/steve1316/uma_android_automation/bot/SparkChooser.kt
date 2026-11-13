@@ -356,6 +356,13 @@ object SparkReadReconcile {
             refusal = SparkReconcileRefusal.NONE,
         )
     }
+
+    /**
+     * The rows the kept record shows for the winner: the repaired names when the chooser repaired exactly this pager read,
+     * else the pager rows. Count, order, kinds and stars are the pager's either way.
+     */
+    fun keptRows(pagerRows: List<SparkRowFact>, authority: SparkReadAuthorityResult?): List<SparkRowFact> =
+        if (authority != null && authority.pager.rows == pagerRows) authority.effective.rows else pagerRows
 }
 
 enum class SparkSelectionAction {
@@ -968,7 +975,7 @@ object SparkKeepPolicy {
             for (i in keyO.indices) {
                 if (keyO[i] != keyR[i]) {
                     val side = if (keyO[i] > keyR[i]) SparkSetSide.ORIGINAL else SparkSetSide.REROLLED
-                    return decided(side, tierName, "$tierName ${keyO.joinToString("/")} vs ${keyR.joinToString("/")}", o, r)
+                    return decided(side, tierName, "$tierName ${keyText(keyO)} vs ${keyText(keyR)}", o, r)
                 }
             }
         }
@@ -976,6 +983,9 @@ object SparkKeepPolicy {
     }
 
     private fun negRank(rank: Int): Int = if (rank < 0) Int.MIN_VALUE else -rank
+
+    /** The not-a-target marker is only an ordering key, so the reason text names it instead of printing the number. */
+    private fun keyText(key: List<Int>): String = key.joinToString("/") { if (it == Int.MIN_VALUE) "no target" else it.toString() }
 
     private fun decided(side: SparkSetSide, decidedBy: String, detail: String, o: SparkSideBreakdown, r: SparkSideBreakdown): SparkChoice =
         SparkChoice(
