@@ -4041,8 +4041,8 @@ class CareerLaunchNavigator(private val context: Context) {
     /**
      * Reads a COMPLETE spark list, scrolling as needed and merging overlapping frames by
      * content ([SparkScrollMerge]). Completion requires positive proof: the end-of-list marker
-     * inside a frame, or a scroll attempt that provably moved nothing (two identical parses
-     * around a swipe). A scrollbar thumb alone is never proof. Anything else terminates as a
+     * inside a frame, or two consecutive swipes that each moved nothing (identical parses around
+     * both; one swipe can be dropped). A scrollbar thumb alone is never proof. Anything else terminates as a
      * typed partial result that must not authorize a spend or an automatic choice. The list is
      * scrolled back to the top afterwards (the pager must only be paged from the top, and a
      * later Confirm must commit the page as the game presents it).
@@ -4059,7 +4059,29 @@ class CareerLaunchNavigator(private val context: Context) {
         var scrolls = 0
         var sameFrameRetries = 0
         var sameFrameRecoveries = 0
+        var unchangedRun = 0
+        var confirmationSwipes = 0
         var result: SparkSetReading? = null
+
+        fun swipeListForward() {
+            scrolls++
+            val startY = sparkListY(1100f, geometry)
+            OwnUiForeground.waitForGame()
+            gestureUtils.swipe(SPARK_LIST_SCROLL_X, startY, SPARK_LIST_SCROLL_X, startY - geometry.rowPitch * 4f, duration = 900L)
+            waitSafe(1.0)
+        }
+
+        // The frame after a swipe matched the one before it: the list ended or the swipe was dropped.
+        fun endOrConfirmUnchanged() {
+            if (SparkScrollMerge.listEnded(unchangedRun)) {
+                result = SparkSetReading(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, scrolls, sameFrameRetries, sameFrameRecoveries)
+            } else if (scrolls >= maxScrolls || System.currentTimeMillis() - startMs > budgetMs) {
+                result = SparkSetReading(merged, SparkScanTermination.TIMED_OUT_PARTIAL, scrolls, sameFrameRetries, sameFrameRecoveries)
+            } else {
+                confirmationSwipes++
+                swipeListForward()
+            }
+        }
         while (result == null) {
             // A user Stop or queue-stop mid-scan: bail as a partial read (never complete) so the
             // caller keeps the original set. A hard interrupt throws out of waitSafe below and is
@@ -4084,14 +4106,15 @@ class CareerLaunchNavigator(private val context: Context) {
                     }
                 break
             }
-            // No-progress is checked BEFORE the merge: a post-swipe frame identical to the
-            // pre-swipe frame proves the list cannot move (it is at its bottom), regardless of
-            // whether the frame's rows are repetitive enough to make the content merge ambiguous.
-            // Checking it here keeps a bottom-of-list of look-alike whites a COMPLETE read rather
-            // than letting the hardened (ambiguity-refusing) merge downgrade it to ALIGNMENT_FAILED.
-            if (previousRows != null && previousRows.size == frame.rows.size && SparkScrollMerge.rowsAlign(previousRows, frame.rows)) {
-                result = SparkSetReading(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, scrolls, sameFrameRetries, sameFrameRecoveries)
-                break
+            // No-progress is checked BEFORE the merge: post-swipe frames identical to the pre-swipe
+            // frame after two swipes in a row prove the list cannot move (it is at its bottom),
+            // regardless of whether the frame's rows are repetitive enough to make the content merge
+            // ambiguous. Checking it here keeps a bottom-of-list of look-alike whites a COMPLETE read
+            // rather than letting the hardened (ambiguity-refusing) merge downgrade it to ALIGNMENT_FAILED.
+            unchangedRun = SparkScrollMerge.unchangedSwipeRun(previousRows, frame.rows, unchangedRun)
+            if (unchangedRun > 0) {
+                endOrConfirmUnchanged()
+                continue
             }
             var mergedNext = SparkScrollMerge.merge(merged, frame.rows)
             if (mergedNext == null) {
@@ -4110,11 +4133,12 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 val retryFrame = readSparkFrame(iu.getSourceBitmap(), geometry)
                 if (retryFrame != null && retryFrame.rows.isNotEmpty()) {
-                    if (previousRows != null && previousRows.size == retryFrame.rows.size && SparkScrollMerge.rowsAlign(previousRows, retryFrame.rows)) {
-                        // The settled frame proves the list never moved: this is a normal
-                        // bottom-of-list completion, not a failed stitch.
-                        result = SparkSetReading(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, scrolls, sameFrameRetries, sameFrameRecoveries)
-                        break
+                    unchangedRun = SparkScrollMerge.unchangedSwipeRun(previousRows, retryFrame.rows, unchangedRun)
+                    if (unchangedRun > 0) {
+                        // The settled frame shows the list did not move: a normal bottom-of-list
+                        // completion once confirmed, not a failed stitch.
+                        endOrConfirmUnchanged()
+                        continue
                     }
                     val retryMerge = SparkScrollMerge.merge(merged, retryFrame.rows)
                     if (retryMerge != null) {
@@ -4140,11 +4164,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 break
             }
             previousRows = frame.rows
-            scrolls++
-            val startY = sparkListY(1100f, geometry)
-            OwnUiForeground.waitForGame()
-            gestureUtils.swipe(SPARK_LIST_SCROLL_X, startY, SPARK_LIST_SCROLL_X, startY - geometry.rowPitch * 4f, duration = 900L)
-            waitSafe(1.0)
+            swipeListForward()
         }
         if (scrolls > 0) {
             restoreSparkListTop(geometry, merged.firstOrNull(), scrolls)
@@ -4152,7 +4172,8 @@ class CareerLaunchNavigator(private val context: Context) {
         MessageLog.i(
             TAG,
             "[SPARKS] Scan ($label): ${result!!.rows.size} rows, ${result.termination.name}, $scrolls scroll(s), " +
-                "${result.unreadableRowCount} unreadable name(s), $sameFrameRetries same-position retry(ies), $sameFrameRecoveries recovered.",
+                "$confirmationSwipes confirmation swipe(s), ${result.unreadableRowCount} unreadable name(s), " +
+                "$sameFrameRetries same-position retry(ies), $sameFrameRecoveries recovered.",
         )
         return result
     }

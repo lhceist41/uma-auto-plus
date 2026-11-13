@@ -127,6 +127,15 @@ object SparkScrollMerge {
         return merged + next.subList(chosenOverlap, next.size)
     }
 
+    /** A single swipe can be dropped, so a list only counts as ended after this many swipes in a row that leave the parsed rows unchanged. */
+    const val UNCHANGED_SWIPES_TO_END = 2
+
+    /** The run of unchanged swipes after [frame]: [runSoFar] plus one when [frame] matches the rows before the swipe, else 0. */
+    fun unchangedSwipeRun(before: List<SparkRowFact>?, frame: List<SparkRowFact>, runSoFar: Int): Int =
+        if (before != null && rowsAlign(before, frame)) runSoFar + 1 else 0
+
+    fun listEnded(unchangedSwipeRun: Int): Boolean = unchangedSwipeRun >= UNCHANGED_SWIPES_TO_END
+
     /** Diagnostic prefix comparison only; separate from [rowsAlign] so loosening it cannot loosen a safety rule. */
     private fun foldName(name: String): String =
         name.lowercase().replace('0', 'o').replace('1', 'i').replace('l', 'i').filter { it.isLetterOrDigit() }
