@@ -710,12 +710,20 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         /** A distance token: digits (or OCR-confused uppercase O) with at least one real digit, ending in "m"; keeps stray "Om" out. */
         private val DISTANCE_METER_TOKEN = Regex("\\b[0-9O]*[0-9][0-9O]*m\\b")
 
+        /** A four-digit race distance in meters ("2000m"); every database distance is 1000 to 3600. */
+        private val FOUR_DIGIT_DISTANCE = Regex("^[1-3][0-9]{3}m$")
+
         /**
-         * Fixes the one proven OCR confusion: uppercase O read for 0 inside a distance token ("160Om" -> "1600m"). Venue words (Tokyo, OP, Ooi) are
-         * never touched; returns the input unchanged when nothing matches and never mutates a stored DB string.
+         * Fixes the two proven OCR confusions inside a distance token: uppercase O read for 0 ("160Om" -> "1600m"), and a stray O added after the
+         * four digits ("2000Om" -> "2000m", which O-to-0 alone would turn into a five-digit distance). Venue words (Tokyo, OP, Ooi) are never
+         * touched; returns the input unchanged when nothing matches and never mutates a stored DB string.
          */
         internal fun canonicalizeRaceLabelForLookup(detectedName: String): String =
-            DISTANCE_METER_TOKEN.replace(detectedName) { match -> match.value.replace('O', '0') }
+            DISTANCE_METER_TOKEN.replace(detectedName) { match ->
+                val zeroed = match.value.replace('O', '0')
+                val deleted = match.value.replace("O", "")
+                if (!FOUR_DIGIT_DISTANCE.matches(zeroed) && FOUR_DIGIT_DISTANCE.matches(deleted)) deleted else zeroed
+            }
 
         /** The venue rows (each a base race refiled under an alternate course's label and distance type) whose label is [lookupName]. */
         internal fun venueMatches(

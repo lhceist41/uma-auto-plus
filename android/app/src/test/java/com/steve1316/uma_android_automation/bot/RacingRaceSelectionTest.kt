@@ -325,6 +325,24 @@ class RacingRaceSelectionTest {
     }
 
     @Test
+    @DisplayName("a stray O after four digits is deleted instead of becoming a five-digit distance")
+    fun canonDeletesExtraO() {
+        assertEquals("Nakayama Turf 2000m (Med) Right / Inner", canonicalizeRaceLabelForLookup("Nakayama Turf 2000Om (Med) Right / Inner"))
+        assertEquals("Nakayama Turf 2500m (Long) Right / Outer", canonicalizeRaceLabelForLookup("Nakayama Turf 2500Om (Long) Right / Outer"))
+        assertEquals("Morioka Dirt 1600m (Mile) Left", canonicalizeRaceLabelForLookup("Morioka Dirt 1600Om (Mile) Left"))
+        assertEquals("Fukushima Turf 1800m (Mile) Right", canonicalizeRaceLabelForLookup("Fukushima Turf 1800Om (Mile) Right"))
+        assertEquals("2200m", canonicalizeRaceLabelForLookup("2200Om"))
+    }
+
+    @Test
+    @DisplayName("a distance token with no usable four-digit reading keeps the plain O-to-0 result")
+    fun canonKeepsPlainResultWithoutFourDigits() {
+        assertEquals("Nakayama Turf 20000m (Med) Right", canonicalizeRaceLabelForLookup("Nakayama Turf 20000m (Med) Right")) // no O: unchanged
+        assertEquals("40000m", canonicalizeRaceLabelForLookup("4000Om")) // deleted form 4000m is not a race distance
+        assertEquals("200000m", canonicalizeRaceLabelForLookup("200OOOm")) // neither variant has four digits
+    }
+
+    @Test
     @DisplayName("a valid distance token is left unchanged")
     fun canonLeavesValidDistance() {
         assertEquals("Chukyo Turf 1600m (Mile) Left", canonicalizeRaceLabelForLookup("Chukyo Turf 1600m (Mile) Left"))
