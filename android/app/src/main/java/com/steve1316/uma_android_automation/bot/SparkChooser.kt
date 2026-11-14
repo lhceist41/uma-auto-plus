@@ -202,8 +202,8 @@ data class SparkPrefixEvidence(
 }
 
 /**
- * Blue (stat) and pink (aptitude) rows are the only kinds with a name space known up front, which is what makes a
- * repair provable. White and unique names are open vocabulary and are never repaired.
+ * Blue (stat) and pink (aptitude) rows are the only kinds with a name space known up front. White and unique names are
+ * repaired against the spark-name catalog instead (see [SparkReadReconcile]).
  */
 val SPARK_STAT_NAMES: List<String> = listOf("Speed", "Stamina", "Power", "Guts", "Wit")
 
@@ -280,10 +280,14 @@ data class SparkReadAuthorityResult(
 /**
  * The pager's name OCR is systematically worse than the earlier result-screen capture of the same immutable set: it
  * loses leading glyphs (`Speed` -> `peed`), which demoted a configured blue target to rank -1 under exact-name matching.
- * The pager stays the authority for side identity and navigation. The earlier capture may repair CONTENT NAMES ONLY, on
- * stat and aptitude rows (closed vocabularies), only when both reads match structurally (same transaction, side, row
- * count, order, kind and stars), and only where the earlier name resolves and the pager name does not. Two different
- * valid names are a contradiction, so the whole side falls back to the pager read.
+ * The pager stays the authority for side identity and navigation. The earlier capture may repair CONTENT NAMES ONLY,
+ * only when both reads match structurally (same transaction, side, row count, order, kind and stars), and only where the
+ * earlier name resolves: on stat and aptitude rows (closed vocabularies) where the pager name does not; on white and
+ * unique rows, through [resolveName] (the spark-name catalog), where the pager name is the earlier name with its first
+ * one or two characters lost or misread, or does not resolve (a truncated white name usually still resolves, so "does not
+ * resolve" alone would miss it). With no catalog, a white or unique row is repaired only when the pager name is the
+ * earlier one with its first one or two characters dropped. Two different valid names are a contradiction, except a white
+ * or unique pair that differs only by the pager's leading-glyph damage, so the whole side falls back to the pager read.
  */
 object SparkReadReconcile {
     fun canonicalNameFor(kind: SparkRowKind, name: String): String? =
@@ -298,6 +302,7 @@ object SparkReadReconcile {
         transactionId: String,
         earlier: SparkSideCapture?,
         pager: SparkSetReading,
+        resolveName: ((String, SparkRowKind) -> String?)?,
     ): SparkReadAuthorityResult {
         fun pagerOnly(refusal: SparkReconcileRefusal, structurallyAgreed: Boolean = false) =
             SparkReadAuthorityResult(
@@ -321,8 +326,8 @@ object SparkReadReconcile {
         val pagerRows = pager.rows
         if (earlierRows.size != pagerRows.size) return pagerOnly(SparkReconcileRefusal.ROW_COUNT_MISMATCH)
         // Index comparison does not prove order (swapping two rows with equal kind and stars would pass), but that is safe: a
-        // set has one stat and one aptitude row, the list reader and scroll merge preserve order, whites are never repaired,
-        // and scoring is permutation-invariant.
+        // set has one stat and one aptitude row, the list reader and scroll merge preserve order, a white or unique row is
+        // repaired only from a name the pager read did not contradict, and scoring is permutation-invariant.
         for (i in pagerRows.indices) {
             if (earlierRows[i].kind != pagerRows[i].kind) return pagerOnly(SparkReconcileRefusal.KIND_MISMATCH)
             if (earlierRows[i].stars != pagerRows[i].stars) return pagerOnly(SparkReconcileRefusal.STAR_MISMATCH)
@@ -331,8 +336,30 @@ object SparkReadReconcile {
         val repairs = mutableListOf<SparkNameRepair>()
         for (i in pagerRows.indices) {
             val kind = pagerRows[i].kind
-            if (kind != SparkRowKind.STAT && kind != SparkRowKind.APTITUDE) continue
             if (SparkTextNorm.namesEqual(earlierRows[i].name, pagerRows[i].name)) continue
+            if (kind == SparkRowKind.WHITE || kind == SparkRowKind.UNIQUE) {
+                val earlierName = earlierRows[i].name
+                val pagerName = pagerRows[i].name
+                if (earlierRows[i].unreadable) continue
+                if (resolveName == null) {
+                    if (!leadingCharactersLost(earlierName, pagerName, misreadAllowed = false)) continue
+                } else {
+                    val earlierCanonical = resolveName(earlierName, kind) ?: continue
+                    // The leading-damage match is checked before the catalog, which can place a clean name on the wrong
+                    // entry ("Hanshin J.F." resolves to Hanshin Cup, "danshin J.F." to Hanshin Juvenile Fillies).
+                    if (!leadingCharactersLost(earlierName, pagerName, misreadAllowed = true)) {
+                        val pagerCanonical = if (pagerRows[i].unreadable) null else resolveName(pagerName, kind)
+                        if (pagerCanonical != null && pagerCanonical != earlierCanonical) {
+                            return pagerOnly(SparkReconcileRefusal.VALID_NAME_CONTRADICTION, structurallyAgreed = true)
+                        }
+                        // Same catalog entry and no leading damage: another spelling, which is not repaired.
+                        if (pagerCanonical != null) continue
+                    }
+                }
+                // The earlier read's own spelling: catalog names differ from the screen text ("○" is read as "O").
+                repairs.add(SparkNameRepair(i, kind, pagerName, earlierName))
+                continue
+            }
             val earlierCanonical = canonicalNameFor(kind, earlierRows[i].name)
             val pagerCanonical = canonicalNameFor(kind, pagerRows[i].name)
             if (earlierCanonical != null && pagerCanonical != null && earlierCanonical != pagerCanonical) {
@@ -380,6 +407,17 @@ object SparkReadReconcile {
      */
     fun keptRows(pagerRows: List<SparkRowFact>, authority: SparkReadAuthorityResult?): List<SparkRowFact> =
         if (authority != null && authority.pager.rows == pagerRows) authority.effective.rows else pagerRows
+
+    // The pager's damage pattern: the first one or two characters dropped ("Lucky Seven" -> "ucky Seven") or, when
+    // [misreadAllowed], misread ("Unity Cup" -> "Jnity Cup"). At least four characters must remain so a short tail cannot
+    // match by chance.
+    private fun leadingCharactersLost(earlier: String, pager: String, misreadAllowed: Boolean): Boolean {
+        val e = earlier.filter { it.isLetterOrDigit() }
+        val p = pager.filter { it.isLetterOrDigit() }
+        return (1..2).any { lost ->
+            e.length - lost >= 4 && (0..(if (misreadAllowed) lost else 0)).any { misread -> SparkTextNorm.namesEqual(e.drop(lost), p.drop(misread)) }
+        }
+    }
 }
 
 enum class SparkSelectionAction {

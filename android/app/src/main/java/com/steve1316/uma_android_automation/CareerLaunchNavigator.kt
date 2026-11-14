@@ -3312,13 +3312,15 @@ class CareerLaunchNavigator(private val context: Context) {
             // captures), and one lost glyph is enough to demote a configured blue target to rank
             // -1 and discard the better set. Where the earlier capture of the SAME side in the
             // SAME transaction corroborates this read row for row - equal count and order,
-            // identical kinds and stars - a damaged stat/aptitude name may take the earlier
-            // capture's exact spelling. Side identity, navigation and the Confirm target below
-            // are untouched by this and stay the pager's alone.
+            // identical kinds and stars - a damaged name may take the earlier capture's exact
+            // spelling (white and unique names only through the spark-name catalog). Side
+            // identity, navigation and the Confirm target below are untouched by this and stay
+            // the pager's alone.
+            val resolveName = sparkNameCatalog?.let { catalog -> { name: String, kind: SparkRowKind -> catalog.resolve(name, kind).canonicalName } }
             val originalAuthority =
-                SparkReadReconcile.reconcile(SparkSetSide.ORIGINAL, transaction.careerNonce, transaction.earlierCapture(SparkSetSide.ORIGINAL), original)
+                SparkReadReconcile.reconcile(SparkSetSide.ORIGINAL, transaction.careerNonce, transaction.earlierCapture(SparkSetSide.ORIGINAL), original, resolveName)
             val rerolledAuthority =
-                SparkReadReconcile.reconcile(SparkSetSide.REROLLED, transaction.careerNonce, transaction.earlierCapture(SparkSetSide.REROLLED), rerolled)
+                SparkReadReconcile.reconcile(SparkSetSide.REROLLED, transaction.careerNonce, transaction.earlierCapture(SparkSetSide.REROLLED), rerolled, resolveName)
             transaction.recordReadAuthority(originalAuthority)
             transaction.recordReadAuthority(rerolledAuthority)
             reportReadAuthority(originalAuthority)

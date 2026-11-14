@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.utils.VeteranFactorDomain
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -21,6 +22,13 @@ import java.io.File
  */
 class SparkReadReconcileTest {
     private val tx = "abc12345"
+
+    private val catalog =
+        VeteranFactorDomain.parse(File(sourceRoot(), "../../../../assets/${VeteranFactorDomain.ASSET_NAME}").readText())
+            ?: error("the shipped veteran_factor_domain.json should parse")
+
+    /** The spark-name catalog lookup production passes in. */
+    private val resolve: (String, SparkRowKind) -> String? = { name, kind -> catalog.resolve(name, kind).canonicalName }
 
     private fun stat(name: String, stars: Int) = SparkRowFact(name, stars, SparkRowKind.STAT)
 
@@ -46,7 +54,8 @@ class SparkReadReconcileTest {
         pager: SparkSetReading,
         side: SparkSetSide = SparkSetSide.REROLLED,
         transactionId: String = tx,
-    ) = SparkReadReconcile.reconcile(side, transactionId, earlier, pager)
+        resolveName: ((String, SparkRowKind) -> String?)? = resolve,
+    ) = SparkReadReconcile.reconcile(side, transactionId, earlier, pager, resolveName)
 
     @Nested
     @DisplayName("repairs that the structure proves")
@@ -166,54 +175,223 @@ class SparkReadReconcileTest {
     }
 
     @Nested
-    @DisplayName("kinds that are never repaired")
-    inner class UnsupportedKinds {
+    @DisplayName("white and unique names, repaired through the spark-name catalog")
+    inner class CatalogRepairs {
         @Test
-        fun `a skill-name disagreement is left alone`() {
-            val result =
-                reconcile(
-                    capture(reading(stat("Speed", 2), white("Ignited Spirit SPD", 2, SparkWhiteClass.SKILL))),
-                    reading(stat("Speed", 2), white("gnited Spirit SPD", 2, SparkWhiteClass.SKILL)),
+        fun `a white that lost its first glyph is repaired beside the stat and aptitude repairs`() {
+            // Rice Shower, 2026-11-14 12:51: the original page as the result screen and the pager read it.
+            val earlier =
+                reading(
+                    stat("Wit", 1),
+                    apt("Long", 2),
+                    unique("Blue Rose Closer", 1),
+                    white("Tenno Sho (Spring)", 1, SparkWhiteClass.RACE),
+                    white("Deep Breaths", 1, SparkWhiteClass.SKILL),
+                    white("Medium Corners O", 1, SparkWhiteClass.SKILL),
+                    white("Ignited Spirit SPD", 2, SparkWhiteClass.SKILL),
                 )
+            val pager =
+                reading(
+                    stat("Nit", 1),
+                    apt("-ong", 2),
+                    unique("Blue Rose Closer", 1),
+                    white("Tenno Sho (Spring)", 1, SparkWhiteClass.RACE),
+                    white("Deep Breaths", 1, SparkWhiteClass.SKILL),
+                    white("Medium Corners O", 1, SparkWhiteClass.SKILL),
+                    white("gnited Spirit SPD", 2, SparkWhiteClass.SKILL),
+                )
+            val result = reconcile(capture(earlier, SparkSetSide.ORIGINAL), pager, side = SparkSetSide.ORIGINAL)
 
-            assertEquals(SparkReadAuthority.PAGER_UNCHANGED, result.authority)
-            assertEquals("gnited Spirit SPD", result.effective.rows[1].name)
+            assertEquals(SparkReadAuthority.PAGER_WITH_STRUCTURAL_NAME_REPAIR, result.authority)
+            assertEquals(listOf(0, 1, 6), result.repairedRowIndexes)
+            assertEquals(earlier.rows.map { it.name }, result.effective.rows.map { it.name })
+            assertEquals(SparkRowKind.WHITE, result.repairs.last().kind)
+            assertEquals("gnited Spirit SPD", result.repairs.last().pagerName)
+            assertEquals(earlier.rows.map { it.name }, SparkReadReconcile.keptRows(pager.rows, result).map { it.name })
+            assertEquals(pager.rows.map { it.whiteClass }, result.effective.rows.map { it.whiteClass })
         }
 
         @Test
-        fun `a race-name disagreement is left alone`() {
-            val result =
-                reconcile(
-                    capture(reading(stat("Speed", 2), white("Japanese Derby", 3, SparkWhiteClass.RACE))),
-                    reading(stat("Speed", 2), white("lapanese Derby", 3, SparkWhiteClass.RACE)),
+        fun `a white whose only damage is its first glyph no longer reads as corroborated`() {
+            // Rerolled page, 2026-11-14 06:21: every other row read cleanly on the pager.
+            val earlier =
+                reading(
+                    stat("Guts", 1),
+                    apt("Pace Chaser", 2),
+                    unique("The Duty of Dignity Calls", 3),
+                    white("Takarazuka Kinen", 2, SparkWhiteClass.RACE),
+                    white("Corner Adept O", 2, SparkWhiteClass.SKILL),
+                    white("Lucky Seven", 3, SparkWhiteClass.SKILL),
                 )
+            val pager = reading(*earlier.rows.dropLast(1).toTypedArray(), white("ucky Seven", 3, SparkWhiteClass.SKILL))
+            val result = reconcile(capture(earlier), pager)
 
-            assertEquals(SparkReadAuthority.PAGER_UNCHANGED, result.authority)
-            assertEquals("lapanese Derby", result.effective.rows[1].name)
+            assertEquals(SparkReadAuthority.PAGER_WITH_STRUCTURAL_NAME_REPAIR, result.authority)
+            assertEquals(listOf(5), result.repairedRowIndexes)
+            assertEquals("Lucky Seven", SparkReadReconcile.keptRows(pager.rows, result)[5].name)
         }
 
         @Test
-        fun `a scenario-name disagreement is left alone`() {
+        fun `a first glyph read as a dash or another letter is repaired too`() {
             val result =
                 reconcile(
-                    capture(reading(stat("Speed", 2), white("Unity Cup", 2, SparkWhiteClass.RACE))),
-                    reading(stat("Speed", 2), white("Jnity Cup", 2, SparkWhiteClass.RACE)),
+                    capture(reading(stat("Power", 1), white("Left-Handed O", 2, SparkWhiteClass.SKILL), white("Unity Cup", 2, SparkWhiteClass.RACE))),
+                    reading(stat("Power", 1), white("-eft-Handed O", 2, SparkWhiteClass.SKILL), white("Jnity Cup", 2, SparkWhiteClass.RACE)),
                 )
 
-            assertEquals(SparkReadAuthority.PAGER_UNCHANGED, result.authority)
-            assertEquals("Jnity Cup", result.effective.rows[1].name)
+            assertEquals(listOf("Power", "Left-Handed O", "Unity Cup"), result.effective.rows.map { it.name })
         }
 
         @Test
-        fun `a unique-name disagreement is left alone`() {
+        fun `a unique that lost its first glyph is repaired`() {
             val result =
                 reconcile(
                     capture(reading(stat("Speed", 2), unique("Our Ticket to Win!", 1))),
-                    reading(stat("Speed", 2), unique("Dur Ticket to Win!", 1)),
+                    reading(stat("Speed", 2), unique("ur Ticket to Win!", 1)),
+                )
+
+            assertEquals("Our Ticket to Win!", result.effective.rows[1].name)
+            assertEquals(SparkRowKind.UNIQUE, result.repairs.single().kind)
+        }
+
+        @Test
+        fun `an unreadable pager white takes the earlier name`() {
+            val result =
+                reconcile(
+                    capture(reading(stat("Speed", 2), white("Takarazuka Kinen", 3, SparkWhiteClass.RACE))),
+                    reading(stat("Speed", 2), white(SPARK_UNREADABLE_NAME, 3, SparkWhiteClass.UNKNOWN)),
+                )
+
+            assertEquals("Takarazuka Kinen", result.effective.rows[1].name)
+            assertEquals(SparkWhiteClass.UNKNOWN, result.effective.rows[1].whiteClass, "the class stays the pager's")
+        }
+
+        @Test
+        fun `two different valid white names are a contradiction, not a repair`() {
+            val result =
+                reconcile(
+                    capture(reading(stat("Speed", 2), apt("Sprint", 2), white("Corner Adept O", 2, SparkWhiteClass.SKILL))),
+                    reading(stat("peed", 2), apt("Sprint", 2), white("Corner Recovery O", 2, SparkWhiteClass.SKILL)),
+                )
+
+            assertEquals(SparkReadAuthority.PAGER_ONLY, result.authority)
+            assertEquals(SparkReconcileRefusal.VALID_NAME_CONTRADICTION, result.refusal)
+            assertTrue(result.structurallyAgreed)
+            assertSame(result.pager, result.effective, "no partial repair may leak out of a refused side")
+        }
+
+        @Test
+        fun `a structural mismatch blocks the white repair with every other`() {
+            val result =
+                reconcile(
+                    capture(reading(stat("Wit", 1), white("Ignited Spirit SPD", 2, SparkWhiteClass.SKILL))),
+                    reading(stat("Nit", 1), white("gnited Spirit SPD", 1, SparkWhiteClass.SKILL)),
+                )
+
+            assertEquals(SparkReadAuthority.PAGER_ONLY, result.authority)
+            assertEquals(SparkReconcileRefusal.STAR_MISMATCH, result.refusal)
+            assertEquals(listOf("Nit", "gnited Spirit SPD"), result.effective.rows.map { it.name })
+        }
+
+        @Test
+        fun `a white whose earlier name does not resolve stays the pager's`() {
+            val result =
+                reconcile(
+                    capture(reading(stat("Speed", 2), white("Qqqqq Zzzzz", 2, SparkWhiteClass.UNKNOWN))),
+                    reading(stat("Speed", 2), white("qqqq Zzzzz", 2, SparkWhiteClass.UNKNOWN)),
                 )
 
             assertEquals(SparkReadAuthority.PAGER_UNCHANGED, result.authority)
-            assertEquals("Dur Ticket to Win!", result.effective.rows[1].name)
+            assertEquals("qqqq Zzzzz", result.effective.rows[1].name)
+        }
+
+        @Test
+        fun `a pager white on the same catalog entry is not respelled from the earlier read`() {
+            // Trailing noise on the earlier read is not the pager's damage pattern, so the pager spelling stands.
+            val result =
+                reconcile(
+                    capture(reading(stat("Speed", 2), white("Unity CupP", 2, SparkWhiteClass.RACE))),
+                    reading(stat("Speed", 2), white("Unity Cup", 2, SparkWhiteClass.RACE)),
+                )
+
+            assertEquals(SparkReadAuthority.PAGER_UNCHANGED, result.authority)
+            assertEquals("Unity Cup", result.effective.rows[1].name)
+        }
+
+        // Every distinct earlier/pager name pair of structurally agreeing live pager reads (earlier name first).
+        private val liveRepaired =
+            listOf(
+                "Leader's Pride" to "eader's Pride",
+                "Playtime's Over!" to "laytime's Over!",
+                "Hanshin J.F." to "danshin J.F.",
+                "Ignited Spirit SPD" to "gnited Spirit SPD",
+                "Ignited Spirit STA" to "gnited Spirit STA",
+                "Inside Scoop" to "nside Scoop",
+                "Japan C." to "lapan C.",
+                "Japanese Derby" to "lapanese Derby",
+                "Late Surger Savvy O" to "ate Surger Savvy O",
+                "Lay Low" to "-ay Low",
+                "Left-Handed O" to "-eft-Handed O",
+                "Left-Handed O" to "eft-Handed O",
+                "Long Corners O" to "-ong Corners O",
+                "Lucky Seven" to "ucky Seven",
+                "On the Attack" to "Dn the Attack",
+                "Opening Gambit" to "Dpening Gambit",
+                "Osaka Hai" to "Dsaka Hai",
+                "Our Grand Concert" to "Dur Grand Concert",
+                "Outer Swell" to "Duter Swell",
+                "TS Climax Scenario" to "rs Climax Scenario",
+                "URA Finale" to "JRA Finale",
+                "Up-Tempo" to "Jp-Tempo",
+                "Updrafters" to "Jpdrafters",
+                "Victoria Mile" to "lictoria Mile",
+            )
+        private val liveRepairedUniques =
+            listOf(
+                "I See Victory in My Future!" to "See Victory in My Future!",
+                "Just a Little Farther!" to "lust a Little Farther!",
+                "Luck Runs My Way" to "uck Runs My Way",
+                "Operation Cacao" to "Dperation Cacao",
+            )
+
+        // Live pairs where the earlier read carries the noise: the pager spelling must stand.
+        private val liveKeptPager =
+            listOf(
+                "All I've Got" to "All lI've Got",
+                "End Closer Straightaways O" to "End Closer Straightaways",
+                "Queen Elizabeth I| Cup" to "Queen Elizabeth II Cup",
+                "Rainy Days O" to "Rainy Days",
+                "Unity CupP" to "Jnity Cup",
+            )
+
+        private fun repairOne(row: (String) -> SparkRowFact, earlierName: String, pagerName: String): String =
+            reconcile(capture(reading(stat("Speed", 2), row(earlierName))), reading(stat("Speed", 2), row(pagerName))).effective.rows[1].name
+
+        @Test
+        fun `every live leading-glyph loss takes the earlier name`() {
+            for ((earlierName, pagerName) in liveRepaired) {
+                assertEquals(earlierName, repairOne({ white(it, 2, SparkWhiteClass.SKILL) }, earlierName, pagerName), pagerName)
+            }
+            for ((earlierName, pagerName) in liveRepairedUniques) {
+                assertEquals(earlierName, repairOne({ unique(it, 2) }, earlierName, pagerName), pagerName)
+            }
+        }
+
+        @Test
+        fun `a live earlier read with its own noise never respells the pager`() {
+            for ((earlierName, pagerName) in liveKeptPager) {
+                assertEquals(pagerName, repairOne({ white(it, 2, SparkWhiteClass.SKILL) }, earlierName, pagerName), earlierName)
+            }
+            assertEquals("Victoria por plancha", repairOne({ unique(it, 2) }, "Victoria por plancha t", "Victoria por plancha"))
+        }
+
+        @Test
+        fun `without the catalog only a dropped first glyph is repaired`() {
+            val earlier = reading(stat("Speed", 2), white("Lucky Seven", 3, SparkWhiteClass.SKILL), white("Unity Cup", 2, SparkWhiteClass.RACE))
+            val pager = reading(stat("Speed", 2), white("ucky Seven", 3, SparkWhiteClass.SKILL), white("Jnity Cup", 2, SparkWhiteClass.RACE))
+            val result = reconcile(capture(earlier), pager, resolveName = null)
+
+            assertEquals(listOf("Speed", "Lucky Seven", "Jnity Cup"), result.effective.rows.map { it.name })
         }
     }
 
@@ -452,14 +630,14 @@ class SparkReadReconcileTest {
 
         @Test
         fun `reconciled reads choose the rerolled set`() {
-            val original = SparkReadReconcile.reconcile(SparkSetSide.ORIGINAL, tx, capture(originalEarlier, SparkSetSide.ORIGINAL), originalPager)
-            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), rerolledPager)
+            val original = SparkReadReconcile.reconcile(SparkSetSide.ORIGINAL, tx, capture(originalEarlier, SparkSetSide.ORIGINAL), originalPager, resolve)
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), rerolledPager, resolve)
 
             assertEquals("Speed", rerolled.effective.rows[0].name)
             assertEquals("Sprint", rerolled.effective.rows[1].name)
-            assertEquals(listOf(0, 1), rerolled.repairedRowIndexes)
-            // The original page needed no repair: its blue and pink read cleanly even on the pager.
-            assertEquals(SparkReadAuthority.PAGER_UNCHANGED, original.authority)
+            assertEquals(listOf(0, 1, 5, 8), rerolled.repairedRowIndexes)
+            // The original page's blue and pink read cleanly even on the pager; only its white names needed a repair.
+            assertEquals(listOf(3, 4, 5), original.repairedRowIndexes)
 
             val choice = SparkKeepPolicy.choose(original.effective, rerolled.effective, profile)
             assertEquals(SparkSetSide.REROLLED, choice.side)
@@ -473,7 +651,7 @@ class SparkReadReconcileTest {
         fun `the repair is what flips it -- the pink repair alone does not decide the tier`() {
             // Sprint matters for the pink tier, but the blue tier is compared first and already
             // separates the sides. Pinning this keeps the outcome attributable.
-            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), rerolledPager)
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), rerolledPager, resolve)
             val choice = SparkKeepPolicy.choose(originalPager, rerolled.effective, profile)
 
             assertEquals(SparkSetSide.REROLLED, choice.side)
@@ -482,7 +660,7 @@ class SparkReadReconcileTest {
 
         @Test
         fun `without structural corroboration no repair is fabricated and the original still wins`() {
-            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, null, rerolledPager)
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, null, rerolledPager, resolve)
 
             assertEquals(SparkReadAuthority.PAGER_ONLY, rerolled.authority)
             assertEquals("peed", rerolled.effective.rows[0].name)
@@ -493,7 +671,7 @@ class SparkReadReconcileTest {
         @Test
         fun `an incomplete pager read still takes the degraded keep-original path, not a repair`() {
             val short = rerolledPager.copy(termination = SparkScanTermination.ALIGNMENT_FAILED)
-            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), short)
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), short, resolve)
 
             assertEquals(SparkReadAuthority.PAGER_ONLY, rerolled.authority)
             assertEquals(SparkReconcileRefusal.PAGER_INCOMPLETE, rerolled.refusal)
@@ -509,7 +687,7 @@ class SparkReadReconcileTest {
             // Content repair must not be able to reach a Rerolled commit through the degraded path:
             // the selection policy only ever commits ORIGINAL when the comparison is not certain.
             val short = rerolledPager.copy(termination = SparkScanTermination.TIMED_OUT_PARTIAL)
-            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), short)
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), short, resolve)
             val choice = SparkKeepPolicy.choose(originalPager, rerolled.effective, profile)
 
             val decision =
@@ -562,7 +740,7 @@ class SparkReadReconcileTest {
             assertEquals(null, SparkReadReconcile.canonicalNameFor(SparkRowKind.STAT, "peed"))
             assertEquals(null, SparkReadReconcile.canonicalNameFor(SparkRowKind.APTITUDE, "print"))
             assertEquals("Late Surger", SparkReadReconcile.canonicalNameFor(SparkRowKind.APTITUDE, "late surger"))
-            // Kinds without a closed vocabulary never resolve, so they can never be repaired.
+            // Kinds without a closed vocabulary resolve only through the spark-name catalog.
             assertEquals(null, SparkReadReconcile.canonicalNameFor(SparkRowKind.WHITE, "Unity Cup"))
             assertEquals(null, SparkReadReconcile.canonicalNameFor(SparkRowKind.UNIQUE, "Speed"))
         }
@@ -592,6 +770,13 @@ class SparkReadReconcileTest {
                 "SparkKeepPolicy.choose(originalAuthority.effective, rerolledAuthority.effective" in body,
                 "the comparison must score the reconciled reads, not the raw pager reads",
             )
+        }
+
+        @Test
+        fun `both sides are reconciled with the spark-name catalog`() {
+            val body = pagerHandlerBody()
+            assertTrue("val resolveName = sparkNameCatalog?.let" in body, "the lookup must come from the shipped catalog")
+            assertEquals(2, Regex("""SparkReadReconcile\.reconcile\([^\n]*, resolveName\)""").findAll(body).count())
         }
 
         @Test

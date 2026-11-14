@@ -22,7 +22,7 @@ class SparkKeptRecordTest {
     private fun complete(vararg rows: SparkRowFact) = SparkSetReading(rows.toList(), SparkScanTermination.COMPLETE_END_MARKER)
 
     private fun authority(earlier: SparkSetReading?, pager: SparkSetReading) =
-        SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, earlier?.let { SparkSideCapture(it, SparkSetSide.REROLLED, tx) }, pager)
+        SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, earlier?.let { SparkSideCapture(it, SparkSetSide.REROLLED, tx) }, pager, null)
 
     @Test
     fun `a repaired winner side is kept under the repaired names with the pager's count, order, kinds and stars`() {
@@ -39,13 +39,13 @@ class SparkKeptRecordTest {
     }
 
     @Test
-    fun `a white name stays as the pager read it`() {
+    fun `a white name that lost its first glyph is kept under the earlier name`() {
         val earlier = complete(stat("Speed", 2), white("Corner Adept O", 1))
         val pager = complete(stat("peed", 2), white("orner Adept O", 1))
 
         val kept = SparkReadReconcile.keptRows(pager.rows, authority(earlier, pager))
 
-        assertEquals(listOf("Speed", "orner Adept O"), kept.map { it.name })
+        assertEquals(listOf("Speed", "Corner Adept O"), kept.map { it.name })
     }
 
     @Test
