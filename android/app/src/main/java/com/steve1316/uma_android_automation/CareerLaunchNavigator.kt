@@ -4180,6 +4180,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // regardless of whether the frame's rows are repetitive enough to make the content merge
             // ambiguous. Checking it here keeps a bottom-of-list of look-alike whites a COMPLETE read
             // rather than letting the hardened (ambiguity-refusing) merge downgrade it to ALIGNMENT_FAILED.
+            val runBeforeSwipe = unchangedRun
             unchangedRun = SparkScrollMerge.unchangedSwipeRun(previousRows, frame.rows, unchangedRun)
             if (unchangedRun > 0) {
                 endOrConfirmUnchanged()
@@ -4202,7 +4203,9 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 val retryFrame = readSparkFrame(iu.getSourceBitmap(), geometry)
                 if (retryFrame != null && retryFrame.rows.isNotEmpty()) {
-                    unchangedRun = SparkScrollMerge.unchangedSwipeRun(previousRows, retryFrame.rows, unchangedRun)
+                    // The re-read replaces the transient capture as this swipe's evidence, so it
+                    // extends the run the earlier swipes built instead of the one it just reset.
+                    unchangedRun = SparkScrollMerge.unchangedSwipeRun(previousRows, retryFrame.rows, runBeforeSwipe)
                     if (unchangedRun > 0) {
                         // The settled frame shows the list did not move: a normal bottom-of-list
                         // completion once confirmed, not a failed stitch.

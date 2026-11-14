@@ -18,7 +18,8 @@ class SparkScrollEndTest {
     private val top11 = list13.subList(0, 11)
     private val bottom11 = list13.subList(2, 13)
 
-    private class Frame(val rows: List<SparkRowFact>, val endMarker: Boolean = false)
+    /** One swipe's evidence: the first capture and, when it neither matches nor stitches, the settled same-position re-read. */
+    private class Frame(val rows: List<SparkRowFact>, val endMarker: Boolean = false, val reread: List<SparkRowFact>? = null)
 
     private class Replay(val rows: List<SparkRowFact>, val termination: SparkScanTermination?, val swipes: Int)
 
@@ -29,19 +30,40 @@ class SparkScrollEndTest {
         var run = 0
         var swipes = 0
         for (frame in frames) {
+            val runBeforeSwipe = run
             run = SparkScrollMerge.unchangedSwipeRun(previous, frame.rows, run)
             if (run > 0) {
                 if (SparkScrollMerge.listEnded(run)) return Replay(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, swipes)
                 swipes++
                 continue
             }
-            merged = SparkScrollMerge.merge(merged, frame.rows) ?: return Replay(merged, SparkScanTermination.ALIGNMENT_FAILED, swipes)
+            var used = frame.rows
+            var next = SparkScrollMerge.merge(merged, used)
+            if (next == null) {
+                val reread = frame.reread ?: return Replay(merged, SparkScanTermination.ALIGNMENT_FAILED, swipes)
+                run = SparkScrollMerge.unchangedSwipeRun(previous, reread, runBeforeSwipe)
+                if (run > 0) {
+                    if (SparkScrollMerge.listEnded(run)) return Replay(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, swipes)
+                    swipes++
+                    continue
+                }
+                used = reread
+                next = SparkScrollMerge.merge(merged, used) ?: return Replay(merged, SparkScanTermination.ALIGNMENT_FAILED, swipes)
+            }
+            merged = next
             if (frame.endMarker) return Replay(merged, SparkScanTermination.COMPLETE_END_MARKER, swipes)
-            previous = frame.rows
+            previous = used
             swipes++
         }
         return Replay(merged, null, swipes)
     }
+
+    /** [rows] with one name misread, as a capture taken before the list settles can read it. */
+    private fun misread(
+        rows: List<SparkRowFact>,
+        index: Int = rows.lastIndex,
+        suffix: String = "P",
+    ) = rows.mapIndexed { i, row -> if (i == index) row.copy(name = row.name + suffix) else row }
 
     @Nested
     @DisplayName("a dropped swipe")
@@ -95,6 +117,61 @@ class SparkScrollEndTest {
     }
 
     @Nested
+    @DisplayName("a misread first capture after each swipe")
+    inner class TransientCapture {
+        private val keep11 =
+            lead +
+                listOf(
+                    white("Japanese Derby"),
+                    white("Sprinters S.", 2),
+                    white("Hopeful S."),
+                    white("Medium Corners O"),
+                    white("Late Surger Corners O", 2),
+                    white("Groundwork"),
+                    white("Ignited Spirit: Speed +", 2),
+                    white("Unity Cup"),
+                )
+        private val transient = Frame(misread(keep11), reread = keep11)
+
+        @Test
+        fun `an exact window whose re-reads match ends complete after two swipes`() {
+            val read = replay(listOf(Frame(keep11)) + List(6) { transient })
+            assertEquals(SparkScanTermination.COMPLETE_NO_PROGRESS, read.termination)
+            assertEquals(keep11, read.rows)
+            assertEquals(2, read.swipes)
+        }
+
+        @Test
+        fun `one matching re-read alone never ends the read`() {
+            assertNull(replay(listOf(Frame(keep11), transient)).termination)
+        }
+
+        @Test
+        fun `a list that moved is stitched from the re-read and not ended by it`() {
+            val moved = Frame(misread(bottom11, index = 0), reread = bottom11)
+            val read = replay(listOf(Frame(top11), moved, moved))
+            assertNull(read.termination, "one unchanged swipe at the real bottom is not a confirmation")
+            assertEquals(list13, read.rows)
+            val ended = replay(listOf(Frame(top11), moved, moved, moved))
+            assertEquals(SparkScanTermination.COMPLETE_NO_PROGRESS, ended.termination)
+            assertEquals(list13, ended.rows)
+        }
+
+        @Test
+        fun `a re-read that neither matches nor stitches still fails the read`() {
+            val read = replay(listOf(Frame(keep11), Frame(misread(keep11), reread = misread(keep11, suffix = "Q"))))
+            assertEquals(SparkScanTermination.ALIGNMENT_FAILED, read.termination)
+        }
+
+        @Test
+        fun `a re-read showing a move resets the run built before it`() {
+            val read = replay(listOf(Frame(top11), Frame(top11), Frame(misread(bottom11, index = 0), reread = bottom11), Frame(bottom11)))
+            assertNull(read.termination)
+            assertEquals(list13, read.rows)
+        }
+    }
+
+    @Nested
     @DisplayName("unchanged swipe run")
     inner class Run {
         @Test
@@ -137,6 +214,15 @@ class SparkScrollEndTest {
             assertEquals(2, Regex("""SparkScrollMerge\.unchangedSwipeRun\(""").findAll(body).count(), "first read and same-position re-read")
             assertEquals(1, Regex("""SparkScrollMerge\.listEnded\(""").findAll(body).count())
             assertEquals(1, Regex("""SparkScanTermination\.COMPLETE_NO_PROGRESS""").findAll(body).count(), "the only no-progress ending sits behind listEnded")
+        }
+
+        @Test
+        fun `the same-position re-read extends the run from before the swipe`() {
+            val body = readerBody()
+            val saved = body.indexOf("val runBeforeSwipe = unchangedRun")
+            assertTrue(saved >= 0, "the run is saved before the first capture is scored")
+            assertTrue(saved < body.indexOf("SparkScrollMerge.unchangedSwipeRun("), "saved before the first capture's call")
+            assertTrue(body.contains("SparkScrollMerge.unchangedSwipeRun(previousRows, retryFrame.rows, runBeforeSwipe)"), "the re-read must not extend the run its transient capture reset")
         }
     }
 }
