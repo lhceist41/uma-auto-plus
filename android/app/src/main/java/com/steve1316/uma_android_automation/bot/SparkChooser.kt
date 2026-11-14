@@ -906,7 +906,8 @@ object SparkKeepPolicy {
                 profile.blueTargetsOrdered.indexOfFirst { SparkTextNorm.namesEqual(it, blue.name) }
             }
         val targetBlueStars = if (blueRank >= 0) blue!!.stars else 0
-        val pinks = rows.filter { it.kind == SparkRowKind.APTITUDE }
+        // Turf is skipped: no outfit has Turf B to D and a career-start pink only lifts toward A, so it never helps a child.
+        val pinks = rows.filter { it.kind == SparkRowKind.APTITUDE && !SparkTextNorm.namesEqual(it.name, "Turf") }
         val matchedPinks =
             pinks.filter { pink ->
                 !pink.unreadable &&

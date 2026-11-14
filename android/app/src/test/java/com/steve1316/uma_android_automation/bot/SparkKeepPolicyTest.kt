@@ -214,6 +214,68 @@ class SparkKeepPolicyTest {
         }
 
         @Test
+        fun `a Turf pink carries no value even when the profile matches Turf`() {
+            val original =
+                complete(listOf(stat("Stamina", 1), pink("Turf", 1), white("Cut and Drive!", 2), white("Mile Straightaways", 1)))
+            val rerolled =
+                complete(
+                    listOf(
+                        stat("Stamina", 1),
+                        pink("Mile", 1),
+                        white("Cut and Drive!", 2),
+                        white("Yasuda Kinen", 1),
+                        white("Shuka Sho", 2),
+                        white("Mile Straightaways", 2),
+                        white("Be Still", 2),
+                        white("Unity Cup", 1),
+                    ),
+                )
+            val choice = SparkKeepPolicy.choose(original, rerolled, profile)
+            assertEquals(SparkSetSide.REROLLED, choice.side)
+            assertEquals(0, choice.original.matchedPinkStars)
+            assertEquals(0, choice.original.rawPinkStars)
+            assertEquals(1, choice.rerolled.rawPinkStars)
+        }
+
+        @Test
+        fun `a 3-star Turf pink earns no protection against a 2-star matched pink`() {
+            val original = complete(listOf(stat("Speed", 2), pink("Turf", 3), unique("u", 1)))
+            val rerolled = complete(listOf(stat("Speed", 2), pink("Medium", 2), unique("u", 1)))
+            val choice = SparkKeepPolicy.choose(original, rerolled, profile)
+            assertEquals(0, choice.original.protectedDesiredPink3)
+            assertEquals(SparkSetSide.REROLLED, choice.side)
+            assertEquals("pink", choice.decidedBy)
+        }
+
+        @Test
+        fun `an unmatched pink beats a matched Turf pink on raw stars`() {
+            val original = complete(listOf(stat("Speed", 2), pink("Turf", 1), unique("u", 1)))
+            val rerolled = complete(listOf(stat("Speed", 2), pink("Long", 2), unique("u", 1)))
+            val choice = SparkKeepPolicy.choose(original, rerolled, profile)
+            assertEquals(SparkSetSide.REROLLED, choice.side)
+            assertEquals("pink", choice.decidedBy)
+        }
+
+        @Test
+        fun `no outfit has Turf B, C or D, which is why a Turf pink carries no value`() {
+            var dir: File? = File(System.getProperty("user.dir"))
+            var file: File? = null
+            repeat(5) {
+                val candidate = File(dir, "src/data/build_budget_data.json")
+                if (file == null && candidate.isFile) file = candidate
+                dir = dir?.parentFile
+            }
+            val data = requireNotNull(file) { "src/data/build_budget_data.json not found from ${System.getProperty("user.dir")}" }
+            val outfits = JSONObject(data.readText()).getJSONArray("traineeBase")
+            assertTrue(outfits.length() > 0)
+            for (i in 0 until outfits.length()) {
+                val outfit = outfits.getJSONObject(i)
+                val turf = outfit.getJSONObject("aptitudes").getString("turf")
+                assertFalse(turf in listOf("B", "C", "D"), "card ${outfit.optInt("cardId")} has Turf $turf")
+            }
+        }
+
+        @Test
         fun `irrelevant whites never outweigh a superior target blue`() {
             val original = bareSet("Speed", 2)
             val rerolled =
