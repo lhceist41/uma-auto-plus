@@ -22,6 +22,7 @@ import com.steve1316.uma_android_automation.components.ButtonHomeSpecialMissions
 import com.steve1316.uma_android_automation.components.ButtonItemRequestSashTab
 import com.steve1316.uma_android_automation.components.ButtonItemRequestShoesTab
 import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeSelected
+import com.steve1316.uma_android_automation.components.ButtonOkDialog
 import com.steve1316.uma_android_automation.components.ButtonSelectAll
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabDaily
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabMain
@@ -45,6 +46,7 @@ import com.steve1316.uma_android_automation.components.LabelItemRequestExpired
 import com.steve1316.uma_android_automation.components.LabelItemRequestHeader
 import com.steve1316.uma_android_automation.components.LabelItemRequestHeld
 import com.steve1316.uma_android_automation.components.LabelItemRequestMaxDonations
+import com.steve1316.uma_android_automation.components.LabelItemRequestNotice
 import com.steve1316.uma_android_automation.components.LabelItemRequestSelectPrompt
 import com.steve1316.uma_android_automation.components.LabelMissionsHeader
 import com.steve1316.uma_android_automation.components.LabelPresentsHeader
@@ -359,6 +361,9 @@ internal enum class ExtrasScreen {
 
     /** The Item Request dialog with neither an ended result nor the picker: a request still running. */
     ITEM_REQUEST_OTHER,
+
+    /** The notice "It hasn't been 8 hours since your last request.", closed with OK. */
+    ITEM_REQUEST_TOO_SOON,
     CONFIRM_REQUEST,
     PRESENTS,
     REWARDS_COLLECTED,
@@ -389,6 +394,7 @@ internal enum class ExtrasTarget {
     CLOSE,
     CANCEL,
     CONFIRM,
+    OK,
     BACK,
     HOME_TAB,
     SHOP_BUTTON,
@@ -432,6 +438,9 @@ internal interface ExtrasDevice {
     fun costBar(): Pair<Int?, Int?>
 
     fun pause(seconds: Double)
+
+    /** Saves the current frame for a failure report. */
+    fun saveFrame(name: String) {}
 }
 
 /**
@@ -444,6 +453,7 @@ internal class DailyExtras(
     private val clubRequest: Boolean,
     private val requestItem: String,
     private val buyDailySales: Boolean = false,
+    private val clockMs: () -> Long = System::currentTimeMillis,
     private val log: (String) -> Unit = {},
 ) {
     companion object {
@@ -458,6 +468,10 @@ internal class DailyExtras(
 
         /** Home shows before its buttons finish drawing; polls of about a second for a Home button. */
         const val HOME_BUTTON_POLLS = 6
+
+        /** Leaving Club for Home can be slow, so the way back is bounded by time as well as rounds. */
+        const val BACK_HOME_MILLIS = 20_000L
+        const val BACK_HOME_ROUNDS = 10
 
         private val MISSION_TABS =
             listOf(
@@ -554,7 +568,7 @@ internal class DailyExtras(
         var reopened = false
         repeat(3) {
             if (!device.press(ExtrasTarget.ITEM_REQUEST_BUTTON)) return "Item Request button not found"
-            when (awaitAny(ExtrasScreen.ITEM_REQUEST_ENDED, ExtrasScreen.ITEM_REQUEST_PICKER, ExtrasScreen.ITEM_REQUEST_OTHER)) {
+            when (awaitAny(ExtrasScreen.ITEM_REQUEST_ENDED, ExtrasScreen.ITEM_REQUEST_PICKER, ExtrasScreen.ITEM_REQUEST_OTHER, ExtrasScreen.ITEM_REQUEST_TOO_SOON)) {
                 ExtrasScreen.ITEM_REQUEST_ENDED -> {
                     log("The last item request has ended; closing its result.")
                     device.press(ExtrasTarget.CLOSE)
@@ -569,6 +583,13 @@ internal class DailyExtras(
                     device.press(ExtrasTarget.CLOSE)
                     if (reopened || awaitScreen(ExtrasScreen.CLUB) != ExtrasScreen.CLUB) return "a request is still running"
                     reopened = true
+                }
+
+                ExtrasScreen.ITEM_REQUEST_TOO_SOON -> {
+                    // The game allows one request per 8 hours and this one was made less than that ago.
+                    val note = "no request: it has not been 8 hours since the last one"
+                    if (!device.press(ExtrasTarget.OK)) return "$note, and its dialog would not close"
+                    return if (awaitScreen(ExtrasScreen.CLUB) == ExtrasScreen.CLUB) note else "$note, then lost the screen"
                 }
 
                 else -> return "Item Request did not open"
@@ -644,18 +665,32 @@ internal class DailyExtras(
         return "no request: $reason"
     }
 
-    /** Leaves any screen of this step for Home: closes dialogs with Close or Cancel, then Back or the Home tab. */
+    /**
+     * Leaves any screen of this step for Home: closes dialogs with Close or Cancel, then Back or the Home tab.
+     * The game can still be moving when a button is missing, so a round that pressed nothing waits a second and the
+     * loop runs until [BACK_HOME_MILLIS] pass; a failure logs every round and keeps one frame.
+     */
     private fun backToHome(): Boolean {
-        repeat(6) {
-            when (awaitAny(*ExtrasScreen.entries.filter { it != ExtrasScreen.UNKNOWN }.toTypedArray(), polls = 3)) {
-                ExtrasScreen.HOME -> return true
-                ExtrasScreen.CLUB -> device.press(ExtrasTarget.HOME_TAB)
-                ExtrasScreen.MISSIONS, ExtrasScreen.SHOP_MENU, ExtrasScreen.DAILY_SALES -> device.press(ExtrasTarget.BACK)
-                ExtrasScreen.CONFIRM_REQUEST, ExtrasScreen.ITEM_REQUEST_PICKER, ExtrasScreen.SPENDING_DIALOG, ExtrasScreen.CONFIRM_EXCHANGE -> device.press(ExtrasTarget.CANCEL)
-                // Close, Cancel and Back never accept anything; an unknown screen gets nothing else.
-                else -> device.press(ExtrasTarget.CLOSE) || device.press(ExtrasTarget.CANCEL) || device.press(ExtrasTarget.BACK)
-            }
+        val started = clockMs()
+        val rounds = mutableListOf<String>()
+        while (rounds.size < BACK_HOME_ROUNDS && clockMs() - started < BACK_HOME_MILLIS) {
+            val screen = awaitAny(*ExtrasScreen.entries.filter { it != ExtrasScreen.UNKNOWN }.toTypedArray(), polls = 3)
+            if (screen == ExtrasScreen.HOME) return true
+            val pressed =
+                when (screen) {
+                    ExtrasScreen.CLUB -> device.press(ExtrasTarget.HOME_TAB)
+                    ExtrasScreen.MISSIONS, ExtrasScreen.SHOP_MENU, ExtrasScreen.DAILY_SALES -> device.press(ExtrasTarget.BACK)
+                    ExtrasScreen.CONFIRM_REQUEST, ExtrasScreen.ITEM_REQUEST_PICKER, ExtrasScreen.SPENDING_DIALOG, ExtrasScreen.CONFIRM_EXCHANGE -> device.press(ExtrasTarget.CANCEL)
+                    ExtrasScreen.ITEM_REQUEST_TOO_SOON -> device.press(ExtrasTarget.OK)
+                    // Close, Cancel and Back never accept anything; an unknown screen gets nothing else.
+                    else -> device.press(ExtrasTarget.CLOSE) || device.press(ExtrasTarget.CANCEL) || device.press(ExtrasTarget.BACK)
+                }
+            rounds += "${screen ?: "unknown"}: ${if (pressed) "pressed" else "nothing to press"}"
+            if (!pressed) device.pause(1.0)
         }
+        if (awaitScreen(ExtrasScreen.HOME, polls = 5) == ExtrasScreen.HOME) return true
+        log("Could not get back to Home after ${(clockMs() - started) / 1000} s: ${rounds.joinToString("; ")}")
+        device.saveFrame("extras_not_home")
         return false
     }
 
@@ -785,6 +820,7 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
             bitmap.shows(LabelItemRequestExpired) || bitmap.shows(LabelItemRequestMaxDonations) -> ExtrasScreen.ITEM_REQUEST_ENDED
             bitmap.shows(LabelItemRequestSelectPrompt) -> ExtrasScreen.ITEM_REQUEST_PICKER
             bitmap.shows(LabelItemRequestHeader) -> ExtrasScreen.ITEM_REQUEST_OTHER
+            bitmap.shows(LabelItemRequestNotice) && bitmap.shows(ButtonOkDialog) -> ExtrasScreen.ITEM_REQUEST_TOO_SOON
             bitmap.shows(LabelPresentsHeader) -> ExtrasScreen.PRESENTS
             bitmap.shows(LabelMissionsHeader) -> ExtrasScreen.MISSIONS
             bitmap.shows(LabelClubMenu) -> ExtrasScreen.CLUB
@@ -815,6 +851,7 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
                 ExtrasTarget.CLOSE -> ButtonClose.click(imageUtils)
                 ExtrasTarget.CANCEL -> ButtonCancel.click(imageUtils)
                 ExtrasTarget.CONFIRM -> ButtonConfirm.click(imageUtils)
+                ExtrasTarget.OK -> ButtonOkDialog.click(imageUtils)
                 ExtrasTarget.BACK -> ButtonBack.click(imageUtils)
                 ExtrasTarget.HOME_TAB -> ButtonMenuBarHomeSelected.click(imageUtils)
                 ExtrasTarget.SHOP_BUTTON -> ButtonHomeShop.click(imageUtils)
@@ -825,6 +862,10 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
             }
         if (clicked) game.wait(1.0)
         return clicked
+    }
+
+    override fun saveFrame(name: String) {
+        runCatching { imageUtils.saveBitmap(filename = name, fullRes = true) }
     }
 
     override fun openPickerTab(shoes: Boolean) {

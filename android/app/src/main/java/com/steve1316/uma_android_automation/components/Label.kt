@@ -422,6 +422,11 @@ object LabelItemRequestHeader : ComponentInterface {
     override val template = Template("components/label/item_request_header", region = Region.topQuarter, confidence = 0.9)
 }
 
+/** The "Item Request" title of the small notice dialog, which sits below the top quarter where the full dialogs draw it. */
+object LabelItemRequestNotice : ComponentInterface {
+    override val template = Template("components/label/item_request_header", region = Region.middle, confidence = 0.9)
+}
+
 /** "The item request has expired." on the result of the account's own finished request. */
 object LabelItemRequestExpired : ComponentInterface {
     override val template = Template("components/label/item_request_expired", region = Region.bottomHalf)

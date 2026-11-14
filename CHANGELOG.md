@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- **Daily extras after Club:** the extras step now waits up to 20 seconds for the game to get back to Home from Club instead of stopping early, and it closes the game's "It hasn't been 8 hours since your last request" notice and goes on with Presents, Missions and Daily Sales.
 - **Turf sparks:** when choosing between the original and rerolled sparks, the bot no longer treats a Turf spark as a useful pink, so it stops keeping a weaker set because of one, and it no longer passes up a reroll to protect one. Every turf runner already has Turf A, and a spark only lifts an aptitude up to A at career start.
 - **Race sparks:** when the bot chooses between the original and rerolled sparks, it now recognises race sparks such as Arima Kinen, Satsuki Sho or NHK Mile Cup (and scenario sparks) as races instead of mistaking them for skills, so a 3-star race spark on the original set is no longer thrown away for a better blue. A white spark it cannot name for sure never counts as a race or a wanted skill; at 3 stars it can only protect the original set.
 - **Spark reroll:** after the bot chooses between the original and rerolled sparks, it now waits when the game is slow to leave the selection screen instead of stopping the queue there. Before it spends 30 TP on a reroll, it reads the spark list a second time and keeps the original sparks if the two reads differ.

@@ -10,6 +10,7 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.HOME
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_ENDED
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_OTHER
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_PICKER
+import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_TOO_SOON
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.MISSIONS
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.PRESENTS
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.REWARDS_COLLECTED
@@ -31,6 +32,7 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_D
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_MAIN
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_SPECIAL
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.MISSIONS_TAB_TITLES
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.OK
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.PRESENTS_BUTTON
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.RESET
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.SELECT_ALL
@@ -82,6 +84,8 @@ private class FakeGame(
     val balance: Int? = 5_683_820,
     /** After this tap a dialog the step does not know shows instead; its Close returns to the Daily Sales list. */
     val errorAfter: ExtrasTarget? = null,
+    /** After the first Home tab press on Club, the game takes this long to reach Home; until then the tab does not match. */
+    val homeTabLagMs: Long = 0,
 ) : ExtrasDevice {
     val taps = mutableListOf<ExtrasTarget>()
     var requested: String? = null
@@ -99,8 +103,14 @@ private class FakeGame(
     private var selected = false
     var bought = false
     private var errorShowing = false
+    var elapsedMs = 0L
+    private var homeArrivesAtMs = -1L
+    var framesSaved = 0
 
-    override fun screen(): ExtrasScreen = dialogTitle?.let { extrasDialogScreen(it) ?: UNKNOWN } ?: if (spendingShowing) spendingScreen else screen
+    override fun screen(): ExtrasScreen {
+        if (homeArrivesAtMs >= 0 && elapsedMs >= homeArrivesAtMs && screen == CLUB) screen = HOME
+        return dialogTitle?.let { extrasDialogScreen(it) ?: UNKNOWN } ?: if (spendingShowing) spendingScreen else screen
+    }
 
     override fun press(target: ExtrasTarget): Boolean {
         dialogTitle?.let { error("tapped $target on the \"$it\" dialog") }
@@ -109,6 +119,10 @@ private class FakeGame(
             taps += target
             spendingShowing = false
             return true
+        }
+        if (target == HOME_TAB && screen == CLUB && homeTabLagMs > 0) {
+            if (homeArrivesAtMs < 0) homeArrivesAtMs = elapsedMs + homeTabLagMs
+            return false
         }
         if (target == CLUB_BUTTON && clubButtonMisses > 0) {
             clubButtonMisses--
@@ -136,10 +150,12 @@ private class FakeGame(
                 when (request) {
                     "ended" -> ITEM_REQUEST_ENDED
                     "running" -> ITEM_REQUEST_OTHER
+                    "too_soon" -> ITEM_REQUEST_TOO_SOON
                     else -> ITEM_REQUEST_PICKER
                 }
             ITEM_REQUEST_ENDED to CLOSE -> CLUB.also { request = "none" }
             ITEM_REQUEST_OTHER to CLOSE -> CLUB.also { if (expiredMissed) request = "none" }
+            ITEM_REQUEST_TOO_SOON to OK -> CLUB
             ITEM_REQUEST_PICKER to CANCEL -> CLUB
             CONFIRM_REQUEST to CANCEL -> ITEM_REQUEST_PICKER
             CONFIRM_REQUEST to CONFIRM ->
@@ -223,7 +239,13 @@ private class FakeGame(
 
     private fun rewardsOn(on: ExtrasTarget): Boolean = (on == openTab && missionRewards) || (on == MISSIONS_TAB_TITLES && titlesRewards)
 
-    override fun pause(seconds: Double) {}
+    override fun pause(seconds: Double) {
+        elapsedMs += (seconds * 1000).toLong()
+    }
+
+    override fun saveFrame(name: String) {
+        framesSaved++
+    }
 }
 
 /** A real Winner's Sash tab as the picker lists it (Default sort), with its held counts. */
@@ -696,6 +718,39 @@ class DailyExtrasTest {
         assertFalse(COLLECT_ALL in game.taps)
         assertEquals(listOf(PRESENTS_BUTTON, CLOSE, MISSIONS_BUTTON, MISSIONS_TAB_MAIN, MISSIONS_TAB_TITLES, MISSIONS_TAB_SPECIAL, MISSIONS_TAB_DAILY, BACK), game.taps)
         assertEquals(listOf("Presents: nothing to collect", "Missions: nothing to collect"), notes)
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `the step waits for Home while the game is still leaving Club`() {
+        val game = FakeGame(homeTabLagMs = 4_000)
+        val notes = DailyExtras(game, collectRewards = false, clubRequest = true, requestItem = "Dirt Racing Shoes", clockMs = { game.elapsedMs }).run()
+        assertEquals(listOf("Club: requested Dirt Racing Shoes"), notes)
+        assertEquals(HOME, game.screen)
+        assertEquals(0, game.framesSaved)
+    }
+
+    @Test
+    fun `a screen that never leads Home still ends the step within the time bound, with every round logged and one frame saved`() {
+        val game = FakeGame(unknownAfter = CLUB_BUTTON)
+        val lines = mutableListOf<String>()
+        val notes = DailyExtras(game, collectRewards = true, clubRequest = true, requestItem = "Dirt Racing Shoes", clockMs = { game.elapsedMs }, log = { lines += it }).run()
+        assertEquals(listOf("Club: Club screen did not appear; could not get back to Home, stopped"), notes)
+        assertEquals(1, game.framesSaved)
+        val report = lines.single { it.startsWith("Could not get back to Home") }
+        val seconds = Regex("after ([0-9]+) s").find(report)!!.groupValues[1].toInt()
+        assertTrue(seconds in 20..30, report)
+        assertTrue("unknown: nothing to press" in report, report)
+        assertEquals(listOf(CLUB_BUTTON), game.taps)
+    }
+
+    @Test
+    fun `the 8-hour notice is closed with OK and reported as no request`() {
+        val game = FakeGame(request = "too_soon")
+        val notes = runClub(game)
+        assertEquals(listOf(CLUB_BUTTON, ITEM_REQUEST_BUTTON, OK, HOME_TAB), game.taps)
+        assertNull(game.requested)
+        assertEquals(listOf("Club: no request: it has not been 8 hours since the last one"), notes)
         assertEquals(HOME, game.screen)
     }
 

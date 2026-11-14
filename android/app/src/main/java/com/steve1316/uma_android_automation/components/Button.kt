@@ -232,6 +232,11 @@ object ButtonOk : ButtonInterface {
     override val template = Template("components/button/ok", region = Region.bottomHalf)
 }
 
+/** The white OK pill of the game's small notice dialogs (the green [ButtonOk] is a different button). */
+object ButtonOkDialog : ButtonInterface {
+    override val template = Template("components/button/ok_dialog", region = Region.bottomHalf)
+}
+
 object ButtonOptions : ButtonInterface {
     override val template = Template("components/button/options", region = Region.bottomHalf)
 }
