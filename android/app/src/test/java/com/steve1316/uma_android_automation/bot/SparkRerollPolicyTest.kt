@@ -39,6 +39,31 @@ class SparkRerollPolicyTest {
     }
 
     @Test
+    fun `a three-star Turf pink is not protected and the reason says so`() {
+        // High stats and a three-star Turf pink: a Turf pink never helps a child, so the redraw prices positive.
+        val stats = listOf(1150, 1120, 1100, 1200, 1105)
+        val verdict = SparkRerollPolicy.decide(1, 3, 1, 0, stats, pinkIsTurf = true)
+        assertTrue(verdict.reroll)
+        assertTrue("Turf pink not protected" in verdict.reason, verdict.reason)
+    }
+
+    @Test
+    fun `the same set with a three-star pink of another type is kept`() {
+        val stats = listOf(1150, 1120, 1100, 1200, 1105)
+        val verdict = SparkRerollPolicy.decide(1, 3, 1, 0, stats, pinkIsTurf = false)
+        assertFalse(verdict.reroll)
+        assertFalse("Turf" in verdict.reason, verdict.reason)
+    }
+
+    @Test
+    fun `only a Turf aptitude name is treated as Turf`() {
+        assertTrue(isTurfAptitude("Turf"))
+        assertTrue(isTurfAptitude("turf "))
+        assertFalse(isTurfAptitude("Dirt"))
+        assertFalse(isTurfAptitude(null))
+    }
+
+    @Test
     fun `one-star blue on a dead pool is kept`() {
         // Every stat under 600: a redraw cannot roll a 3-star blue, so 30 TP buys nothing.
         val verdict = SparkRerollPolicy.decide(1, 1, 1, 0, listOf(599, 598, 500, 400, 300))

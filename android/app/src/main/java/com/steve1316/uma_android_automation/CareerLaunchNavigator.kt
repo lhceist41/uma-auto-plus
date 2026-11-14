@@ -78,6 +78,7 @@ import com.steve1316.uma_android_automation.bot.resolvePagerSide
 import com.steve1316.uma_android_automation.bot.sparkPagerDotSide
 import com.steve1316.uma_android_automation.bot.sparkSelectionDrivable
 import com.steve1316.uma_android_automation.bot.sparkWhiteClass
+import com.steve1316.uma_android_automation.bot.isTurfAptitude
 import com.steve1316.uma_android_automation.bot.sparkPagerClosing
 import com.steve1316.uma_android_automation.bot.sparkReadsAgree
 import com.steve1316.uma_android_automation.components.*
@@ -2890,6 +2891,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 uniqueStars = rows[2].stars,
                 visibleWhiteThreeStars = rows.drop(3).count { it.kind == SparkRowKind.WHITE && it.stars >= 3 },
                 finalStats = pricedStats.values,
+                pinkIsTurf = isTurfAptitude(rows[1].name),
             )
         MessageLog.i(TAG, "[REROLL] EV gate: ${verdict.reason}")
         if (!verdict.reroll) {

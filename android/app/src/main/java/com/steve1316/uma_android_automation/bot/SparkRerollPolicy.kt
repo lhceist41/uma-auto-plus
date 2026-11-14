@@ -36,13 +36,17 @@ object SparkRerollPolicy {
 
     data class Verdict(val reroll: Boolean, val reason: String)
 
-    /** Star counts come from row color samples; null pink/unique stars (unreadable rows) price neutral. */
+    /**
+     * Star counts come from row color samples; null pink/unique stars (unreadable rows) price neutral. A Turf pink
+     * ([pinkIsTurf]) is never protected, see [isTurfAptitude].
+     */
     fun decide(
         blueStars: Int,
         pinkStars: Int?,
         uniqueStars: Int?,
         visibleWhiteThreeStars: Int,
         finalStats: Collection<Int>,
+        pinkIsTurf: Boolean = false,
     ): Verdict {
         if (blueStars >= 3) {
             return Verdict(false, "blue spark is already 3-star - never re-gamble it")
@@ -54,11 +58,13 @@ object SparkRerollPolicy {
         if (finalStats.isNotEmpty() && finalStats.all { it < 600 }) {
             return Verdict(false, "every stat finished under 600 - a redraw cannot roll a 3-star blue")
         }
-        val pinkLoss = ((pinkStars ?: 0).toDouble() - FRESH_PINK_STARS).coerceAtLeast(0.0)
+        val pinkLoss = if (pinkIsTurf) 0.0 else ((pinkStars ?: 0).toDouble() - FRESH_PINK_STARS).coerceAtLeast(0.0)
         val uniqueLoss = UNIQUE_HOLDING_WEIGHT * (((uniqueStars ?: 0).toDouble() - FRESH_PINK_STARS).coerceAtLeast(0.0))
         val whiteHold = WHITE_THREE_STAR_HOLDING * visibleWhiteThreeStars
         val net = freshBlue - blueStars - pinkLoss - uniqueLoss - whiteHold
-        val math = "fresh blue ${fmt(freshBlue)} vs 1-star, holdings -${fmt(pinkLoss + uniqueLoss + whiteHold)}, net ${fmt(net)}"
+        val math =
+            "fresh blue ${fmt(freshBlue)} vs 1-star, holdings -${fmt(pinkLoss + uniqueLoss + whiteHold)}, net ${fmt(net)}" +
+                if (pinkIsTurf) ", Turf pink not protected" else ""
         return if (net > MARGIN) {
             Verdict(true, "1-star blue and the redraw prices positive: $math")
         } else {
