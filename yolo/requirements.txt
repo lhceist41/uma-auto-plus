@@ -1,4 +1,3 @@
 ultralytics==8.4.9
-torch==2.11.0.dev20260130+cu128
-torchvision==0.25.0.dev20260130+cu128
-torchaudio==2.11.0.dev20260130+cu128
+torch==2.13.0+cu130
+torchvision==0.28.0+cu130
