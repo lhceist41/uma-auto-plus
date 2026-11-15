@@ -584,7 +584,18 @@ object SparkTextNorm {
         return fa.isNotEmpty() && fa == fb
     }
 
-    fun nameInList(name: String?, list: Collection<String>): Boolean = list.any { namesEqual(name, it) }
+    /**
+     * A planned skill against a white spark read. Skill sparks carry only the "○" grade, never "◎" or "×" (master.mdb
+     * factor names), and OCR reads that circle as "O" or drops it.
+     */
+    fun plannedSkillMatches(sparkName: String?, plannedName: String): Boolean {
+        val planned = plannedName.trim()
+        return when {
+            planned.endsWith("◎") || planned.endsWith("×") -> false
+            planned.endsWith("○") -> planned.dropLast(1).let { base -> namesEqual(sparkName, base) || namesEqual(sparkName, "$base O") }
+            else -> namesEqual(sparkName, planned)
+        }
+    }
 
     /**
      * Same-row comparison for two reads of the same list. Tolerant one step past [namesEqual]: an unreadable side matches
@@ -962,7 +973,7 @@ object SparkKeepPolicy {
         fun whiteRelevant(row: SparkRowFact): Boolean =
             when (row.whiteClass) {
                 SparkWhiteClass.RACE -> true
-                SparkWhiteClass.SKILL -> SparkTextNorm.nameInList(row.name, profile.plannedSkillNames)
+                SparkWhiteClass.SKILL -> profile.plannedSkillNames.any { SparkTextNorm.plannedSkillMatches(row.name, it) }
                 else -> false
             }
         val relevantWhites = whites.filter { whiteRelevant(it) }

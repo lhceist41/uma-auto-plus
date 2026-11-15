@@ -299,6 +299,43 @@ class SparkKeepPolicyTest {
         }
 
         @Test
+        fun `a planned graded skill counts its spark read with the circle read as O, 0 or dropped`() {
+            val planned = profile.copy(plannedSkillNames = listOf("Left-Handed ○"))
+            for (read in listOf("Left-Handed O", "Left-Handed 0", "Left-Handed")) {
+                val original = bareSet("Speed", 2, extra = listOf(SparkRowFact(read, 2, SparkRowKind.WHITE, SparkWhiteClass.SKILL)))
+                val rerolled = bareSet("Speed", 2, extra = listOf(white("Pop & Polish", 2)))
+                val choice = SparkKeepPolicy.choose(original, rerolled, planned)
+                assertEquals("relevant_whites", choice.decidedBy, read)
+                assertEquals(SparkSetSide.ORIGINAL, choice.side, read)
+            }
+            assertFalse(SparkTextNorm.plannedSkillMatches("Right-Handed O", "Left-Handed ○"))
+        }
+
+        @Test
+        fun `a planned double-circle or cross skill never counts a circle spark`() {
+            for (mark in listOf("◎", "×")) {
+                val planned = profile.copy(plannedSkillNames = listOf("Chukyo Racecourse $mark"))
+                for (read in listOf("Chukyo Racecourse O", "Chukyo Racecourse")) {
+                    val original = bareSet("Speed", 2, extra = listOf(SparkRowFact(read, 2, SparkRowKind.WHITE, SparkWhiteClass.SKILL)))
+                    val rerolled = bareSet("Speed", 2, extra = listOf(white("Pop & Polish", 2)))
+                    assertEquals("tie", SparkKeepPolicy.choose(original, rerolled, planned).decidedBy, "$mark vs $read")
+                }
+            }
+        }
+
+        @Test
+        fun `every graded skills json name matches only its own spark reads, untiered names match themselves`() {
+            for (name in skillNames.filter { it.endsWith("○") }) {
+                for (read in name.dropLast(1).let { listOf("$it O", it) }) {
+                    assertEquals(listOf(name), skillNames.filter { SparkTextNorm.plannedSkillMatches(read, it) }, read)
+                }
+            }
+            val untiered = skillNames.filterNot { it.endsWith("○") || it.endsWith("◎") || it.endsWith("×") }
+            assertTrue(untiered.size > 300)
+            untiered.forEach { assertTrue(SparkTextNorm.plannedSkillMatches(it, it), it) }
+        }
+
+        @Test
         fun `an identical set ties and the tie keeps the Original`() {
             val choice = SparkKeepPolicy.choose(anchorOriginal, anchorOriginal.copy(), profile)
             assertEquals(SparkSetSide.ORIGINAL, choice.side)
