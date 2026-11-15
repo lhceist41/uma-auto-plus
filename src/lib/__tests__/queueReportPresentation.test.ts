@@ -373,21 +373,25 @@ describe("Home wiring", () => {
     it("re-reads the report from the bridge every time it refreshes, as after a remount", async () => {
         const StartModule = { getLastQueueReport: jest.fn(async () => stored) }
         const setLastSession = jest.fn()
-        const refresh = callback("refreshLastSession", { StartModule, setLastSession, parseLastSession, useCallback: (f: unknown) => f })
+        const noteStarAskReport = jest.fn()
+        const refresh = callback("refreshLastSession", { StartModule, setLastSession, parseLastSession, noteStarAskReport, useCallback: (f: unknown) => f })
         refresh()
         await flush()
         refresh()
         await flush()
         expect(StartModule.getLastQueueReport).toHaveBeenCalledTimes(2)
         expect(setLastSession).toHaveBeenLastCalledWith(parseLastSession(stored))
+        expect(noteStarAskReport).toHaveBeenLastCalledWith(stored)
     })
 
     it("keeps what it shows when the bridge fails", async () => {
         const StartModule = { getLastQueueReport: jest.fn(async () => Promise.reject(new Error("bridge"))) }
         const setLastSession = jest.fn()
-        callback("refreshLastSession", { StartModule, setLastSession, parseLastSession, useCallback: (f: unknown) => f })()
+        const noteStarAskReport = jest.fn()
+        callback("refreshLastSession", { StartModule, setLastSession, parseLastSession, noteStarAskReport, useCallback: (f: unknown) => f })()
         await flush()
         expect(setLastSession).not.toHaveBeenCalled()
+        expect(noteStarAskReport).not.toHaveBeenCalled()
     })
 
     it("dismisses the shown report in Kotlin and then re-reads", async () => {

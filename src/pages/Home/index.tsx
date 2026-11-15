@@ -19,7 +19,9 @@ import PageHeader from "../../components/PageHeader"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SelectButton from "../../components/SelectButton"
 import PresetPicker from "../../components/PresetPicker"
+import StarAskDialog from "../../components/StarAskDialog"
 import WhatsNewDialog from "../../components/WhatsNewDialog"
+import { useStarAsk } from "../../hooks/useStarAsk"
 import { useWhatsNew } from "../../hooks/useWhatsNew"
 import { useKeyboardHeight } from "../../hooks/useKeyboardHeight"
 import { useBugReport } from "../../hooks/useBugReport"
@@ -132,6 +134,8 @@ const Home = () => {
     // True once the native session state has been read, so the What's new dialog never opens over a bot that is already running.
     const [sessionKnown, setSessionKnown] = useState<boolean>(false)
     const whatsNew = useWhatsNew(armed || botRunning, sessionKnown)
+    const starAsk = useStarAsk(armed || botRunning, sessionKnown, whatsNew.status)
+    const noteStarAskReport = starAsk.noteReport
     const phase = sessionPhase(session)
     const [showNotReadyDialog, setShowNotReadyDialog] = useState<boolean>(false)
     const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false)
@@ -196,9 +200,12 @@ const Home = () => {
      * as the interrupted-queue refresh; Kotlin writes the report before it announces the bot's end. */
     const refreshLastSession = useCallback(() => {
         StartModule.getLastQueueReport()
-            .then((payload: unknown) => setLastSession(parseLastSession(payload)))
+            .then((payload: unknown) => {
+                setLastSession(parseLastSession(payload))
+                noteStarAskReport(payload)
+            })
             .catch(() => {})
-    }, [StartModule])
+    }, [StartModule, noteStarAskReport])
 
     /** Re-reads whether Start is armed and the bot is running from Kotlin, so Start/Stop is right
      * after this screen was re-created while armed. Called on mount and on every return to the app. */
@@ -1259,6 +1266,7 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
             </View>
 
             <WhatsNewDialog content={armed || botRunning ? null : whatsNew.content} onClose={whatsNew.dismiss} />
+            <StarAskDialog open={starAsk.open && !(armed || botRunning)} onAnswer={starAsk.answer} />
 
             <AlertDialog open={showNotReadyDialog} onOpenChange={setShowNotReadyDialog}>
                 <AlertDialogContent onDismiss={() => setShowNotReadyDialog(false)}>

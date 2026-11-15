@@ -14,6 +14,24 @@ interface UiPrefs {
     favoritePresets: string[]
     /** The app version whose "What's new" dialog was already seen, or that a fresh install started on. */
     whatsNewSeenVersion: string | null
+    /** The one-time star ask; absent until a finished career is counted. */
+    starAsk?: StarAskPrefs
+}
+
+/** Finished careers counted so far, the last session counted (so a report is never counted twice), and whether the ask was answered. */
+export interface StarAskPrefs {
+    careers: number
+    countedSessionId: string | null
+    answered: boolean
+}
+
+const NO_STAR_ASK: StarAskPrefs = { careers: 0, countedSessionId: null, answered: false }
+
+const parseStarAsk = (value: unknown): StarAskPrefs | undefined => {
+    if (typeof value !== "object" || value === null) return undefined
+    const stored = value as Record<string, unknown>
+    const careers = typeof stored.careers === "number" && Number.isInteger(stored.careers) && stored.careers > 0 ? stored.careers : 0
+    return { careers, countedSessionId: typeof stored.countedSessionId === "string" ? stored.countedSessionId : null, answered: stored.answered === true }
 }
 
 const PREFS_FILE = FileSystem.documentDirectory + "uiPrefs.json"
@@ -34,9 +52,11 @@ const ensureLoaded = (): Promise<void> => {
             // Migration: the legacy key stored bare character names, which happen to equal the
             // base outfit's preset name, so carrying them over keeps the base-outfit star lit.
             const stored = Array.isArray(parsed.favoritePresets) ? parsed.favoritePresets : parsed.favoriteCharacters
+            const starAsk = parseStarAsk(parsed.starAsk)
             prefs = {
                 favoritePresets: Array.isArray(stored) ? stored.filter((c: unknown) => typeof c === "string") : prefs.favoritePresets,
                 whatsNewSeenVersion: typeof parsed.whatsNewSeenVersion === "string" ? parsed.whatsNewSeenVersion : prefs.whatsNewSeenVersion,
+                ...(starAsk && { starAsk }),
             }
             emit()
         })
@@ -97,6 +117,30 @@ export function loadWhatsNewSeenVersion(): Promise<string | null> {
 export function saveWhatsNewSeenVersion(version: string): Promise<void> {
     return ensureLoaded().then(() => {
         prefs = { ...prefs, whatsNewSeenVersion: version }
+        return persist()
+    })
+}
+
+/** The star ask's stored state: nothing counted yet when none is stored. */
+export function loadStarAsk(): Promise<StarAskPrefs> {
+    return ensureLoaded().then(() => prefs.starAsk ?? NO_STAR_ASK)
+}
+
+/** Adds a session's finished careers once: a session already counted, or none finished, changes nothing. Rejects when the write fails. */
+export function recordFinishedCareers(sessionId: string, finished: number): Promise<StarAskPrefs> {
+    return ensureLoaded().then(() => {
+        const current = prefs.starAsk ?? NO_STAR_ASK
+        if (finished <= 0 || current.countedSessionId === sessionId) return current
+        const next = { ...current, careers: current.careers + finished, countedSessionId: sessionId }
+        prefs = { ...prefs, starAsk: next }
+        return persist().then(() => next)
+    })
+}
+
+/** Remembers that the player answered the star ask, for good. Rejects when the write fails. */
+export function saveStarAskAnswered(): Promise<void> {
+    return ensureLoaded().then(() => {
+        prefs = { ...prefs, starAsk: { ...(prefs.starAsk ?? NO_STAR_ASK), answered: true } }
         return persist()
     })
 }
