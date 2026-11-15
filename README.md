@@ -12,6 +12,8 @@ A hands-off distribution of [steve1316/uma-android-automation](https://github.co
 
 Questions, help and career results: join the [UMA Auto+ Discord](https://discord.gg/JNhCDs4MSF).
 
+If UMA Auto+ saves you time, a star on GitHub helps other players find it.
+
 - Plays whole careers in all four scenarios: URA Finale, Unity Cup, Trackblazer, Grand Concert.
 - Queues 2 to 20 careers and can rotate trainees between runs.
 - Built-in trainee presets with a build for every scenario; applying one sets its scenario too.

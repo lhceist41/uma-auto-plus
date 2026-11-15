@@ -4,32 +4,50 @@ All notable changes to **UMA Auto+** are documented in this file.
 
 This project is a fork of [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation). The fork baseline is upstream **v5.4.8**. For a summary of what this fork adds on top of that baseline, see [README.md](README.md).
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
+New releases start with a one-line summary, then list what you need to do, what is new, changed and fixed, and preset updates, plus removals and known issues when there are any. The layout is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
 ## [Unreleased]
 
-- **Spark rerolls:** a spark reroll is no longer wasted when the bot reads a spark name slightly differently on its second look at the original set. It now compares both sets and keeps the better one.
-- **Training gains:** the bot no longer drops a repeated digit of a training's stat gains (+11 and +22 were read as +1 and +2), and it no longer raises a correctly read Power gain on Guts training. A gain it still cannot read whole is now estimated on the low side from the game's own gains instead of being guessed 10 higher.
-- **Two-digit training gains:** on MuMu at 1080x1920 the bot now reads both digits of a gain such as +13 or +15 (often read as +1) and no longer reads a small side gain such as +3 or +6 as 0, so training choices follow the gains on screen.
-- **Fewer unexplained stops:** the bot now frees its text reader itself when a career or a trip through the menus ends. Android used to free it later on its own, and when that took too long it ended the bot, once even between two careers of a run queue. If an error does stop the bot between careers, the queue now says it stopped after an error instead of "Queue was stopped during navigation".
-- **Career history:** when the bot finishes a career's end steps again after a restart, or after the game's daily reset interrupted the Finish, that career is no longer counted twice in the career history. A career whose skill points the bot never read now shows them as unknown instead of 120.
-- **Daily extras after Club:** the extras step now waits up to 20 seconds for the game to get back to Home from Club instead of stopping early, and it closes the game's "It hasn't been 8 hours since your last request" notice and goes on with Presents, Missions and Daily Sales.
-- **Turf sparks:** when choosing between the original and rerolled sparks, the bot no longer treats a Turf spark as a useful pink, so it stops keeping a weaker set because of one, and it no longer passes up a reroll to protect one. Every turf runner already has Turf A, and a spark only lifts an aptitude up to A at career start.
-- **Race sparks:** when the bot chooses between the original and rerolled sparks, it now recognises race sparks such as Arima Kinen, Satsuki Sho or NHK Mile Cup (and scenario sparks) as races instead of mistaking them for skills, so a 3-star race spark on the original set is no longer thrown away for a better blue. A white spark it cannot name for sure never counts as a race or a wanted skill; at 3 stars it can only protect the original set.
-- **Skill sparks:** when the bot chooses between the original and rerolled sparks, a spark for a skill in your enabled skill plans now also counts as wanted when the skill has a ○ grade, such as Left-Handed ○ or Corner Recovery ○. Before, only skills without a grade mark were recognised.
-- **Spark reroll:** after the bot chooses between the original and rerolled sparks, it now waits when the game is slow to leave the selection screen instead of stopping the queue there. Before it spends 30 TP on a reroll, it reads the spark list a second time and keeps the original sparks if the two reads differ.
-- **Daily reset popups:** the bot no longer stops on the popups the game shows after its daily reset. Between careers it closes the Daily Sale offer with Cancel (it never opens the Shop), and it taps through the Uma Outing Login Bonus and Gauge MAX popups, also during Daily Races. A Session Verification Error is now handled like a Session Error: between careers the bot can return to the title screen and carry on; in a career or during the daily modes it stops with a clear reason.
-- **Race names:** the bot now matches races whose distance the game text reads with an extra letter ("2000Om" for 2000m, seen on Nakayama, Fukushima and Morioka races), so it picks the right race and, in Grand Concert, uses that race's fans instead of ignoring it.
-- **Grand Concert fans:** the bot now trains instead of racing for fans while there is still time to earn them later, so it no longer races from the first Junior turns, and on those turns it follows your racing settings. When it must race for fans, it picks a race the trainee suits over one that only pays more on paper, and it keeps an eye on later fan requirements after an earlier fan goal is met.
-- **Spark lists at career end:** a long spark list (12 or more sparks) is only treated as fully read after two swipes in a row move nothing, so one swipe the game ignores no longer cuts the list short and stops the queue on the Keep Sparks screen. A screenshot taken before the list has settled does not undo that check, so careers that end with exactly 11 sparks carry on too. Skill, race and unique spark names that lose their first letter on the selection screen are now repaired from the earlier read, so a planned skill spark still counts as wanted and the kept sparks are recorded with their full names.
-- **Slow Scenario Select:** when the game takes several seconds to leave Scenario Select after Next, the bot now waits for the next screen instead of pressing Next again or tapping the scenario arrow on Trainee Select and Legacy Select, so a busy PC no longer stops the queue there.
-- **Club item request:** the picker row for the Queen Elizabeth II Cup Winner's Sash is still read correctly when the game text is read without its second "I", so the request is no longer skipped over it.
-- **New presets:** Daitaku Helios and the newly released Mejiro Ryan (Marguerite Latte) and Ines Fujin (Melt Your Heart) outfits have research-graded presets for all four scenarios (464 presets across 115 trainee cards). Daitaku Helios runs as a turf Mile Pace Chaser, and her URA Finale preset races Mile and Sprint races in her first two years for the 15000 fans her Classic Mile Championship needs. Marguerite Latte races and buys skills as a Pace Chaser, the card's own style.
-- **Ines Fujin presets:** the base Ines Fujin presets now plan her own card's skills (With All My Soul, Slipstream, Moxie) instead of the ones from her Melt Your Heart outfit.
-- **Skill plans:** the Sweep Tosho and Hishi Akebono presets, and the Sakura Bakushin O Trackblazer presets, now plan a top-rated skill from their own card that they left out (it replaces their weakest plain skill).
-- **Screens that draw text smaller:** when you press Start on the Home screen or in a career, the bot checks whether the game draws text smaller than on MuMu at 240 DPI. If it does (seen on a 1080x1920 emulator at 480 DPI and on a Galaxy A13), more labels and buttons, such as Legacy Select's Auto-Select and Details, are also found at slightly smaller sizes. On MuMu at 240 DPI nothing changes. Tested on screenshots only so far.
+Sturdier spark rerolls and training reads, fewer stops after the daily reset and on slow screens, smarter Grand Concert fan racing, and presets for three new trainee cards.
+
+### Changed
+
+- **Sparks:** before spending 30 TP on a reroll, the bot reads the spark list a second time and keeps the original sparks if the two reads differ.
+- **Sparks:** a spark name read slightly differently on the second look no longer wastes a reroll; the bot compares both sets and keeps the better one.
+- **Sparks:** a Turf spark no longer counts as a useful pink, so the bot stops keeping a weaker set or skipping a reroll for one; every turf runner already has Turf A.
+- **Grand Concert:** while there is still time to earn the fans, the bot trains and follows your racing settings instead of racing for fans, so it no longer races from the first Junior turns.
+- **Grand Concert:** when it must race for fans, it picks a race the trainee suits over one that only pays more on paper, and keeps watching later fan goals after an earlier one is met.
+- **Phones and screens:** if the game draws text smaller than MuMu at 240 DPI (seen at 480 DPI and on a Galaxy A13), more labels and buttons are found at slightly smaller sizes; MuMu at 240 DPI is unchanged (tested on screenshots only).
+
+### Fixed
+
+- **Training:** a repeated digit of a gain is no longer dropped (+11 and +22 were read as +1 and +2), and a correctly read Power gain on Guts training is no longer raised.
+- **Training:** on MuMu at 1080x1920 both digits of gains such as +13 and +15 are read, and small side gains such as +3 or +6 are no longer read as 0.
+- **Training:** a gain the bot still cannot read whole is estimated on the low side from the game's own gains instead of guessed 10 higher.
+- **Run queue:** fewer unexplained stops after a career or a trip through the menus ends (one hit even between two careers), and an error that stops the bot between careers is reported as one instead of "Queue was stopped during navigation".
+- **Daily reset:** the bot no longer stops on the popups the game shows after it: between careers it closes the Daily Sale offer with Cancel and never opens the Shop.
+- **Daily reset:** the Uma Outing Login Bonus and Gauge MAX popups are tapped through, also during Daily Races.
+- **Errors:** a Session Verification Error is handled like a Session Error: between careers the bot can return to the title screen and carry on; in a career or the daily modes it stops with a clear reason.
+- **Sparks:** race sparks such as Arima Kinen and Satsuki Sho, and scenario sparks, count as races instead of skills, so a 3-star race spark on the original set is no longer thrown away for a better blue.
+- **Sparks:** a spark for a skill in your enabled skill plans counts as wanted when the skill has a ○ grade, such as Left-Handed ○.
+- **Sparks:** skill, race and unique spark names that lose their first letter on the selection screen are repaired from the earlier read, so a planned skill spark still counts and kept sparks are recorded in full.
+- **Sparks:** a career that ends with 11 or more sparks no longer stops the queue on Keep Sparks when the game ignores a swipe or the list has not settled yet.
+- **Sparks:** the queue no longer stops when the game is slow to leave the spark selection screen; the bot waits.
+- **Career start:** when the game is slow to leave Scenario Select, the bot waits for the next screen instead of pressing Next again or tapping the scenario arrow, so a busy PC no longer stops the queue.
+- **Racing:** races whose distance the game text reads with an extra letter ("2000Om", seen on Nakayama, Fukushima and Morioka) are matched, so the right race is picked and Grand Concert uses its fans.
+- **Rewards and Club:** after Club the bot waits up to 20 seconds for Home instead of stopping, closes the game's "It hasn't been 8 hours" notice, and goes on with Presents, Missions and Daily Sales.
+- **Rewards and Club:** the Club item request is no longer skipped when the Queen Elizabeth II Cup Winner's Sash is read without its second "I".
+- **Career history:** a career whose end steps run again after a restart or the daily reset is no longer counted twice, and skill points the bot never read show as unknown instead of 120.
+
+### Presets and game data
+
+- **New presets:** Daitaku Helios and the newly released Mejiro Ryan (Marguerite Latte) and Ines Fujin (Melt Your Heart) outfits, research-graded for all four scenarios (464 presets across 115 trainee cards).
+- **Daitaku Helios** runs as a turf Mile Pace Chaser; her URA Finale preset races Mile and Sprint races in her first two years for the 15000 fans her Classic Mile Championship needs.
+- **Mejiro Ryan (Marguerite Latte)** races and buys skills as a Pace Chaser, the card's own style.
+- **Ines Fujin:** the base presets now plan her own card's skills (With All My Soul, Slipstream, Moxie) instead of those of her Melt Your Heart outfit.
+- **Skill plans:** the Sweep Tosho and Hishi Akebono presets, and the Sakura Bakushin O Trackblazer presets, now plan a top-rated skill from their own card that they left out, replacing their weakest plain skill.
 
 ## [1.8.0] - 2026-10-29
 
