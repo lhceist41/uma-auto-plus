@@ -74,13 +74,25 @@ class SparkKeptRecordTest {
     }
 
     @Test
-    fun `the confirmation handler records the kept set through the winner's recorded authority`() {
+    fun `the confirmation handler checks and records the kept set as the read the chooser scored`() {
         val navigator = sourceFile("CareerLaunchNavigator.kt").readText()
         val handler = navigator.indexOf("private fun handleSparkSelectionConfirmation(")
-        val end = navigator.indexOf("recordSparkRows(", handler)
+        val end = navigator.indexOf("markKeptRecorded()", handler)
         assertTrue(handler >= 0 && end > handler)
         val body = navigator.substring(handler, end)
+        assertTrue("val keptRead = SparkReadReconcile.winnerReading(winnerRead, transaction.recordedReadAuthorities[winner])" in body)
+        assertTrue("val expectedRows = keptRead?.rows ?: emptyList()" in body)
         assertTrue("SparkReadReconcile.keptRows(expectedRows, transaction.recordedReadAuthorities[winner])" in body)
+        assertTrue("recordSparkRows(keptRows, \"kept\", keptRead)" in body)
+
+        // On an EARLIER_CAPTURE side that read is the complete earlier capture, so the record says the scan was complete.
+        val earlier = complete(stat("Speed", 2), apt("Long", 2), white("Corner Adept O", 1))
+        val partial = SparkSetReading(listOf(stat("Speed", 2), apt("Long", 2)), SparkScanTermination.ALIGNMENT_FAILED)
+        val result = authority(earlier, partial)
+        assertEquals(SparkReadAuthority.EARLIER_CAPTURE, result.authority)
+        val kept = SparkReadReconcile.winnerReading(partial, result)
+        assertSame(earlier, kept)
+        assertTrue(kept!!.complete)
     }
 
     @Test

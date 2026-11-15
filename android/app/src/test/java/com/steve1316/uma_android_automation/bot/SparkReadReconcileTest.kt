@@ -4,6 +4,7 @@ import com.steve1316.uma_android_automation.utils.VeteranFactorDomain
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
@@ -535,7 +536,7 @@ class SparkReadReconcileTest {
         }
 
         @Test
-        fun `an incomplete pager read is left to the degraded-Original path`() {
+        fun `an incomplete pager read whose short blue lost its first glyph is not taken from the earlier read`() {
             assertPagerOnly(
                 reconcile(
                     capture(reading(stat("Speed", 2))),
@@ -669,7 +670,7 @@ class SparkReadReconcileTest {
         }
 
         @Test
-        fun `an incomplete pager read still takes the degraded keep-original path, not a repair`() {
+        fun `an incomplete pager read whose short blue lost its first glyph still keeps the original uncertain`() {
             val short = rerolledPager.copy(termination = SparkScanTermination.ALIGNMENT_FAILED)
             val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), short, resolve)
 
@@ -830,6 +831,180 @@ class SparkReadReconcileTest {
             assertFalse("while (" in body, "no loop other than the single indexed pass may exist")
             assertFalse("usePagerRescan" in body, "reconciliation must never consume a rescan budget")
             assertFalse("readCompleteSparkSet" in body, "reconciliation must never read the screen")
+        }
+    }
+
+    /** A spent reroll whose pager Original re-read ended partial on an OCR name variant (live, 1080). */
+    @Nested
+    @DisplayName("a partial pager read and a complete earlier capture")
+    inner class PartialPagerRead {
+        private val originalEarlier =
+            reading(
+                stat("Stamina", 1),
+                apt("Pace Chaser", 1),
+                unique("Blazing Pride", 2),
+                white("Shuka Sho", 1, SparkWhiteClass.RACE),
+                white("Left-Handed O", 1, SparkWhiteClass.SKILL),
+                white("Firm Conditions O", 1, SparkWhiteClass.SKILL),
+                white("Corner Adept O", 2, SparkWhiteClass.SKILL),
+                white("Corner Recovery O", 1, SparkWhiteClass.SKILL),
+                white("Pace Chaser Straightaways O", 2, SparkWhiteClass.SKILL),
+                termination = SparkScanTermination.COMPLETE_NO_PROGRESS,
+            )
+
+        private val originalPager =
+            SparkSetReading(
+                originalEarlier.rows.map {
+                    when (it.name) {
+                        "Left-Handed O" -> it.copy(name = "-eft-Handed O")
+                        "Pace Chaser Straightaways O" -> it.copy(name = "Pace Chaser\nStraightaways O")
+                        else -> it
+                    }
+                },
+                SparkScanTermination.ALIGNMENT_FAILED,
+            )
+
+        private val rerolledEarlier =
+            reading(
+                stat("Power", 1),
+                apt("Pace Chaser", 1),
+                unique("Blazing Pride", 1),
+                white("Takarazuka Kinen", 2, SparkWhiteClass.RACE),
+                white("Shuka Sho", 1, SparkWhiteClass.RACE),
+                white("Hanshin J.F.", 1, SparkWhiteClass.RACE),
+                white("Left-Handed O", 3, SparkWhiteClass.SKILL),
+                white("Firm Conditions O", 2, SparkWhiteClass.SKILL),
+            )
+
+        private val rerolledPager =
+            SparkSetReading(
+                rerolledEarlier.rows.map {
+                    when (it.name) {
+                        "Hanshin J.F." -> it.copy(name = "danshin J.F.")
+                        "Left-Handed O" -> it.copy(name = "-eft-Handed O")
+                        else -> it
+                    }
+                },
+                SparkScanTermination.COMPLETE_NO_PROGRESS,
+            )
+
+        // Blue order of Air Groove's Unity Cup preset (characterPresets.ts).
+        private val profile =
+            SparkChooserProfile(
+                traineeIdentity = "Air Groove",
+                objective = "sparks",
+                blueTargetsOrdered = listOf("Speed", "Power", "Wit", "Stamina", "Guts"),
+                preferredDistance = "Medium",
+                preferredStyle = "Pace Chaser",
+                preferredSurface = "Turf",
+                plannedSkillNames = emptyList(),
+            )
+
+        private fun original(pager: SparkSetReading = originalPager, earlier: SparkSideCapture? = capture(originalEarlier, SparkSetSide.ORIGINAL)) =
+            SparkReadReconcile.reconcile(SparkSetSide.ORIGINAL, tx, earlier, pager, resolve)
+
+        private fun withRow(
+            rows: List<SparkRowFact>,
+            index: Int,
+            change: (SparkRowFact) -> SparkRowFact,
+        ) = SparkSetReading(rows.mapIndexed { i, row -> if (i == index) change(row) else row }, SparkScanTermination.ALIGNMENT_FAILED)
+
+        private fun assertPagerOnly(result: SparkReadAuthorityResult, refusal: SparkReconcileRefusal) {
+            assertEquals(SparkReadAuthority.PAGER_ONLY, result.authority)
+            assertEquals(refusal, result.refusal)
+            assertSame(result.pager, result.effective, "a refused side must score the raw pager read")
+        }
+
+        @Test
+        fun `the Original is scored from its complete earlier read with the clean names`() {
+            val result = original()
+
+            assertEquals(SparkReadAuthority.EARLIER_CAPTURE, result.authority)
+            assertEquals(SparkReconcileRefusal.NONE, result.refusal)
+            assertTrue(result.effective.complete)
+            assertEquals("Left-Handed O", result.effective.rows[4].name)
+            assertEquals(originalEarlier.rows, result.effective.rows)
+            assertSame(originalPager, result.pager, "the raw pager read is kept for the record")
+            assertTrue(result.structurallyAgreed, "equal row counts")
+            assertFalse(original(pager = SparkSetReading(originalPager.rows.take(7), SparkScanTermination.ALIGNMENT_FAILED)).structurallyAgreed, "a prefix match is not structural agreement")
+        }
+
+        @Test
+        fun `the spent reroll is compared and the better blue is kept`() {
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), rerolledPager, resolve)
+            val choice = SparkKeepPolicy.choose(original().effective, rerolled.effective, profile)
+
+            assertEquals(SparkSetSide.REROLLED, choice.side)
+            assertEquals("blue", choice.decidedBy)
+            assertTrue(choice.certain)
+            assertEquals(3, choice.original.blueTargetRank)
+            assertEquals(1, choice.rerolled.blueTargetRank)
+        }
+
+        @Test
+        fun `the kept rows carry the earlier names, also when the pager read stopped before the dialog's last rows`() {
+            val result = original()
+            val kept = SparkReadReconcile.winnerReading(originalPager, result)
+            assertSame(originalEarlier, kept, "the kept record states the complete earlier read it shows")
+            val expected = kept!!.rows
+            assertEquals(originalEarlier.rows, expected)
+            assertEquals(originalEarlier.rows.map { it.name }, SparkReadReconcile.keptRows(expected, result).map { it.name })
+
+            val short = SparkSetReading(originalPager.rows.take(7), SparkScanTermination.ALIGNMENT_FAILED)
+            val shortResult = original(pager = short)
+            val dialogRows = originalPager.rows
+            val shortExpected = SparkReadReconcile.winnerReading(short, shortResult)!!.rows
+            assertTrue(shortExpected.size >= dialogRows.size, "the earlier read covers every row the dialog shows")
+            assertEquals(originalEarlier.rows.map { it.name }, SparkReadReconcile.keptRows(shortExpected, shortResult).map { it.name })
+            assertEquals(dialogRows.map { it.kind to it.stars }, shortExpected.map { it.kind to it.stars })
+        }
+
+        @Test
+        fun `other authorities keep the pager rows for the confirmation check`() {
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), rerolledPager, resolve)
+            assertEquals(SparkReadAuthority.PAGER_WITH_STRUCTURAL_NAME_REPAIR, rerolled.authority)
+            assertSame(rerolledPager, SparkReadReconcile.winnerReading(rerolledPager, rerolled))
+            assertSame(originalPager, SparkReadReconcile.winnerReading(originalPager, null))
+            assertNull(SparkReadReconcile.winnerReading(null, original()))
+            val rescanned = SparkSetReading(originalPager.rows.take(8), SparkScanTermination.ALIGNMENT_FAILED)
+            assertSame(rescanned, SparkReadReconcile.winnerReading(rescanned, original()), "an authority scored on another pager read is not applied")
+        }
+
+        @Test
+        fun `a partial row with a different star or kind stays the pager read`() {
+            assertPagerOnly(original(withRow(originalPager.rows, 4) { it.copy(stars = 2) }), SparkReconcileRefusal.PAGER_INCOMPLETE)
+            assertPagerOnly(original(withRow(originalPager.rows, 2) { it.copy(kind = SparkRowKind.WHITE) }), SparkReconcileRefusal.PAGER_INCOMPLETE)
+        }
+
+        @Test
+        fun `a partial row with a different name stays the pager read`() {
+            assertPagerOnly(original(withRow(originalPager.rows, 6) { it.copy(name = "Groundwork") }), SparkReconcileRefusal.PAGER_INCOMPLETE)
+        }
+
+        @Test
+        fun `a partial read longer than the earlier one, or empty, stays the pager read`() {
+            val longer = SparkSetReading(originalPager.rows + white("Lucky Seven", 1, SparkWhiteClass.SKILL), SparkScanTermination.ALIGNMENT_FAILED)
+            assertPagerOnly(original(longer), SparkReconcileRefusal.PAGER_INCOMPLETE)
+            assertPagerOnly(original(SparkSetReading(emptyList(), SparkScanTermination.FAILED)), SparkReconcileRefusal.PAGER_INCOMPLETE)
+        }
+
+        @Test
+        fun `an incomplete, foreign or other-side earlier capture keeps today's refusals`() {
+            val incomplete = originalEarlier.copy(termination = SparkScanTermination.TIMED_OUT_PARTIAL)
+            assertPagerOnly(original(earlier = capture(incomplete, SparkSetSide.ORIGINAL)), SparkReconcileRefusal.EARLIER_INCOMPLETE)
+            assertPagerOnly(original(earlier = capture(originalEarlier, SparkSetSide.ORIGINAL, transactionId = "other")), SparkReconcileRefusal.DIFFERENT_TRANSACTION)
+            assertPagerOnly(original(earlier = capture(originalEarlier, SparkSetSide.REROLLED)), SparkReconcileRefusal.DIFFERENT_SIDE)
+            assertPagerOnly(original(earlier = null), SparkReconcileRefusal.NO_EARLIER_CAPTURE)
+        }
+
+        @Test
+        fun `a refused partial Original still keeps the original uncertain`() {
+            val refused = original(withRow(originalPager.rows, 4) { it.copy(stars = 3) })
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), rerolledPager, resolve)
+            val choice = SparkKeepPolicy.choose(refused.effective, rerolled.effective, profile)
+            assertEquals(SparkSetSide.ORIGINAL, choice.side)
+            assertFalse(choice.certain)
+            assertEquals("incomplete_read", choice.decidedBy)
         }
     }
 

@@ -106,19 +106,23 @@ enum class SparkConfirmationPill {
  * Over-reporting incompleteness costs a keep; under-reporting it discards a spark the choice depended on.
  */
 object SparkScrollMerge {
+    /**
+     * Kinds and stars exactly; names equal ignoring case or under [SparkTextNorm.namesEqual]'s fold, because the same row
+     * reads differently at different scroll positions ("-eft-Handed O" / "eft-Handed O", "SavvyO" / "Savvy O").
+     */
     fun rowsAlign(a: List<SparkRowFact>, b: List<SparkRowFact>): Boolean {
         if (a.size != b.size) return false
         return a.zip(b).all { (x, y) ->
             x.kind == y.kind &&
                 x.stars == y.stars &&
-                (x.unreadable || y.unreadable || x.name.equals(y.name, ignoreCase = true))
+                (x.unreadable || y.unreadable || x.name.equals(y.name, ignoreCase = true) || SparkTextNorm.namesEqual(x.name, y.name))
         }
     }
 
     /**
-     * True when [partial] agrees with the leading rows of [known]. Diagnostic only: as an authorization gate it refused
-     * for the same transient misread that made the read partial, because it compares through the exact-match [rowsAlign].
-     * It feeds [SparkPrefixEvidence.prefixAgreed] so the log states whether the old rule would have blocked.
+     * True when [partial] agrees with the leading rows of [known] under [rowsAlign]. Diagnostic only: as an authorization
+     * gate it refused for the same transient misread that made the read partial. It feeds [SparkPrefixEvidence.prefixAgreed]
+     * so the log states whether the stitch predicate accepts the prefix.
      */
     fun rowsAreConsistentPrefix(known: List<SparkRowFact>, partial: List<SparkRowFact>): Boolean {
         if (partial.isEmpty() || partial.size > known.size) return false
@@ -150,7 +154,7 @@ object SparkScrollMerge {
 
     fun listEnded(unchangedSwipeRun: Int): Boolean = unchangedSwipeRun >= UNCHANGED_SWIPES_TO_END
 
-    /** Diagnostic prefix comparison only; separate from [rowsAlign] so loosening it cannot loosen a safety rule. */
+    /** Diagnostic prefix comparison only; kept apart from [rowsAlign] so changing it cannot change a stitch or a list end. */
     private fun foldName(name: String): String =
         name.lowercase().replace('0', 'o').replace('1', 'i').replace('l', 'i').filter { it.isLetterOrDigit() }
 
@@ -178,7 +182,7 @@ object SparkScrollMerge {
             // Tolerant: names a row that genuinely disagrees, not one that lost a glyph.
             firstDifferingRow = firstDiffering,
             firstDifference = detail,
-            // Strict (the old gate's predicate): says whether that gate would have blocked.
+            // The stitch predicate: the same fold, except that two different names folding to nothing disagree.
             prefixAgreed = rowsAreConsistentPrefix(known, partial),
         )
     }
@@ -219,6 +223,9 @@ enum class SparkReadAuthority {
     PAGER_WITH_STRUCTURAL_NAME_REPAIR,
 
     PAGER_ONLY,
+
+    /** The pager read was partial but agreed row for row with the complete earlier capture, which is scored instead. */
+    EARLIER_CAPTURE,
 }
 
 enum class SparkReconcileRefusal(val wire: String) {
@@ -274,6 +281,9 @@ data class SparkReadAuthorityResult(
                 "the ${side.wire} page was scored from the pager alone (${refusal.wire}); authority=${authority.name}"
             SparkReadAuthority.PAGER_UNCHANGED ->
                 "the ${side.wire} page reads corroborate and needed no repair; authority=${authority.name}"
+            SparkReadAuthority.EARLIER_CAPTURE ->
+                "the ${side.wire} page was scored from its complete earlier read (${effective.rows.size} rows): the pager read " +
+                    "${pager.termination.name} with ${pager.rows.size} rows that agree with it; authority=${authority.name}"
         }
 }
 
@@ -288,6 +298,8 @@ data class SparkReadAuthorityResult(
  * resolve" alone would miss it). With no catalog, a white or unique row is repaired only when the pager name is the
  * earlier one with its first one or two characters dropped. Two different valid names are a contradiction, except a white
  * or unique pair that differs only by the pager's leading-glyph damage, so the whole side falls back to the pager read.
+ * A partial pager read is scored as the complete earlier capture when every pager row matches it in order, kind and
+ * stars with a compatible name; otherwise it stays the pager read alone.
  */
 object SparkReadReconcile {
     fun canonicalNameFor(kind: SparkRowKind, name: String): String? =
@@ -320,7 +332,31 @@ object SparkReadReconcile {
         if (earlier.transactionId != transactionId) return pagerOnly(SparkReconcileRefusal.DIFFERENT_TRANSACTION)
         if (earlier.side != side) return pagerOnly(SparkReconcileRefusal.DIFFERENT_SIDE)
         if (!earlier.reading.complete) return pagerOnly(SparkReconcileRefusal.EARLIER_INCOMPLETE)
-        if (!pager.complete) return pagerOnly(SparkReconcileRefusal.PAGER_INCOMPLETE)
+        if (!pager.complete) {
+            // The earlier capture read this same set completely (an Original is only spent on after a complete recheck),
+            // so a partial pager read that agrees with it row for row lets the spent reroll be compared instead of kept blind.
+            val earlierRows = earlier.reading.rows
+            val agrees =
+                pager.rows.isNotEmpty() &&
+                    pager.rows.size <= earlierRows.size &&
+                    pager.rows.indices.all { i ->
+                        val e = earlierRows[i]
+                        val p = pager.rows[i]
+                        e.kind == p.kind && e.stars == p.stars && SparkTextNorm.namesCompatible(e.name, p.name)
+                    }
+            if (!agrees) return pagerOnly(SparkReconcileRefusal.PAGER_INCOMPLETE)
+            return SparkReadAuthorityResult(
+                side = side,
+                earlier = earlier.reading,
+                pager = pager,
+                effective = earlier.reading,
+                authority = SparkReadAuthority.EARLIER_CAPTURE,
+                repairs = emptyList(),
+                // Structural agreement means equal row counts, so a prefix match alone does not claim it.
+                structurallyAgreed = pager.rows.size == earlierRows.size,
+                refusal = SparkReconcileRefusal.NONE,
+            )
+        }
 
         val earlierRows = earlier.reading.rows
         val pagerRows = pager.rows
@@ -402,11 +438,16 @@ object SparkReadReconcile {
     }
 
     /**
-     * The rows the kept record shows for the winner: the repaired names when the chooser repaired exactly this pager read,
-     * else the pager rows. Count, order, kinds and stars are the pager's either way.
+     * The rows the kept record shows for the winner: the repaired names when the chooser repaired exactly these pager rows,
+     * else [pagerRows] as given ([winnerReading]'s rows, so the earlier read on an [SparkReadAuthority.EARLIER_CAPTURE] side).
+     * A repair keeps the count, order, kinds and stars it was given.
      */
     fun keptRows(pagerRows: List<SparkRowFact>, authority: SparkReadAuthorityResult?): List<SparkRowFact> =
         if (authority != null && authority.pager.rows == pagerRows) authority.effective.rows else pagerRows
+
+    /** The winner's read for the confirmation check and the kept record: the earlier read when the chooser scored it over exactly this pager read. */
+    fun winnerReading(pagerRead: SparkSetReading?, authority: SparkReadAuthorityResult?): SparkSetReading? =
+        if (authority?.authority == SparkReadAuthority.EARLIER_CAPTURE && authority.pager.rows == pagerRead?.rows) authority.effective else pagerRead
 
     // The pager's damage pattern: the first one or two characters dropped ("Lucky Seven" -> "ucky Seven") or, when
     // [misreadAllowed], misread ("Unity Cup" -> "Jnity Cup"). At least four characters must remain so a short tail cannot

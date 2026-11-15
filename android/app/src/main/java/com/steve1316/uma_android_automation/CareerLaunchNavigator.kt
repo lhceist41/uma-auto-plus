@@ -3495,7 +3495,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      */
     private fun reportReadAuthority(result: SparkReadAuthorityResult) {
         when (result.authority) {
-            SparkReadAuthority.PAGER_WITH_STRUCTURAL_NAME_REPAIR -> MessageLog.i(TAG, "[SPARKS] [CHOOSER] ${result.summarize()}")
+            SparkReadAuthority.PAGER_WITH_STRUCTURAL_NAME_REPAIR, SparkReadAuthority.EARLIER_CAPTURE -> MessageLog.i(TAG, "[SPARKS] [CHOOSER] ${result.summarize()}")
             SparkReadAuthority.PAGER_ONLY ->
                 if (result.refusal != SparkReconcileRefusal.NO_EARLIER_CAPTURE) {
                     MessageLog.w(TAG, "[SPARKS] [CHOOSER] ${result.summarize()}")
@@ -3558,7 +3558,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         // dialog list is tolerated once the header matched.
         val winnerRead = transaction.pagerRead(winner) ?: if (winner == SparkSetSide.ORIGINAL) transaction.originalRead else transaction.rerolledRead
         val dialogRows = readSparkRows(bitmap, SPARKS_CONFIRM_GEOMETRY)
-        val expectedRows = winnerRead?.rows ?: emptyList()
+        val keptRead = SparkReadReconcile.winnerReading(winnerRead, transaction.recordedReadAuthorities[winner])
+        val expectedRows = keptRead?.rows ?: emptyList()
         val comparable = minOf(dialogRows.size, expectedRows.size)
         val contradiction =
             (0 until comparable).firstOrNull { i ->
@@ -3576,14 +3577,14 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         if (transaction.state != SparkTxState.COMPLETE) {
             transaction.verifyFinalConfirmation()
             if (!transaction.keptRecorded) {
-                // The winner's complete pager read IS the kept set; the dialog may clip.
+                // The winner's complete read (the pager's, or the earlier capture it agreed with) is the kept set; the dialog may clip.
                 val keptRows =
                     if (expectedRows.size >= dialogRows.size) {
                         SparkReadReconcile.keptRows(expectedRows, transaction.recordedReadAuthorities[winner])
                     } else {
                         dialogRows
                     }
-                recordSparkRows(keptRows, "kept", winnerRead)
+                recordSparkRows(keptRows, "kept", keptRead)
                 transaction.markKeptRecorded()
             }
             if (!transaction.choiceRecorded) {
@@ -3919,8 +3920,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
 
     /**
      * One side's read-authority audit trail. The pager read is always persisted verbatim, so a
-     * repair can never silently replace what the pager actually saw; the effective read is
-     * written only when it differs.
+     * repair can never silently replace what the pager actually saw. The effective rows are
+     * written with repairs; an EARLIER_CAPTURE side scores `earlier_rows`.
      */
     private fun sparkReadAuthorityJson(result: SparkReadAuthorityResult): JSONObject =
         JSONObject().apply {

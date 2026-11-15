@@ -1510,14 +1510,18 @@ identity, page navigation and which page is confirmed -- it is the surface the C
 on. The earlier capture may repair CONTENT NAMES ONLY, and only where the two reads corroborate
 each other structurally: same transaction, same side, both complete, equal row count and order,
 and identical kind and stars at every index. Under those conditions the two reads describe the
-same list row for row, so a name difference is by construction a misread on one side. The repair
-is confined further to stat and aptitude rows, whose vocabularies are closed, and runs only in
-the direction that adds information: the earlier name resolves exactly, the pager name does not.
-Names that both resolve to DIFFERENT valid entries are a contradiction rather than a repair --
-that breaks the same-set premise, so the whole side falls back to the pager read. White rows
-(race and skill names) and unique rows are open-vocabulary and are never repaired. Each side
-records which read it was scored from (`PAGER_UNCHANGED`, `PAGER_WITH_STRUCTURAL_NAME_REPAIR`,
-or `PAGER_ONLY` with the refusal reason), and every pager page is persisted raw as its own
+same list row for row, so a name difference is by construction a misread on one side. Stat and
+aptitude rows (closed vocabularies) are repaired where the earlier name resolves exactly and the
+pager name does not. With the spark-name catalog, white and unique rows are repaired where the
+earlier name resolves and the pager name lost or misread its first one or two characters or does
+not resolve; without it, only where those characters were dropped. Names that both resolve to DIFFERENT valid entries are a contradiction rather than
+a repair -- that breaks the same-set premise, so the whole side falls back to the pager read.
+One case replaces more than names: a partial pager read whose every row matches the complete
+earlier capture in order, kind and stars, with a compatible name, is scored as that earlier
+capture (`EARLIER_CAPTURE`); the confirmation dialog is then checked against the earlier rows.
+Each side records which read it was scored from (`PAGER_UNCHANGED`,
+`PAGER_WITH_STRUCTURAL_NAME_REPAIR`, `EARLIER_CAPTURE`, or `PAGER_ONLY` with the refusal
+reason), and every pager page is persisted raw as its own
 `pager_original` / `pager_rerolled` corpus record before any repair exists, so a repair can
 never hide what the pager actually saw.
 
@@ -1526,8 +1530,8 @@ comparison with no numeric weights. First a 3-star protection vector per side ([
 desired pink, relevant white], where race sparks always count as relevant, skill whites only
 when planned, and an unreadable 3-star white protects the ORIGINAL side only), then plain
 integer tiers: target-blue stars (with target order breaking ties), matched pinks, uniques,
-relevant whites, total stars. A tie keeps the original; an incomplete read on either side
-forces keep-original.
+relevant whites, total stars. A tie keeps the original; a read still incomplete after
+reconciliation, on either side, forces keep-original.
 
 What that keep-original then requires is the part two overnight queues got wrong. It used to
 demand that the short pager read still match the known set row for row, through the same

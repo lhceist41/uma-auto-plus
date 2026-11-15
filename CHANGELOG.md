@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- **Spark rerolls:** a spark reroll is no longer wasted when the bot reads a spark name slightly differently on its second look at the original set. It now compares both sets and keeps the better one.
 - **Training gains:** the bot no longer drops a repeated digit of a training's stat gains (+11 and +22 were read as +1 and +2), and it no longer raises a correctly read Power gain on Guts training. A gain it still cannot read whole is now estimated on the low side from the game's own gains instead of being guessed 10 higher.
 - **Two-digit training gains:** on MuMu at 1080x1920 the bot now reads both digits of a gain such as +13 or +15 (often read as +1) and no longer reads a small side gain such as +3 or +6 as 0, so training choices follow the gains on screen.
 - **Fewer unexplained stops:** the bot now frees its text reader itself when a career or a trip through the menus ends. Android used to free it later on its own, and when that took too long it ended the bot, once even between two careers of a run queue. If an error does stop the bot between careers, the queue now says it stopped after an error instead of "Queue was stopped during navigation".

@@ -189,6 +189,120 @@ class SparkScrollEndTest {
     }
 
     @Nested
+    @DisplayName("a row read differently at another scroll position")
+    inner class PositionVariants {
+        private fun stat(name: String, stars: Int) = SparkRowFact(name, stars, SparkRowKind.STAT)
+
+        private fun apt(name: String, stars: Int) = SparkRowFact(name, stars, SparkRowKind.APTITUDE)
+
+        private fun unique(name: String, stars: Int) = SparkRowFact(name, stars, SparkRowKind.UNIQUE)
+
+        private fun renamed(rows: List<SparkRowFact>, from: String, to: String) = rows.map { if (it.name == from) it.copy(name = to) else it }
+
+        // Live pager Original at 1080: the second frame read the same Left-Handed row without its dash.
+        private val pagerOriginal =
+            listOf(
+                stat("Stamina", 1),
+                apt("Pace Chaser", 1),
+                unique("Blazing Pride", 2),
+                white("Shuka Sho", 1),
+                white("-eft-Handed O", 1),
+                white("Firm Conditions O", 1),
+                white("Corner Adept O", 2),
+                white("Corner Recovery O", 1),
+                white("Pace Chaser\nStraightaways O", 2),
+            )
+        private val lowerFrame = pagerOriginal.drop(1)
+        private val lowerFrameVariant = renamed(lowerFrame, "-eft-Handed O", "eft-Handed O")
+
+        @Test
+        fun `a dash lost on one row still stitches the frame onto the rows already read`() {
+            assertEquals(pagerOriginal, SparkScrollMerge.merge(pagerOriginal, lowerFrameVariant))
+        }
+
+        @Test
+        fun `the same frame with that row read differently counts as an unchanged swipe`() {
+            assertEquals(1, SparkScrollMerge.unchangedSwipeRun(lowerFrame, lowerFrameVariant, 0))
+        }
+
+        @Test
+        fun `the 1440 Savvy rows stitch into the ten rows the keep dialog showed`() {
+            val powerSetFirst =
+                listOf(
+                    stat("Power", 2),
+                    apt("Front Runner", 2),
+                    unique("Flashy*Landin", 2),
+                    white("Tenno Sho (Spring)", 2),
+                    white("Kikuka Sho", 1),
+                    white("Arima Kinen", 2),
+                    white("Straightaway Recovery", 2),
+                    white("Pace Chaser SavvyO", 2),
+                    white("On the Attack", 1),
+                )
+            val powerSetSecond = renamed(powerSetFirst.drop(1), "Pace Chaser SavvyO", "Pace Chaser Savvy O") + white("Ignited Spirit STA", 2)
+            val powerSetDialog = powerSetFirst + white("Ignited Spirit STA", 2)
+            val powerSet = SparkScrollMerge.merge(powerSetFirst, powerSetSecond)
+            assertEquals(10, powerSet?.size)
+            assertEquals(powerSetDialog.map { it.kind to it.stars }, powerSet!!.map { it.kind to it.stars })
+
+            val staminaSetFirst =
+                listOf(
+                    stat("Stamina", 1),
+                    apt("Turf", 2),
+                    unique("Flashy*Landin", 2),
+                    white("Tenno Sho (Spring)", 1),
+                    white("Arima Kinen", 2),
+                    white("Corner Recovery O", 1),
+                    white("Straightaway Recovery", 2),
+                    white("Pace Chaser SavvyO", 1),
+                    white("Lucky Seven", 1),
+                )
+            val staminaSetSecond = renamed(staminaSetFirst.drop(1), "Pace Chaser SavvyO", "Pace Chaser Savvy O") + white("Head-On", 1)
+            val staminaSetDialog = staminaSetFirst + white("Head-On", 1)
+            val staminaSet = SparkScrollMerge.merge(staminaSetFirst, staminaSetSecond)
+            assertEquals(10, staminaSet?.size)
+            assertEquals(staminaSetDialog.map { it.kind to it.stars }, staminaSet!!.map { it.kind to it.stars })
+        }
+
+        @Test
+        fun `the live sequence that ended ALIGNMENT_FAILED now ends complete with all nine rows`() {
+            val read =
+                replay(
+                    listOf(
+                        Frame(pagerOriginal),
+                        Frame(pagerOriginal),
+                        Frame(lowerFrame),
+                        Frame(lowerFrameVariant, reread = lowerFrameVariant),
+                        Frame(lowerFrame),
+                    ),
+                )
+            assertEquals(SparkScanTermination.COMPLETE_NO_PROGRESS, read.termination)
+            assertEquals(pagerOriginal, read.rows)
+        }
+
+        @Test
+        fun `a folded name that makes a second overlap align still refuses the merge`() {
+            val merged = listOf(white("Corner Adept O"), white("Corner Adept 0"))
+            val next = listOf(white("Corner Adept 0"), white("Corner Adept O"))
+            assertNull(SparkScrollMerge.merge(merged, next))
+        }
+
+        @Test
+        fun `a name that lost a letter, not just a glyph shape, still refuses the stitch`() {
+            val merged = listOf(stat("Stamina", 1), apt("Mile", 2), white("Mile Straightaways O"))
+            val next = listOf(apt("Mile", 2), white("ile Straightaways O"), white("Groundwork"))
+            assertNull(SparkScrollMerge.merge(merged, next))
+            assertEquals(0, SparkScrollMerge.unchangedSwipeRun(merged.drop(1), next.take(2), 0))
+        }
+
+        @Test
+        fun `a different star or kind on the variant row still refuses the stitch`() {
+            assertNull(SparkScrollMerge.merge(pagerOriginal, lowerFrameVariant.mapIndexed { i, r -> if (i == 3) r.copy(stars = 2) else r }))
+            assertNull(SparkScrollMerge.merge(pagerOriginal, lowerFrameVariant.mapIndexed { i, r -> if (i == 3) r.copy(kind = SparkRowKind.UNIQUE) else r }))
+        }
+    }
+
+    @Nested
     @DisplayName("reader wiring")
     inner class Wiring {
         private fun readerBody(): String {
