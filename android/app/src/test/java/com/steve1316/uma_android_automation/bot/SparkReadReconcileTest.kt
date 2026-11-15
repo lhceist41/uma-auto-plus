@@ -536,14 +536,11 @@ class SparkReadReconcileTest {
         }
 
         @Test
-        fun `an incomplete pager read whose short blue lost its first glyph is not taken from the earlier read`() {
-            assertPagerOnly(
-                reconcile(
-                    capture(reading(stat("Speed", 2))),
-                    reading(stat("peed", 2), termination = SparkScanTermination.ALIGNMENT_FAILED),
-                ),
-                SparkReconcileRefusal.PAGER_INCOMPLETE,
-            )
+        fun `an incomplete pager read whose short blue lost its first glyph is scored from the earlier read`() {
+            val result = reconcile(capture(reading(stat("Speed", 2))), reading(stat("peed", 2), termination = SparkScanTermination.ALIGNMENT_FAILED))
+
+            assertEquals(SparkReadAuthority.EARLIER_CAPTURE, result.authority)
+            assertEquals("Speed", result.effective.rows.single().name)
         }
 
         @Test
@@ -670,7 +667,8 @@ class SparkReadReconcileTest {
         }
 
         @Test
-        fun `an incomplete pager read whose short blue lost its first glyph still keeps the original uncertain`() {
+        fun `an incomplete pager read with a misread white name still keeps the original uncertain`() {
+            // "Jnity Cup" is a misread first letter, not a dropped one, so the partial read does not match the earlier one.
             val short = rerolledPager.copy(termination = SparkScanTermination.ALIGNMENT_FAILED)
             val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), short, resolve)
 
@@ -681,6 +679,18 @@ class SparkReadReconcileTest {
             assertEquals(SparkSetSide.ORIGINAL, choice.side)
             assertFalse(choice.certain, "an incomplete side must stay the uncertain keep-original fallback")
             assertEquals("incomplete_read", choice.decidedBy)
+        }
+
+        @Test
+        fun `an incomplete pager read whose short blue lost its first glyph is compared and the rerolled set is kept`() {
+            val short = SparkSetReading(rerolledPager.rows.take(8), SparkScanTermination.ALIGNMENT_FAILED)
+            val rerolled = SparkReadReconcile.reconcile(SparkSetSide.REROLLED, tx, capture(rerolledEarlier), short, resolve)
+
+            assertEquals(SparkReadAuthority.EARLIER_CAPTURE, rerolled.authority)
+            val choice = SparkKeepPolicy.choose(originalPager, rerolled.effective, profile)
+            assertEquals(SparkSetSide.REROLLED, choice.side)
+            assertTrue(choice.certain)
+            assertEquals("blue", choice.decidedBy)
         }
 
         @Test
@@ -1005,6 +1015,78 @@ class SparkReadReconcileTest {
             assertEquals(SparkSetSide.ORIGINAL, choice.side)
             assertFalse(choice.certain)
             assertEquals("incomplete_read", choice.decidedBy)
+        }
+
+        private fun shortNames(
+            blue: Pair<String, String>,
+            pink: Pair<String, String>,
+            pagerPinkStars: Int = 1,
+            pagerPinkKind: SparkRowKind = SparkRowKind.APTITUDE,
+        ): SparkReadAuthorityResult {
+            val earlier = reading(stat(blue.first, 2), apt(pink.first, 1), unique("Blazing Pride", 2), termination = SparkScanTermination.COMPLETE_NO_PROGRESS)
+            val pager = SparkSetReading(listOf(stat(blue.second, 2), SparkRowFact(pink.second, pagerPinkStars, pagerPinkKind)), SparkScanTermination.ALIGNMENT_FAILED)
+            return original(pager, capture(earlier, SparkSetSide.ORIGINAL))
+        }
+
+        @Test
+        fun `short blue and pink names that lost their first one or two letters are scored from the earlier read`() {
+            listOf(
+                ("Speed" to "peed") to ("Mile" to "ile"),
+                ("Wit" to "it") to ("Turf" to "urf"),
+                ("Guts" to "uts") to ("Long" to "-ong"),
+                ("Power" to "ower") to ("Dirt" to "irt"),
+                ("Wit" to "t") to ("Mile" to "le"),
+                ("Speed" to "eed") to ("Turf" to "rf"),
+                ("Stamina" to "amina") to ("Sprint" to "rint"),
+            ).forEach { (blue, pink) ->
+                val result = shortNames(blue, pink)
+                assertEquals(SparkReadAuthority.EARLIER_CAPTURE, result.authority, "$blue $pink")
+                assertEquals(listOf(blue.first, pink.first), result.effective.rows.take(2).map { it.name })
+            }
+        }
+
+        @Test
+        fun `a damaged short name that reads as another name of its set stays the pager read`() {
+            assertPagerOnly(shortNames("Speed" to "ower", "Mile" to "ile"), SparkReconcileRefusal.PAGER_INCOMPLETE)
+            assertPagerOnly(shortNames("Wit" to "uts", "Mile" to "ile"), SparkReconcileRefusal.PAGER_INCOMPLETE)
+            assertPagerOnly(shortNames("Speed" to "peed", "Mile" to "urf"), SparkReconcileRefusal.PAGER_INCOMPLETE)
+            assertPagerOnly(shortNames("Speed" to "peed", "Dirt" to "Turf"), SparkReconcileRefusal.PAGER_INCOMPLETE)
+        }
+
+        @Test
+        fun `a star or kind mismatch on a damaged short name stays the pager read`() {
+            assertPagerOnly(shortNames("Speed" to "peed", "Mile" to "ile", pagerPinkStars = 2), SparkReconcileRefusal.PAGER_INCOMPLETE)
+            assertPagerOnly(shortNames("Speed" to "peed", "Mile" to "ile", pagerPinkKind = SparkRowKind.WHITE), SparkReconcileRefusal.PAGER_INCOMPLETE)
+        }
+
+        @Test
+        fun `a white or unique short name with the same damage stays the pager read`() {
+            val earlier = reading(unique("Guts", 1), white("Mile", 1, SparkWhiteClass.RACE), termination = SparkScanTermination.COMPLETE_NO_PROGRESS)
+            val uniquePager = SparkSetReading(listOf(unique("uts", 1)), SparkScanTermination.ALIGNMENT_FAILED)
+            val whitePager = SparkSetReading(listOf(unique("Guts", 1), white("ile", 1, SparkWhiteClass.RACE)), SparkScanTermination.ALIGNMENT_FAILED)
+            assertPagerOnly(original(uniquePager, capture(earlier, SparkSetSide.ORIGINAL)), SparkReconcileRefusal.PAGER_INCOMPLETE)
+            assertPagerOnly(original(whitePager, capture(earlier, SparkSetSide.ORIGINAL)), SparkReconcileRefusal.PAGER_INCOMPLETE)
+        }
+
+        @Test
+        fun `a tail that another name of the set shares refuses`() {
+            assertFalse(SparkReadReconcile.leadingCharactersLostInSet(listOf("Mile", "Bile"), "Mile", "ile"))
+            assertFalse(SparkReadReconcile.leadingCharactersLostInSet(listOf("Wit", "Twit"), "Wit", "it"))
+            assertFalse(SparkReadReconcile.leadingCharactersLostInSet(listOf("Speed", "Peed"), "Speed", "peed"))
+            assertFalse(SparkReadReconcile.leadingCharactersLostInSet(SPARK_STAT_NAMES, "Speed", "ed"), "three letters dropped")
+            assertFalse(SparkReadReconcile.leadingCharactersLostInSet(SPARK_STAT_NAMES, "Speed", "Speed"), "an equal name is not a lost glyph")
+        }
+
+        @Test
+        fun `every blue and pink name with one or two first letters dropped reads as only itself`() {
+            for (names in listOf(SPARK_STAT_NAMES, SPARK_APTITUDE_NAMES)) {
+                for (name in names) {
+                    for (lost in 1..2) {
+                        val tail = name.filter { it.isLetterOrDigit() }.drop(lost)
+                        assertTrue(SparkReadReconcile.leadingCharactersLostInSet(names, name, tail), "$name -> $tail")
+                    }
+                }
+            }
         }
     }
 

@@ -299,7 +299,8 @@ data class SparkReadAuthorityResult(
  * earlier one with its first one or two characters dropped. Two different valid names are a contradiction, except a white
  * or unique pair that differs only by the pager's leading-glyph damage, so the whole side falls back to the pager read.
  * A partial pager read is scored as the complete earlier capture when every pager row matches it in order, kind and
- * stars with a compatible name; otherwise it stays the pager read alone.
+ * stars with a compatible name (a blue or pink name may also have lost its first one or two characters when no other
+ * name in its set reads the same); otherwise it stays the pager read alone.
  */
 object SparkReadReconcile {
     fun canonicalNameFor(kind: SparkRowKind, name: String): String? =
@@ -342,7 +343,15 @@ object SparkReadReconcile {
                     pager.rows.indices.all { i ->
                         val e = earlierRows[i]
                         val p = pager.rows[i]
-                        e.kind == p.kind && e.stars == p.stars && SparkTextNorm.namesCompatible(e.name, p.name)
+                        val closedNames =
+                            when (e.kind) {
+                                SparkRowKind.STAT -> SPARK_STAT_NAMES
+                                SparkRowKind.APTITUDE -> SPARK_APTITUDE_NAMES
+                                else -> emptyList()
+                            }
+                        e.kind == p.kind &&
+                            e.stars == p.stars &&
+                            (SparkTextNorm.namesCompatible(e.name, p.name) || leadingCharactersLostInSet(closedNames, e.name, p.name))
                     }
             if (!agrees) return pagerOnly(SparkReconcileRefusal.PAGER_INCOMPLETE)
             return SparkReadAuthorityResult(
@@ -448,6 +457,19 @@ object SparkReadReconcile {
     /** The winner's read for the confirmation check and the kept record: the earlier read when the chooser scored it over exactly this pager read. */
     fun winnerReading(pagerRead: SparkSetReading?, authority: SparkReadAuthorityResult?): SparkSetReading? =
         if (authority?.authority == SparkReadAuthority.EARLIER_CAPTURE && authority.pager.rows == pagerRead?.rows) authority.effective else pagerRead
+
+    /**
+     * True when [pager] is [earlier], a name in [names], with its first one or two characters dropped and no other name in
+     * [names] reads the same with up to two dropped. Short closed-set names ("it" for Wit) are too short for
+     * [SparkTextNorm.namesCompatible]; uniqueness within the set stands in for its length floor.
+     */
+    internal fun leadingCharactersLostInSet(names: List<String>, earlier: String, pager: String): Boolean {
+        val name = names.firstOrNull { SparkTextNorm.namesEqual(it, earlier) } ?: return false
+
+        fun tails(n: String) = n.filter { it.isLetterOrDigit() }.let { key -> (0..2).map { key.drop(it) } }
+        return tails(name).drop(1).any { SparkTextNorm.namesEqual(it, pager) } &&
+            names.count { other -> tails(other).any { SparkTextNorm.namesEqual(it, pager) } } == 1
+    }
 
     // The pager's damage pattern: the first one or two characters dropped ("Lucky Seven" -> "ucky Seven") or, when
     // [misreadAllowed], misread ("Unity Cup" -> "Jnity Cup"). At least four characters must remain so a short tail cannot
