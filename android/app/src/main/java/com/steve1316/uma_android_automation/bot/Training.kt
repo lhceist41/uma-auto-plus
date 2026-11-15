@@ -643,7 +643,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val expectedSideEffects = affectedStatsMap[result.name] ?: emptyList()
 
             // By game data a training's own gain is above each side gain, so a main gain at or below a side gain, or 0 beside them, was not read
-            // whole. It is estimated from the largest expected side gain by the scenario's lowest ratio, so it stays at or below the real gain.
+            // whole. It is estimated from the largest expected side gain by the scenario's lowest ratio, so it stays at or below the game's base gain.
             val largestExpectedSide = expectedSideEffects.maxOfOrNull { newStatGains[it] ?: 0 }?.takeIf { it > 0 } ?: maxSideEffectGain
             val estimatedMainGain = maxOf((largestExpectedSide * lowestGainRatio(scenario, result.name)).roundToInt(), maxSideEffectGain + 1)
             var mainEstimated = false

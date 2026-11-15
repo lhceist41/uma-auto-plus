@@ -11,7 +11,7 @@ import java.io.File
 /** URA phone gain bands and the boxes the matcher judged in them (src/test/resources/fixtures/uragain/PROVENANCE.md). */
 @DisplayName("URA training gains read their + and 1")
 class UraGainEqualityGateTest {
-    /** A judged box. The searched shares are the matcher's own: earlier rejected boxes of the same template are painted black in its copy. */
+    /** A judged box. The searched shares were recorded by the former matcher, which painted earlier rejected boxes of the same template black in its copy. */
     private class Box(
         val fixture: String,
         val truth: String,
@@ -91,11 +91,11 @@ class UraGainEqualityGateTest {
         }
     }
 
-    /** Non-zero where the band's gray equals the template's, as Core.compare(CMP_EQ) gives it. */
-    private fun equal(box: Box): ByteArray {
+    /** Non-zero where the band's gray is within [levels] of the template's: exact equality, as the fixture columns were recorded, by default. */
+    private fun equal(box: Box, levels: Int = 0): ByteArray {
         val b = band(box.fixture)
         val t = template(box.template)
-        return ByteArray(t.width * t.height) { i -> if (b.gray[(box.y + i / t.width) * b.width + box.x + i % t.width] == t.gray[i]) -1 else 0 }
+        return ByteArray(t.width * t.height) { i -> if (kotlin.math.abs(b.gray[(box.y + i / t.width) * b.width + box.x + i % t.width] - t.gray[i]) <= levels) -1 else 0 }
     }
 
     private fun wholeBox(equal: ByteArray): Double = equal.count { it.toInt() != 0 }.toDouble() / equal.size
@@ -135,7 +135,23 @@ class UraGainEqualityGateTest {
             val truth = boxes.first { it.fixture == fixture }.truth
             val expected = if (truth == "empty") "" else truth.removePrefix("+")
             assertEquals(expected, reading(fixture, clean), fixture)
-            assertEquals(expected, reading(fixture, searched), "$fixture in the matcher's painted copy")
+            assertEquals(expected, reading(fixture, searched), "$fixture in the former matcher's painted copy")
+        }
+    }
+
+    @Test
+    @DisplayName("Within the matcher's gray tolerance every band still reads its gain, and the outfit art still reads nothing")
+    fun bandsReadWithinTheTolerance() {
+        val levels = StatGainDigits.EQUAL_GRAY_LEVELS
+        val tolerant = { box: Box -> StatGainDigits.equalRatio(box.template, equal(box, levels), template(box.template).alpha) >= minEqual }
+        for (fixture in boxes.map { it.fixture }.distinct()) {
+            val truth = boxes.first { it.fixture == fixture }.truth
+            assertEquals(if (truth == "empty") "" else truth.removePrefix("+"), reading(fixture, tolerant), fixture)
+        }
+        val art = boxes.filter { it.truth == "empty" && it.pearson >= minPearson }
+        assertTrue(art.isNotEmpty())
+        for (box in art) {
+            assertTrue(StatGainDigits.equalRatio(box.template, equal(box, levels), template(box.template).alpha) < minEqual, "${box.fixture} ${box.template}@${box.x}")
         }
     }
 

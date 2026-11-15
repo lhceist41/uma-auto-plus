@@ -2328,10 +2328,12 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 templateGray.copyTo(templateValid, validPixels)
                 matchedRegion.copyTo(regionValid, validPixels)
 
-                // For the first test, compare pixel-by-pixel equality between the matched region and template to calculate match ratio.
-                val templateComparison = Mat()
-                Core.compare(matchedRegion, templateGray, templateComparison, Core.CMP_EQ)
-                val equalPixels = ByteArray(templateComparison.total().toInt()).also { templateComparison.get(0, 0, it) }
+                // For the first test, the share of pixels whose gray is within EQUAL_GRAY_LEVELS of the template's.
+                val difference = Mat()
+                Core.absdiff(matchedRegion, templateGray, difference)
+                val differences = ByteArray(difference.total().toInt()).also { difference.get(0, 0, it) }
+                difference.release()
+                val equalPixels = StatGainDigits.withinGrayLevels(differences, StatGainDigits.EQUAL_GRAY_LEVELS)
                 val pixelMatchRatio = StatGainDigits.equalRatio(templateName, equalPixels, alphaPixels)
                 if (pixelMatchRatio < minPixelMatchRatio) {
                     failedPixelMatchRatio = true
@@ -2353,7 +2355,6 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                     failedPixelCorrelation = true
                 }
 
-                templateComparison.release()
                 matchedRegion.release()
                 templateValid.release()
                 regionValid.release()

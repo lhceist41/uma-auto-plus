@@ -27,3 +27,25 @@ the same careers' 745 frames.
 centre x in the row crop) as logged by `constructIntegerFromMatches` on MuMu (single-row URA Finale and
 two-row careers, 2026-09-26 to 2026-10-05) and on a 1080x2316 phone (Trackblazer, 2026-10-06): every
 distinct list without two matches closer than 12 px, 329 lists covering 10,111 reads.
+
+## Native 1080 Unity Cup bands
+
+Five more bands come from one unattended Unity Cup career (King Halo) on 2026-11-15, saved with Debug Mode on as each
+facility's analysis frame (`unitycup_train_NNNN_<FACILITY>.png`, 1080x1920 on MuMu, read at native size). They are cut
+and channel-swapped like the bands above, with the "Skill Pts" anchor at (971, 134).
+
+| Fixture | Source frame | Screen |
+|---|---|---|
+| native_speed_13_2.png | unitycup_train_0011_SPEED | Speed +13 and bonus-row +2; Power +6 |
+| native_speed_15_2.png | unitycup_train_0016_SPEED | Speed +15 and bonus-row +2; Power +9 |
+| native_guts_8.png | unitycup_train_0019_GUTS | Speed +3, Power +4, Guts +8 |
+| native_guts_8_power_6.png | unitycup_train_0004_GUTS | Speed +5, Power +6, Guts +8 |
+| native_stamina_13.png | unitycup_train_0037_STAMINA | Stamina +13, Guts +11 |
+
+Every value was checked by eye on the frame. With exact gray equality the matcher read +13 and +15 as +1 and the side
+gains +3 and +6 as a lone "+".
+
+`native_boxes.csv` lists, for each gain row of the facility's stats, every box the matcher's peak search visits (masked
+TM_CCORR_NORMED of 0.9 or more, in search order per template as `rank`): top-left position in band coordinates, the
+equal-pixel share at exact equality (`share0`) and within 2 gray levels (`share2`), and the Pearson correlation, from an
+OpenCV 4.13 replay of the matcher that reproduced all 227 matches the bot logged for the career's first 50 frames.

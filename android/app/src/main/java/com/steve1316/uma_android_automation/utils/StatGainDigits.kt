@@ -107,6 +107,13 @@ object StatGainDigits {
 
     private const val OPAQUE = 0xFF.toByte()
 
+    // Real glyphs on lossless 1080 captures sit 1-2 gray levels off the template: exact equality left 54 of 276 under the 0.1 share, within
+    // 2 levels every one passed (lowest 0.17) and no peak off a real glyph reached 0.1. At 6 a "7" on URA outfit art passes.
+    const val EQUAL_GRAY_LEVELS = 2
+
+    /** Non-zero where the absolute gray [difference] (one unsigned byte per pixel) is at most [levels], as [equalRatio] takes it. */
+    fun withinGrayLevels(difference: ByteArray, levels: Int): ByteArray = ByteArray(difference.size) { if ((difference[it].toInt() and 0xFF) <= levels) -1 else 0 }
+
     /** One template hit in a gain row: template name, centre x in the row crop, and its pixel correlation. */
     class TemplateMatch(val template: String, val x: Double, val score: Double)
 
