@@ -556,6 +556,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 result
             }
 
+        /** The navigator's stop text after an error ended the service says so instead of reading as a stop. */
+        fun stopAfterErrorWords(result: NavigationResult, botRunning: Boolean, runPostedException: Boolean): NavigationResult =
+            if (!botRunning && runPostedException && result.failureReason == CareerLaunchNavigator.STOPPED_DURING_NAVIGATION) {
+                result.copy(failureReason = "The bot stopped after an error during navigation (see its notification).", recommendedAction = "Check the error notification, then restart the queue.")
+            } else {
+                result
+            }
+
         /** The overlay Stop ends the service without setting [queueStopRequested]; no bot stop reason and no posted exception means the player. */
         fun isOverlayStop(botRunning: Boolean, botStopReason: String?, runPostedException: Boolean): Boolean =
             !botRunning && botStopReason == null && !runPostedException
@@ -1717,7 +1725,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     try {
                         taskResult = entryPoint.start()
                     } finally {
-                        entryPoint.memoryLog.gameEnd()
+                        try {
+                            entryPoint.memoryLog.gameEnd()
+                        } finally {
+                            entryPoint.imageUtils.releaseTesseract()
+                        }
                     }
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
@@ -1845,7 +1857,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     /** Runs the Rewards and Club step once a career's end flow parked the game on Home; the run's result never depends on it. */
     private fun runDailyExtrasAfterCareer() {
         try {
-            CareerLaunchNavigator(context).runDailyExtras()?.let { MessageLog.i(TAG, "[DAILY_EXTRAS] ${it.joinToString("; ")}.") }
+            CareerLaunchNavigator(context).use { it.runDailyExtras() }?.let { MessageLog.i(TAG, "[DAILY_EXTRAS] ${it.joinToString("; ")}.") }
         } catch (e: InterruptedException) {
             MessageLog.w(TAG, "[DAILY_EXTRAS] Stopped: ${e.message}")
         } catch (e: Exception) {
@@ -1866,12 +1878,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      */
     private fun navigateWithDeadline(
         reuseLastLaunchSetup: Boolean,
-        navigator: CareerLaunchNavigator = CareerLaunchNavigator(context),
+        launchNavigator: CareerLaunchNavigator? = null,
         finalizeToHome: Boolean = false,
         previousCareerComplete: Boolean = false,
         coldStartOnHome: Boolean = false,
         careerInFlight: Boolean = false,
     ): NavigationResult {
+        val navigator = launchNavigator ?: CareerLaunchNavigator(context)
         val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
         // Set true ONLY when the deadline thread itself interrupts the queue thread. The catch
         // below uses this to tell a genuine wedge from a stop/teardown interrupt: an
@@ -1919,6 +1932,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         return try {
             noteStopByPlayer(navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome, careerInFlight = careerInFlight))
                 .copy(careerResumed = navigator.careerResumed)
+                .let { stopAfterErrorWords(it, BotService.isRunning, lastRunPostedException) }
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
             Thread.interrupted()
@@ -1964,6 +1978,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         } finally {
             navDone.set(true)
             deadlineThread.interrupt()
+            if (launchNavigator == null) navigator.close()
         }
     }
 
@@ -2086,7 +2101,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)
         ledger.phase = StartModule.PHASE_LAUNCHING
         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
-        val home = CareerLaunchNavigator(context).backOutToHome()
+        val home = CareerLaunchNavigator(context).use { it.backOutToHome() }
         if (!home) MessageLog.e(TAG, "[QUEUE] Could not return the game to its home screen after skipping run $run.")
         return home
     }
@@ -2546,41 +2561,48 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // Reuse the probe's navigator for the launch - its Game/CV initialisation is
                     // the expensive part, and navigate() resets all session-scoped flags itself.
                     val coldStartNavigator = if (isMiscMode) null else CareerLaunchNavigator(context)
-                    if (coldStartNavigator != null && coldStartNavigator.isOnHomeScreen()) {
-                        MessageLog.i(TAG, "[QUEUE] Game is on the home screen. Launching a career for run $startFromRun...")
-                        sendQueueProgressEvent(startFromRun, totalRuns, "navigating")
-                        val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer, careerInFlight = resumeReEntersCareer)
-                        if (!resumeReEntersCareer && skipsTrainee(navResult, rotation) && coldStartNavigator.backOutToHome()) {
-                            MessageLog.w(TAG, "[QUEUE] Run $startFromRun cannot start its trainee (${navResult.reasonKey}): ${navResult.failureReason} Back on the home screen; the run's own launch records the skip.")
-                        } else if (!navResult.success) {
-                            logNavigationFailure(navResult)
-                            // A user Stop mid-navigation is a clean cancellation, not a navigation
-                            // failure - no halt reason, so the post-loop queueComplete reports the
-                            // ending, same as a Stop during a run.
-                            if (navResult.lastDetectedState != "STOPPED") {
-                                queueHaltReason = "cold-start career launch failed before run $startFromRun: ${navResult.failureReason}"
-                                ledger.haltEnd = SessionEnd.LAUNCH_FAILED_BEFORE_RUN
-                                ledger.reasonKey = navResult.reasonKey
-                                ledger.reasonTrainee = navResult.reasonTrainee
-                                ledger.reasonOutfit = navResult.reasonOutfit
-                                ledger.reasonRotation = navResult.reasonRotation
-                                queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
-                                queueHaltRun = startFromRun - 1
-                                queueHaltCareerInFlight = navigationLeftCareer(resumeReEntersCareer || navResult.careerResumed, navResult)
+                    try {
+                        if (coldStartNavigator != null && coldStartNavigator.isOnHomeScreen()) {
+                            MessageLog.i(TAG, "[QUEUE] Game is on the home screen. Launching a career for run $startFromRun...")
+                            sendQueueProgressEvent(startFromRun, totalRuns, "navigating")
+                            val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer, careerInFlight = resumeReEntersCareer)
+                            if (!resumeReEntersCareer && skipsTrainee(navResult, rotation) && coldStartNavigator.backOutToHome()) {
+                                MessageLog.w(
+                                    TAG,
+                                    "[QUEUE] Run $startFromRun cannot start its trainee (${navResult.reasonKey}): ${navResult.failureReason} Back on the home screen; the run's own launch records the skip.",
+                                )
+                            } else if (!navResult.success) {
+                                logNavigationFailure(navResult)
+                                // A user Stop mid-navigation is a clean cancellation, not a navigation
+                                // failure - no halt reason, so the post-loop queueComplete reports the
+                                // ending, same as a Stop during a run.
+                                if (navResult.lastDetectedState != "STOPPED") {
+                                    queueHaltReason = "cold-start career launch failed before run $startFromRun: ${navResult.failureReason}"
+                                    ledger.haltEnd = SessionEnd.LAUNCH_FAILED_BEFORE_RUN
+                                    ledger.reasonKey = navResult.reasonKey
+                                    ledger.reasonTrainee = navResult.reasonTrainee
+                                    ledger.reasonOutfit = navResult.reasonOutfit
+                                    ledger.reasonRotation = navResult.reasonRotation
+                                    queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
+                                    queueHaltRun = startFromRun - 1
+                                    queueHaltCareerInFlight = navigationLeftCareer(resumeReEntersCareer || navResult.careerResumed, navResult)
+                                }
+                                queueStopRequested = true
+                            } else {
+                                coldStartConfirmedCareer = true
+                                // Resume re-entered a career already in the slot, so the first run carries it on.
+                                if (navResult.careerResumed) resumeReEntersCareer = true
+                                nextRunCareerLaunched = navResult.careerLaunched
                             }
-                            queueStopRequested = true
-                        } else {
+                        } else if (coldStartNavigator != null) {
+                            // Not confirmed on Home: assume a career already exists, as the unconditional
+                            // true this replaced always did. isOnHomeScreen() == false does not prove the
+                            // training menu specifically - it also covers a screen the probe did not
+                            // recognize - but it is still evidence against an empty Home lobby.
                             coldStartConfirmedCareer = true
-                            // Resume re-entered a career already in the slot, so the first run carries it on.
-                            if (navResult.careerResumed) resumeReEntersCareer = true
-                            nextRunCareerLaunched = navResult.careerLaunched
                         }
-                    } else if (coldStartNavigator != null) {
-                        // Not confirmed on Home: assume a career already exists, as the unconditional
-                        // true this replaced always did. isOnHomeScreen() == false does not prove the
-                        // training menu specifically - it also covers a screen the probe did not
-                        // recognize - but it is still evidence against an empty Home lobby.
-                        coldStartConfirmedCareer = true
+                    } finally {
+                        coldStartNavigator?.close()
                     }
                 }
 
@@ -3009,7 +3031,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             if (navResult.careerResumed) previousRunLeftCareer = true
                             nextRunCareerLaunched = navResult.success && navResult.careerLaunched
 
-                            if (skipsTrainee(navResult, rotation) && CareerLaunchNavigator(context).backOutToHome()) {
+                            if (skipsTrainee(navResult, rotation) && CareerLaunchNavigator(context).use { it.backOutToHome() }) {
                                 MessageLog.w(TAG, "[QUEUE] Run ${i + 1} cannot start its trainee (${navResult.reasonKey}): ${navResult.failureReason} Back on the home screen; the run's own launch records the skip.")
                             } else if (!navResult.success) {
                                 logNavigationFailure(navResult)

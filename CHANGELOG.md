@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+- **Fewer unexplained stops:** the bot now frees its text reader itself when a career or a trip through the menus ends. Android used to free it later on its own, and when that took too long it ended the bot, once even between two careers of a run queue. If an error does stop the bot between careers, the queue now says it stopped after an error instead of "Queue was stopped during navigation".
 - **Career history:** when the bot finishes a career's end steps again after a restart, or after the game's daily reset interrupted the Finish, that career is no longer counted twice in the career history. A career whose skill points the bot never read now shows them as unknown instead of 120.
 - **Daily extras after Club:** the extras step now waits up to 20 seconds for the game to get back to Home from Club instead of stopping early, and it closes the game's "It hasn't been 8 hours since your last request" notice and goes on with Presents, Missions and Daily Sales.
 - **Turf sparks:** when choosing between the original and rerolled sparks, the bot no longer treats a Turf spark as a useful pink, so it stops keeping a weaker set because of one, and it no longer passes up a reroll to protect one. Every turf runner already has Turf A, and a spark only lifts an aptitude up to A at career start.

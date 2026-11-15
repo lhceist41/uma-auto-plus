@@ -159,7 +159,7 @@ abstract class MiscTask(game: Game) : Task(game) {
         val reopen = game.reopenGame(attempt = 2)
         MessageLog.w(TAG, "[RECOVERY] The game stopped responding on a screen the bot knows (its own taps still reach the screen): ${reopenOutcomeWords(reopen)}.")
         if (reopen == GameReopen.NOT_DISPATCHED) return false
-        val home = CareerLaunchNavigator(game.myContext).navigate(reuseLastLaunchSetup = true, finalizeToHome = true)
+        val home = CareerLaunchNavigator(game.myContext).use { it.navigate(reuseLastLaunchSetup = true, finalizeToHome = true) }
         if (!home.success) {
             MessageLog.w(TAG, "[RECOVERY] The restarted game did not reach Home (${home.failureReason}); stopping this run.")
             return false

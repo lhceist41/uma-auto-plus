@@ -279,12 +279,15 @@ data class NavigationResult(
  *
  * @property context The Android application context.
  */
-class CareerLaunchNavigator(private val context: Context) {
+class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
     companion object {
         private val TAG = "[${MainActivity.loggerTag}]CareerLaunchNavigator"
 
         /** Maximum number of detection-and-transition iterations before timing out. */
         private const val MAX_DETECTION_ATTEMPTS = 100
+
+        /** [navigate]'s failure text when the bot stopped under it. */
+        const val STOPPED_DURING_NAVIGATION = "Queue was stopped during navigation."
 
         /** Maximum consecutive UNKNOWN detections before failing. */
         private const val MAX_CONSECUTIVE_UNKNOWNS = 5
@@ -672,6 +675,7 @@ class CareerLaunchNavigator(private val context: Context) {
     // constructor should not throw. If it does, navigate() catches it and returns a failure.
     private var tempGame: Game? = null
     private var imageUtils: CustomImageUtils? = null
+    private var ownsTempGame = false
 
     // Session-scoped flag: Auto-Fill has already been clicked in this navigation session.
     // Prevents infinite loops when the Auto-Fill button remains visible after clicking it.
@@ -902,6 +906,7 @@ class CareerLaunchNavigator(private val context: Context) {
             val game = Game(context)
             tempGame = game
             imageUtils = game.imageUtils
+            ownsTempGame = true
             true
         } catch (e: InterruptedException) {
             // The queue-side navigation deadline interrupts this thread when a call below us
@@ -921,9 +926,20 @@ class CareerLaunchNavigator(private val context: Context) {
      * rather than standing up a second Game beside it. Call before isOnHomeScreen()/navigate().
      */
     fun attachLiveGame(game: Game) {
+        close()
         tempGame = game
         imageUtils = game.imageUtils
         liveGameAttached = true
+    }
+
+    /** Frees the Tesseract engines of the Game [ensureInitialised] built; an attached or injected Game stays untouched. */
+    override fun close() {
+        if (!ownsTempGame) return
+        ownsTempGame = false
+        val game = tempGame
+        tempGame = null
+        imageUtils = null
+        game?.imageUtils?.releaseTesseract()
     }
 
     /** The Rewards and Club step on Home; null when no part is on or no Game could be built. */
@@ -1148,6 +1164,17 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] [BORROW] Active trainee \"$it\" is excluded from borrow candidates for this launch.")
         }
 
+        // Building the Game takes Tesseract and settings work; a stopped bot needs none of it.
+        if (!BotService.isRunning || StartModule.queueStopRequested) {
+            return NavigationResult(
+                success = false,
+                lastDetectedState = LaunchScreenState.POST_RUN_RESULTS.name,
+                failureReason = STOPPED_DURING_NAVIGATION,
+                isRecoverable = false,
+                recommendedAction = "Restart the queue when ready.",
+            )
+        }
+
         if (!ensureInitialised()) {
             return NavigationResult(
                 success = false,
@@ -1200,7 +1227,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 return NavigationResult(
                     success = false,
                     lastDetectedState = currentState.name,
-                    failureReason = "Queue was stopped during navigation.",
+                    failureReason = STOPPED_DURING_NAVIGATION,
                     isRecoverable = false,
                     recommendedAction = "Restart the queue when ready.",
                 )
@@ -1228,7 +1255,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         return NavigationResult(
                             success = false,
                             lastDetectedState = currentState.name,
-                            failureReason = "Queue was stopped during navigation.",
+                            failureReason = STOPPED_DURING_NAVIGATION,
                             isRecoverable = false,
                             recommendedAction = "Restart the queue when ready.",
                         )
@@ -1509,7 +1536,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         return NavigationResult(
                             success = false,
                             lastDetectedState = currentState.name,
-                            failureReason = "Queue was stopped during navigation.",
+                            failureReason = STOPPED_DURING_NAVIGATION,
                             isRecoverable = false,
                             recommendedAction = "Restart the queue when ready.",
                         )

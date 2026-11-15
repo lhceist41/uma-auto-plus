@@ -83,7 +83,7 @@ class DailyExtrasAfterCareerTest {
     @Test
     fun `the step never changes the run's result`() {
         val helper = body(start, "private fun runDailyExtrasAfterCareer(")
-        assertTrue(helper.contains("CareerLaunchNavigator(context).runDailyExtras()"))
+        assertTrue(helper.contains("CareerLaunchNavigator(context).use { it.runDailyExtras() }"))
         assertTrue(helper.contains("catch (e: InterruptedException)"))
         assertTrue(helper.contains("catch (e: Exception)"))
         for (word in listOf("ledger", "queueHalt", "return ", "throw ")) assertFalse(helper.contains(word), word)

@@ -61,8 +61,10 @@ import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.LockSupport
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.math.sqrt
@@ -353,8 +355,6 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         /** Tesseract calls running or waiting for [ocrLock]; a re-creation waits for zero. */
         private val ocrCallsInFlight = AtomicInteger(0)
 
-        private inline fun <T> withOcrLock(block: () -> T): T = runOcrCall(ocrLock, ocrCallsInFlight, block)
-
         /** Runs one Tesseract call under [lock], counted in [inFlight] from before it waits for the lock until it leaves. */
         internal inline fun <T> runOcrCall(lock: Any, inFlight: AtomicInteger, block: () -> T): T {
             inFlight.incrementAndGet()
@@ -362,6 +362,50 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 return synchronized(lock) { block() }
             } finally {
                 inFlight.decrementAndGet()
+            }
+        }
+
+        /** Runs [block] under [lock], or returns [fallback] without touching an engine once the pair was [released]. */
+        internal inline fun <T> runOcrUnlessReleased(lock: Any, inFlight: AtomicInteger, released: AtomicBoolean, fallback: T, block: () -> T): T =
+            runOcrCall(lock, inFlight) { if (released.get()) fallback else block() }
+
+        /** A normal read takes well under a second; only leftover reads from finished threads are waited for. */
+        private const val RELEASE_WAIT_MS = 2_000L
+
+        /**
+         * Marks the pair [released], so no later call reaches an engine, then recycles both under [lock] once no Tesseract call is
+         * running or waiting. Returns false when the pair was released before, or when OCR stayed busy for [waitMs]: a wedged native
+         * read holds [lock] for good, so that pair is left to the finalizer instead of hanging the owner.
+         * Android's finalizer frees an engine nobody recycled, and a native free slower than its 10 s watchdog ends the bot.
+         */
+        internal fun <E> releaseEnginesOnce(lock: Any, inFlight: AtomicInteger, released: AtomicBoolean, waitMs: Long, engines: () -> Pair<E, E>, recycle: (E) -> Unit): Boolean {
+            if (!released.compareAndSet(false, true)) return false
+            if (!awaitOcrIdle(inFlight, waitMs)) return false
+            synchronized(lock) {
+                val (text, digits) = engines()
+                try {
+                    recycle(text)
+                } finally {
+                    recycle(digits)
+                }
+            }
+            return true
+        }
+
+        /** Waits up to [waitMs] for [inFlight] to reach zero. Parks rather than sleeps, so a stop's interrupt neither ends the wait nor is lost. */
+        internal fun awaitOcrIdle(inFlight: AtomicInteger, waitMs: Long): Boolean {
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(waitMs)
+            var interrupted = false
+            try {
+                while (inFlight.get() > 0) {
+                    val left = deadline - System.nanoTime()
+                    if (left <= 0) return false
+                    LockSupport.parkNanos(minOf(left, TimeUnit.MILLISECONDS.toNanos(10)))
+                    if (Thread.interrupted()) interrupted = true
+                }
+                return true
+            } finally {
+                if (interrupted) Thread.currentThread().interrupt()
             }
         }
 
@@ -499,12 +543,22 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         matchFilePath = externalTemp.absolutePath
     }
 
+    private val tesseractReleased = AtomicBoolean(false)
+
+    private inline fun <T> withEngines(fallback: T, block: () -> T): T = runOcrUnlessReleased(ocrLock, ocrCallsInFlight, tesseractReleased, fallback, block)
+
+    /** Frees both Tesseract engines on this thread once their owner is done; OCR on this instance afterwards reads nothing. */
+    fun releaseTesseract() {
+        releaseEnginesOnce(ocrLock, ocrCallsInFlight, tesseractReleased, RELEASE_WAIT_MS, { tessBaseAPI to tessDigitsBaseAPI }, { it.recycle() })
+    }
+
     /**
      * Replaces both Tesseract engines with fresh ones and frees the old ones, only while no Tesseract call is running or
      * waiting. Returns false when OCR was busy. Throws when the new engines failed; the old ones are back in place then.
      */
     fun reinitTesseractWhenIdle(): Boolean =
         reinitWhenOcrIdle(ocrLock, ocrCallsInFlight) {
+            if (tesseractReleased.get()) return@reinitWhenOcrIdle
             replaceEngines(
                 read = { tessBaseAPI to tessDigitsBaseAPI },
                 write = { (text, digits) ->
@@ -851,7 +905,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         val resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
         Utils.matToBitmap(bwImage, resultBitmap)
         var result = ""
-        withOcrLock {
+        withEngines(Unit) {
             tessBaseAPI.setImage(resultBitmap)
             try {
                 // Finally, detect text on the cropped region.
@@ -2760,7 +2814,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
         Utils.matToBitmap(bwImage, resultBitmap)
         var result = "empty!"
-        withOcrLock {
+        withEngines(Unit) {
             tessDigitsBaseAPI.setImage(resultBitmap)
             try {
                 // Finally, detect text on the cropped region.
@@ -3197,7 +3251,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
             Utils.matToBitmap(bwImage, resultBitmap)
             var result = ""
-            withOcrLock {
+            withEngines(Unit) {
                 tessDigitsBaseAPI.setImage(resultBitmap)
                 try {
                     // Finally, detect text on the cropped region.
@@ -3366,7 +3420,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Fallback to Tesseract if ML Kit failed.
         if (mlKitFailed || result.isEmpty()) {
             Log.d(TAG, "[DEBUG] findTextByColor:: Falling back to Tesseract.")
-            withOcrLock {
+            withEngines(Unit) {
                 tessBaseAPI.setImage(finalBitmap)
                 try {
                     result = tessBaseAPI.utF8Text
@@ -3401,7 +3455,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @throws InterruptedException When the thread is interrupted while ML Kit reads.
      */
     internal fun readAllTextBlocks(bitmap: Bitmap, scale: Double = 2.0): List<OcrTextBlock> =
-        withOcrLock {
+        withEngines(emptyList()) {
             val rgba = Mat()
             val gray = Mat()
             val grayBitmap =
@@ -3430,7 +3484,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                             fail()
                         }
                 } ?: emptyList<OcrTextBlock>().also { Log.e(TAG, "[ERROR] readAllTextBlocks:: ML Kit timed out.") }
-            if (read.isNotEmpty()) return@withOcrLock read
+            if (read.isNotEmpty()) return@withEngines read
 
             val text =
                 try {
@@ -3499,7 +3553,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Perform OCR using findText() from ImageUtils. Serialized via ocrLock: findText drives the
         // shared, non-thread-safe Tesseract engine and this runs from parallel training-analysis
         // threads, so unsynchronized concurrent calls double-free the Leptonica Pix (native SIGABRT).
-        return withOcrLock {
+        return withEngines("") {
             findText(
                 cropRegion = intArrayOf(x, y, width, height),
                 grayscale = useGrayscale,

@@ -146,15 +146,15 @@ class QueueSkipTest {
             assertTrue(skip.trimEnd().endsWith("continue\n                    }"), "no career end, no wait, no between-run launch")
             val leave = after("private fun leaveSkippedRun(").substringBefore("\n    }\n")
             assertTrue(leave.contains("saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)"))
-            assertTrue(leave.indexOf("saveQueueState(") < leave.indexOf("CareerLaunchNavigator(context).backOutToHome()"), "saved past before the game is touched")
+            assertTrue(leave.indexOf("saveQueueState(") < leave.indexOf("CareerLaunchNavigator(context).use { it.backOutToHome() }"), "saved past before the game is touched")
             assertFalse(after("TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE -> {").substringBefore("}").contains("completedRuns++"), "a skipped run is not counted as done")
         }
 
         @Test
         fun `a launch stopped by its trainee before the run is left from Home, and the run's own launch records the skip`() {
             assertTrue(start.contains("if (!resumeReEntersCareer && skipsTrainee(navResult, rotation) && coldStartNavigator.backOutToHome()) {"))
-            assertTrue(start.contains("if (skipsTrainee(navResult, rotation) && CareerLaunchNavigator(context).backOutToHome()) {"))
-            for (divert in listOf("coldStartNavigator.backOutToHome()) {", "CareerLaunchNavigator(context).backOutToHome()) {")) {
+            assertTrue(start.contains("if (skipsTrainee(navResult, rotation) && CareerLaunchNavigator(context).use { it.backOutToHome() }) {"))
+            for (divert in listOf("coldStartNavigator.backOutToHome()) {", "CareerLaunchNavigator(context).use { it.backOutToHome() }) {")) {
                 val branch = after(divert).substringBefore("} else if (!navResult.success) {")
                 for (forbidden in listOf("queueHaltReason", "queueStopRequested", "break")) assertFalse(branch.contains(forbidden), "$divert: $forbidden")
             }

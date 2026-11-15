@@ -1108,12 +1108,16 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                     MessageLog.i(TAG, "[INFO] Single-run launch will verify Trainee Select against '$expectedTrainee' (applied preset).")
                 }
                 val navResult =
-                    navigator.navigate(
-                        reuseSetup,
-                        singleRunTrainee = expectedTrainee,
-                        singleRunTraineeExcludes = expectedExcludes,
-                        careerInFlight = careerInFlight || onTrainingSelection,
-                    )
+                    try {
+                        navigator.navigate(
+                            reuseSetup,
+                            singleRunTrainee = expectedTrainee,
+                            singleRunTraineeExcludes = expectedExcludes,
+                            careerInFlight = careerInFlight || onTrainingSelection,
+                        )
+                    } finally {
+                        navigator.close()
+                    }
                 if (!navResult.success) {
                     MessageLog.e(TAG, "[INFO] Auto-navigation failed: ${navResult.failureReason}")
                     MessageLog.e(TAG, "[INFO] Last state: ${navResult.lastDetectedState}, transition: ${navResult.failedTransition}")

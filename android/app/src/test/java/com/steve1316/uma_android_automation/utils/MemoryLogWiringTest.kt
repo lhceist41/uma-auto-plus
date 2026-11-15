@@ -42,7 +42,7 @@ class MemoryLogWiringTest {
     }
 
     @Test
-    @DisplayName("nothing else re-creates or recycles the engines")
+    @DisplayName("nothing else re-creates the engines, and only the re-creation and the owner's release recycle them")
     fun singleReinitCaller() {
         val all = File(root(), base).walkTopDown().filter { it.extension == "kt" }.map { it.name to it.readText() }.toList()
         assertEquals(listOf("Campaign.kt"), all.filter { it.second.contains("reinitTesseractWhenIdle()") && !it.second.contains("fun reinitTesseractWhenIdle()") }.map { it.first })
@@ -50,17 +50,20 @@ class MemoryLogWiringTest {
         val imageUtils = source("$base/utils/CustomImageUtils.kt")
         assertFalse(imageUtils.contains("BaseAPI.recycle()"))
         val reinit = imageUtils.substring(imageUtils.indexOf("fun reinitTesseractWhenIdle()"))
-        assertEquals(1, Regex("recycle = \\{ it\\.recycle\\(\\) \\}").findAll(imageUtils).count(), "engines are freed only through replaceEngines")
+        assertEquals(1, Regex("recycle = \\{ it\\.recycle\\(\\) \\}").findAll(imageUtils).count(), "the re-creation frees engines only through replaceEngines")
+        assertEquals(2, Regex("\\{ it\\.recycle\\(\\) \\}").findAll(imageUtils).count(), "the only other free is releaseEnginesOnce")
+        assertTrue(imageUtils.contains("releaseEnginesOnce(ocrLock, ocrCallsInFlight, tesseractReleased, RELEASE_WAIT_MS, { tessBaseAPI to tessDigitsBaseAPI }, { it.recycle() })"))
         assertTrue(reinit.indexOf("replaceEngines(") in 0 until reinit.indexOf("initTesseract("))
         assertTrue(reinit.contains("ready = { it.initLanguagesAsString == \"eng\" }"), "a failed native init must be caught before the old pair goes")
     }
 
     @Test
-    @DisplayName("every Tesseract engine access is inside a counted OCR call or the re-creation")
+    @DisplayName("every Tesseract engine access is inside a counted OCR call that skips a released pair, or the re-creation")
     fun engineAccessIsCounted() {
         val imageUtils = source("$base/utils/CustomImageUtils.kt")
         assertFalse(imageUtils.contains("synchronized(ocrLock)"), "an uncounted lock would let a re-creation free an engine mid-read")
-        val blocks = Regex("withOcrLock \\{").findAll(imageUtils).map { it.range.first to blockEnd(imageUtils, it.range.last) }.toList()
+        assertFalse(imageUtils.contains("withOcrLock"), "an OCR call that ignores the release would reach a recycled engine")
+        val blocks = Regex("withEngines\\(.*?\\) \\{").findAll(imageUtils).map { it.range.first to blockEnd(imageUtils, it.range.last) }.toList()
         assertEquals(6, blocks.size)
         val reinitStart = imageUtils.indexOf("fun reinitTesseractWhenIdle()")
         val reinit = reinitStart to blockEnd(imageUtils, imageUtils.indexOf("{", imageUtils.indexOf("reinitWhenOcrIdle(ocrLock", reinitStart)))
