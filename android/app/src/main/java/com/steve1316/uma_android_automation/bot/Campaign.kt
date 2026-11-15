@@ -4047,6 +4047,16 @@ abstract class Campaign(game: Game) : Task(game) {
         val quality = classifyCareerQuality(outcome, finaleRaces, finaleRaces1st)
         // The deck this career's launch read, claimed by launch id only: a resumed or restarted career records "not observed".
         val launchDeck = LaunchDeckObservation.forCareer(LaunchTransactionGate.active?.id)
+        val skillPts = reportedSkillPoints(trainee.skillPoints, trainee.skillPointsReads)
+
+        // A restart or a lost Finish re-enters an end screen already recorded: the hand-off above still runs for the sparks, the records do not.
+        val completed = result.code == TaskResultCode.TASK_RESULT_COMPLETE
+        val nowMs = System.currentTimeMillis()
+        val recordedKey = parseCareerEndKey(StartModule.queueStateValue(game.myContext, CAREER_END_KEY_SETTING))
+        if (careerEndAlreadyRecorded(recordedKey, resolvedName, scenarioToken, trainee.fans, game.careerLaunched, completed, nowMs)) {
+            return "[CAREER_END] Already recorded for this career ($resolvedName, $scenarioToken); not recording it again. Re-read: fans=${trainee.fans} " +
+                "spd=${st.speed} sta=${st.stamina} pwr=${st.power} grt=${st.guts} wit=${st.wit} skillPts=$skillPts estScore=${trainee.estimatedRank?.totalScore ?: "none"}"
+        }
 
         // Same fields as the ledger line, appended to the on-device corpus; the write swallows its own failures, so the ledger line always logs.
         val record =
@@ -4071,7 +4081,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 put("grt", st.guts)
                 put("wit", st.wit)
                 if (careerEndLastKnownStats.isNotEmpty()) put("lastKnown", JSONArray(careerEndLastKnownStats))
-                put("skillPts", trainee.skillPoints)
+                put("skillPts", skillPts)
                 if (careerEndSkillPointsDisputed) put("skillPtsDisputed", true)
                 put("finaleRaces", finaleRaces)
                 put("finaleWins", finaleRaces1st)
@@ -4091,6 +4101,7 @@ abstract class Campaign(game: Game) : Task(game) {
         runCatching {
             scenarioCareerEndRecord(careerEndFp, resolvedName, scenarioToken, outcome)?.let { OutcomeCorpus.append(game.myContext, it) }
         }.onFailure { MessageLog.w(TAG, "[OUTCOME] Failed to append the scenario career-end record: $it") }
+        if (completed && trainee.fans > 0) StartModule.setQueueStateValue(game.myContext, CAREER_END_KEY_SETTING, careerEndKeyValue(CareerEndKey(resolvedName, scenarioToken, trainee.fans, nowMs)))
 
         return buildString {
             append("[CAREER_END] result=").append(careerLedgerResult(result.code, StartModule.queueStopReason))
@@ -4106,7 +4117,7 @@ abstract class Campaign(game: Game) : Task(game) {
             append(" grt=").append(st.guts)
             append(" wit=").append(st.wit)
             if (careerEndLastKnownStats.isNotEmpty()) append(" lastKnown=").append(careerEndLastKnownStats.joinToString(","))
-            append(" skillPts=").append(trainee.skillPoints)
+            append(" skillPts=").append(skillPts)
             if (careerEndSkillPointsDisputed) append(" skillPtsDisputed=true")
             append(" finaleRaces=").append(finaleRaces)
             append(" finaleWins=").append(finaleRaces1st)

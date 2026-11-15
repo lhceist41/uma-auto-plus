@@ -874,6 +874,23 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             }
         }
 
+        /** Reads the row [setQueueStateValue] writes straight from the table; null when it is absent or unreadable. */
+        fun queueStateValue(context: Context, key: String): String? {
+            try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) return null
+                SettingsDatabase.get(context).rawQuery(
+                    "SELECT value FROM settings WHERE category = ? AND key = ?",
+                    arrayOf("queueState", key),
+                ).use { cursor ->
+                    return if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to read queueState.$key: ${e.message}")
+                return null
+            }
+        }
+
         /**
          * Cursor shift folded into every rotation slot lookup. Normally 0; set by
          * [resyncRotationOntoCareer] so the run the mismatch guard resynced counts as the

@@ -1,6 +1,50 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.types.StatName
+import org.json.JSONObject
+
+/** The career the last `[CAREER_END]` record was written for, stored so a restarted process can tell its end screen was already recorded. */
+internal data class CareerEndKey(val trainee: String, val scenario: String, val fans: Int, val atMs: Long)
+
+/** The queueState row holding the [CareerEndKey]. */
+internal const val CAREER_END_KEY_SETTING = "careerEndKey"
+
+/** A day, the same window in which an interrupted queue is still resumed. */
+internal const val CAREER_END_KEY_MAX_AGE_MS: Long = 24 * 60 * 60 * 1000L
+
+/**
+ * True when this completed career end, which this run did not launch, is the career last recorded: a restart or a lost Finish
+ * re-enters the same end screen. Same trainee, scenario and readable final fans within [CAREER_END_KEY_MAX_AGE_MS].
+ */
+internal fun careerEndAlreadyRecorded(
+    saved: CareerEndKey?,
+    trainee: String,
+    scenario: String,
+    fans: Int,
+    careerLaunched: Boolean,
+    completed: Boolean,
+    nowMs: Long,
+): Boolean {
+    if (careerLaunched || !completed || fans <= 0 || saved == null) return false
+    return saved.trainee == trainee && saved.scenario == scenario && saved.fans == fans && nowMs - saved.atMs in 0..CAREER_END_KEY_MAX_AGE_MS
+}
+
+internal fun careerEndKeyValue(key: CareerEndKey): String =
+    JSONObject().put("trainee", key.trainee).put("scenario", key.scenario).put("fans", key.fans).put("atMs", key.atMs).toString()
+
+/** -1 (unknown) until a turn-start read succeeded: before that the trainee still holds its starting 120 or a copied skill-list value. */
+internal fun reportedSkillPoints(skillPoints: Int, skillPointsReads: Int): Int = if (skillPointsReads > 0) skillPoints else -1
+
+/** Null for a missing or damaged row, which reads as nothing recorded. */
+internal fun parseCareerEndKey(raw: String?): CareerEndKey? {
+    if (raw.isNullOrBlank()) return null
+    return try {
+        val json = JSONObject(raw)
+        CareerEndKey(json.getString("trainee"), json.getString("scenario"), json.getInt("fans"), json.getLong("atMs"))
+    } catch (_: Exception) {
+        null
+    }
+}
 
 /**
  * Career-outcome label for the `[CAREER_END]` ledger, from the task result code and whether the bot confirmed a force-end.
