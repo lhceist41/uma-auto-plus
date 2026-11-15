@@ -1,6 +1,5 @@
 package com.steve1316.uma_android_automation.utils
 
-import com.steve1316.uma_android_automation.bot.Training.Companion.trustedGoldGains
 import com.steve1316.uma_android_automation.types.StatName
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -95,13 +94,5 @@ class StatGainDigitsTest {
         assertEquals(12, StatGainDigits.resolveRowValue(12, StatGainDigits.Row(13, gold = false)))
         assertEquals(12, StatGainDigits.resolveRowValue(12, null))
         assertEquals(0, StatGainDigits.resolveRowValue(9, StatGainDigits.Row(null, gold = true)))
-    }
-
-    @Test
-    @DisplayName("Only gold gains that read are exempt from the OCR-failure corrections")
-    fun trustedGold() {
-        val gains = mapOf(StatName.SPEED to 19, StatName.POWER to 20, StatName.GUTS to 0)
-        assertEquals(setOf(StatName.SPEED), trustedGoldGains(gains, setOf(StatName.SPEED, StatName.GUTS)))
-        assertEquals(emptySet<StatName>(), trustedGoldGains(gains, emptySet()))
     }
 }

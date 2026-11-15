@@ -6,26 +6,27 @@ import com.steve1316.uma_android_automation.bot.Training.TrainingAnalysisResult
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CountDownLatch
 
-/** Gains are frame-checked Unity Cup reads and master.mdb base gains; stats sit far below their caps. */
+/** Gains are frame-checked Unity Cup and Grand Concert reads and master.mdb base gains; stats sit far below their caps unless a test sets one. */
 @DisplayName("The contextual gain correction keeps correct reads and estimates unread ones from game data")
 class ContextualStatGainBoostTest {
     private fun boost(
         training: StatName,
         vararg gains: Pair<StatName, Int>,
         scenario: String = "Unity Cup",
-        seniorYear: Boolean = false,
         bars: List<CustomImageUtils.BarFillResult> = emptyList(),
+        gold: Set<StatName> = emptySet(),
+        stats: Map<StatName, Int> = emptyMap(),
     ): TrainingAnalysisResult {
         val result = TrainingAnalysisResult(training, CountDownLatch(0), 0L)
         result.statGains = StatName.entries.associateWith { 0 } + gains
         result.relationshipBars = ArrayList(bars)
-        applyContextualStatGainBoost(result, scenario, StatName.entries.associateWith { 300 }, { 1200 }, isSeniorYear = seniorYear, debugMode = false)
+        result.goldStatGains = gold
+        applyContextualStatGainBoost(result, scenario, StatName.entries.associateWith { 300 } + stats, { 1200 })
         return result
     }
 
@@ -74,14 +75,60 @@ class ContextualStatGainBoostTest {
     }
 
     @Test
-    @DisplayName("A two-row 11+2 read as 1+2 is flagged and estimated from game data, not set to the largest side + 10")
+    @DisplayName("A main gain at or below a side gain stays as read: concert side bonuses put it there on correct screens")
     fun mainAtOrBelowSide() {
-        val result = boost(StatName.GUTS, StatName.SPEED to 7, StatName.POWER to 5, StatName.GUTS to 3)
-        assertTrue(StatName.GUTS in result.correctedStats)
-        assertNotEquals(17, result.statGains[StatName.GUTS])
-        assertEquals(11, result.statGains[StatName.GUTS])
-        assertEquals(7, result.statGains[StatName.SPEED])
-        assertEquals(5, result.statGains[StatName.POWER])
+        val gc = GrandConcertScenario.KEY
+        val reads =
+            listOf(
+                boost(StatName.WIT, StatName.SPEED to 21, StatName.WIT to 21, scenario = gc) to 21,
+                boost(StatName.WIT, StatName.SPEED to 21, StatName.WIT to 15, scenario = gc) to 15,
+                boost(StatName.GUTS, StatName.SPEED to 11, StatName.POWER to 15, StatName.GUTS to 15, scenario = gc) to 15,
+                boost(StatName.STAMINA, StatName.GUTS to 11, StatName.STAMINA to 10, scenario = gc) to 10,
+            )
+        for ((result, main) in reads) {
+            assertEquals(main, result.statGains[result.name], "${result.name} training")
+            assertTrue(result.correctedStats.isEmpty(), "${result.name} training")
+        }
+    }
+
+    @Test
+    @DisplayName("A small side gain beside a large main gain stays as read")
+    fun smallSideBesideLargeMain() {
+        val gc = GrandConcertScenario.KEY
+        val reads =
+            listOf(
+                boost(StatName.GUTS, StatName.SPEED to 9, StatName.POWER to 8, StatName.GUTS to 29) to mapOf(StatName.SPEED to 9, StatName.POWER to 8, StatName.GUTS to 29),
+                boost(StatName.GUTS, StatName.SPEED to 7, StatName.POWER to 7, StatName.GUTS to 29) to mapOf(StatName.SPEED to 7, StatName.POWER to 7, StatName.GUTS to 29),
+                boost(StatName.POWER, StatName.STAMINA to 6, StatName.POWER to 27, scenario = gc) to mapOf(StatName.STAMINA to 6, StatName.POWER to 27),
+                boost(StatName.POWER, StatName.STAMINA to 8, StatName.POWER to 30, scenario = gc) to mapOf(StatName.STAMINA to 8, StatName.POWER to 30),
+            )
+        for ((result, gains) in reads) {
+            assertEquals(gains, result.statGains.filterKeys { it in gains }, "${result.name} training")
+            assertTrue(result.correctedStats.isEmpty(), "${result.name} training")
+        }
+    }
+
+    @Test
+    @DisplayName("An unread gold main gain is estimated from game data and the log says the gold digits were not read")
+    fun unreadGoldMain() {
+        MessageLog.clearLog()
+        val result = boost(StatName.SPEED, StatName.POWER to 20, gold = setOf(StatName.SPEED))
+        assertEquals(27, result.statGains[StatName.SPEED])
+        assertEquals(listOf(StatName.SPEED), result.correctedStats)
+        val logged = MessageLog.getMessageLogCopy().single { "[TRAINING] SPEED training" in it }
+        assertTrue(logged.contains("its gold gain digits could not be read"), logged)
+    }
+
+    @Test
+    @DisplayName("An expected side gain of 0 below its cap is half the main gain; at its cap it stays 0")
+    fun zeroExpectedSide() {
+        val belowCap = boost(StatName.GUTS, StatName.POWER to 9, StatName.GUTS to 18)
+        assertEquals(9, belowCap.statGains[StatName.SPEED])
+        assertEquals(listOf(StatName.SPEED), belowCap.correctedStats)
+
+        val atCap = boost(StatName.GUTS, StatName.POWER to 9, StatName.GUTS to 18, stats = mapOf(StatName.SPEED to 1200))
+        assertEquals(0, atCap.statGains[StatName.SPEED])
+        assertTrue(atCap.correctedStats.isEmpty())
     }
 
     @Test
@@ -101,42 +148,29 @@ class ContextualStatGainBoostTest {
     }
 
     @Test
-    @DisplayName("A summer Wit gain of 14 read as 4 beside Speed 4 is estimated at or below 14, not at the level 1 ratio's 20")
-    fun summerWitEstimate() {
-        val result = boost(StatName.WIT, StatName.SPEED to 4, StatName.WIT to 4, scenario = "URA Finale")
-        assertTrue(StatName.WIT in result.correctedStats)
-        assertTrue(result.statGains.getValue(StatName.WIT) in 5..14, "estimate ${result.statGains[StatName.WIT]}")
-    }
-
-    @Test
-    @DisplayName("At level 1 and in summer, in every scenario, an unread or misread main gain is never estimated above the real one")
+    @DisplayName("At level 1 and in summer, in every scenario, an unread main gain is never estimated above the real one")
     fun estimateNeverAboveGameData() {
         for (row in gameRows) {
-            for (read in listOf(0, 1)) {
-                val result = boost(row.training, *row.sides, row.training to read, scenario = row.scenario)
-                val estimate = result.statGains.getValue(row.training)
-                val label = "${row.scenario} ${row.training} main ${row.main} sides ${row.sides.toList()} read $read: estimate $estimate"
-                assertTrue(estimate <= row.main, label)
-                assertTrue(estimate > row.sides.maxOf { it.second }, label)
-            }
+            val result = boost(row.training, *row.sides, row.training to 0, scenario = row.scenario)
+            val estimate = result.statGains.getValue(row.training)
+            val label = "${row.scenario} ${row.training} main ${row.main} sides ${row.sides.toList()}: estimate $estimate"
+            assertTrue(estimate <= row.main, label)
+            assertTrue(estimate > row.sides.maxOf { it.second }, label)
         }
     }
 
     @Test
-    @DisplayName("In Senior Year an estimated main gain is not raised again by a support bar, and the log names the value used")
-    fun estimateNotRaisedBySupportBars() {
+    @DisplayName("Support bars do not change a gain: an unread main is still estimated and logged, a read main stays as read")
+    fun supportBarsDoNotChangeGain() {
         val bar = listOf(CustomImageUtils.BarFillResult(StatName.SPEED, 40.0, 2, "green"))
         MessageLog.clearLog()
-        val unread = boost(StatName.SPEED, StatName.POWER to 3, seniorYear = true, bars = bar)
+        val unread = boost(StatName.SPEED, StatName.POWER to 3, bars = bar)
         val used = unread.statGains.getValue(StatName.SPEED)
         val logged = MessageLog.getMessageLogCopy().single { "[TRAINING] SPEED training" in it }
         assertTrue(logged.contains("estimated at $used ("), logged)
         assertEquals(4, used)
 
-        val misread = boost(StatName.SPEED, StatName.POWER to 3, StatName.SPEED to 2, seniorYear = true, bars = bar)
-        assertEquals(4, misread.statGains[StatName.SPEED])
-
-        val readRight = boost(StatName.SPEED, StatName.POWER to 3, StatName.SPEED to 6, seniorYear = true, bars = bar)
-        assertEquals(11, readRight.statGains[StatName.SPEED], "a low read gain still gets the support bar raise")
+        assertEquals(2, boost(StatName.SPEED, StatName.POWER to 3, StatName.SPEED to 2, bars = bar).statGains[StatName.SPEED])
+        assertEquals(6, boost(StatName.SPEED, StatName.POWER to 3, StatName.SPEED to 6, bars = bar).statGains[StatName.SPEED])
     }
 }

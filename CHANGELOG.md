@@ -25,7 +25,7 @@ Sturdier spark rerolls and training reads, fewer stops after the daily reset and
 
 - **Training:** a repeated digit of a gain is no longer dropped (+11 and +22 were read as +1 and +2), and a correctly read Power gain on Guts training is no longer raised.
 - **Training:** on MuMu at 1080x1920 both digits of gains such as +13 and +15 are read, and small side gains such as +3 or +6 are no longer read as 0.
-- **Training:** a gain the bot still cannot read whole is estimated on the low side from the game's own gains instead of guessed 10 higher.
+- **Training:** a gain the bot still cannot read is estimated on the low side from the game's own gains instead of guessed 10 higher.
 - **Run queue:** fewer unexplained stops after a career or a trip through the menus ends (one hit even between two careers), and an error that stops the bot between careers is reported as one instead of "Queue was stopped during navigation".
 - **Daily reset:** the bot no longer stops on the popups the game shows after it: between careers it closes the Daily Sale offer with Cancel and never opens the Shop.
 - **Daily reset:** the Uma Outing Login Bonus and Gauge MAX popups are tapped through, also during Daily Races.
