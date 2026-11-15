@@ -36,6 +36,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * Identifies which branch of `recommendTraining` produced the most recent selection so that
@@ -598,6 +599,220 @@ class Training(private val game: Game, private val campaign: Campaign) {
          * below its side effects. A gold row that read 0 was not read and stays correctable.
          */
         fun trustedGoldGains(statGains: Map<StatName, Int>, goldStats: Set<StatName>): Set<StatName> = goldStats.filter { (statGains[it] ?: 0) > 0 }.toSet()
+
+        /** Corrects gains a misread would explain, updating [result]'s gains and corrected stats in place. [statCap] gives a stat's current cap. */
+        fun applyContextualStatGainBoost(
+            result: TrainingAnalysisResult,
+            scenario: String,
+            allStats: Map<StatName, Int>,
+            statCap: (StatName) -> Int,
+            isSeniorYear: Boolean,
+            debugMode: Boolean,
+        ) {
+            val currentStat = allStats[result.name] ?: 0
+            val effectiveStatCap = statCap(result.name) - 20
+
+            // Helper: a stat gain is "at cap" if currentValue + gain >= the stat's cap,
+            // meaning the low OCR value is expected (not an OCR error).
+            fun isAtCap(statName: StatName, gain: Int): Boolean {
+                val current = allStats[statName] ?: 0
+                val cap = statCap(statName)
+                return current + gain >= cap
+            }
+
+            val mainStatGainRaw = result.statGains[result.name] ?: 0
+            val mainStatAtCap = isAtCap(result.name, mainStatGainRaw)
+
+            val newStatGains = result.statGains.toMutableMap()
+            val sideEffectStats = newStatGains.keys.filter { it != result.name }
+            val maxSideEffectGain = sideEffectStats.maxOfOrNull { newStatGains[it] ?: 0 } ?: 0
+            val mainStatGain = newStatGains[result.name] ?: 0
+            val trustedGold = trustedGoldGains(result.statGains, result.goldStatGains)
+
+            var boosted = false
+
+            // Expected side effects mapping.
+            val affectedStatsMap =
+                mapOf(
+                    StatName.SPEED to listOf(StatName.POWER),
+                    StatName.STAMINA to listOf(StatName.GUTS),
+                    StatName.POWER to listOf(StatName.STAMINA),
+                    StatName.GUTS to listOf(StatName.SPEED, StatName.POWER),
+                    StatName.WIT to listOf(StatName.SPEED),
+                )
+            val expectedSideEffects = affectedStatsMap[result.name] ?: emptyList()
+
+            // By game data a training's own gain is above each side gain, so a main gain at or below a side gain, or 0 beside them, was not read
+            // whole. It is estimated from the largest expected side gain by the scenario's lowest ratio, so it stays at or below the real gain.
+            val largestExpectedSide = expectedSideEffects.maxOfOrNull { newStatGains[it] ?: 0 }?.takeIf { it > 0 } ?: maxSideEffectGain
+            val estimatedMainGain = maxOf((largestExpectedSide * lowestGainRatio(scenario, result.name)).roundToInt(), maxSideEffectGain + 1)
+            var mainEstimated = false
+
+            // Check if any expected side effect stat has a higher or equal gain than the main stat.
+            // This check only runs if the main stat gain is greater than zero to avoid overlapping with other edge cases.
+            // Skip if the main stat is at cap since the low gain is expected.
+            if (mainStatGain > 0 && mainStatGain in 1..maxSideEffectGain && !mainStatAtCap && result.name !in trustedGold) {
+                newStatGains[result.name] = estimatedMainGain
+                mainEstimated = true
+
+                val newCorrectedStats = result.correctedStats.toMutableList()
+                if (!newCorrectedStats.contains(result.name)) {
+                    newCorrectedStats.add(result.name)
+                    result.correctedStats = newCorrectedStats
+                }
+
+                MessageLog.d(
+                    TAG,
+                    "[DEBUG] applyContextualStatGainBoost:: ${result.name} gain read $mainStatGain, not above the side effects (up to $maxSideEffectGain), so it was not read whole: estimated at $estimatedMainGain from the scenario's base gains.",
+                )
+                boosted = true
+            }
+
+            // If the expected side effect stat gains were zeroes, boost them to half of the main stat gain.
+            // Skip if the side effect stat is at cap since a zero gain is expected.
+            val boostedMainStatGain = newStatGains[result.name] ?: 0
+            for (statName in expectedSideEffects) {
+                if ((newStatGains[statName] ?: 0) == 0 && boostedMainStatGain > 0 && !isAtCap(statName, 0)) {
+                    newStatGains[statName] = boostedMainStatGain / 2
+
+                    val newCorrectedStats = result.correctedStats.toMutableList()
+                    if (!newCorrectedStats.contains(statName)) {
+                        newCorrectedStats.add(statName)
+                        result.correctedStats = newCorrectedStats
+                    }
+
+                    MessageLog.d(
+                        TAG,
+                        "[DEBUG] applyContextualStatGainBoost:: Artificially increased $statName side-effect stat gain to ${newStatGains[statName]} because it was 0 due to possible OCR failure. Based on half of boosted ${result.name} = $boostedMainStatGain.",
+                    )
+                    boosted = true
+                }
+            }
+
+            // Below the stat's cap a training always raises its own stat, so a main gain of 0 with side effects showing means the digits were not
+            // read. Say so: the estimate is a guess, not a reading.
+            if (mainStatGain == 0 && maxSideEffectGain > 0 && currentStat < effectiveStatCap) {
+                val newMainGain = estimatedMainGain
+                newStatGains[result.name] = newMainGain
+                mainEstimated = true
+
+                val newCorrectedStats = result.correctedStats.toMutableList()
+                if (!newCorrectedStats.contains(result.name)) {
+                    newCorrectedStats.add(result.name)
+                    result.correctedStats = newCorrectedStats
+                }
+
+                val unreadReason = if (result.name in result.goldStatGains) "its gold gain digits could not be read" else "its gain digits could not be read"
+                MessageLog.w(
+                    TAG,
+                    "[TRAINING] ${result.name} training: $unreadReason, so its ${result.name} gain is estimated at $newMainGain (side effects up to $maxSideEffectGain, current stat $currentStat).",
+                )
+                boosted = true
+            }
+
+            // Edge case: Low stat gains with relationship bars in Senior Year.
+            // Skip if the main stat is at cap since the low gain is expected, or if it was just estimated.
+            val currentMainStatGain = newStatGains[result.name] ?: 0
+            if (isSeniorYear && currentMainStatGain <= 9 && result.relationshipBars.isNotEmpty() && !mainStatAtCap && !mainEstimated && result.name !in trustedGold) {
+                val boostAmount = result.relationshipBars.size * 5
+                newStatGains[result.name] = currentMainStatGain + boostAmount
+
+                val newCorrectedStats = result.correctedStats.toMutableList()
+                if (!newCorrectedStats.contains(result.name)) {
+                    newCorrectedStats.add(result.name)
+                    result.correctedStats = newCorrectedStats
+                }
+
+                if (debugMode) {
+                    MessageLog.d(
+                        TAG,
+                        "[DEBUG] applyContextualStatGainBoost:: Artificially increased ${result.name} stat gain from $currentMainStatGain to ${newStatGains[result.name]} due to having ${result.relationshipBars.size} relationship bars in Senior Year.",
+                    )
+                } else {
+                    Log.d(
+                        TAG,
+                        "[DEBUG] applyContextualStatGainBoost:: Artificially increased ${result.name} stat gain from $currentMainStatGain to ${newStatGains[result.name]} due to having ${result.relationshipBars.size} relationship bars in Senior Year.",
+                    )
+                }
+                boosted = true
+            }
+
+            // Edge case: Side effect is less than 9 and the difference with the main effect is greater than 20.
+            // Skip if the side effect stat is at cap since the low gain is expected. Not on Wit training: its Speed side is a fifth to two fifths
+            // of its main gain by game data, so the gap is normal there.
+            for (sideEffect in expectedSideEffects) {
+                val sideGain = newStatGains[sideEffect] ?: 0
+                if (result.name != StatName.WIT && sideGain < 9 && (mainStatGain - sideGain) > 20 && !isAtCap(sideEffect, sideGain) && sideEffect !in trustedGold) {
+                    newStatGains[sideEffect] = sideGain + 10
+
+                    val newCorrectedStats = result.correctedStats.toMutableList()
+                    if (!newCorrectedStats.contains(sideEffect)) {
+                        newCorrectedStats.add(sideEffect)
+                        result.correctedStats = newCorrectedStats
+                    }
+
+                    if (debugMode) {
+                        MessageLog.d(
+                            TAG,
+                            "[DEBUG] applyContextualStatGainBoost:: Artificially increased $sideEffect side-effect stat gain from $sideGain to ${newStatGains[sideEffect]} due to being less than 9 and having >20 difference with main stat gain of $mainStatGain.",
+                        )
+                    } else {
+                        Log.d(
+                            TAG,
+                            "[DEBUG] applyContextualStatGainBoost:: Artificially increased $sideEffect side-effect stat gain from $sideGain to ${newStatGains[sideEffect]} due to being less than 9 and having >20 difference with main stat gain of $mainStatGain.",
+                        )
+                    }
+                    boosted = true
+                }
+            }
+
+            if (boosted) {
+                result.statGains = newStatGains
+            }
+        }
+
+        /**
+         * Lowest main gain over largest expected side gain at any training level (master.mdb single_mode_training_effect): the level 1 main
+         * over the level 5 (summer) side. Levels 2 to 4 are not stored; gains do not fall as a level rises.
+         */
+        private fun lowestGainRatio(scenario: String, training: StatName): Double {
+            val (main, side) =
+                when (scenario) {
+                    "Unity Cup" ->
+                        when (training) {
+                            StatName.SPEED -> 8 to 6
+                            StatName.STAMINA -> 8 to 8
+                            StatName.POWER -> 9 to 6
+                            StatName.GUTS -> 6 to 4
+                            StatName.WIT -> 6 to 4
+                        }
+                    GrandConcertScenario.KEY ->
+                        when (training) {
+                            StatName.SPEED -> 8 to 6
+                            StatName.STAMINA -> 8 to 8
+                            StatName.POWER -> 9 to 6
+                            StatName.GUTS -> 7 to 3
+                            StatName.WIT -> 6 to 4
+                        }
+                    "Trackblazer" ->
+                        when (training) {
+                            StatName.SPEED -> 8 to 6
+                            StatName.STAMINA -> 7 to 5
+                            StatName.POWER -> 6 to 6
+                            StatName.GUTS -> 6 to 4
+                            StatName.WIT -> 6 to 4
+                        }
+                    else ->
+                        when (training) {
+                            StatName.SPEED -> 11 to 8
+                            StatName.STAMINA -> 10 to 8
+                            StatName.POWER -> 9 to 8
+                            StatName.GUTS -> 8 to 6
+                            StatName.WIT -> 10 to 4
+                        }
+                }
+            return main.toDouble() / side
+        }
 
         /** Stats gained per finale race win, per stat. Slightly above the actual +10 to account for misc event/card gains. */
         private const val FINALE_RACE_STAT_BONUS = 15
@@ -2212,197 +2427,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
      *
      * @param result The [TrainingAnalysisResult] to update.
      */
-    private fun applyContextualStatGainBoost(result: TrainingAnalysisResult) {
-        val allStats = campaign.trainee.stats.asMap()
-        val currentStat = allStats[result.name] ?: 0
-        val statCap = getCurrentStatCap(result.name)
-        val effectiveStatCap = statCap - 20
-
-        // Helper: a stat gain is "at cap" if currentValue + gain >= the stat's cap,
-        // meaning the low OCR value is expected (not an OCR error).
-        fun isAtCap(statName: StatName, gain: Int): Boolean {
-            val current = allStats[statName] ?: 0
-            val cap = getCurrentStatCap(statName)
-            return current + gain >= cap
-        }
-
-        val mainStatGainRaw = result.statGains[result.name] ?: 0
-        val mainStatAtCap = isAtCap(result.name, mainStatGainRaw)
-
-        val newStatGains = result.statGains.toMutableMap()
-        val sideEffectStats = newStatGains.keys.filter { it != result.name }
-        val maxSideEffectGain = sideEffectStats.maxOfOrNull { newStatGains[it] ?: 0 } ?: 0
-        val mainStatGain = newStatGains[result.name] ?: 0
-        val trustedGold = trustedGoldGains(result.statGains, result.goldStatGains)
-
-        var boosted = false
-
-        // Edge case: Specific manual correction for GUTS training where POWER gain should be greater than SPEED gain.
-        if (result.name == StatName.GUTS) {
-            val speedGain = newStatGains[StatName.SPEED] ?: 0
-            var powerGain = newStatGains[StatName.POWER] ?: 0
-
-            if (powerGain < speedGain && !isAtCap(StatName.POWER, powerGain) && StatName.POWER !in trustedGold) {
-                val originalPowerGain = powerGain
-                while (powerGain <= speedGain) {
-                    powerGain += 10
-                }
-                newStatGains[StatName.POWER] = powerGain
-
-                val newCorrectedStats = result.correctedStats.toMutableList()
-                if (!newCorrectedStats.contains(StatName.POWER)) {
-                    newCorrectedStats.add(StatName.POWER)
-                    result.correctedStats = newCorrectedStats
-                }
-
-                if (game.imageUtils.debugMode) {
-                    MessageLog.d(
-                        TAG,
-                        "[DEBUG] applyContextualStatGainBoost:: Artificially increased POWER stat gain for GUTS training from $originalPowerGain to $powerGain to be greater than SPEED gain ($speedGain).",
-                    )
-                } else {
-                    Log.d(
-                        TAG,
-                        "[DEBUG] applyContextualStatGainBoost:: Artificially increased POWER stat gain for GUTS training from $originalPowerGain to $powerGain to be greater than SPEED gain ($speedGain).",
-                    )
-                }
-                boosted = true
-            }
-        }
-
-        // Expected side effects mapping.
-        val affectedStatsMap =
-            mapOf(
-                StatName.SPEED to listOf(StatName.POWER),
-                StatName.STAMINA to listOf(StatName.GUTS),
-                StatName.POWER to listOf(StatName.STAMINA),
-                StatName.GUTS to listOf(StatName.SPEED, StatName.POWER),
-                StatName.WIT to listOf(StatName.SPEED),
-            )
-        val expectedSideEffects = affectedStatsMap[result.name] ?: emptyList()
-
-        // Check if any expected side effect stat has a higher or equal gain than the main stat.
-        // This check only runs if the main stat gain is greater than zero to avoid overlapping with other edge cases.
-        // Skip if the main stat is at cap since the low gain is expected.
-        if (mainStatGain > 0 && mainStatGain in 1..maxSideEffectGain && !mainStatAtCap && result.name !in trustedGold) {
-            newStatGains[result.name] = maxSideEffectGain + 10
-
-            val newCorrectedStats = result.correctedStats.toMutableList()
-            if (!newCorrectedStats.contains(result.name)) {
-                newCorrectedStats.add(result.name)
-                result.correctedStats = newCorrectedStats
-            }
-
-            MessageLog.d(
-                TAG,
-                "[DEBUG] applyContextualStatGainBoost:: Artificially increased ${result.name} stat gain from $mainStatGain to ${newStatGains[result.name]} due to possible OCR failure. Side-effect stats had higher or equal gains: $sideEffectStats",
-            )
-            boosted = true
-        }
-
-        // If the expected side effect stat gains were zeroes, boost them to half of the main stat gain.
-        // Skip if the side effect stat is at cap since a zero gain is expected.
-        val boostedMainStatGain = newStatGains[result.name] ?: 0
-        for (statName in expectedSideEffects) {
-            if ((newStatGains[statName] ?: 0) == 0 && boostedMainStatGain > 0 && !isAtCap(statName, 0)) {
-                newStatGains[statName] = boostedMainStatGain / 2
-
-                val newCorrectedStats = result.correctedStats.toMutableList()
-                if (!newCorrectedStats.contains(statName)) {
-                    newCorrectedStats.add(statName)
-                    result.correctedStats = newCorrectedStats
-                }
-
-                MessageLog.d(
-                    TAG,
-                    "[DEBUG] applyContextualStatGainBoost:: Artificially increased $statName side-effect stat gain to ${newStatGains[statName]} because it was 0 due to possible OCR failure. Based on half of boosted ${result.name} = $boostedMainStatGain.",
-                )
-                boosted = true
-            }
-        }
-
-        // Below the stat's cap a training always raises its own stat, so a main gain of 0 with side effects showing means the digits were not
-        // read. Estimate it above the side effects and say so: the estimate is a guess, not a reading.
-        if (mainStatGain == 0 && maxSideEffectGain > 0 && currentStat < effectiveStatCap) {
-            var newMainGain = mainStatGain
-            while (newMainGain <= maxSideEffectGain) {
-                newMainGain += 10
-            }
-            newStatGains[result.name] = newMainGain
-
-            val newCorrectedStats = result.correctedStats.toMutableList()
-            if (!newCorrectedStats.contains(result.name)) {
-                newCorrectedStats.add(result.name)
-                result.correctedStats = newCorrectedStats
-            }
-
-            val unreadReason = if (result.name in result.goldStatGains) "its gold gain digits could not be read" else "its gain digits could not be read"
-            MessageLog.w(
-                TAG,
-                "[TRAINING] ${result.name} training: $unreadReason, so its ${result.name} gain is estimated at $newMainGain (side effects up to $maxSideEffectGain, current stat $currentStat).",
-            )
-            boosted = true
-        }
-
-        // Edge case: Low stat gains with relationship bars in Senior Year.
-        // Skip if the main stat is at cap since the low gain is expected.
-        val currentMainStatGain = newStatGains[result.name] ?: 0
-        if (campaign.date.year == DateYear.SENIOR && currentMainStatGain <= 9 && result.relationshipBars.isNotEmpty() && !mainStatAtCap && result.name !in trustedGold) {
-            val boostAmount = result.relationshipBars.size * 5
-            newStatGains[result.name] = currentMainStatGain + boostAmount
-
-            val newCorrectedStats = result.correctedStats.toMutableList()
-            if (!newCorrectedStats.contains(result.name)) {
-                newCorrectedStats.add(result.name)
-                result.correctedStats = newCorrectedStats
-            }
-
-            if (game.imageUtils.debugMode) {
-                MessageLog.d(
-                    TAG,
-                    "[DEBUG] applyContextualStatGainBoost:: Artificially increased ${result.name} stat gain from $currentMainStatGain to ${newStatGains[result.name]} due to having ${result.relationshipBars.size} relationship bars in Senior Year.",
-                )
-            } else {
-                Log.d(
-                    TAG,
-                    "[DEBUG] applyContextualStatGainBoost:: Artificially increased ${result.name} stat gain from $currentMainStatGain to ${newStatGains[result.name]} due to having ${result.relationshipBars.size} relationship bars in Senior Year.",
-                )
-            }
-            boosted = true
-        }
-
-        // Edge case: Side effect is less than 9 and the difference with the main effect is greater than 20.
-        // Skip if the side effect stat is at cap since the low gain is expected.
-        for (sideEffect in expectedSideEffects) {
-            val sideGain = newStatGains[sideEffect] ?: 0
-            if (sideGain < 9 && (mainStatGain - sideGain) > 20 && !isAtCap(sideEffect, sideGain) && sideEffect !in trustedGold) {
-                newStatGains[sideEffect] = sideGain + 10
-
-                val newCorrectedStats = result.correctedStats.toMutableList()
-                if (!newCorrectedStats.contains(sideEffect)) {
-                    newCorrectedStats.add(sideEffect)
-                    result.correctedStats = newCorrectedStats
-                }
-
-                if (game.imageUtils.debugMode) {
-                    MessageLog.d(
-                        TAG,
-                        "[DEBUG] applyContextualStatGainBoost:: Artificially increased $sideEffect side-effect stat gain from $sideGain to ${newStatGains[sideEffect]} due to being less than 9 and having >20 difference with main stat gain of $mainStatGain.",
-                    )
-                } else {
-                    Log.d(
-                        TAG,
-                        "[DEBUG] applyContextualStatGainBoost:: Artificially increased $sideEffect side-effect stat gain from $sideGain to ${newStatGains[sideEffect]} due to being less than 9 and having >20 difference with main stat gain of $mainStatGain.",
-                    )
-                }
-                boosted = true
-            }
-        }
-
-        if (boosted) {
-            result.statGains = newStatGains
-        }
-    }
+    private fun applyContextualStatGainBoost(result: TrainingAnalysisResult) =
+        applyContextualStatGainBoost(result, game.scenario, campaign.trainee.stats.asMap(), { getCurrentStatCap(it) }, campaign.date.year == DateYear.SENIOR, game.imageUtils.debugMode)
 
     /**
      * Recommend the best training option based on the current scoring mode and game state.

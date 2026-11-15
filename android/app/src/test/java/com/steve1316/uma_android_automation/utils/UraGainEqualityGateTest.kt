@@ -152,9 +152,9 @@ class UraGainEqualityGateTest {
     }
 
     @Test
-    @DisplayName("Black paint over a rejected box no longer counts as a match")
+    @DisplayName("Black pixels under transparent template pixels do not count as a match")
     fun paintedPixelsDoNotPass() {
-        // Transparent template pixels are 0 once premultiplied, like the black boxes the matcher paints over rejected matches.
+        // Transparent template pixels are 0 once premultiplied, so black pixels in the band equal them.
         val alpha = byteArrayOf(-1, -1, 0, 0, 0, 0, 0, 0)
         val equal = byteArrayOf(0, 0, -1, -1, -1, -1, -1, -1)
         assertEquals(0.75, StatGainDigits.equalRatio("7_mini", equal, alpha))

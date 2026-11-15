@@ -122,6 +122,65 @@ object StatGainDigits {
         return kept.sortedBy { it.x }
     }
 
+    // Digit centres one and two pitches right of the "+" in logged reads: single row 40-43 / 82-85 px, row 1 38-40 / 75-79, row 2 32-34 / 67-68.
+    const val GLYPH_PITCH_SINGLE_ROW = 42
+    const val GLYPH_PITCH_ROW_1 = 39
+    const val GLYPH_PITCH_ROW_2 = 34
+    const val GRID_MAX_DX = 7
+
+    /** With a "+", keeps the best-scoring "+" and the digits one to three [pitch]es right of it within [maxDx]; without one, [matches] as given. */
+    fun onPlusGrid(matches: List<TemplateMatch>, pitch: Double, maxDx: Double): List<TemplateMatch> {
+        val plus = matches.filter { it.template.startsWith("+") }.maxByOrNull { it.score } ?: return matches
+        return matches.filter { match ->
+            if (match.template.startsWith("+")) return@filter match === plus
+            val dx = match.x - plus.x
+            val step = kotlin.math.round(dx / pitch)
+            step in 1.0..3.0 && kotlin.math.abs(dx - step * pitch) <= maxDx
+        }
+    }
+
+    const val MAX_MATCHES_PER_TEMPLATE = 10
+    const val MAX_PEAK_PASSES = 30
+
+    /**
+     * Best-first search of one template's score map ([scores] row-major, [cols] wide) for positions scoring at least [minScore]. Each pass takes
+     * the best remaining position anywhere in the row and asks [accept], then blanks the positions centred in that [boxW] x [boxH] box, kept or
+     * not, so a glyph left of a better or rejected peak is still searched. Blanking the score map, not the pixels: a black box makes the masked
+     * normalised score 0/0, and minMaxLoc picks the resulting inf. Returns the kept top-left positions.
+     */
+    fun searchPeaks(
+        scores: FloatArray,
+        cols: Int,
+        boxW: Int,
+        boxH: Int,
+        minScore: Double,
+        stopAfterFirst: Boolean,
+        accept: (x: Int, y: Int) -> Boolean,
+    ): List<Pair<Int, Int>> {
+        val remaining = scores.copyOf()
+        val rows = remaining.size / cols
+        val kept = mutableListOf<Pair<Int, Int>>()
+        repeat(MAX_PEAK_PASSES) {
+            var best = -1
+            for (i in remaining.indices) {
+                if (remaining[i].isFinite() && (best < 0 || remaining[i] > remaining[best])) best = i
+            }
+            if (best < 0 || remaining[best] < minScore) return kept
+            val x = best % cols
+            val y = best / cols
+            if (accept(x, y)) {
+                kept.add(x to y)
+                if (stopAfterFirst || kept.size >= MAX_MATCHES_PER_TEMPLATE) return kept
+            }
+            val halfW = (boxW - 1) / 2
+            val halfH = (boxH - 1) / 2
+            for (by in maxOf(0, y - halfH)..minOf(rows - 1, y + halfH)) {
+                for (bx in maxOf(0, x - halfW)..minOf(cols - 1, x + halfW)) remaining[by * cols + bx] = Float.NEGATIVE_INFINITY
+            }
+        }
+        return kept
+    }
+
     private class Comp(val x0: Int, val x1: Int, val area: Int, val label: Char?)
 
     private fun components(glyph: BooleanArray, white: BooleanArray, w: Int, h: Int, scale: Double): List<Comp> {

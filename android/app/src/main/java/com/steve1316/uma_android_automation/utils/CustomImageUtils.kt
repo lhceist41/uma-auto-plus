@@ -275,8 +275,9 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @property height The height of the detection region.
      * @property rowName The human-readable name of the row (e.g., "row 1").
      * @property templateSuffix The suffix to append to template names for this row (e.g., "_mini").
+     * @property glyphPitch Distance between the row's glyph centres at 1080 px width.
      */
-    data class StatGainRowConfig(val startX: Int, val startY: Int, val width: Int, val height: Int, val rowName: String, val templateSuffix: String = "")
+    data class StatGainRowConfig(val startX: Int, val startY: Int, val width: Int, val height: Int, val rowName: String, val templateSuffix: String, val glyphPitch: Int)
 
     /**
      * Defines the result of analyzing a relationship or energy bar.
@@ -1955,13 +1956,13 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                 val row2Offset = if (game.scenario == "Trackblazer") -60 else -55
                                 val secondRowStartY = relY(firstRowStartY.toDouble(), row2Offset)
                                 listOf(
-                                    StatGainRowConfig(firstRowStartX, firstRowStartY, relWidth(150), relHeight(55), "row 1", "_mini"),
-                                    StatGainRowConfig(firstRowStartX, secondRowStartY, relWidth(150), relHeight(55), "row 2", "_mini_bold"),
+                                    StatGainRowConfig(firstRowStartX, firstRowStartY, relWidth(150), relHeight(55), "row 1", "_mini", StatGainDigits.GLYPH_PITCH_ROW_1),
+                                    StatGainRowConfig(firstRowStartX, secondRowStartY, relWidth(150), relHeight(55), "row 2", "_mini_bold", StatGainDigits.GLYPH_PITCH_ROW_2),
                                 )
                             } else {
                                 // Default: single row.
                                 listOf(
-                                    StatGainRowConfig(firstRowStartX, firstRowStartY, relWidth(150), relHeight(82), "", ""),
+                                    StatGainRowConfig(firstRowStartX, firstRowStartY, relWidth(150), relHeight(82), "", "", StatGainDigits.GLYPH_PITCH_SINGLE_ROW),
                                 )
                             }
 
@@ -2086,11 +2087,19 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                     }
 
                                     val kept = StatGainDigits.keepBestPerGlyph(rowScores, relWidth(StatGainDigits.SAME_GLYPH_MAX_DX).toDouble())
+                                    val onGrid = StatGainDigits.onPlusGrid(kept, relWidth(row.glyphPitch).toDouble(), relWidth(StatGainDigits.GRID_MAX_DX).toDouble())
+
+                                    fun describe(matches: List<StatGainDigits.TemplateMatch>) = matches.map { "${it.template}@${it.x.toInt()}=${"%.3f".format(it.score)}" }
                                     if (kept.size < rowScores.size) {
-                                        fun describe(matches: List<StatGainDigits.TemplateMatch>) = matches.map { "${it.template}@${it.x.toInt()}=${"%.3f".format(it.score)}" }
                                         val dropped = describe(rowScores.filter { it !in kept })
                                         Log.d(TAG, "[DEBUG] determineStatGainFromTraining:: Dropped $dropped on already matched glyphs, keeping ${describe(kept)} for $trainingContext ${row.rowName}.")
-                                        rowMatches.forEach { (template, points) -> points.retainAll { point -> kept.any { it.template == template && it.x == point.x } } }
+                                    }
+                                    if (onGrid.size < kept.size) {
+                                        val offGrid = describe(kept.filter { it !in onGrid })
+                                        Log.d(TAG, "[DEBUG] determineStatGainFromTraining:: Dropped $offGrid off the glyph grid of the \"+\" for $trainingContext ${row.rowName}.")
+                                    }
+                                    if (onGrid.size < rowScores.size) {
+                                        rowMatches.forEach { (template, points) -> points.retainAll { point -> onGrid.any { it.template == template && it.x == point.x } } }
                                     }
                                 }
 
@@ -2295,152 +2304,102 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // //////////////////////////////////////////////////////////////////
         // //////////////////////////////////////////////////////////////////
 
-        var continueSearching = true
-        var searchMat = Mat()
-        var xOffset = 0
-        workingMat.copyTo(searchMat)
-
+        val result = Mat()
         try {
-            while (continueSearching) {
-                var failedPixelMatchRatio = false
-                var failedPixelCorrelation = false
-
-                // Template match with the alpha mask.
-                val result = Mat()
-                Imgproc.matchTemplate(searchMat, templateGray, result, Imgproc.TM_CCORR_NORMED, alphaMask)
-                val mmr = Core.minMaxLoc(result)
-                val matchVal = mmr.maxVal
-                val matchLocation = mmr.maxLoc
-
-                if (matchVal >= matchConfidence) {
-                    val x = matchLocation.x.toInt()
-                    val y = matchLocation.y.toInt()
-                    val h = templateGray.rows()
-                    val w = templateGray.cols()
-
-                    // Validate that the match location is within bounds.
-                    if (x >= 0 && y >= 0 && x + w <= searchMat.cols() && y + h <= searchMat.rows()) {
-                        // Extract the matched region from the source image.
-                        val matchedRegion = Mat(searchMat, Rect(x, y, w, h))
-
-                        // Create masked versions of the template and matched region using only non-transparent pixels.
-                        val templateValid = Mat()
-                        val regionValid = Mat()
-                        templateGray.copyTo(templateValid, validPixels)
-                        matchedRegion.copyTo(regionValid, validPixels)
-
-                        // For the first test, compare pixel-by-pixel equality between the matched region and template to calculate match ratio.
-                        val templateComparison = Mat()
-                        Core.compare(matchedRegion, templateGray, templateComparison, Core.CMP_EQ)
-                        val equalPixels = ByteArray(templateComparison.total().toInt()).also { templateComparison.get(0, 0, it) }
-                        val pixelMatchRatio = StatGainDigits.equalRatio(templateName, equalPixels, alphaPixels)
-                        if (pixelMatchRatio < minPixelMatchRatio) {
-                            failedPixelMatchRatio = true
-                        }
-
-                        // Extract pixel values into double arrays for correlation calculation.
-                        val templateValidMat = Mat()
-                        val regionValidMat = Mat()
-                        templateValid.convertTo(templateValidMat, CvType.CV_64F)
-                        regionValid.convertTo(regionValidMat, CvType.CV_64F)
-                        val templateArray = DoubleArray(templateValid.total().toInt())
-                        val regionArray = DoubleArray(regionValid.total().toInt())
-                        templateValidMat.get(0, 0, templateArray)
-                        regionValidMat.get(0, 0, regionArray)
-
-                        // For the second test, validate the match quality by performing correlation calculation.
-                        val pixelCorrelation = calculateCorrelation(templateArray, regionArray)
-                        if (pixelCorrelation < minPixelCorrelation) {
-                            failedPixelCorrelation = true
-                        }
-
-                        // If both tests passed, then the match is valid.
-                        if (!failedPixelMatchRatio && !failedPixelCorrelation) {
-                            val centerX = (x + xOffset) + (w / 2)
-                            val centerY = y + (h / 2)
-
-                            // Check for overlap with existing matches within 10 pixels on both axes.
-                            val hasOverlap =
-                                matchResults.values.flatten().any { existingPoint ->
-                                    val existingX = existingPoint.x
-                                    val existingY = existingPoint.y
-
-                                    // Check if the new match overlaps with existing match within 10 pixels.
-                                    val xOverlap = kotlin.math.abs(centerX - existingX) < 10
-                                    val yOverlap = kotlin.math.abs(centerY - existingY) < 10
-
-                                    xOverlap && yOverlap
-                                }
-
-                            if (!hasOverlap) {
-                                val rowSuffix =
-                                    if (trainingContext.isNotEmpty() && rowName.isNotEmpty()) {
-                                        " for $trainingContext $rowName"
-                                    } else if (trainingContext.isNotEmpty()) {
-                                        " for $trainingContext"
-                                    } else if (rowName.isNotEmpty()) {
-                                        " for $rowName"
-                                    } else {
-                                        ""
-                                    }
-                                Log.d(TAG, "[DEBUG] processStatGainTemplateWithTransparency:: Found valid match for template \"$templateName\" at ($centerX, $centerY)$rowSuffix.")
-                                matchResults[templateName]?.add(Point(centerX.toDouble(), centerY.toDouble()))
-                                scores.add(StatGainDigits.TemplateMatch(templateName, centerX.toDouble(), pixelCorrelation))
-
-                                // If it found the + symbol, then there is no need to look for additional pluses.
-                                if (templateName in listOf("+", "+_mini")) {
-                                    continueSearching = false
-                                }
-                            }
-                        }
-
-                        // Draw a box to prevent re-detection in the next loop iteration.
-                        Imgproc.rectangle(searchMat, Point(x.toDouble(), y.toDouble()), Point((x + w).toDouble(), (y + h).toDouble()), Scalar(0.0, 0.0, 0.0), 10)
-
-                        templateComparison.release()
-                        matchedRegion.release()
-                        templateValid.release()
-                        regionValid.release()
-                        templateValidMat.release()
-                        regionValidMat.release()
-
-                        // Crop the Mat horizontally to exclude the supposed matched area.
-                        val cropX = x + w
-                        val remainingWidth = searchMat.cols() - cropX
-                        when {
-                            remainingWidth < templateGray.cols() -> {
-                                continueSearching = false
-                            }
-
-                            else -> {
-                                val newSearchMat = Mat(searchMat, Rect(cropX, 0, remainingWidth, searchMat.rows()))
-                                searchMat.release()
-                                searchMat = newSearchMat
-                                xOffset += cropX
-                            }
-                        }
-                    } else {
-                        // Stop searching when the source has been traversed.
-                        continueSearching = false
-                    }
-                } else {
-                    // No match found above threshold, stop searching for this template.
-                    continueSearching = false
-                }
-
-                result.release()
-
-                // Safety check to prevent infinite loops.
-                if ((matchResults[templateName]?.size ?: 0) > 10) {
-                    continueSearching = false
-                }
+            Imgproc.matchTemplate(workingMat, templateGray, result, Imgproc.TM_CCORR_NORMED, alphaMask)
+            val scoreMap = FloatArray(result.total().toInt()).also { result.get(0, 0, it) }
+            val h = templateGray.rows()
+            val w = templateGray.cols()
+            // If it found the + symbol, then there is no need to look for additional pluses.
+            val stopAfterFirst = templateName in listOf("+", "+_mini")
+            StatGainDigits.searchPeaks(scoreMap, result.cols(), w, h, matchConfidence, stopAfterFirst) { x, y ->
                 if (!BotService.isRunning) {
                     throw InterruptedException()
                 }
+                var failedPixelMatchRatio = false
+                var failedPixelCorrelation = false
+
+                // Extract the matched region from the source image.
+                val matchedRegion = Mat(workingMat, Rect(x, y, w, h))
+
+                // Create masked versions of the template and matched region using only non-transparent pixels.
+                val templateValid = Mat()
+                val regionValid = Mat()
+                templateGray.copyTo(templateValid, validPixels)
+                matchedRegion.copyTo(regionValid, validPixels)
+
+                // For the first test, compare pixel-by-pixel equality between the matched region and template to calculate match ratio.
+                val templateComparison = Mat()
+                Core.compare(matchedRegion, templateGray, templateComparison, Core.CMP_EQ)
+                val equalPixels = ByteArray(templateComparison.total().toInt()).also { templateComparison.get(0, 0, it) }
+                val pixelMatchRatio = StatGainDigits.equalRatio(templateName, equalPixels, alphaPixels)
+                if (pixelMatchRatio < minPixelMatchRatio) {
+                    failedPixelMatchRatio = true
+                }
+
+                // Extract pixel values into double arrays for correlation calculation.
+                val templateValidMat = Mat()
+                val regionValidMat = Mat()
+                templateValid.convertTo(templateValidMat, CvType.CV_64F)
+                regionValid.convertTo(regionValidMat, CvType.CV_64F)
+                val templateArray = DoubleArray(templateValid.total().toInt())
+                val regionArray = DoubleArray(regionValid.total().toInt())
+                templateValidMat.get(0, 0, templateArray)
+                regionValidMat.get(0, 0, regionArray)
+
+                // For the second test, validate the match quality by performing correlation calculation.
+                val pixelCorrelation = calculateCorrelation(templateArray, regionArray)
+                if (pixelCorrelation < minPixelCorrelation) {
+                    failedPixelCorrelation = true
+                }
+
+                templateComparison.release()
+                matchedRegion.release()
+                templateValid.release()
+                regionValid.release()
+                templateValidMat.release()
+                regionValidMat.release()
+
+                // If both tests passed, then the match is valid.
+                if (failedPixelMatchRatio || failedPixelCorrelation) {
+                    return@searchPeaks false
+                }
+                val centerX = x + (w / 2)
+                val centerY = y + (h / 2)
+
+                // Check for overlap with existing matches within 10 pixels on both axes.
+                val hasOverlap =
+                    matchResults.values.flatten().any { existingPoint ->
+                        val existingX = existingPoint.x
+                        val existingY = existingPoint.y
+
+                        // Check if the new match overlaps with existing match within 10 pixels.
+                        val xOverlap = kotlin.math.abs(centerX - existingX) < 10
+                        val yOverlap = kotlin.math.abs(centerY - existingY) < 10
+
+                        xOverlap && yOverlap
+                    }
+                if (hasOverlap) {
+                    return@searchPeaks false
+                }
+                val rowSuffix =
+                    if (trainingContext.isNotEmpty() && rowName.isNotEmpty()) {
+                        " for $trainingContext $rowName"
+                    } else if (trainingContext.isNotEmpty()) {
+                        " for $trainingContext"
+                    } else if (rowName.isNotEmpty()) {
+                        " for $rowName"
+                    } else {
+                        ""
+                    }
+                Log.d(TAG, "[DEBUG] processStatGainTemplateWithTransparency:: Found valid match for template \"$templateName\" at ($centerX, $centerY)$rowSuffix.")
+                matchResults[templateName]?.add(Point(centerX.toDouble(), centerY.toDouble()))
+                scores.add(StatGainDigits.TemplateMatch(templateName, centerX.toDouble(), pixelCorrelation))
+                true
             }
         } finally {
             // Always clean up resources, even if InterruptedException is thrown.
-            searchMat.release()
+            result.release()
             alphaChannels.forEach { it.release() }
             validPixels.release()
             alphaMask.release()
