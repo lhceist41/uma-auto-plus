@@ -21,6 +21,7 @@ Sturdier spark rerolls and training reads, fewer stops after the daily reset and
 ### Changed
 
 - **App:** the progress notification now updates silently instead of popping up over the game every turn.
+- **Skills:** one or two turns before a goal race of 3000m or longer, the bot buys one recovery skill if the trainee owns none that suits their running style.
 - **Training:** before a goal race of 3000m or longer, the bot trains Stamina when it is below what the race needs (300, or 450 from 3200m), from the second year (the third in Unity Cup), for trainees whose goal races it knows.
 - **Sparks:** before spending 30 TP on a reroll the bot reads the spark list twice and keeps the original sparks if the reads differ; a name read differently or missing its first letters (such as "it" for Wit) no longer wastes a reroll.
 - **Sparks:** a Turf spark no longer counts as a useful pink, so the bot stops keeping a weaker set or skipping a reroll for one; every turf runner already has Turf A.

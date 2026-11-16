@@ -1307,11 +1307,25 @@ triggers inert, which is why every unmigrated preset behaves exactly as before.
   a skill that unlocks later becomes eligible after the next organic parse. A session that
   fires and buys nothing suppresses its evidence until a non-affordable parse refreshes it,
   and a further firing needs +120 SP over the last one -- the bounds on repeated opening.
+- **`LONG_GOAL_RECOVERY`** (Manual and Adaptive, any objective; needs the `skillPointCheck`
+  plan enabled): fires when a mandatory goal race of 3000m or longer is 1 to 2 turns away, at
+  least 150 SP are banked, and no usable recovery is owned. The race comes from the
+  goal-chain facts (`gc_fan_runtime.json`), not OCR, so it needs a trainee matched uniquely
+  by name; it never fires in Trackblazer (which replaces the character goal races) or from
+  day 71 on, and a choice turn counts its longest option. A white or gold recovery the
+  resolved running style can activate counts as owned (inherited-unique recoveries too), read
+  from tracked skills before opening the screen and again from the Obtained rows once it is
+  open. The session buys at most one recovery and nothing else (no golds, inherited uniques,
+  negatives or strategy tail): the first planned recovery in plan order that fits the budget
+  (never an inherited unique), else the cheapest compatible observed recovery as in Recovery
+  protection below, with the distance axis forced to Long. A completed session records the
+  race's turn in the same handled-turn key as `CRITICAL_RACE`, so that race opens no second
+  session; one that does not complete may retry the next turn inside the window.
 
-Precedence: `SCENARIO_FINALS` > `CRITICAL_RACE` > `PLANNED_SKILL_AFFORDABLE` > high-water;
-careerComplete and the debug harness keep their own contexts, and the breakpoint stop remains
-exclusively the high-water plan-disabled behavior (disabling that plan disables both new
-triggers with it).
+Precedence: `SCENARIO_FINALS` > `LONG_GOAL_RECOVERY` > `CRITICAL_RACE` >
+`PLANNED_SKILL_AFFORDABLE` > high-water; careerComplete and the debug harness keep their own
+contexts, and the breakpoint stop remains exclusively the high-water plan-disabled behavior
+(disabling that plan disables all three dynamic triggers with it).
 
 Every `skill_spend` record (`policy: trigger-v4`; older versions stay readable) carries the
 resolved `threshold`, `tier` (`manual` when no tier governs), `reason`, and `objective`;
@@ -1443,7 +1457,10 @@ that does not fit the remaining wave budget is skipped with a log and retried at
 session; no knapsack required-groups are involved (an unfit required group would wipe the whole
 DP plan). `trigger-v4` records carry `recoveryRuleActive`/`recoveryRequired` whenever the gate
 was evaluated and `recoverySkill`/`recoveryObservedPrice` only when an injection actually
-bought something. Manual mode and the `rank`/`sparks` objectives never arm the rule.
+bought something. The rule is armed in two cases only: an Adaptive career whose preferred distance and
+objective allow injection (above), and a `LONG_GOAL_RECOVERY` session that reaches the injection
+fallback (no recovery owned, none of the planned ones bought), which arms it in any mode and
+objective. Every other Manual career, and the `rank` and `sparks` objectives, never arm it.
 
 Live status: the first armed profile (Grass Wonder (Saintly Jade Cleric) Unity Cup,
 `safe_completion`, Long) completed a supervised career with the gate evaluated at five spend
