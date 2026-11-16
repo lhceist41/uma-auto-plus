@@ -33,6 +33,10 @@ class StatGainDigitsTest {
         return StatGainDigits.readRow(sampler(name), left, rowStartY - 5, StatGainDigits.COLUMN_WIDTH, 55 + 5)
     }
 
+    /** Speed-column fixtures hold only the read window: row 0 (gain) starts at y 60, row 1 (bonus) at y 5. */
+    private fun readColumn(name: String, row: Int): StatGainDigits.Row? =
+        StatGainDigits.readRow(sampler(name), 0, if (row == 0) 60 else 5, StatGainDigits.COLUMN_WIDTH, 55 + 5)
+
     private fun assertGold(expected: Int, actual: StatGainDigits.Row?) {
         assertNotNull(actual)
         assertTrue(actual!!.gold, "row should be gold")
@@ -70,6 +74,23 @@ class StatGainDigitsTest {
         // Speed 1169 + 3 stays below 1200, so the game keeps it orange.
         assertFalse(read("orange_speed_1169_guts", StatName.SPEED, 0)!!.gold)
         assertFalse(read("orange_speed_1169_guts", StatName.SPEED, 1)!!.gold)
+    }
+
+    @Test
+    @DisplayName("A two-digit gold gain reads although background art touches the column edge after it")
+    fun goldTwoDigitsBeforeColumnEdge() {
+        assertGold(25, readColumn("native_gold_speed_25", 0))
+        assertGold(2, readColumn("native_gold_speed_25", 1))
+        assertGold(24, readColumn("native_gold_speed_24", 0))
+        assertNull(readColumn("native_gold_speed_24", 1))
+    }
+
+    @Test
+    @DisplayName("A resized Unity Cup bonus chip reads its 8")
+    fun resizedBonusChipEight() {
+        assertGold(8, readColumn("gold_speed_chip_8_w1440", 0))
+        assertGold(8, readColumn("gold_speed_chip_8_w1440", 1))
+        assertEquals(16, listOf(0, 1).sumOf { StatGainDigits.resolveRowValue(0, readColumn("gold_speed_chip_8_w1440", it)) })
     }
 
     @Test

@@ -49,3 +49,17 @@ gains +3 and +6 as a lone "+".
 TM_CCORR_NORMED of 0.9 or more, in search order per template as `rank`): top-left position in band coordinates, the
 equal-pixel share at exact equality (`share0`) and within 2 gray levels (`share2`), and the Pearson correlation, from an
 OpenCV 4.13 replay of the matcher that reproduced all 227 matches the bot logged for the career's first 50 frames.
+
+## Gold Speed columns
+
+Three crops of the Speed column only (169x125, both gain rows) from unattended Unity Cup careers saved with Debug Mode
+on, channel-swapped into native RGB. The read window starts at x 0; the gain row's box starts at y 60 and the bonus
+row's at y 5. No trainer name, ID or other identifying data.
+
+| Fixture | Source frame | Screen |
+|---|---|---|
+| gold_speed_chip_8_w1440.png | unitycup_train_0251_SPEED, 2026-11-16, a 1440x2560 capture the bot resized to 1080 wide | Speed gold +8 and bonus-chip +8 |
+| native_gold_speed_25.png | unitycup_train_0206_SPEED, 2026-11-15, native 1080x1920 | Speed gold +25 and bonus-row +2; trainee skin after the 5 reaches the column edge |
+| native_gold_speed_24.png | unitycup_train_0216_SPEED, 2026-11-15, native 1080x1920 | Speed gold +24, no bonus row; trainee skin after the 4 reaches the column edge |
+
+Every value was checked by eye on the frame.
