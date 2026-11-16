@@ -129,10 +129,10 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     // Completed 2026-07-26 after the mid-career daily-reset interruption was fixed; the career
     // resumed from turn 49 and finished its full arc.
     "Daiwa Scarlet|Grand Concert",
-    // Unity Cup and Trackblazer completions map unambiguously to the base presets: the Legacy
-    // Farm arm is URA-only, so it cannot be the source of either. Her URA ledger mixes the base
-    // build with Legacy Farm careers and stays unpromoted until the corpus refresh resolves it
-    // by config fingerprint.
+    // Unity Cup and Trackblazer completions map unambiguously to the base presets: the former
+    // Legacy Farm preset was URA-only, so it cannot be the source of either. Her URA ledger mixes
+    // the base build with careers from that preset and stays unpromoted until the corpus refresh
+    // resolves it by config fingerprint.
     "Daiwa Scarlet|Unity Cup",
     "Daiwa Scarlet|Trackblazer",
     // The 2026-07-27 four-trainee rotation queue: every career completed its full 75-turn arc at

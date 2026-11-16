@@ -126,15 +126,23 @@ describe("buildRotationSnapshotRows", () => {
         expect(objectiveRow?.value).toBe("race_reward")
     })
 
-    it("stamps sparks for the Blue Farm preset (2B-1 migration)", () => {
-        const blueFarm = characterPresets.find((p) => p.name === "Super Creek (Blue Farm)" && p.scenario === "Unity Cup")
-        expect(blueFarm).toBeDefined()
-        const { rows: farmRows, missing: farmMissing } = buildRotationSnapshotRows(baseSettings, [
-            { inGameName: "Super Creek", presetKey: blueFarm!.name, scenario: blueFarm!.scenario },
-        ])
-        expect(farmMissing).toHaveLength(0)
-        const objectiveRow = farmRows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")
-        expect(objectiveRow?.value).toBe("sparks")
+    it("reports a removed preset as missing and still builds every valid row, leaving the rotation intact", () => {
+        // A queue saved before a preset was removed must not throw or lose its other entries.
+        const [first, second] = characterPresets
+        const rotation = [
+            { inGameName: "First", presetKey: first.name, scenario: first.scenario },
+            { inGameName: "Daiwa Scarlet", presetKey: "Daiwa Scarlet (Legacy Farm)", scenario: "URA Finale" },
+            { inGameName: "Third", presetKey: second.name, scenario: second.scenario },
+        ]
+        const before = JSON.parse(JSON.stringify(rotation))
+        let result: ReturnType<typeof buildRotationSnapshotRows> | undefined
+        expect(() => {
+            result = buildRotationSnapshotRows(baseSettings, rotation)
+        }).not.toThrow()
+        expect(result!.missing).toEqual([{ index: 1, presetKey: "Daiwa Scarlet (Legacy Farm)", scenario: "URA Finale" }])
+        const prefixes = new Set(result!.rows.map((r) => r.category.split("_")[0]))
+        expect(prefixes).toEqual(new Set(["rot0", "rot2"]))
+        expect(rotation).toEqual(before)
     })
 })
 
@@ -151,30 +159,34 @@ describe("preset-name derivation", () => {
         expect(deriveInGameName("Symboli Rudolf")).toBe("Symboli Rudolf")
     })
 
-    it("derives the bare character name for (Legacy Farm) build variants - no such banner exists in-game", () => {
+    it("derives the bare character name for removed build-variant names - no such banner exists in-game", () => {
         // Regression: "[Legacy Farm] Air Groove" as the OCR target scanned all 32 roster trainees at
-        // 0.437 best score (threshold 0.86) and stopped the queue with "trainee not found".
+        // 0.437 best score (threshold 0.86) and stopped the queue with "trainee not found". The presets
+        // are gone, but saved settings and queues can still carry their names.
         expect(deriveInGameName("Air Groove (Legacy Farm)")).toBe("Air Groove")
         expect(deriveInGameName("Daiwa Scarlet (Legacy Farm)")).toBe("Daiwa Scarlet")
         expect(deriveInGameName("El Condor Pasa (Legacy Farm)")).toBe("El Condor Pasa")
+        expect(deriveInGameName("Super Creek (Blue Farm)")).toBe("Super Creek")
     })
 
     it("strips both outfit and variant suffixes for character-identity comparison", () => {
         expect(baseCharacter("El Condor Pasa (Kukulkan Warrior)")).toBe("El Condor Pasa")
         expect(baseCharacter("Air Groove (Legacy Farm)")).toBe("Air Groove")
+        expect(baseCharacter("Super Creek (Blue Farm)")).toBe("Super Creek")
         expect(baseCharacter("Air Groove")).toBe("Air Groove")
     })
 
-    it("gives variant presets the same sibling-outfit protection as the plain base name", () => {
+    it("gives a removed variant name the same sibling-outfit protection as the plain base name", () => {
         // The bare "El Condor Pasa" target would also match "[Kukulkan Warrior] El Condor Pasa" on the
-        // grid, so the legacy entry must exclude the sibling outfit exactly like the plain preset does.
+        // grid, so a stale legacy name must exclude the sibling outfit exactly like the plain preset does.
         expect(deriveExcludeOutfits("El Condor Pasa (Legacy Farm)")).toContain("Kukulkan Warrior")
         expect(deriveExcludeOutfits("El Condor Pasa")).toContain("Kukulkan Warrior")
     })
 
     it("never collects a build variant as an outfit to exclude", () => {
-        for (const name of ["El Condor Pasa", "Air Groove", "Daiwa Scarlet"]) {
+        for (const name of ["El Condor Pasa", "Air Groove", "Daiwa Scarlet", "Super Creek (Blue Farm)", "El Condor Pasa (Legacy Farm)"]) {
             expect(deriveExcludeOutfits(name)).not.toContain("Legacy Farm")
+            expect(deriveExcludeOutfits(name)).not.toContain("Blue Farm")
         }
     })
 
@@ -193,24 +205,12 @@ describe("preset-name derivation", () => {
 })
 
 describe("preset display name vs trainee selection identity (traineeName)", () => {
-    it("keeps 'Super Creek (Blue Farm)' as the picker display name under Unity Cup", () => {
-        const bf = characterPresets.find((p) => p.name === "Super Creek (Blue Farm)")
-        expect(bf).toBeDefined()
-        expect(bf!.scenario).toBe("Unity Cup")
-    })
-
-    it("resolves the Blue Farm preset to the canonical trainee 'Super Creek'", () => {
-        expect(presetTraineeName("Super Creek (Blue Farm)")).toBe("Super Creek")
-    })
-
     it("targets the real trainee 'Super Creek', never the phantom '[Blue Farm] Super Creek'", () => {
         // The live failure: deriveInGameName turned the display name into a nonexistent outfit target,
-        // scored 0.000 against '[Murmuring Stream] Super Creek', and stopped the queue.
+        // scored 0.000 against '[Murmuring Stream] Super Creek', and stopped the queue. A stale saved
+        // name must still resolve to the real trainee now that the preset itself is gone.
         expect(deriveInGameName("Super Creek (Blue Farm)")).toBe("Super Creek")
         expect(deriveInGameName("Super Creek (Blue Farm)")).not.toBe("[Blue Farm] Super Creek")
-    })
-
-    it("never treats the variant suffix as a phantom outfit to exclude", () => {
         expect(deriveExcludeOutfits("Super Creek (Blue Farm)")).not.toContain("Blue Farm")
     })
 
@@ -221,7 +221,7 @@ describe("preset display name vs trainee selection identity (traineeName)", () =
         expect(deriveInGameName("Super Creek")).toBe("Super Creek")
     })
 
-    it("audits (Legacy Farm) variants: each resolves to its real trainee, not '[Legacy Farm] <name>'", () => {
+    it("resolves each removed farm name to its real trainee, not '[Legacy Farm] <name>'", () => {
         for (const [display, trainee] of [
             ["Air Groove (Legacy Farm)", "Air Groove"],
             ["Daiwa Scarlet (Legacy Farm)", "Daiwa Scarlet"],
@@ -310,19 +310,30 @@ describe("outfit text shown to the player", () => {
         expect(presetOutfitLabel("Biwa Hayahide")).toBe("[pf. Winning Equation...]")
     })
 
-    it("shows a farm build as a build, never as an outfit", () => {
+    it("shows a removed farm name as a build, never as an outfit", () => {
         expect(presetOutfitLabel("Daiwa Scarlet (Legacy Farm)")).toBe("Legacy Farm build")
         expect(presetOutfitLabel("Super Creek (Blue Farm)")).toBe("Blue Farm build")
     })
 
-    it("shows nothing for a preset with no known outfit", () => {
-        expect(presetOutfitLabel("Nobody At All")).toBe("")
+    it("labels every removed farm name in Home and rotation text as a build, never a bracketed outfit", () => {
+        const removed = [
+            ["Daiwa Scarlet (Legacy Farm)", "URA Finale", "Daiwa Scarlet"],
+            ["El Condor Pasa (Legacy Farm)", "URA Finale", "El Condor Pasa"],
+            ["Air Groove (Legacy Farm)", "URA Finale", "Air Groove"],
+            ["Super Creek (Blue Farm)", "Unity Cup", "Super Creek"],
+        ] as const
+        for (const [name, scenario, trainee] of removed) {
+            for (const text of [presetLine(name, scenario), presetSubtitle(name, scenario)]) {
+                expect(text).toMatch(/ build/)
+                expect(text).not.toMatch(/\[(Legacy|Blue) Farm\]/)
+                expect(text).not.toContain("(")
+            }
+            expect(presetLine(name, scenario).startsWith(`${trainee} · `)).toBe(true)
+        }
     })
 
-    it("never brackets a variant suffix that is not an outfit", () => {
-        const variants = characterPresets.filter((p) => p.traineeName !== undefined || /\(Legacy Farm\)$/.test(p.name))
-        expect(variants.length).toBeGreaterThan(0)
-        for (const p of variants) expect(presetOutfitLabel(p.name)).toMatch(/ build$/)
+    it("shows nothing for a preset with no known outfit", () => {
+        expect(presetOutfitLabel("Nobody At All")).toBe("")
     })
 
     it("builds the Home and rotation subtitle with dots and no raw preset key", () => {

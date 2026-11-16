@@ -56,13 +56,17 @@ Sturdier spark rerolls and training reads, fewer stops after the daily reset and
 ### Presets and game data
 
 - **Game data:** six new support cards and the skills now released on the global game are in, and skills and outfits the global game does not have yet are no longer offered.
-- **New presets:** Daitaku Helios and the newly released Mejiro Ryan (Marguerite Latte) and Ines Fujin (Melt Your Heart) outfits, research-graded for all four scenarios (464 presets across 115 trainee cards).
+- **New presets:** Daitaku Helios and the newly released Mejiro Ryan (Marguerite Latte) and Ines Fujin (Melt Your Heart) outfits, research-graded for all four scenarios (460 presets across 115 trainee cards).
 - **Daitaku Helios** runs as a turf Mile Pace Chaser; her URA Finale preset races Mile and Sprint races in her first two years for the 15000 fans her Classic Mile Championship needs.
 - **Mejiro Ryan (Marguerite Latte)** races and buys skills as a Pace Chaser, the card's own style.
 - **Ines Fujin:** the base presets now plan her own card's skills (With All My Soul, Slipstream, Moxie) instead of those of her Melt Your Heart outfit.
 - **Grand Concert presets:** Sprint, Mile and Medium trainees now aim Speed at the cap with Wit and Power close behind; stayers keep their URA weighting apart from a higher Wit target.
 - **Mejiro McQueen:** all three outfits buy recovery skills before inherited unique skills mid-career, and train Stamina first in URA Finale, Unity Cup and Grand Concert. Frontline Elegance is now marked as a good fit for Unity Cup.
 - **Skill plans:** the Sweep Tosho and Hishi Akebono presets, and the Sakura Bakushin O Trackblazer presets, now plan a top-rated skill from their own card that they left out, replacing their weakest plain skill.
+
+### Removed
+
+- **Presets:** the four farming presets (Legacy Farm, Blue Farm) are removed. Current settings keep working until you apply another preset; a queue row naming one asks for a new preset before it starts.
 
 ## [1.8.0] - 2026-10-29
 

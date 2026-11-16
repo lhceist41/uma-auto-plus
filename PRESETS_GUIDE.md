@@ -58,7 +58,7 @@ The picker gives you five signals per row.
 
 **Outfit text.** Each row shows the outfit the way the game titles the card, in brackets, such as
 [Rouge Caroler]. Some original outfits have code-like titles, such as [MB-19890425]; that is the
-real in-game title. A farm variant reads "Legacy Farm build" or "Blue Farm build" because the game has no such outfit.
+real in-game title.
 
 **Favorites.** Star a row and it pins to the top. Favorites are per outfit, so starring one card
 does not star the character's other cards.
@@ -99,29 +99,6 @@ Any trainee with a green chip for a scenario is a good pick for it. Beyond that:
 - **Grand Concert** presets exist for every trainee. They are derived from that trainee's URA Finale
   build (see below), so they inherit her training identity.
 
-## Farm variants
-
-Most rows are one trainee's competitive build. A few are parent-farming variants, built to produce
-better inheritance material rather than a better career score. They are deliberately not the right
-pick for badge or rating chasing.
-
-| Variant | Scenario | What it changes |
-|---|---|---|
-| Legacy Farm (Daiwa Scarlet, El Condor Pasa, Air Groove) | URA Finale only | Swaps in a G1-dense mandatory race schedule, spaced so the run never trips the consecutive-race limit. More racing, fewer training turns, more inheritance value per career. |
-| Blue Farm (Super Creek) | Unity Cup only | Broadens the blue-spark focus from the competitive build's narrow stat pair to all five stats, and switches skill spending to a farming objective. |
-
-Both farm families train with all five stats in their spark focus and switch skill spending to a
-farming objective, so the career-end blue spark never lands on a stat that was left out to rot.
-
-**Why Blue Farm broadens the stat list.** The career-end blue spark picks its stat at random among
-all five, and a stat that finishes below 600 can never roll a 3-star. The training scorer's
-spark-rescue boost only fires on the stats you list, so the list is the whole lever: narrowing it to
-a trainee's "good" stats silently reintroduces dead rolls. Blue Farm trades a little stat peak for
-blue coverage across the board.
-
-Farm variants are scenario-limited on purpose. Legacy Farm's curated schedule is tuned to the URA
-goal chain and would not survive being pointed at another scenario; Blue Farm is a Unity Cup build.
-
 ## Grand Concert presets are derived
 
 Grand Concert differs from URA Finale in two ways a preset cares about: its stat caps and its own fan goals. So
@@ -148,8 +125,6 @@ Three things change in the derivation:
   non-URA preset. A curated plan is tuned to the URA goal chain, and in mandatory-plan mode
   voluntary races happen only on planned turns, so a plan that does not fit the scenario cannot
   recover from a fan shortfall.
-
-The Legacy Farm variants stay URA-only and get no Grand Concert twin.
 
 ## Why some presets look unusual
 

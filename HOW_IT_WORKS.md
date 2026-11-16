@@ -1328,7 +1328,7 @@ strategy-specific tail that normally spends the remaining budget (`OPTIMIZE_SKIL
 `OPTIMIZE_RANK`, or the knapsack) is skipped at every mid-career spend session. Leftover SP is
 accepted deliberately there: unplanned filler dilutes the white-spark pool a farming career
 exists to build, and the points remain spendable later. There is no automatic recovery
-exception -- a farming preset must plan its own recovery skills, and every migrated profile does.
+exception -- a `sparks` preset must plan its own recovery skills.
 Manual mode ignores the objective entirely and every other objective keeps the full tail, so
 nothing changes outside Adaptive sparks careers. Each record carries the decision as
 `strategyTailAllowed` (false exactly when the tail was skipped; absent when the session exited

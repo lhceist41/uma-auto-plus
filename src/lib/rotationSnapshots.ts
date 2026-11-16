@@ -47,7 +47,7 @@ const squashName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, ""
 
 /**
  * Outfits a bare base-name target must skip: all the outfit data (unreleased included) or presets name,
- * except the base card. Outfit targets get none; variant presets ("(Legacy Farm)") count as bare.
+ * except the base card. Outfit targets get none; build-variant presets ("(Some Build)") count as bare.
  */
 export function deriveExcludeOutfits(presetName: string): string[] {
     const canonical = presetTraineeName(presetName)
@@ -62,7 +62,7 @@ export function deriveExcludeOutfits(presetName: string): string[] {
     byCard.forEach((o) => outfits.add(o.title))
     for (const p of characterPresets) {
         // Resolve each roster entry to its canonical trainee too, so a variant display name's suffix
-        // (e.g. "(Blue Farm)") is never mistaken for a real sibling outfit to exclude.
+        // (e.g. "(Some Build)") is never mistaken for a real sibling outfit to exclude.
         const parsed = parsePresetName(presetTraineeName(p.name))
         if (parsed.outfit && parsed.base === base) outfits.add(parsed.outfit)
     }

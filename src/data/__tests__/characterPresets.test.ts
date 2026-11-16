@@ -47,62 +47,21 @@ describe("trainerAdvisories data integrity", () => {
     })
 })
 
-describe("Super Creek (Blue Farm) preset", () => {
-    const find = (name: string, scenario: string) => characterPresets.find((p) => p.name === name && p.scenario === scenario)
-    const base = () => find("Super Creek", "Unity Cup")
-    const blueFarm = () => find("Super Creek (Blue Farm)", "Unity Cup")
+describe("removed farming presets", () => {
+    const removed = ["Daiwa Scarlet (Legacy Farm)", "El Condor Pasa (Legacy Farm)", "Air Groove (Legacy Farm)", "Super Creek (Blue Farm)"]
 
-    it("leaves the original Super Creek Unity Cup preset unchanged (Speed+Stamina focus)", () => {
-        const b = base()
-        expect(b).toBeDefined()
-        expect(b!.settings.training?.focusOnSparkStatTarget).toEqual(["Speed", "Stamina"])
-    })
-
-    it("exists as a distinct preset under Unity Cup", () => {
-        const bf = blueFarm()
-        expect(bf).toBeDefined()
-        expect(bf!.scenario).toBe("Unity Cup")
-        expect(bf).not.toBe(base())
-    })
-
-    it("declares its canonical trainee identity as plain 'Super Creek' (display name is a variant label)", () => {
-        expect(blueFarm()!.traineeName).toBe("Super Creek")
-        expect(base()!.traineeName).toBeUndefined() // the competitive preset selects by its own name
-    })
-
-    it("focuses the spark rescue on all five stats, each exactly once", () => {
-        const focus = blueFarm()!.settings.training!.focusOnSparkStatTarget!
-        expect(focus).toEqual(["Speed", "Stamina", "Power", "Guts", "Wit"])
-        expect(new Set(focus).size).toBe(5)
-    })
-
-    it("matches the source Creek Unity build in every setting except the spark target and the sparks objective", () => {
-        // The two deliberate farming differences: the five-stat spark rescue and, since 2B-1,
-        // the planned-only sparks objective. Everything else must stay a faithful clone.
-        expect((blueFarm()!.settings.skills as { skillSpendObjective?: string }).skillSpendObjective).toBe("sparks")
-        expect((base()!.settings.skills as { skillSpendObjective?: string }).skillSpendObjective).toBeUndefined()
-        const strip = (s: unknown) => {
-            const clone = JSON.parse(JSON.stringify(s))
-            delete clone.training.focusOnSparkStatTarget
-            delete clone.skills.skillSpendObjective
-            return clone
+    it("are neither presets nor advisories, so a stale name can never resolve", () => {
+        for (const name of removed) {
+            expect(characterPresets.filter((p) => p.name === name)).toEqual([])
+            expect(Object.keys(trainerAdvisories)).not.toContain(name)
         }
-        expect(strip(blueFarm()!.settings)).toEqual(strip(base()!.settings))
     })
 
-    it("is independent of the source preset — a deep clone (what apply/rotation snapshots do) cannot mutate it", () => {
-        const bf = blueFarm()!
-        const b = base()!
-        expect(bf.settings.training!.focusOnSparkStatTarget).not.toBe(b.settings.training!.focusOnSparkStatTarget)
-        const applied = JSON.parse(JSON.stringify(bf))
-        applied.settings.training.focusOnSparkStatTarget.push("Speed")
-        expect(bf.settings.training!.focusOnSparkStatTarget).toHaveLength(5)
-        expect(b.settings.training!.focusOnSparkStatTarget).toEqual(["Speed", "Stamina"])
-    })
-
-    it("is not marked recommended (stays unproven until its own careers are analyzed)", () => {
-        // The name suffix is the label; deliberately no recommended-badge entry -> no "proven" hint.
-        expect(trainerAdvisories["Super Creek (Blue Farm)"]?.recommended ?? []).toEqual([])
+    it("leave the competitive Super Creek Unity Cup preset on its Speed+Stamina focus, selected by its own name", () => {
+        const base = characterPresets.find((p) => p.name === "Super Creek" && p.scenario === "Unity Cup")
+        expect(base).toBeDefined()
+        expect(base!.settings.training?.focusOnSparkStatTarget).toEqual(["Speed", "Stamina"])
+        expect(base!.traineeName).toBeUndefined()
     })
 })
 
@@ -1602,28 +1561,22 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
 })
 
 describe("skill spend objective (Phase 2A)", () => {
-    it("exactly the farming set, the Copano sash profile, and the SJC safety profile declare objectives", () => {
-        // The four farming profiles run sparks (planned-only spending under Adaptive); Copano
-        // URA keeps race_reward; Saintly Jade Cleric Unity Cup is the first safe_completion
-        // profile (arms recovery protection). Everything else stays implicitly "rank". A new
-        // entry here must be a deliberate decision.
+    it("exactly the Copano sash profile and the SJC safety profile declare objectives", () => {
+        // Copano URA keeps race_reward; Saintly Jade Cleric Unity Cup is the first safe_completion
+        // profile (arms recovery protection). Everything else stays implicitly "rank", so no
+        // preset runs sparks. A new entry here must be a deliberate decision.
         const declared = characterPresets
             .filter((p) => (p.settings as any)?.skills?.skillSpendObjective !== undefined)
             .map((p) => `${p.name} / ${p.scenario} -> ${(p.settings as any).skills.skillSpendObjective}`)
             .sort()
         expect(declared).toEqual([
-            "Air Groove (Legacy Farm) / URA Finale -> sparks",
             "Copano Rickey / URA Finale -> race_reward",
-            "Daiwa Scarlet (Legacy Farm) / URA Finale -> sparks",
-            "El Condor Pasa (Legacy Farm) / URA Finale -> sparks",
             "Grass Wonder (Saintly Jade Cleric) / Unity Cup -> safe_completion",
-            "Super Creek (Blue Farm) / Unity Cup -> sparks",
         ])
     })
 
-    it("the competitive clones next to the farming profiles stay undeclared", () => {
-        // The farming presets are clones of these; a stray objective here would flip a
-        // competitive profile into planned-only mode.
+    it("the competitive presets stay undeclared", () => {
+        // A stray objective here would flip a competitive profile into planned-only mode.
         const undeclared = (name: string, scenario: string) => {
             const p = characterPresets.find((x) => x.name === name && x.scenario === scenario)
             expect(p).toBeDefined()
@@ -1662,7 +1615,7 @@ describe("skill spend objective (Phase 2A)", () => {
 })
 
 describe("Grand Concert derived presets", () => {
-    // Every derived twin. The three Legacy Farm arms are deliberately absent (URA-only farm specializations).
+    // Every derived twin.
     const derived = [
         "Agnes Tachyon",
         "Mihono Bourbon",
@@ -1798,7 +1751,7 @@ describe("Grand Concert derived presets", () => {
         // The docs used to be checked with `grep -c '^        scenario: "'`, which no longer works:
         // derived twins are not literals, and grandConcertFrom's own return adds a matching line.
         // This assertion is the authoritative count now. Update the docs whenever it changes.
-        expect(characterPresets.length).toBe(464)
+        expect(characterPresets.length).toBe(460)
         expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(115)
         expect(new Set(characterPresets.map((p) => `${p.name}|${p.scenario}`)).size).toBe(characterPresets.length)
     })

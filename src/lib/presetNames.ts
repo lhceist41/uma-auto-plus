@@ -7,13 +7,13 @@ import { presetCharacter, presetOutfit } from "../data/presetMeta"
 /**
  * Preset names read "Character" or "Character (Suffix)". Usually the suffix is an OUTFIT
  * ("El Condor Pasa (Kukulkan Warrior)"), which the Trainee Select banner renders as
- * "[Kukulkan Warrior] El Condor Pasa". Build variants like "(Legacy Farm)" are NOT outfits -
- * they are alternate presets of the base character, and no "[Legacy Farm]" banner exists
- * in-game. Deriving one as an OCR target makes the navigator scan the entire roster, find
- * nothing above the match threshold, and stop the queue. Keep this set in sync with any
- * future non-outfit suffix presets.
+ * "[Kukulkan Warrior] El Condor Pasa". Build variants are NOT outfits: no "[Legacy Farm]" banner
+ * exists in-game, and deriving one as an OCR target makes the navigator scan the entire roster,
+ * find nothing above the match threshold, and stop the queue. These suffixes belong to removed
+ * build-variant presets that saved settings may still name, so they read as a build, never as an
+ * outfit. Keep this set in sync with any future non-outfit suffix presets.
  */
-const NON_OUTFIT_SUFFIXES = new Set(["Legacy Farm"])
+const NON_OUTFIT_SUFFIXES = new Set(["Legacy Farm", "Blue Farm"])
 
 /** Splits a preset name into base character name and outfit (absent for plain/variant names). */
 export function parsePresetName(presetName: string): { base: string; outfit?: string } {
@@ -25,8 +25,8 @@ export function parsePresetName(presetName: string): { base: string; outfit?: st
 
 /**
  * The canonical in-game trainee identity for a preset display name: the preset's explicit
- * `traineeName` when set, otherwise the display name unchanged. Decouples a variant/farming display
- * name (e.g. "Super Creek (Blue Farm)") from the trainee it actually selects ("Super Creek"). General
+ * `traineeName` when set, otherwise the display name unchanged. Decouples a build-variant display
+ * name (e.g. "Name (Some Build)") from the trainee it actually selects ("Name"). General
  * - driven by the preset's own declaration, never by a hard-coded suffix.
  */
 export function presetTraineeName(presetName: string): string {
@@ -35,7 +35,7 @@ export function presetTraineeName(presetName: string): string {
 
 /**
  * The outfit text a player sees for a preset: "[Rouge Caroler]" or "[MB-19890425]" as the game
- * titles the card, "Legacy Farm build" for a build variant, "" when no outfit is known.
+ * titles the card, "<Suffix> build" for a build variant, "" when no outfit is known.
  */
 export function presetOutfitLabel(presetName: string): string {
     const outfit = presetOutfit(presetName)
