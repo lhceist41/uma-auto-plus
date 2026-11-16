@@ -10,22 +10,30 @@ New releases start with a one-line summary, then list what you need to do, what 
 
 ## [Unreleased]
 
-Sturdier spark rerolls and training reads, fewer stops after the daily reset and on slow screens, smarter Grand Concert fan racing, and presets for three new trainee cards.
+Sturdier spark rerolls and training reads, fewer stops after the daily reset and on slow screens, smarter Grand Concert fan racing, optional Daily Sales buying, and presets for three new trainee cards.
+
+### New
+
+- **Rewards and Club:** new setting "Buy the Daily Sales", off by default. After Daily Races, Team Trials or your last career it buys every item only when all cost Monies, and nothing if a page was unread. Seen live.
+- **App:** if the app restarts after the bot was killed mid-session (low memory, a crash, a reboot), a notification says so at once instead of waiting until you open the app.
+- **App:** after your third finished career the app asks once for a GitHub star; never while the bot runs.
 
 ### Changed
 
-- **Sparks:** before spending 30 TP on a reroll, the bot reads the spark list a second time and keeps the original sparks if the two reads differ.
-- **Sparks:** a spark name read slightly differently on the second look no longer wastes a reroll; the bot compares both sets and keeps the better one.
+- **App:** the progress notification now updates silently instead of popping up over the game every turn.
+- **Training:** before a goal race of 3000m or longer, the bot trains Stamina when it is below what the race needs (300, or 450 from 3200m), from the second year (the third in Unity Cup), for trainees whose goal races it knows.
+- **Sparks:** before spending 30 TP on a reroll the bot reads the spark list twice and keeps the original sparks if the reads differ; a name read differently or missing its first letters (such as "it" for Wit) no longer wastes a reroll.
 - **Sparks:** a Turf spark no longer counts as a useful pink, so the bot stops keeping a weaker set or skipping a reroll for one; every turf runner already has Turf A.
 - **Grand Concert:** while there is still time to earn the fans, the bot trains and follows your racing settings instead of racing for fans, so it no longer races from the first Junior turns.
 - **Grand Concert:** when it must race for fans, it picks a race the trainee suits over one that only pays more on paper, and keeps watching later fan goals after an earlier one is met.
 - **Phones and screens:** if the game draws text smaller than MuMu at 240 DPI (seen at 480 DPI and on a Galaxy A13), more labels and buttons are found at slightly smaller sizes; MuMu at 240 DPI is unchanged (tested on screenshots only).
+- **Phones and screens:** the bot now reads every screen at a fixed 1080-wide size and maps its taps back to the real resolution. Tested live on MuMu at 720x1280 and 1440x2560 at 240 DPI (one full career at each width); 1080x1920 reads as before. Other phones are not tested.
 
 ### Fixed
 
-- **Training:** a repeated digit of a gain is no longer dropped (+11 and +22 were read as +1 and +2), and a correctly read Power gain on Guts training is no longer raised.
-- **Training:** on MuMu at 1080x1920 both digits of gains such as +13 and +15 are read, and small side gains such as +3 or +6 are no longer read as 0.
+- **Training:** gains are read whole: repeated digits (+11, +22), both digits at 1080x1920 (+13, +15), small side gains (+3, +6), and gold gains whose bonus 8 looks like a 6 or that sit next to the trainee's art (+24, +25). A correct Power gain on Guts training is no longer raised.
 - **Training:** a gain the bot still cannot read is estimated on the low side from the game's own gains instead of guessed 10 higher.
+- **Training:** the failure chance is read after its bubble has finished sliding in, so a training is no longer judged on a half-drawn bubble.
 - **Run queue:** fewer unexplained stops after a career or a trip through the menus ends (one hit even between two careers), and an error that stops the bot between careers is reported as one instead of "Queue was stopped during navigation".
 - **Daily reset:** the bot no longer stops on the popups the game shows after it: between careers it closes the Daily Sale offer with Cancel and never opens the Shop.
 - **Daily reset:** the Uma Outing Login Bonus and Gauge MAX popups are tapped through, also during Daily Races.
@@ -36,17 +44,24 @@ Sturdier spark rerolls and training reads, fewer stops after the daily reset and
 - **Sparks:** a career that ends with 11 or more sparks no longer stops the queue on Keep Sparks when the game ignores a swipe or the list has not settled yet.
 - **Sparks:** the queue no longer stops when the game is slow to leave the spark selection screen; the bot waits.
 - **Career start:** when the game is slow to leave Scenario Select, the bot waits for the next screen instead of pressing Next again or tapping the scenario arrow, so a busy PC no longer stops the queue.
-- **Racing:** races whose distance the game text reads with an extra letter ("2000Om", seen on Nakayama, Fukushima and Morioka) are matched, so the right race is picked and Grand Concert uses its fans.
-- **Rewards and Club:** after Club the bot waits up to 20 seconds for Home instead of stopping, closes the game's "It hasn't been 8 hours" notice, and goes on with Presents, Missions and Daily Sales.
+- **Racing:** races are matched when the distance reads with an extra letter ("2000Om", seen on Nakayama, Fukushima and Morioka) or the race is drawn on another venue's course (a JBC race, a trainee's own Satsuki Sho, Tenno Sho or Takarazuka Kinen), and Ooi is spelled "Oi".
+- **Rewards and Club:** after Club the bot waits up to 20 seconds for Home instead of stopping, closes the "It hasn't been 8 hours" notice and goes on with Presents, Missions and Daily Sales; Collect All taps every Missions tab and counts a "Rewards Collected" title.
 - **Rewards and Club:** the Club item request is no longer skipped when the Queen Elizabeth II Cup Winner's Sash is read without its second "I".
-- **Career history:** a career whose end steps run again after a restart or the daily reset is no longer counted twice, and skill points the bot never read show as unknown instead of 120.
+- **Skills:** the skill list no longer mistakes a ◎ skill for its ○, and counts the ○ as owned when its ◎ shows.
+- **Errors:** when the game asks for an update from the store the bot stops and taps nothing, and it no longer taps inside the button row of a dialog it does not know (that once opened the store).
+- **Errors:** when Android shows its "isn't responding" dialog for the game, the bot presses Close app and relaunches instead of waiting; it never presses Wait, and a game that hangs on every launch still stops the run.
+- **Grand Concert:** a resumed career whose scenario cannot be proven is stopped and kept instead of played, and the scenario search on Scenario Select is bounded, ending with a message to check for an update.
+- **Career history:** the career-end fan count is read when the text reader splits its digits or misreads 0 and 1; a career whose end steps rerun after a restart or the daily reset is no longer counted twice, and unread skill points show as unknown, not 120.
 
 ### Presets and game data
 
+- **Game data:** six new support cards and the skills now released on the global game are in, and skills and outfits the global game does not have yet are no longer offered.
 - **New presets:** Daitaku Helios and the newly released Mejiro Ryan (Marguerite Latte) and Ines Fujin (Melt Your Heart) outfits, research-graded for all four scenarios (464 presets across 115 trainee cards).
 - **Daitaku Helios** runs as a turf Mile Pace Chaser; her URA Finale preset races Mile and Sprint races in her first two years for the 15000 fans her Classic Mile Championship needs.
 - **Mejiro Ryan (Marguerite Latte)** races and buys skills as a Pace Chaser, the card's own style.
 - **Ines Fujin:** the base presets now plan her own card's skills (With All My Soul, Slipstream, Moxie) instead of those of her Melt Your Heart outfit.
+- **Grand Concert presets:** Sprint, Mile and Medium trainees now aim Speed at the cap with Wit and Power close behind; stayers keep their URA weighting apart from a higher Wit target.
+- **Mejiro McQueen:** all three outfits buy recovery skills before inherited unique skills mid-career, and train Stamina first in URA Finale, Unity Cup and Grand Concert. Frontline Elegance is now marked as a good fit for Unity Cup.
 - **Skill plans:** the Sweep Tosho and Hishi Akebono presets, and the Sakura Bakushin O Trackblazer presets, now plan a top-rated skill from their own card that they left out, replacing their weakest plain skill.
 
 ## [1.8.0] - 2026-10-29
