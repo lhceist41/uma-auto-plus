@@ -4,13 +4,18 @@ import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.Notification
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
+import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
 import com.facebook.react.bridge.ActivityEventListener
@@ -21,6 +26,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.steve1316.automation_library.R as LibraryR
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.events.ExceptionEvent
 import com.steve1316.automation_library.events.JSEvent
@@ -33,6 +39,7 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.NotificationUtils
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.automation_library.utils.StopServiceReceiver
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
@@ -2221,6 +2228,31 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
     }
 
+    /** The library's running notification with [text], plus alert-once: its HIGH status channel shows every update as a heads-up over the game. */
+    private fun postProgressLine(text: String) {
+        runCatching {
+            val open = PendingIntent.getActivity(context, LIBRARY_NOTIFICATION_ID, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val builder =
+                NotificationCompat
+                    .Builder(context, DeadSessionNotice.CHANNEL_ID)
+                    .setSmallIcon(LibraryR.drawable.ic_baseline_control_camera_24)
+                    .setContentTitle("Status")
+                    .setContentText(text)
+                    .setContentIntent(open)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val stop = PendingIntent.getBroadcast(context, System.currentTimeMillis().toInt(), Intent(context, StopServiceReceiver::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_CANCEL_CURRENT)
+                builder.addAction(LibraryR.drawable.stop_circle_filled, context.getString(LibraryR.string.accessibility_service_action), stop)
+            }
+            builder
+                .setPriority(NotificationManager.IMPORTANCE_HIGH)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .setOngoing(true)
+                .setShowWhen(true)
+                .setOnlyAlertOnce(true)
+            NotificationManagerCompat.from(context).notify(LIBRARY_NOTIFICATION_ID, builder.build())
+        }
+    }
+
     /**
      * Logs a failed keep-screen-on hold from a short daemon thread, never the main looper the
      * [KeepScreenOn.start] callback itself runs on: MessageLog holds a single process-wide lock, and
@@ -2274,7 +2306,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 ProgressTracker.beginWindow()
                 StatusBoard.reset(ledger.startedAt)
                 ProgressNotification.begin(captureRunning = { MediaProjectionService.isRunning }) { text ->
-                    NotificationUtils.updateNotification(context, MainActivity::class.java, true, text)
+                    postProgressLine(text)
                 }
                 launchSnapshotReadStarted = false
                 launchSnapshotReadFinished = false

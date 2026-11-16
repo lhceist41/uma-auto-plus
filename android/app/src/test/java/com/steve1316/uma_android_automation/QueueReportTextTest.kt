@@ -324,11 +324,25 @@ class QueueReportTextTest {
                     .map { it.name }
                     .toList()
             assertEquals(listOf("StartModule.kt"), users)
-            // The end notifier, and the live progress line it stops first.
-            assertEquals(2, Regex("NotificationUtils\\.").findAll(startModule).count())
+            // The end notifier posts through the library; the live progress line it stops first posts the same notification alert-once.
+            assertEquals(1, Regex("NotificationUtils\\.").findAll(startModule).count())
             assertEquals(1, Regex("update = \\{ NotificationUtils\\.updateNotification\\(").findAll(startModule).count())
-            val progressLine = Regex("ProgressNotification\\.begin\\(captureRunning = \\{ MediaProjectionService\\.isRunning \\}\\) \\{ text ->\\s+NotificationUtils\\.updateNotification\\(")
+            val progressLine = Regex("ProgressNotification\\.begin\\(captureRunning = \\{ MediaProjectionService\\.isRunning \\}\\) \\{ text ->\\s+postProgressLine\\(text\\)\\s+\\}")
             assertEquals(1, progressLine.findAll(startModule).count())
+            val header = "private fun postProgressLine(text: String) {"
+            assertEquals(1, Regex(Regex.escape(header)).findAll(startModule).count())
+            val post = startModule.substringAfter(header).substringBefore("\n    }\n")
+            val parts =
+                listOf(
+                    "runCatching {",
+                    ".Builder(context, DeadSessionNotice.CHANNEL_ID)",
+                    "StopServiceReceiver::class.java",
+                    ".setOngoing(true)",
+                    ".setOnlyAlertOnce(true)",
+                    "notify(LIBRARY_NOTIFICATION_ID, builder.build())",
+                )
+            for (part in parts) assertTrue(post.contains(part), part)
+            assertFalse(post.contains("Log"), "the progress post never logs")
             assertEquals(1, Regex("\\bExceptionEvent\\(").findAll(startModule).count(), "only the game thread's own post")
         }
     }
