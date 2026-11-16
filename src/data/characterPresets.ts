@@ -152,9 +152,9 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         //
         // URA-viable: clears the full career arc end-to-end. What flipped it past the Tenno Sho
         // (Spring) wall: a Pal-type friend card (energy economy doubled training volume) plus the
-        // 350-SP mid-career skill threshold. Unity Cup and Trackblazer stay unbadged until they
-        // get their own completed runs.
-        recommended: ["URA Finale"],
+        // 350-SP mid-career skill threshold. Unity Cup is badged from completed runs; Trackblazer
+        // stays unbadged.
+        recommended: ["URA Finale", "Unity Cup"],
     },
     "Winning Ticket (Get to Winning!)": {
         // Md=A, Lg=B, Late=A. Power+20%/Stamina+10% growth. 15 char events covered.
@@ -11506,7 +11506,8 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        // Off mid-career: uniques outspent Hydrate and Calm and Collected before the Tenno Sho (Spring).
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
@@ -11730,7 +11731,8 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        // Off mid-career: uniques outspent Hydrate and Calm and Collected before the Tenno Sho (Spring).
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
@@ -11836,7 +11838,7 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 // Power dropped from the spark focus - see the URA Finale preset note.
@@ -11939,7 +11941,8 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        // Off mid-career: uniques outspent Hydrate and Calm and Collected before the Tenno Sho (Spring).
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
@@ -12045,7 +12048,7 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 // Power dropped from the spark focus: its 2.5x below-600 bonus outscores the
@@ -58074,7 +58077,7 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200432,201532,202012,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
@@ -58180,7 +58183,7 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
@@ -58272,7 +58275,7 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200432,201532,202012,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
@@ -58378,7 +58381,7 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
@@ -58470,7 +58473,7 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200432,201532,202012,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
@@ -63560,7 +63563,7 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
@@ -63666,7 +63669,7 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
@@ -63758,7 +63761,7 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
@@ -63864,7 +63867,7 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
@@ -63956,7 +63959,7 @@ const basePresets: CharacterPreset[] = [
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
-                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyInheritedUniqueSkills: false,
                         enableBuyNegativeSkills: false,
                         plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },

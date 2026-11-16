@@ -2342,3 +2342,37 @@ describe("Potential skills in preset plans", () => {
         expect(misplaced).toEqual([])
     })
 })
+
+describe("Mejiro McQueen buys recovery before inherited uniques and trains Stamina first", () => {
+    const OUTFITS = ["Mejiro McQueen (Frontline Elegance)", "Mejiro McQueen (Fair Lady of the Waves)", "Mejiro McQueen (End of the Skies)"]
+    const STAMINA_FIRST = ["Stamina", "Speed", "Power", "Wit", "Guts"]
+    const find = (name: string, scenario: string) => characterPresets.find((p) => p.name === name && p.scenario === scenario)!
+    const plans = (name: string, scenario: string) => find(name, scenario).settings.skills!.plans as any
+
+    it.each(["URA Finale", "Unity Cup", "Trackblazer", "Grand Concert"])("skips inherited uniques in the mid-career plan in %s", (scenario) => {
+        for (const name of OUTFITS) {
+            expect({ name, flag: plans(name, scenario).skillPointCheck.enableBuyInheritedUniqueSkills }).toEqual({ name, flag: false })
+        }
+    })
+
+    it.each(["URA Finale", "Unity Cup", "Trackblazer", "Grand Concert"])("still buys inherited uniques before the finals and at career end in %s", (scenario) => {
+        for (const name of OUTFITS) {
+            expect(plans(name, scenario).preFinals.enableBuyInheritedUniqueSkills).toBe(true)
+            expect(plans(name, scenario).careerComplete.enableBuyInheritedUniqueSkills).toBe(true)
+        }
+    })
+
+    it.each(["URA Finale", "Unity Cup", "Grand Concert"])("puts Stamina first in %s", (scenario) => {
+        for (const name of OUTFITS) {
+            expect({ name, priority: find(name, scenario).settings.training!.statPrioritization }).toEqual({ name, priority: STAMINA_FIRST })
+        }
+    })
+
+    it("leaves Trackblazer's priority order alone", () => {
+        for (const name of OUTFITS) expect(find(name, "Trackblazer").settings.training!.statPrioritization).toEqual(["Speed", "Stamina", "Power", "Wit", "Guts"])
+    })
+
+    it("badges Frontline Elegance for URA Finale and Unity Cup only", () => {
+        expect(trainerAdvisories["Mejiro McQueen (Frontline Elegance)"].recommended).toEqual(["URA Finale", "Unity Cup"])
+    })
+})
