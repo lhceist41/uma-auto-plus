@@ -23,9 +23,23 @@ data class LongGoalStaminaFloor(val raceName: String, val distanceMeters: Int, v
         /** Shortest goal that gets a floor: a 2500m Arima Kinen passes at about 300 Stamina, a 3000m Kikuka Sho does not. */
         const val MIN_DISTANCE_METERS: Int = 3000
 
-        /** Live boundaries (Kyoto 3000m and 3200m, Late Surger and Pace Chaser): 0-retry passes from these values, losses below. */
+        /** Logged boundaries (Kyoto 3000m and 3200m): careers owning a recovery skill pass from these values; not a guarantee, 3200m careers without one lost up to about 500. */
         fun fullFloorFor(distanceMeters: Int): Int = if (distanceMeters >= 3200) 450 else 300
     }
+}
+
+/** A mandatory 3000m+ goal race [raceName] of [distanceMeters] at [goalTurn], [turnsUntil] turns away. */
+data class LongGoalRace(val raceName: String, val distanceMeters: Int, val goalTurn: Int, val turnsUntil: Int)
+
+/**
+ * The 3000m+ goal race the pre-race recovery purchase targets this turn, or null: no goal-chain facts, an unmatched or
+ * ambiguous trainee, Trackblazer (it replaces the character goal races), finals adjacency (day 71+), or nothing 1-2
+ * turns out. Pure.
+ */
+fun longGoalRecoveryRace(facts: GrandConcertFanFacts?, traineeName: String, currentTurn: Int, trackblazer: Boolean): LongGoalRace? {
+    if (facts == null || trackblazer || currentTurn >= PRE_FINALS_DAY - 1) return null
+    val match = facts.match(traineeName) as? GrandConcertFanFacts.Match.Matched ?: return null
+    return match.facts.longGoalRaceDue(currentTurn)
 }
 
 /**
@@ -71,6 +85,20 @@ data class GrandConcertCharacterFanFacts(
             }
             .maxByOrNull { it.floor }
     }
+
+    /** The nearest 3000m+ goal race [CRITICAL_RACE_MIN_TURNS] to [CRITICAL_RACE_MAX_TURNS] turns after [currentTurn]. A choice turn counts its longest option. Pure. */
+    fun longGoalRaceDue(currentTurn: Int): LongGoalRace? =
+        mandatoryGates
+            .filter { it.turn - currentTurn in CRITICAL_RACE_MIN_TURNS..CRITICAL_RACE_MAX_TURNS }
+            .sortedBy { it.turn }
+            .firstNotNullOfOrNull { gate ->
+                val option = gate.options.maxByOrNull { it.distanceMeters }
+                if (option == null || option.distanceMeters < LongGoalStaminaFloor.MIN_DISTANCE_METERS) {
+                    null
+                } else {
+                    LongGoalRace(option.raceName, option.distanceMeters, gate.turn, gate.turn - currentTurn)
+                }
+            }
 }
 
 /**

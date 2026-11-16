@@ -796,7 +796,7 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Valid only while its `turn` equals `date.day`. */
     private var currentGoalSnapshot: GoalDeadlineSnapshot? = null
 
-    /** Both CRITICAL_RACE arms share this key, so firing 2 turns out suppresses the 1-turn re-fire. */
+    /** Both CRITICAL_RACE arms and LONG_GOAL_RECOVERY share this key, so firing 2 turns out suppresses the 1-turn re-fire and one race opens one session. */
     private var lastCriticalRaceTurnHandled: Int? = null
 
     internal val plannedSkillEvidence = PlannedSkillEvidenceStore()
@@ -3537,6 +3537,7 @@ abstract class Campaign(game: Game) : Task(game) {
         val adaptive = resolvedSkillThreshold.mode == SkillSpendMode.ADAPTIVE
         produceGoalSnapshotIfDue(adaptive)
         val critical = computeCriticalRace(adaptive)
+        val longGoal = computeLongGoalRecovery()
         val affordableCandidate =
             if (adaptive && skillSpendObjective.allowsPlannedSkillAffordable()) {
                 val planNames = skillPlan.skillPlans[PLAN_SKILL_POINT_CHECK]?.skillNames ?: emptyList()
@@ -3558,9 +3559,37 @@ abstract class Campaign(game: Game) : Task(game) {
                 alreadyHandledPreFinals = bHasHandledPreFinalsCheck,
                 criticalRaceDue = critical != null,
                 affordableSkillDue = affordableCandidate != null,
+                longGoalRecoveryDue = longGoal != null,
             )
 
         // Handled/re-arm bookkeeping differs per trigger, so each gets its own branch instead of piggybacking on the high-water flags.
+        if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.LONG_GOAL_RECOVERY && longGoal != null) {
+            if (!checkMainScreen()) {
+                MessageLog.i(TAG, "[SKILLS] Skipping the long-goal recovery session for now - not confirmed on the Main screen.")
+                return false
+            }
+            MessageLog.i(
+                TAG,
+                "[SKILLS] Goal race '${longGoal.raceName}' (${longGoal.distanceMeters}m) in ${longGoal.turnsUntil} turn(s) with no recovery skill owned. Buying one before it...",
+            )
+            activeTriggerContext =
+                SkillTriggerContext(
+                    trigger = SkillCheckTrigger.LONG_GOAL_RECOVERY,
+                    criticalRace = longGoal.raceName,
+                    criticalRaceSource = "goal_chain",
+                    turnsUntilRace = longGoal.turnsUntil,
+                )
+            ButtonSkills.click(game.imageUtils)
+            game.wait(1.0)
+            val handled = handleSkillListScreen(PLAN_SKILL_POINT_CHECK, SkillCheckTrigger.LONG_GOAL_RECOVERY)
+            activeTriggerContext = null
+            if (handled) {
+                lastCriticalRaceTurnHandled = longGoal.goalTurn
+            } else {
+                MessageLog.w(TAG, "[WARN] performGlobalChecks:: Long-goal recovery session did not complete. The 1-2 turn window allows one retry next turn.")
+            }
+            return true
+        }
         if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.CRITICAL_RACE && critical != null) {
             if (!checkMainScreen()) {
                 MessageLog.i(TAG, "[SKILLS] Skipping the critical-race skill session for now - not confirmed on the Main screen.")
@@ -3746,6 +3775,15 @@ abstract class Campaign(game: Game) : Task(game) {
             return CriticalRaceDue(planned.raceName, planned.turnNumber, planned.turnNumber - date.day, "racing_plan")
         }
         return null
+    }
+
+    /** Manual and Adaptive alike, from the goal-chain facts (no OCR). The owned check reads tracked skills only; the session re-checks on screen. */
+    private fun computeLongGoalRecovery(): LongGoalRace? {
+        if (trainee.skillPoints < MIN_CRITICAL_SPEND) return null
+        val race = longGoalRecoveryRace(goalChainFacts, trainee.name, date.day, game.scenario == "Trackblazer") ?: return null
+        if (lastCriticalRaceTurnHandled == race.goalTurn) return null
+        if (skillPlan.ownsUsableRecovery(trainee.ownedSkillNames)) return null
+        return race
     }
 
     /**

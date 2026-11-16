@@ -16,6 +16,9 @@ enum class SkillCheckTrigger {
 
     /** Adaptive-only: a user-planned skill seen on the skill screen is now affordable at its observed price. */
     PLANNED_SKILL_AFFORDABLE,
+
+    /** A 3000m+ goal race is 1-2 turns away and no usable recovery skill is owned: buy one recovery, nothing else. Manual and Adaptive. */
+    LONG_GOAL_RECOVERY,
 }
 
 enum class SkillCheckAction {
@@ -55,13 +58,17 @@ fun decideSkillCheck(
     alreadyHandledPreFinals: Boolean,
     criticalRaceDue: Boolean = false,
     affordableSkillDue: Boolean = false,
+    longGoalRecoveryDue: Boolean = false,
 ): SkillCheckDecision {
     if (!alreadyHandledPreFinals && day == PRE_FINALS_DAY && preFinalsPlanEnabled) {
         return SkillCheckDecision(SkillCheckAction.RUN_PLAN, SkillCheckTrigger.SCENARIO_FINALS, PLAN_PRE_FINALS)
     }
 
-    // The critical-race and affordable-skill triggers run the skillPointCheck plan, so they are disabled with it
-    // and never breakpoint-stop; that stays exclusive to the high-water plan-disabled branch below.
+    // The long-goal, critical-race and affordable-skill triggers run the skillPointCheck plan, so they are disabled
+    // with it and never breakpoint-stop; that stays exclusive to the high-water plan-disabled branch below.
+    if (longGoalRecoveryDue && highWaterPlanEnabled) {
+        return SkillCheckDecision(SkillCheckAction.RUN_PLAN, SkillCheckTrigger.LONG_GOAL_RECOVERY, PLAN_SKILL_POINT_CHECK)
+    }
     if (criticalRaceDue && highWaterPlanEnabled) {
         return SkillCheckDecision(SkillCheckAction.RUN_PLAN, SkillCheckTrigger.CRITICAL_RACE, PLAN_SKILL_POINT_CHECK)
     }

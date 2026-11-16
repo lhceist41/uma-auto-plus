@@ -9,9 +9,13 @@ import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateOpt
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateSkillPurchases
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.RecoveryCandidate
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.isDoubleCircleUpgrade
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.isUsableRecovery
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.isRecoveryInjectionCandidate
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.matchesPreference
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.ownedUsableRecovery
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.pickRecoveryCandidate
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.plannedRecoveryNames
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.selectLongGoalRecovery
 import com.steve1316.uma_android_automation.bot.SkillPlan.SkillPlanSettings
 import com.steve1316.uma_android_automation.bot.SkillPlan.SpendingStrategy
 import com.steve1316.uma_android_automation.types.RunningStyle
@@ -1108,6 +1112,120 @@ class SkillPlanPurchasingTest {
             assertTrue(body.contains("rankFillAllows(it.skillData.bIsNegative, it.evaluationPoints)"))
             assertFalse(body.contains("remainingSkills = skillList.getAvailableSkills()"))
             assertFalse(body.contains("remainingSkills: Map<String, SkillListEntry> = skillList.getAvailableSkills()"))
+        }
+    }
+
+    @Nested
+    @DisplayName("long-goal recovery selection")
+    inner class LongGoalRecoveryTests {
+        // Verbatim skills.json ids, icons and conditions, so styles derive through the real Conditions parser.
+        private fun data(id: Int, name: String, iconId: Int, condition: String, inherited: Boolean = false) =
+            SkillData(
+                id = id,
+                name = name,
+                description = "",
+                iconId = iconId,
+                cost = 160,
+                evalPt = 100,
+                condition = condition,
+                precondition = "",
+                bIsInheritedUnique = inherited,
+                communityTier = null,
+                upgrade = null,
+                downgrade = null,
+            )
+
+        private val deepBreaths = data(200742, "Deep Breaths", 20021, "distance_type==4&phase_random==1")
+        private val hydrate = data(201352, "Hydrate", 20021, "running_style==2&phase_random==1")
+        private val beStill = data(201692, "Be Still", 20021, "running_style==3&phase_laterhalf_random==0&order_rate>=40")
+        private val cornerRecovery = data(200352, "Corner Recovery ○", 20021, "corner_random==1@corner_random==2@corner_random==3@corner_random==4")
+        private val clearHeart = data(10451, "Clear Heart", 20021, "phase_random==1&order>=2&order_rate<=40", inherited = true)
+        private val cornerRecoveryX = data(200353, "Corner Recovery ×", 20024, "corner_random==1@corner_random==2")
+        private val paceChaserSavvy = data(201532, "Pace Chaser Savvy ○", 20011, "distance_rate>=50&order_rate<=60")
+        private val byName = listOf(deepBreaths, hydrate, beStill, cornerRecovery, clearHeart, cornerRecoveryX, paceChaserSavvy).associateBy { it.name }
+        private val dataOf: (String) -> SkillData? = { byName[it] }
+
+        @Test
+        fun `a recovery counts only when the running style can activate it`() {
+            assertFalse(isUsableRecovery(beStill, RunningStyle.PACE_CHASER), "a Late Surger recovery is useless to a Pace Chaser")
+            assertTrue(isUsableRecovery(beStill, RunningStyle.LATE_SURGER))
+            assertTrue(isUsableRecovery(beStill, null), "no resolved style keeps the old icon-only rule")
+            assertTrue(isUsableRecovery(cornerRecovery, RunningStyle.PACE_CHASER))
+            assertFalse(isUsableRecovery(cornerRecoveryX, null), "debuff family")
+            assertFalse(isUsableRecovery(paceChaserSavvy, RunningStyle.PACE_CHASER), "non-recovery icon")
+        }
+
+        @Test
+        fun `a style-incompatible owned recovery does not satisfy, a compatible one does`() {
+            assertNull(ownedUsableRecovery(listOf("Be Still", "Pace Chaser Savvy ○"), RunningStyle.PACE_CHASER, dataOf))
+            assertEquals("Hydrate", ownedUsableRecovery(listOf("Be Still", "Hydrate"), RunningStyle.PACE_CHASER, dataOf))
+            assertEquals("Clear Heart", ownedUsableRecovery(listOf("Clear Heart"), null, dataOf), "an owned inherited-unique recovery still counts")
+            assertNull(ownedUsableRecovery(listOf("Unknown Skill"), null, dataOf))
+        }
+
+        @Test
+        fun `planned recoveries keep plan order and never include uniques, debuffs or other skills`() {
+            val plan = listOf("Pace Chaser Savvy ○", "Clear Heart", "Be Still", "Hydrate", "Corner Recovery ×", "Corner Recovery ○", "Unknown Skill")
+            assertEquals(listOf("Hydrate", "Corner Recovery ○"), plannedRecoveryNames(plan, RunningStyle.PACE_CHASER, dataOf))
+            assertEquals(listOf("Be Still", "Hydrate", "Corner Recovery ○"), plannedRecoveryNames(plan, null, dataOf))
+        }
+
+        @Test
+        fun `an owned recovery buys nothing and plans nothing`() {
+            var asked = 0
+            val picked =
+                selectLongGoalRecovery(
+                    ownedRecovery = "Hydrate",
+                    plannedRecoveries = listOf("Corner Recovery ○"),
+                    pickPlanned = {
+                        asked++
+                        mapOf(it to 170)
+                    },
+                    pickInjection = {
+                        asked++
+                        mapOf("Deep Breaths" to 160)
+                    },
+                )
+            assertTrue(picked.isEmpty())
+            assertEquals(0, asked, "neither the plan nor the injection is consulted")
+        }
+
+        @Test
+        fun `the first planned recovery that fits wins and the injection is not consulted`() {
+            var injected = false
+            val picked =
+                selectLongGoalRecovery(
+                    ownedRecovery = null,
+                    plannedRecoveries = listOf("Hydrate", "Corner Recovery ○"),
+                    pickPlanned = { mapOf(it to 180) },
+                    pickInjection = {
+                        injected = true
+                        mapOf("Deep Breaths" to 160)
+                    },
+                )
+            assertEquals(mapOf("Hydrate" to 180), picked)
+            assertFalse(injected)
+        }
+
+        @Test
+        fun `an over-budget planned recovery is skipped for the next planned one`() {
+            val prices = mapOf("Hydrate" to 400, "Corner Recovery ○" to 170)
+            val budget = 300
+            val picked = selectLongGoalRecovery(null, listOf("Hydrate", "Corner Recovery ○"), { n -> prices.getValue(n).let { if (it <= budget) mapOf(n to it) else emptyMap() } }, { emptyMap() })
+            assertEquals(mapOf("Corner Recovery ○" to 170), picked)
+        }
+
+        @Test
+        fun `the injection is the fallback when no planned recovery is buyable, and nothing fits means nothing is bought`() {
+            assertEquals(mapOf("Deep Breaths" to 160), selectLongGoalRecovery(null, listOf("Hydrate"), { emptyMap() }, { mapOf("Deep Breaths" to 160) }))
+            assertEquals(mapOf("Deep Breaths" to 160), selectLongGoalRecovery(null, emptyList(), { error("no planned recovery to try") }, { mapOf("Deep Breaths" to 160) }))
+            assertTrue(selectLongGoalRecovery(null, listOf("Hydrate"), { emptyMap() }, { emptyMap() }).isEmpty())
+        }
+
+        @Test
+        fun `the Long axis keeps Long-gated recoveries for a Medium-preferred trainee`() {
+            assertTrue(isRecoveryInjectionCandidate(deepBreaths, TrackDistance.LONG, RunningStyle.PACE_CHASER, TrackSurface.TURF))
+            assertFalse(isRecoveryInjectionCandidate(deepBreaths, TrackDistance.MEDIUM, RunningStyle.PACE_CHASER, TrackSurface.TURF), "why the session passes Long")
         }
     }
 }

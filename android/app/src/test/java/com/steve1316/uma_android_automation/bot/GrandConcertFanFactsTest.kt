@@ -467,4 +467,50 @@ class GrandConcertFanFactsTest {
         }
         error("could not locate the assets root")
     }
+
+    // ---- pre-race recovery: the 3000m+ goal 1-2 turns out ----
+
+    private fun gate(turn: Int, vararg options: Pair<String, Int>) =
+        GrandConcertMandatoryGate(turn, options.size > 1, options.map { (name, meters) -> GrandConcertGateOption(name, 1000, meters) })
+
+    @Test
+    @DisplayName("the long-goal window is 1 to 2 turns before the race, never race day or 3 turns out")
+    fun longGoalWindowEdges() {
+        val stayer = facts().match("Stayer") as GrandConcertFanFacts.Match.Matched
+        assertNull(stayer.facts.longGoalRaceDue(41))
+        assertEquals(LongGoalRace("Kikuka Sho", 3000, 44, 2), stayer.facts.longGoalRaceDue(42))
+        assertEquals(LongGoalRace("Kikuka Sho", 3000, 44, 1), stayer.facts.longGoalRaceDue(43))
+        assertNull(stayer.facts.longGoalRaceDue(44), "race day is too late to buy")
+        assertNull(stayer.facts.longGoalRaceDue(46), "a 2500m Arima Kinen is not a long goal")
+        assertEquals(LongGoalRace("Tenno Sho (Spring)", 3200, 56, 2), stayer.facts.longGoalRaceDue(54), "a choice turn counts its longest option")
+    }
+
+    @Test
+    @DisplayName("2999m is not a long goal, 3000m is; the nearest qualifying goal wins")
+    fun longGoalDistanceBoundary() {
+        assertNull(GrandConcertCharacterFanFacts(emptyList(), listOf(gate(31, "Short" to 2999))).longGoalRaceDue(30))
+        assertEquals(LongGoalRace("Long", 3000, 31, 1), GrandConcertCharacterFanFacts(emptyList(), listOf(gate(31, "Long" to 3000))).longGoalRaceDue(30))
+        val two = GrandConcertCharacterFanFacts(emptyList(), listOf(gate(32, "Later" to 3200), gate(31, "Sooner" to 3000)))
+        assertEquals("Sooner", two.longGoalRaceDue(30)?.raceName)
+        val shortThenLong = GrandConcertCharacterFanFacts(emptyList(), listOf(gate(31, "Short" to 2999), gate(32, "Long" to 3400)))
+        assertEquals("Long", shortThenLong.longGoalRaceDue(30)?.raceName)
+    }
+
+    @Test
+    @DisplayName("the recovery race is null for an unknown trainee, missing facts, Trackblazer and day 71+")
+    fun longGoalRecoveryRaceGates() {
+        assertEquals(LongGoalRace("Kikuka Sho", 3000, 44, 2), longGoalRecoveryRace(facts(), "Stayer", 42, trackblazer = false))
+        assertNull(longGoalRecoveryRace(facts(), "Nobody Known", 42, trackblazer = false))
+        assertNull(longGoalRecoveryRace(null, "Stayer", 42, trackblazer = false))
+        assertNull(longGoalRecoveryRace(facts(), "Stayer", 42, trackblazer = true))
+        val late =
+            GrandConcertFanFacts.parse(
+                """{ "schemaVersion": 1, "universalCompletedRaceFanFloor": 7, "characters": { "Late": { "fanGoals": [], "mandatoryRaces": [
+                { "turn": 72, "isChoice": false, "options": [{ "raceName": "Finale Long", "fansNeeded": 1, "distanceMeters": 3000 }] }
+                ] } } }""",
+            ) ?: error("late payload should parse")
+        assertEquals(LongGoalRace("Finale Long", 3000, 72, 2), late.match("Late").let { (it as GrandConcertFanFacts.Match.Matched).facts.longGoalRaceDue(70) })
+        assertEquals(LongGoalRace("Finale Long", 3000, 72, 2), longGoalRecoveryRace(late, "Late", 70, trackblazer = false))
+        assertNull(longGoalRecoveryRace(late, "Late", PRE_FINALS_DAY - 1, trackblazer = false), "finals adjacency stays inert")
+    }
 }

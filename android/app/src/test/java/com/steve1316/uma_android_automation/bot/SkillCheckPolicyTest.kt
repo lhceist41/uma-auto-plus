@@ -1,6 +1,8 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.TrackDistance
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -180,6 +182,88 @@ class SkillCheckPolicyTest {
         fun `the plan key always matches its trigger`() {
             assertEquals(PLAN_SKILL_POINT_CHECK, decide(skillPoints = 9999).planKey)
             assertEquals(PLAN_PRE_FINALS, decide(day = PRE_FINALS_DAY).planKey)
+        }
+    }
+
+    @Nested
+    @DisplayName("long-goal recovery trigger")
+    inner class LongGoalRecoveryTests {
+        private fun decideAll(
+            longGoalRecoveryDue: Boolean = true,
+            criticalRaceDue: Boolean = false,
+            affordableSkillDue: Boolean = false,
+            skillPoints: Int = 200,
+            highWaterThreshold: Int = 1000,
+            highWaterPlanEnabled: Boolean = true,
+            alreadyHandledHighWater: Boolean = false,
+            day: Int = 54,
+        ) = decideSkillCheck(
+            skillPoints = skillPoints,
+            highWaterThreshold = highWaterThreshold,
+            enableSkillPointCheck = true,
+            highWaterPlanEnabled = highWaterPlanEnabled,
+            alreadyHandledHighWater = alreadyHandledHighWater,
+            day = day,
+            preFinalsPlanEnabled = true,
+            alreadyHandledPreFinals = false,
+            criticalRaceDue = criticalRaceDue,
+            affordableSkillDue = affordableSkillDue,
+            longGoalRecoveryDue = longGoalRecoveryDue,
+        )
+
+        @Test
+        fun `a due long goal runs the skillPointCheck plan below the user's threshold`() {
+            val d = decideAll(skillPoints = 200, highWaterThreshold = 1000)
+            assertEquals(SkillCheckAction.RUN_PLAN, d.action)
+            assertEquals(SkillCheckTrigger.LONG_GOAL_RECOVERY, d.trigger)
+            assertEquals(PLAN_SKILL_POINT_CHECK, d.planKey)
+        }
+
+        @Test
+        fun `pre-finals still wins, the long goal beats critical, affordable and high water`() {
+            assertEquals(SkillCheckTrigger.SCENARIO_FINALS, decideAll(day = PRE_FINALS_DAY).trigger)
+            assertEquals(SkillCheckTrigger.LONG_GOAL_RECOVERY, decideAll(criticalRaceDue = true, affordableSkillDue = true, skillPoints = 5000).trigger)
+            assertEquals(SkillCheckTrigger.CRITICAL_RACE, decideAll(longGoalRecoveryDue = false, criticalRaceDue = true).trigger)
+        }
+
+        @Test
+        fun `a disabled plan disables it and never turns it into a breakpoint stop`() {
+            assertEquals(SkillCheckAction.NONE, decideAll(highWaterPlanEnabled = false, skillPoints = 200).action)
+            val atThreshold = decideAll(highWaterPlanEnabled = false, skillPoints = 1000)
+            assertEquals(SkillCheckAction.BREAKPOINT_STOP, atThreshold.action)
+            assertEquals(SkillCheckTrigger.HIGH_WATER, atThreshold.trigger, "the stop stays the high-water behavior")
+        }
+
+        @Test
+        fun `manual high-water decisions are unchanged when no long goal is due`() {
+            for (sp in listOf(0, 349, 350, 999, 1000, 4000)) {
+                for (handled in listOf(false, true)) {
+                    for (planEnabled in listOf(false, true)) {
+                        for (day in listOf(30, 54, PRE_FINALS_DAY)) {
+                            val legacy =
+                                decideSkillCheck(
+                                    skillPoints = sp,
+                                    highWaterThreshold = 1000,
+                                    enableSkillPointCheck = true,
+                                    highWaterPlanEnabled = planEnabled,
+                                    alreadyHandledHighWater = handled,
+                                    day = day,
+                                    preFinalsPlanEnabled = true,
+                                    alreadyHandledPreFinals = false,
+                                )
+                            val now = decideAll(longGoalRecoveryDue = false, skillPoints = sp, highWaterPlanEnabled = planEnabled, alreadyHandledHighWater = handled, day = day)
+                            assertEquals(legacy, now, "sp=$sp handled=$handled plan=$planEnabled day=$day")
+                        }
+                    }
+                }
+            }
+        }
+
+        @Test
+        fun `the trigger does not arm recovery injection for other manual sessions`() {
+            for (objective in SkillSpendObjective.entries) {
+                assertFalse(allowsRecoveryInjection(SkillSpendMode.MANUAL, objective, TrackDistance.LONG), objective.name)
+            }
         }
     }
 }

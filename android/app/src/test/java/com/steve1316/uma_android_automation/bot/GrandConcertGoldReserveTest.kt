@@ -171,7 +171,16 @@ class GrandConcertGoldReserveTest {
             for (objective in SkillSpendObjective.entries.filter { it != SkillSpendObjective.RANK }) {
                 assertEquals(today, session(screen, sp, objective = objective))
             }
-            for (trigger in listOf(SkillCheckTrigger.CAREER_COMPLETE, SkillCheckTrigger.CRITICAL_RACE, SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE, SkillCheckTrigger.MANUAL, null)) {
+            val otherTriggers =
+                listOf(
+                    SkillCheckTrigger.CAREER_COMPLETE,
+                    SkillCheckTrigger.CRITICAL_RACE,
+                    SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE,
+                    SkillCheckTrigger.LONG_GOAL_RECOVERY,
+                    SkillCheckTrigger.MANUAL,
+                    null,
+                )
+            for (trigger in otherTriggers) {
                 assertEquals(today, session(screen, sp, trigger = trigger))
             }
         }

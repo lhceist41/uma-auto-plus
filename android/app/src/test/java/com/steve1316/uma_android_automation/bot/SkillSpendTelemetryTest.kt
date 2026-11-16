@@ -207,6 +207,25 @@ class SkillSpendTelemetryTest {
         }
 
         @Test
+        fun `a LONG_GOAL_RECOVERY record carries the goal race and its goal-chain source`() {
+            val r =
+                record(
+                    trigger = SkillCheckTrigger.LONG_GOAL_RECOVERY,
+                    objective = "rank",
+                    criticalRace = "Tenno Sho (Spring)",
+                    criticalRaceSource = "goal_chain",
+                    turnsUntilRace = 2,
+                    strategyTailAllowed = false,
+                )
+            assertEquals("LONG_GOAL_RECOVERY", r.getString("trigger"))
+            assertEquals("Tenno Sho (Spring)", r.getString("criticalRace"))
+            assertEquals("goal_chain", r.getString("criticalRaceSource"))
+            assertEquals(2, r.getInt("turnsUntilRace"))
+            assertFalse(r.getBoolean("strategyTailAllowed"))
+            assertFalse(r.has("plannedSkill"))
+        }
+
+        @Test
         fun `objective rides on ordinary triggers too, and absent v3 fields stay omitted`() {
             val r = record(trigger = SkillCheckTrigger.HIGH_WATER, objective = "rank")
             assertEquals("rank", r.getString("objective"))

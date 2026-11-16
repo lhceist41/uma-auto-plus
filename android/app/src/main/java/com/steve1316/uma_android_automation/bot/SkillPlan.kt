@@ -312,6 +312,37 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 compareBy({ it.recoveryClass != RecoveryClass.WHITE }, { it.price }, { it.skillId }),
             )
 
+        /** A white or gold recovery the running [style] can activate (explicit or inferred style); a null style accepts every recovery. */
+        internal fun isUsableRecovery(skillData: SkillData, style: RunningStyle?): Boolean =
+            recoveryClassOf(skillData.iconId) != RecoveryClass.NONE &&
+                matchesPreference(null, skillData.runningStyle, skillData.inferredRunningStyles, null, null, style, null)
+
+        /** The first of [names] that is a usable recovery, or null. Inherited-unique recoveries count, though no recovery path buys them. */
+        internal fun ownedUsableRecovery(names: Iterable<String>, style: RunningStyle?, dataOf: (String) -> SkillData?): String? =
+            names.firstOrNull { name -> dataOf(name)?.let { isUsableRecovery(it, style) } == true }
+
+        /** The plan's usable recoveries in plan order, never inherited uniques. */
+        internal fun plannedRecoveryNames(planNames: List<String>, style: RunningStyle?, dataOf: (String) -> SkillData?): List<String> =
+            planNames.filter { name -> dataOf(name)?.let { !it.bIsInheritedUnique && isUsableRecovery(it, style) } == true }
+
+        /**
+         * The long-goal session's one recovery: nothing when [ownedRecovery] is set, else the first planned recovery [pickPlanned] can buy
+         * within the budget, else the injection pick.
+         */
+        internal fun selectLongGoalRecovery(
+            ownedRecovery: String?,
+            plannedRecoveries: List<String>,
+            pickPlanned: (String) -> Map<String, Int>,
+            pickInjection: () -> Map<String, Int>,
+        ): Map<String, Int> {
+            if (ownedRecovery != null) return emptyMap()
+            for (name in plannedRecoveries) {
+                val picked = pickPlanned(name)
+                if (picked.isNotEmpty()) return picked
+            }
+            return pickInjection()
+        }
+
         /** The rank fill spends leftovers by ratio, so it skips negatives (their toggle owns them) and skills that add no rating. */
         fun rankFillAllows(isNegative: Boolean, evaluationPoints: Int): Boolean = !isNegative && evaluationPoints > 0
 
@@ -941,20 +972,19 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * a Potential-gated Cooldown must never block the fallback); otherwise buys the cheapest compatible observed
      * candidate (WHITE before GOLD) from the wave budget.
      */
-    private fun getRecoveryInjectionSkills(skillList: SkillList, skillsToBuy: List<String>, availableSkillPoints: Int): Map<String, Int> {
-        val axes = resolvePreferredAxes()
-        if (!allowsRecoveryInjection(campaign.resolvedSkillThreshold.mode, campaign.skillSpendObjective, axes.trackDistance)) {
+    private fun getRecoveryInjectionSkills(skillList: SkillList, skillsToBuy: List<String>, availableSkillPoints: Int, longGoalSession: Boolean = false): Map<String, Int> {
+        val preferred = resolvePreferredAxes()
+        // The long-goal session buys for a 3000m+ race whatever distance the trainee prefers.
+        val axes = if (longGoalSession) preferred.copy(trackDistance = TrackDistance.LONG) else preferred
+        if (!longGoalSession && !allowsRecoveryInjection(campaign.resolvedSkillThreshold.mode, campaign.skillSpendObjective, axes.trackDistance)) {
             return emptyMap()
         }
         sessionRecoveryRuleActive = true
 
-        // Inherited-unique recoveries count as owned though they are never injection candidates.
         val satisfiedBy: String? =
-            (skillList.getObtainedSkills().keys + campaign.trainee.ownedSkillNames + skillsToBuy)
-                .firstOrNull { name ->
-                    val data: SkillData? = game.skillDatabase.getSkillData(name)
-                    data != null && recoveryClassOf(data.iconId) != RecoveryClass.NONE
-                }
+            ownedUsableRecovery(skillList.getObtainedSkills().keys + campaign.trainee.ownedSkillNames + skillsToBuy, axes.runningStyle) {
+                game.skillDatabase.getSkillData(it)
+            }
         if (satisfiedBy != null) {
             sessionRecoveryRequired = false
             MessageLog.i(TAG, "[SKILLS] Recovery protection satisfied by '$satisfiedBy'.")
@@ -991,6 +1021,33 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         sessionRecoveryObservedPrice = choice.price
         MessageLog.i(TAG, "[SKILLS] Recovery protection selected '${choice.name}' at ${choice.price} SP.")
         return mapOf(choice.name to choice.price)
+    }
+
+    /** Whether [names] hold a recovery the trainee's resolved running style can use; lets the long-goal trigger skip opening the screen. */
+    internal fun ownsUsableRecovery(names: Collection<String>): Boolean =
+        ownedUsableRecovery(names, resolvePreferredAxes().runningStyle) { game.skillDatabase.getSkillData(it) } != null
+
+    /** Recovery only for a 3000m+ goal race, so the threshold keeps governing every other purchase: no golds, uniques, negatives or strategy tail. */
+    private fun getLongGoalRecoverySkills(skillPlanSettings: SkillPlanSettings, skillList: SkillList, availableSkillPoints: Int): Map<String, Int> {
+        val style: RunningStyle? = resolvePreferredAxes().runningStyle
+        val dataOf: (String) -> SkillData? = { game.skillDatabase.getSkillData(it) }
+        val ownedRecovery: String? = ownedUsableRecovery(skillList.getObtainedSkills().keys + campaign.trainee.ownedSkillNames, style, dataOf)
+        if (ownedRecovery != null) {
+            MessageLog.i(TAG, "[SKILLS] Long-goal recovery already owned: '$ownedRecovery'. Buying nothing.")
+        }
+        val picked: Map<String, Int> =
+            selectLongGoalRecovery(
+                ownedRecovery = ownedRecovery,
+                plannedRecoveries = plannedRecoveryNames(skillPlanSettings.skillNames, style, dataOf),
+                pickPlanned = { name -> getUserPlannedSkills(skillPlanSettings.copy(skillNames = listOf(name)), skillList, emptyList(), availableSkillPoints) },
+                pickInjection = { getRecoveryInjectionSkills(skillList, emptyList(), availableSkillPoints, longGoalSession = true) },
+            )
+        if (picked.isNotEmpty()) {
+            MessageLog.i(TAG, "[SKILLS] Long-goal recovery selected: ${picked.entries.joinToString(", ") { "${it.key} (${it.value} SP)" }}.")
+        } else if (ownedRecovery == null) {
+            MessageLog.i(TAG, "[SKILLS] Long-goal recovery found nothing that fits $availableSkillPoints SP.")
+        }
+        return picked
     }
 
     /**
@@ -1446,6 +1503,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         if (!skillPlanSettings.bIsEnabled) {
             MessageLog.i(TAG, "[SKILLS] Skill plan is disabled. No skills will be purchased.")
             return emptyMap()
+        }
+
+        if (sessionEffectiveTrigger == SkillCheckTrigger.LONG_GOAL_RECOVERY) {
+            sessionStrategyTailAllowed = false
+            return getLongGoalRecoverySkills(skillPlanSettings, skillList, availableSkillPoints)
         }
 
         val result: MutableMap<String, Int> = mutableMapOf()

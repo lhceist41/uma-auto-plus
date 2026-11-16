@@ -944,6 +944,17 @@ describe("parseCorpus — skill_spend records", () => {
         expect(skillSpends[2].plannedSkill).toBeUndefined()
     })
 
+    it("parses a LONG_GOAL_RECOVERY record with its goal race on the critical-race fields", () => {
+        const { skillSpends } = parseCorpus(
+            skillSpendJson({ policy: "trigger-v4", trigger: "LONG_GOAL_RECOVERY", objective: "rank", criticalRace: "Kikuka Sho", criticalRaceSource: "goal_chain", turnsUntilRace: 1 }) + "\n",
+            "c.jsonl",
+        )
+        expect(skillSpends[0].trigger).toBe("LONG_GOAL_RECOVERY")
+        expect(skillSpends[0].criticalRace).toBe("Kikuka Sho")
+        expect(skillSpends[0].criticalRaceSource).toBe("goal_chain")
+        expect(skillSpends[0].turnsUntilRace).toBe(1)
+    })
+
     it("leaves the v3 fields undefined on older records rather than inferring them", () => {
         const { skillSpends } = parseCorpus(skillSpendJson({ policy: "trigger-v2", threshold: 1000, tier: "manual", reason: "manual threshold 1000" }), "c.jsonl")
         expect(skillSpends[0].objective).toBeUndefined()
