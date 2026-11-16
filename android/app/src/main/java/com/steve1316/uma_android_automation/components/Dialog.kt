@@ -48,13 +48,13 @@
 package com.steve1316.uma_android_automation.components
 
 import android.graphics.Bitmap
-import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.TextUtils
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.BaseComponentInterface
 import com.steve1316.uma_android_automation.types.BoundingBox
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
@@ -219,13 +219,13 @@ object DialogUtils {
         // reflect the detected edge around the screen center to recover the true (smaller) left
         // edge. Keeps the already-correct case unchanged while preventing the negative width
         // (clamped to a useless 1px OCR region) when the match lands right of center.
-        val leftEdgeX = minOf(x, SharedData.displayWidth - x)
+        val leftEdgeX = minOf(x, CanonicalScreen.width - x)
 
         val bbox =
             BoundingBox(
                 imageUtils.relX(leftEdgeX, 0),
                 imageUtils.relY(y, 0),
-                imageUtils.relWidth((SharedData.displayWidth - (leftEdgeX * 2)).toInt()),
+                imageUtils.relWidth((CanonicalScreen.width - (leftEdgeX * 2)).toInt()),
                 imageUtils.relHeight(templateBitmap.height),
             )
 

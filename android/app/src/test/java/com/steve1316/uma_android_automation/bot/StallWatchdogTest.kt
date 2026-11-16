@@ -371,7 +371,7 @@ class StallWatchdogTest {
             val wait = body(game, "fun wait(seconds: Double")
             assertTrue(wait.indexOf("checkCurrentRun()") in 0 until wait.indexOf("heartbeat()"))
             val tap = body(game, "fun tap(x: Double")
-            assertTrue(tap.indexOf("checkCurrentRun()") in 0 until tap.indexOf("gestureUtils.tap("))
+            assertTrue(tap.indexOf("checkCurrentRun()") in 0 until tap.indexOf("gestureUtils.tapCanonical("))
             assertTrue(game.contains("val gestureUtils: MyAccessibilityService get() = MyAccessibilityService.getInstance()"))
         }
 

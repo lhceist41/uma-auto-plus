@@ -50,10 +50,10 @@ class OwnUiInputGuardTest {
 
             val coordinate = sourceFile("bot/CoordinateTap.kt").readText().replace("\r\n", "\n").substringAfter("fun tap(service: MyAccessibilityService,")
             assertTrue(coordinate.contains("val live = if (OwnUiForeground.waitForGame()) MyAccessibilityService.getInstance() else service"))
-            assertTrue(coordinate.indexOf("val live =") < coordinate.indexOf("live.tap("))
+            assertTrue(coordinate.indexOf("val live =") < coordinate.indexOf("live.tapCanonical("))
 
             val components = sourceFile("components/Components.kt").readText().replace("\r\n", "\n")
-            assertTrue(components.contains("OwnUiForeground.waitForGame()\n        MyAccessibilityService.getInstance().tap(x, y, imageName, taps = taps)"))
+            assertTrue(components.contains("OwnUiForeground.waitForGame()\n        MyAccessibilityService.getInstance().tapCanonical(x, y, imageName, taps = taps)"))
         }
 
         @Test
@@ -82,14 +82,16 @@ class OwnUiInputGuardTest {
         /** (file, receiver.method) pairs that dispatch without the guard on purpose. */
         val ALLOWED =
             mapOf(
-                "bot/Game.kt gestureUtils.tap" to "Game.tap's own dispatch; the guard opens the function",
-                "bot/CoordinateTap.kt live.tap" to "the service is re-read after the guard in CoordinateTap.tap",
+                "bot/Game.kt gestureUtils.tapCanonical" to "Game.tap's own dispatch; the guard opens the function",
+                "bot/CoordinateTap.kt live.tapCanonical" to "the service is re-read after the guard in CoordinateTap.tap",
+                "utils/CanonicalScreen.kt MyAccessibilityService.tapCanonical" to "the helper's declaration; every call site is scanned",
+                "utils/CanonicalScreen.kt MyAccessibilityService.swipeCanonical" to "the helper's declaration; every call site is scanned",
                 "utils/OwnInputProbe.kt service.dispatchGesture" to "taps the probe's own overlay window by design; recovery code that acts first",
                 "CareerLaunchNavigator.kt transport.swipe" to "host ADB swipe, sent only after the host reports the game in front",
                 "ProductionHostScrollRecovery.kt activeTransport.swipe" to "host ADB swipe, sent only after the host reports the game in front",
             )
 
-        val CALL = Regex("""([A-Za-z_][\w.]*?(?:\(\))?)\.(tap|swipe|dispatchGesture)\(""")
+        val CALL = Regex("""([A-Za-z_][\w.]*?(?:\(\))?)\.(tapCanonical|swipeCanonical|tap|swipe|dispatchGesture)\(""")
 
         /** Input calls in [text] that neither route through a chokepoint nor follow the guard (comment lines between are fine). */
         fun unguardedInputCalls(path: String, text: String): List<String> {

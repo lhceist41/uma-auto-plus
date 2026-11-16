@@ -383,7 +383,7 @@ class BetweenRunRecoveryTest {
             assertFalse(Regex("\\.click\\(|findAndTapImage|\\.close\\(|\\.ok\\(|Button[A-Z]").containsMatchIn(handler))
             assertEquals(1, count(handler, "CoordinateTap.tap("))
             assertTrue(handler.contains("TitleScreenProbe.TAP_TO_START_X,"))
-            assertTrue(handler.contains("gameY(TitleScreenProbe.TAP_TO_START_Y, ScreenBand.BOTTOM, SharedData.displayWidth, SharedData.displayHeight),"))
+            assertTrue(handler.contains("gameY(TitleScreenProbe.TAP_TO_START_Y, ScreenBand.BOTTOM, CanonicalScreen.width, CanonicalScreen.height),"))
             assertTrue(handler.contains("\"title_tap_to_start\","))
             assertTrue(handler.indexOf("if (!betweenRunRecovery.mayTapToStart(now)) {") in 0 until handler.indexOf("CoordinateTap.tap("))
             assertTrue(handler.indexOf("betweenRunRecovery.tappedToStart(now)") > handler.indexOf("CoordinateTap.tap("))

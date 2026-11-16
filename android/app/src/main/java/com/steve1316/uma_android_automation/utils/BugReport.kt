@@ -47,7 +47,11 @@ object BugReport {
             "App: UMA Auto+ $versionName ($versionCode)",
             "Android: $androidRelease (API $sdk)",
             "Device: $manufacturer $model",
-            if (screenWidth > 0 && screenHeight > 0) "Screen the bot sees: ${screenWidth}x$screenHeight" else "Screen the bot sees: not captured yet (the bot has not been started)",
+            if (screenWidth > 0 && screenHeight > 0) {
+                "Screen the bot sees: ${screenWidth}x$screenHeight${canonicalSizeNote(screenWidth, screenHeight)}"
+            } else {
+                "Screen the bot sees: not captured yet (the bot has not been started)"
+            },
         )
 
     /** One log's lines, and what was left out before any size trimming ([cut], for report.txt). */

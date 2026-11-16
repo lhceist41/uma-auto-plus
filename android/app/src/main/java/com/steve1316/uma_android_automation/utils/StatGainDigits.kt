@@ -114,6 +114,12 @@ object StatGainDigits {
     /** Non-zero where the absolute gray [difference] (one unsigned byte per pixel) is at most [levels], as [equalRatio] takes it. */
     fun withinGrayLevels(difference: ByteArray, levels: Int): ByteArray = ByteArray(difference.size) { if ((difference[it].toInt() and 0xFF) <= levels) -1 else 0 }
 
+    /**
+     * Gray levels a screen pixel may differ from the template and still count as equal in [equalRatio]. Resizing a capture to 1080 wide
+     * moves glyph pixels a few levels (true digits fell from 10-34 percent exactly equal to 2-8), so only a resized capture gets 4.
+     */
+    fun equalGrayLevels(resized: Boolean): Int = if (resized) 4 else EQUAL_GRAY_LEVELS
+
     /** One template hit in a gain row: template name, centre x in the row crop, and its pixel correlation. */
     class TemplateMatch(val template: String, val x: Double, val score: Double)
 

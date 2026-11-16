@@ -51,6 +51,7 @@ import com.steve1316.uma_android_automation.components.LabelItemRequestSelectPro
 import com.steve1316.uma_android_automation.components.LabelMissionsHeader
 import com.steve1316.uma_android_automation.components.LabelPresentsHeader
 import com.steve1316.uma_android_automation.components.LabelRewardsCollectedHeader
+import com.steve1316.uma_android_automation.utils.swipeCanonical
 import org.opencv.core.Point
 import kotlin.math.abs
 
@@ -1060,7 +1061,7 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
         val prompt = LabelDailySalesPrompt.findImageWithBitmap(imageUtils, imageUtils.getSourceBitmap()) ?: return false
         val x = prompt.x.toFloat()
         OwnUiForeground.waitForGame()
-        game.gestureUtils.swipe(x, imageUtils.relY(prompt.y, SALE_SWIPE_FROM).toFloat(), x, imageUtils.relY(prompt.y, SALE_SWIPE_TO).toFloat(), SWIPE_MS)
+        game.gestureUtils.swipeCanonical(x, imageUtils.relY(prompt.y, SALE_SWIPE_FROM).toFloat(), x, imageUtils.relY(prompt.y, SALE_SWIPE_TO).toFloat(), SWIPE_MS)
         game.wait(1.0)
         return true
     }
@@ -1116,7 +1117,7 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
         val far = imageUtils.relY(prompt.y, SWIPE_TO_PROMPT).toFloat()
         val (start, end) = if (up) near to far else far to near
         OwnUiForeground.waitForGame()
-        game.gestureUtils.swipe(x, start, x, end, SWIPE_MS)
+        game.gestureUtils.swipeCanonical(x, start, x, end, SWIPE_MS)
         game.wait(1.0)
         return true
     }

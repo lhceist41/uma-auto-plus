@@ -321,7 +321,7 @@ class BaseTrainingTelemetryCompletenessTest {
             val start = training.indexOf("internal fun selectedTrainingEvidence(")
             assertTrue(start >= 0)
             val body = training.substring(start, training.indexOf("\n        }\n", start) + 1)
-            for (forbidden in listOf("getSourceBitmap", ".tap(", "game.wait", ".clear()", ".put(", "recommendTraining")) {
+            for (forbidden in listOf("getSourceBitmap", ".tap(", ".tapCanonical(", "game.wait", ".clear()", ".put(", "recommendTraining")) {
                 assertFalse(body.contains(forbidden), "helper must not $forbidden")
             }
         }

@@ -123,6 +123,7 @@ import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import com.steve1316.uma_android_automation.utils.VeteranIdentityNames
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
+import com.steve1316.uma_android_automation.utils.tapCanonical
 import com.steve1316.uma_scoring.RankAptitudes
 import com.steve1316.uma_scoring.SkillScoreInput
 import com.steve1316.uma_scoring.estimateRank
@@ -2832,7 +2833,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
             OwnUiForeground.waitForGame()
             // Perform long press on the button.
-            game.gestureUtils.tap(buttonPoint.x, buttonPoint.y, imageName, longPress = true, pressDuration = pressDuration)
+            game.gestureUtils.tapCanonical(buttonPoint.x, buttonPoint.y, imageName, longPress = true, pressDuration = pressDuration)
 
             if (attempt < 3) {
                 // After attempts 1 and 2, wait for the button to reappear.
@@ -4320,7 +4321,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
                     OwnUiForeground.waitForGame()
                     // Now click the button to open the details dialog for aptitude and stat updates.
-                    game.gestureUtils.tap(buttonLocation.x, buttonLocation.y, ButtonDetails.template.path)
+                    game.gestureUtils.tapCanonical(buttonLocation.x, buttonLocation.y, ButtonDetails.template.path)
                     game.wait(1.0)
                     ButtonDetails.click(game.imageUtils)
                     game.wait(1.0)

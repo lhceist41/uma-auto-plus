@@ -2,7 +2,6 @@ package com.steve1316.uma_android_automation.types
 
 import android.graphics.Bitmap
 import android.util.Log
-import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.Campaign
@@ -20,11 +19,13 @@ import com.steve1316.uma_android_automation.types.SkillListEntry
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.utils.CAREER_END_SCAN_BUDGET_MS
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
 import com.steve1316.uma_android_automation.utils.MAX_PROCESS_TIME_DEFAULT_MS
 import com.steve1316.uma_android_automation.utils.ScanTermination
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.ScrollListEntry
 import com.steve1316.uma_android_automation.utils.detailsCellText
+import com.steve1316.uma_android_automation.utils.swipeCanonical
 import org.opencv.core.Point
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -653,7 +654,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
         // Detect special icons (◎, ○, ×) that indicate skill levels or status. A single-ring template also scores well on the outer ring of a
         // double circle, so the best score wins. The crop is normalized to the 1080 width so the upscale holds on any device.
-        val glyphScale: Double = SKILL_LIST_GLYPH_UPSCALE * 1080.0 / SharedData.displayWidth
+        val glyphScale: Double = SKILL_LIST_GLYPH_UPSCALE * 1080.0 / CanonicalScreen.width
         val match: ComponentInterface? =
             game.imageUtils.findBestTemplateMatch(
                 croppedTitle,
@@ -723,7 +724,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      */
     fun parseDetailsSkillsTab(): DetailsSkillsResult {
         // Switch from the default Conditions tab to the Skills tab (a fixed position in the modal).
-        game.tapCoordinate(SharedData.displayWidth * 0.736, SharedData.displayHeight * 0.496, "details_skills_tab")
+        game.tapCoordinate(CanonicalScreen.width * 0.736, CanonicalScreen.height * 0.496, "details_skills_tab")
         game.wait(0.5, skipWaitingForLoading = true)
 
         val ownedNames = LinkedHashSet<String>()
@@ -763,8 +764,8 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      * @return The canonical skill name, or null when the cell is empty or unmatched.
      */
     private fun readDetailsSkillCell(bitmap: Bitmap, row: Int, col: Int, pass: Int): String? {
-        val w = SharedData.displayWidth.toDouble()
-        val h = SharedData.displayHeight.toDouble()
+        val w = CanonicalScreen.width.toDouble()
+        val h = CanonicalScreen.height.toDouble()
         val x0 = if (col == 0) 118 else 622
         // The unique skill (row 0, col 0) shows "Lvl N" on the right, so its name region stops short to avoid reading the level.
         val x1 =
@@ -836,8 +837,8 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      * @return True when the cell background reads as purple.
      */
     private fun isNegativeSkillCell(bitmap: Bitmap, row: Int, col: Int): Boolean {
-        val w = SharedData.displayWidth.toDouble()
-        val h = SharedData.displayHeight.toDouble()
+        val w = CanonicalScreen.width.toDouble()
+        val h = CanonicalScreen.height.toDouble()
         val sx = (w * (if (col == 0) 470 else 990) / 1080.0).toInt()
         val sy = (h * (1050 + row * 112) / 1920.0).toInt()
         val patchW = (w * 40 / 1080.0).toInt()
@@ -873,8 +874,8 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      */
     private fun readUniqueSkillLevel(bitmap: Bitmap): Int {
         // The unique level is a single digit shown as "Lvl N"; crop tightly on just the number and read it at high scale so ML Kit does not drop it.
-        val w = SharedData.displayWidth.toDouble()
-        val h = SharedData.displayHeight.toDouble()
+        val w = CanonicalScreen.width.toDouble()
+        val h = CanonicalScreen.height.toDouble()
         val text =
             game.imageUtils.performOCROnRegion(
                 bitmap,
@@ -894,11 +895,11 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
     /** Swipes up within the skills panel to reveal the next page of skills (for trainees with 10+ skills). */
     private fun scrollSkillsPanel() {
-        val cx = (SharedData.displayWidth / 2).toFloat()
+        val cx = (CanonicalScreen.width / 2).toFloat()
         OwnUiForeground.waitForGame()
         // A short, slow swipe (~1.7 rows) reduces fling and heavily overlaps the previous page, so every skill passes through the visible area at several sub-row offsets across
         // passes - on at least one of which a two-line name is aligned enough to read fully rather than clipped.
-        game.gestureUtils.swipe(cx, (SharedData.displayHeight * 0.66).toFloat(), cx, (SharedData.displayHeight * 0.56).toFloat(), 700L)
+        game.gestureUtils.swipeCanonical(cx, (CanonicalScreen.height * 0.66).toFloat(), cx, (CanonicalScreen.height * 0.56).toFloat(), 700L)
         game.wait(0.5, skipWaitingForLoading = true)
     }
 
@@ -1151,17 +1152,17 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         val bboxSkillBox =
             if (bIsObtained) {
                 BoundingBox(
-                    x = (localPoint.x - (SharedData.displayWidth * 0.77)).toInt(),
-                    y = (localPoint.y - (SharedData.displayHeight * 0.0599)).toInt(),
-                    w = (SharedData.displayWidth * 0.91).toInt(),
-                    h = (SharedData.displayHeight * 0.12).toInt(),
+                    x = (localPoint.x - (CanonicalScreen.width * 0.77)).toInt(),
+                    y = (localPoint.y - (CanonicalScreen.height * 0.0599)).toInt(),
+                    w = (CanonicalScreen.width * 0.91).toInt(),
+                    h = (CanonicalScreen.height * 0.12).toInt(),
                 )
             } else {
                 BoundingBox(
-                    x = (localPoint.x - (SharedData.displayWidth * 0.86)).toInt(),
-                    y = (localPoint.y - (SharedData.displayHeight * 0.0583)).toInt(),
-                    w = (SharedData.displayWidth * 0.91).toInt(),
-                    h = (SharedData.displayHeight * 0.12).toInt(),
+                    x = (localPoint.x - (CanonicalScreen.width * 0.86)).toInt(),
+                    y = (localPoint.y - (CanonicalScreen.height * 0.0583)).toInt(),
+                    w = (CanonicalScreen.width * 0.91).toInt(),
+                    h = (CanonicalScreen.height * 0.12).toInt(),
                 )
             }
 
@@ -1387,7 +1388,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      */
     private fun relocateSkillUpButton(name: String, computed: Point): Point? {
         val bandTop: Int = (computed.y - 50).toInt().coerceAtLeast(0)
-        val band: IntArray = intArrayOf(0, bandTop, SharedData.displayWidth, 100)
+        val band: IntArray = intArrayOf(0, bandTop, CanonicalScreen.width, 100)
         val nearest: Point =
             skillUpTapTargetOrSkip(name, ButtonSkillUp.findAll(game.imageUtils, region = band), computed, deadTapSkills) { MessageLog.w(TAG, it) }
                 ?: return null

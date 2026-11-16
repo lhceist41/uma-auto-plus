@@ -3,7 +3,6 @@ package com.steve1316.uma_android_automation.bot
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.Bitmap
 import android.util.Log
-import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SQLiteSettingsManager
 import com.steve1316.automation_library.utils.SettingsHelper
@@ -59,10 +58,13 @@ import com.steve1316.uma_android_automation.types.RaceGrade
 import com.steve1316.uma_android_automation.types.RunningStyle
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
 import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.StatusBoard
 import com.steve1316.uma_android_automation.utils.isMappedSurface
+import com.steve1316.uma_android_automation.utils.swipeCanonical
+import com.steve1316.uma_android_automation.utils.tapCanonical
 import net.ricecode.similarity.JaroWinklerStrategy
 import net.ricecode.similarity.StringSimilarityServiceImpl
 import org.json.JSONArray
@@ -1026,7 +1028,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         hasInsufficientGoalRacePtsRequirement = false
     }
 
-    private fun hasTallGoalCounters(): Boolean = hasTallGoalCounters(SharedData.displayWidth, SharedData.displayHeight)
+    private fun hasTallGoalCounters(): Boolean = hasTallGoalCounters(CanonicalScreen.width, CanonicalScreen.height)
 
     private fun findTallGoalCounter(label: ComponentInterface, sourceBitmap: Bitmap): Point? =
         label.findAtScales(game.imageUtils, sourceBitmap, TALL_GOAL_COUNTER_SHRINK_FACTORS, confidence = 0.9)
@@ -1283,7 +1285,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     // 1. The overwrite dialog appears.
                     // 2. The scheduled_race dialog appears.
                     // 3. The my_agendas dialog closes automatically and the scheduled_races dialog remains on screen.
-                    game.gestureUtils.tap(buttonLocation.x, buttonLocation.y, ButtonRaceAgendaLoadList.template.path)
+                    game.gestureUtils.tapCanonical(buttonLocation.x, buttonLocation.y, ButtonRaceAgendaLoadList.template.path)
 
                     // Timeout after 5 seconds. Shouldn't ever take near that long.
                     val timeoutMs = 5000
@@ -1362,7 +1364,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     val swipeY = closeButtonLocation.y.toFloat()
                     MessageLog.i(TAG, "[RACE] Swiping up to reveal more agendas (attempt ${swipeCount + 1}/$maxSwipes)...")
                     OwnUiForeground.waitForGame()
-                    game.gestureUtils.swipe(swipeX, swipeY - 300f, swipeX, swipeY - 400f)
+                    game.gestureUtils.swipeCanonical(swipeX, swipeY - 300f, swipeX, swipeY - 400f)
                     game.wait(0.5)
                 } else {
                     // If we can't find the close button for reference, try using the first Load List button.
@@ -1371,7 +1373,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         val swipeY = loadListButtonLocations[0].y.toFloat()
                         MessageLog.i(TAG, "[RACE] Swiping up using Load List button reference (attempt ${swipeCount + 1}/$maxSwipes)...")
                         OwnUiForeground.waitForGame()
-                        game.gestureUtils.swipe(swipeX, swipeY - 300f, swipeX, swipeY - 400f)
+                        game.gestureUtils.swipeCanonical(swipeX, swipeY - 300f, swipeX, swipeY - 400f)
                         game.wait(0.5)
                     }
                 }
@@ -1467,10 +1469,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         if (scrollDown) {
             OwnUiForeground.waitForGame()
-            game.gestureUtils.swipe(startX, startY, startX, endY)
+            game.gestureUtils.swipeCanonical(startX, startY, startX, endY)
         } else {
             OwnUiForeground.waitForGame()
-            game.gestureUtils.swipe(startX, endY, startX, startY)
+            game.gestureUtils.swipeCanonical(startX, endY, startX, startY)
         }
         game.wait(2.0)
 
@@ -3609,7 +3611,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         OwnUiForeground.waitForGame()
         // Scroll to top of list.
-        game.gestureUtils.swipe(
+        game.gestureUtils.swipeCanonical(
             (bboxRaceList.x + (bboxRaceList.w / 2)).toFloat(),
             (bboxRaceList.y + (bboxRaceList.h / 2)).toFloat(),
             (bboxRaceList.x + (bboxRaceList.w / 2)).toFloat(),
@@ -3718,7 +3720,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Longer swipe duration prevents overscrolling. Swipe up ~one entry (each is ~200px tall
             // with a 30px gap). Shorter durations overscroll; longer durations scroll less than the
             // pixel amount specified, so we use 500px to counter that.
-            game.gestureUtils.swipe(
+            game.gestureUtils.swipeCanonical(
                 (bboxRaceList.x + (bboxRaceList.w / 2)).toFloat(),
                 (bboxRaceList.y + (bboxRaceList.h / 2)).toFloat(),
                 (bboxRaceList.x + (bboxRaceList.w / 2)).toFloat(),

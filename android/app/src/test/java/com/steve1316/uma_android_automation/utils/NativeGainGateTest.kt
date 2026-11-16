@@ -217,7 +217,8 @@ class NativeGainGateTest {
         val source = repoFile("android/app/src/main/java/com/steve1316/uma_android_automation/utils/CustomImageUtils.kt").readText().replace("\r\n", "\n")
         val matcher = source.substringAfter("private fun processStatGainTemplateWithTransparency(").substringBefore("\n    }\n")
         assertTrue(matcher.contains("Core.absdiff(matchedRegion, templateGray, difference)"))
-        assertTrue(matcher.contains("val equalPixels = StatGainDigits.withinGrayLevels(differences, StatGainDigits.EQUAL_GRAY_LEVELS)"))
+        assertTrue(matcher.contains("val equalPixels = StatGainDigits.withinGrayLevels(differences, equalGrayLevels)"))
+        assertEquals(StatGainDigits.EQUAL_GRAY_LEVELS, StatGainDigits.equalGrayLevels(resized = false), "a 1080 wide capture keeps the native tolerance")
         assertTrue(!matcher.contains("CMP_EQ"), "no exact-equality share beside the tolerance")
     }
 }

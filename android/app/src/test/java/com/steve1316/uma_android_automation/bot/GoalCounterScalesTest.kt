@@ -183,7 +183,7 @@ class GoalCounterScalesTest {
     @DisplayName("the tall branch is the only new path; 1080x1920 keeps the original single-size calls")
     fun wiring() {
         val racing = File(root(), "android/app/src/main/java/com/steve1316/uma_android_automation/bot/Racing.kt").readText().replace("\r\n", "\n")
-        assertTrue(racing.contains("private fun hasTallGoalCounters(): Boolean = hasTallGoalCounters(SharedData.displayWidth, SharedData.displayHeight)"))
+        assertTrue(racing.contains("private fun hasTallGoalCounters(): Boolean = hasTallGoalCounters(CanonicalScreen.width, CanonicalScreen.height)"))
         assertTrue(racing.contains("label.findAtScales(game.imageUtils, sourceBitmap, TALL_GOAL_COUNTER_SHRINK_FACTORS, confidence = 0.9)"))
         assertEquals(1, Regex("""LabelRaceCriteriaFans\.check\(game\.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0\.9\)""").findAll(racing).count())
         assertEquals(1, Regex("""LabelRaceCriteriaTrophies\.findImageWithBitmap\(game\.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0\.9\)""").findAll(racing).count())

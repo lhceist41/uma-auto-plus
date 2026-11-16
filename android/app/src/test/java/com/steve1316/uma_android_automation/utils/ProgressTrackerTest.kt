@@ -266,9 +266,9 @@ class ProgressTrackerTest {
             val newState = "if (seenStates.add(detectedState)) {\n                    iterationsWithoutProgress = 0\n                    ProgressTracker.noteProgress(ProgressEvent.NAV_NEW_STATE)"
             assertTrue(nav.contains(newState))
             assertTrue(nav.contains("if (detectedState != currentState) ProgressTracker.noteProgress(ProgressEvent.SCREEN_CHANGE)\n                currentState = detectedState"))
-            assertTrue(source("$main/bot/Game.kt").contains("gestureUtils.tap(x, y, imageName, taps = taps)\n        ProgressTracker.noteAction()"))
-            assertTrue(source("$main/components/Components.kt").contains("MyAccessibilityService.getInstance().tap(x, y, imageName, taps = taps)\n        ProgressTracker.noteAction()"))
-            assertTrue(source("$main/bot/CoordinateTap.kt").contains("live.tap(jx.toDouble(), jy.toDouble(), null, taps = taps)\n        ProgressTracker.noteAction()"))
+            assertTrue(source("$main/bot/Game.kt").contains("gestureUtils.tapCanonical(x, y, imageName, taps = taps)\n        ProgressTracker.noteAction()"))
+            assertTrue(source("$main/components/Components.kt").contains("MyAccessibilityService.getInstance().tapCanonical(x, y, imageName, taps = taps)\n        ProgressTracker.noteAction()"))
+            assertTrue(source("$main/bot/CoordinateTap.kt").contains("live.tapCanonical(jx.toDouble(), jy.toDouble(), null, taps = taps)\n        ProgressTracker.noteAction()"))
         }
 
         @Test

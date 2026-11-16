@@ -44,6 +44,7 @@ import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.TeamTrialsGeometry
 import com.steve1316.uma_android_automation.utils.gameY
 import com.steve1316.uma_android_automation.utils.parseTicketCount
+import com.steve1316.uma_android_automation.utils.swipeCanonical
 import org.opencv.core.Point
 
 internal enum class LegendScreen {
@@ -565,7 +566,7 @@ internal class GameLegendDevice(private val game: Game, private val handlePopup:
         val high = low - imageUtils.relHeight(GRID_SCROLL_TRAVEL)
         val (start, end) = if (down) low to high else high to low
         OwnUiForeground.waitForGame()
-        game.gestureUtils.swipe(x, start, x, end, GRID_SWIPE_MS)
+        game.gestureUtils.swipeCanonical(x, start, x, end, GRID_SWIPE_MS)
         game.wait(1.0)
     }
 

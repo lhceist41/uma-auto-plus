@@ -29,7 +29,7 @@ class CoordinateTapMigrationTest {
     fun `helper dispatch passes null imageName`() {
         // CoordinateTap.tap (raw path) and Game.tapCoordinate (waiting path) both tap imageName=null.
         assertTrue(
-            helper.contains(Regex("""live\.tap\(jx\.toDouble\(\), jy\.toDouble\(\), null""")),
+            helper.contains(Regex("""live\.tapCanonical\(jx\.toDouble\(\), jy\.toDouble\(\), null""")),
             "CoordinateTap.tap must dispatch with a null imageName",
         )
         assertTrue(
@@ -61,11 +61,11 @@ class CoordinateTapMigrationTest {
         )
         // The two Class A taps in Campaign (a matched button + a variable imageName) must NOT be migrated.
         assertTrue(
-            campaign.contains("game.gestureUtils.tap(buttonLocation.x, buttonLocation.y, ButtonDetails.template.path)"),
+            campaign.contains("game.gestureUtils.tapCanonical(buttonLocation.x, buttonLocation.y, ButtonDetails.template.path)"),
             "the ButtonDetails template tap must stay on the library path",
         )
         assertTrue(
-            campaign.contains(Regex("""game\.gestureUtils\.tap\(buttonPoint\.x, buttonPoint\.y, imageName""")),
+            campaign.contains(Regex("""game\.gestureUtils\.tapCanonical\(buttonPoint\.x, buttonPoint\.y, imageName""")),
             "the variable-imageName long-press tap must stay on the library path",
         )
     }
@@ -76,7 +76,7 @@ class CoordinateTapMigrationTest {
         // Waiting path: the GC career-complete Skills tap (the label that started this work).
         assertTrue(
             grandConcert.contains(Regex("""\btap\(.*"gc_career_complete_skills"""")) &&
-                grandConcert.contains(") = game.tapCoordinate(x.toDouble(), gameY(y.toDouble(), band, SharedData.displayWidth, SharedData.displayHeight), label)"),
+                grandConcert.contains(") = game.tapCoordinate(x.toDouble(), gameY(y.toDouble(), band, CanonicalScreen.width, CanonicalScreen.height), label)"),
             "gc_career_complete_skills must go through game.tapCoordinate",
         )
         // Raw path: a non-GC fixed-coordinate tap.
@@ -96,7 +96,7 @@ class CoordinateTapMigrationTest {
         )
         // CareerLaunchNavigator used gestureUtils.tap("..."); the getter is the only gestureUtils.tap-free line.
         assertFalse(
-            navigator.contains(Regex("""[^.a-zA-Z]gestureUtils\.tap\(""")),
+            navigator.contains(Regex("""[^.a-zA-Z]gestureUtils\.tap(Canonical)?\(""")),
             "CareerLaunchNavigator must not call gestureUtils.tap directly anymore",
         )
     }

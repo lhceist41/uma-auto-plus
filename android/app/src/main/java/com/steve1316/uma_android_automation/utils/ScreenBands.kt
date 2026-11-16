@@ -6,6 +6,7 @@ import android.os.Build
 import android.view.Display
 import android.view.WindowInsets
 import android.view.WindowManager
+import com.steve1316.automation_library.data.SharedData
 import kotlin.math.roundToInt
 
 /** The game does not scale at width 1080: on taller screens TOP moves by the top cutout inset, BOTTOM by the extra height, DIALOG by half of it, MIDDLE halfway between TOP and BOTTOM (measured on 1080x2316, inset 94). */
@@ -102,7 +103,12 @@ fun IntArray.onScreen(
     return intArrayOf(this[0], gameY(this[1].toDouble(), band, width, height).roundToInt(), this[2], this[3])
 }
 
-/** The window-level cutout inset, which Android can raise above the raw cutout (measured 71 raw, 94 for the window). */
+internal fun canonicalInset(
+    rawInset: Int,
+    rawWidth: Int,
+): Int = rawToCanonical(rawInset.toDouble(), rawWidth).roundToInt()
+
+/** The window-level cutout inset, which Android can raise above the raw cutout (measured 71 raw, 94 for the window). Stored in canonical pixels, like the captures [gameY] reads. */
 fun rememberScreenTopInset(context: Context): Int {
     screenTopInset =
         try {
@@ -118,7 +124,7 @@ fun rememberScreenTopInset(context: Context): Int {
                         .top
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> display.cutout?.safeInsetTop ?: 0
                 else -> 0
-            }
+            }.let { canonicalInset(it, SharedData.displayWidth) }
         } catch (_: Exception) {
             screenTopInset
         }

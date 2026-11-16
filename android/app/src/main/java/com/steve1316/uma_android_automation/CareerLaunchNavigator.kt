@@ -85,6 +85,7 @@ import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.bot.QuickModeAction
 import com.steve1316.uma_android_automation.bot.QuickModePlanner
 import com.steve1316.uma_android_automation.utils.BoundedExecution
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.OwnInputProbeResult
@@ -161,6 +162,7 @@ import com.steve1316.uma_android_automation.utils.sparkPagerActiveDotIndex
 import com.steve1316.uma_android_automation.utils.sparkPagerStructurePresent
 import com.steve1316.uma_android_automation.utils.sparkRerolledStructurePresent
 import com.steve1316.uma_android_automation.utils.sparkWindowShowsListEnd
+import com.steve1316.uma_android_automation.utils.swipeCanonical
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -2365,7 +2367,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         CoordinateTap.tap(
             gestureUtils,
             TitleScreenProbe.TAP_TO_START_X,
-            gameY(TitleScreenProbe.TAP_TO_START_Y, ScreenBand.BOTTOM, SharedData.displayWidth, SharedData.displayHeight),
+            gameY(TitleScreenProbe.TAP_TO_START_Y, ScreenBand.BOTTOM, CanonicalScreen.width, CanonicalScreen.height),
             "title_tap_to_start",
         )
         betweenRunRecovery.tappedToStart(now)
@@ -3196,7 +3198,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                 "end=(${plan.endX.toInt()}, ${plan.endY.toInt()})",
         )
         OwnUiForeground.waitForGame()
-        gestureUtils.swipe(plan.startX, plan.startY, plan.endX, plan.endY, duration = plan.durationMs)
+        gestureUtils.swipeCanonical(plan.startX, plan.startY, plan.endX, plan.endY, duration = plan.durationMs)
         waitSafe(1.5) // animation settle only; the fresh captures below are the proof
         var lastHeading = "unreadable"
         var lastDots = "unreadable"
@@ -4074,7 +4076,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
     private fun sparkListY(
         y: Float,
         geometry: SparkListGeometry,
-    ): Float = gameY(y.toDouble(), geometry.band, SharedData.displayWidth, SharedData.displayHeight).toFloat()
+    ): Float = gameY(y.toDouble(), geometry.band, CanonicalScreen.width, CanonicalScreen.height).toFloat()
 
     /**
      * Reads every visible spark row of a spark list: OCR'd name, gold-star count, and the row
@@ -4168,7 +4170,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
             scrolls++
             val startY = sparkListY(1100f, geometry)
             OwnUiForeground.waitForGame()
-            gestureUtils.swipe(SPARK_LIST_SCROLL_X, startY, SPARK_LIST_SCROLL_X, startY - geometry.rowPitch * 4f, duration = 900L)
+            gestureUtils.swipeCanonical(SPARK_LIST_SCROLL_X, startY, SPARK_LIST_SCROLL_X, startY - geometry.rowPitch * 4f, duration = 900L)
             waitSafe(1.0)
         }
 
@@ -4307,7 +4309,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         repeat(scrollsUsed + 1) {
             val startY = sparkListY(700f, geometry)
             OwnUiForeground.waitForGame()
-            gestureUtils.swipe(SPARK_LIST_SCROLL_X, startY, SPARK_LIST_SCROLL_X, startY + geometry.rowPitch * 4f, duration = 900L)
+            gestureUtils.swipeCanonical(SPARK_LIST_SCROLL_X, startY, SPARK_LIST_SCROLL_X, startY + geometry.rowPitch * 4f, duration = 900L)
             waitSafe(0.8)
         }
         val frame = readSparkFrame(iu.getSourceBitmap(), geometry)
@@ -7429,10 +7431,10 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         val bottom = mid + half
         if (pageDown) {
             OwnUiForeground.waitForGame()
-            gestureUtils.swipe(x, bottom, x, top, duration = 850L)
+            gestureUtils.swipeCanonical(x, bottom, x, top, duration = 850L)
         } else {
             OwnUiForeground.waitForGame()
-            gestureUtils.swipe(x, top, x, bottom, duration = 850L)
+            gestureUtils.swipeCanonical(x, top, x, bottom, duration = 850L)
         }
     }
 
@@ -7867,14 +7869,14 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
             0 -> {
                 val from = bitmap.height * 0.72f
                 OwnUiForeground.waitForGame()
-                gestureUtils.swipe(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
+                gestureUtils.swipeCanonical(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
             }
             1 -> {
                 // Start lower with the same delta: a higher start point can clip the dialog header and
                 // swallow the drag; beginning near the bottom gives the whole gesture room on the list body.
                 val from = bitmap.height * 0.82f
                 OwnUiForeground.waitForGame()
-                gestureUtils.swipe(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
+                gestureUtils.swipeCanonical(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
             }
             else -> {
                 // Longer, larger, slower: a bigger delta over more time clears an inertial swallow the
@@ -7882,7 +7884,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                 val from = bitmap.height * 0.85f
                 val delta = (BORROW_PAGE_SWIPE_PX * 1.4f).coerceAtMost(bitmap.height * 0.55f)
                 OwnUiForeground.waitForGame()
-                gestureUtils.swipe(x, from, x, from - delta, duration = 1300L)
+                gestureUtils.swipeCanonical(x, from, x, from - delta, duration = 1300L)
             }
         }
     }
@@ -9565,7 +9567,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
             }
             if (accumulator.complete || accumulator.stalledRounds >= 2 || scrolls >= maxScrolls) break
             OwnUiForeground.waitForGame()
-            gestureUtils.swipe(scrollX, scrollFromY, scrollX, scrollToY, duration = 900L)
+            gestureUtils.swipeCanonical(scrollX, scrollFromY, scrollX, scrollToY, duration = 900L)
             scrolls++
             waitSafe(0.9)
             bitmap = iu.getSourceBitmap()
@@ -9768,7 +9770,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         CoordinateTap.tap(
             gestureUtils,
             FinalConfirmationTabGeometry.NORMAL_TAB_CLICK_X.toDouble(),
-            gameY(FinalConfirmationTabGeometry.NORMAL_TAB_CLICK_Y.toDouble(), ScreenBand.DIALOG, SharedData.displayWidth, SharedData.displayHeight),
+            gameY(FinalConfirmationTabGeometry.NORMAL_TAB_CLICK_Y.toDouble(), ScreenBand.DIALOG, CanonicalScreen.width, CanonicalScreen.height),
             "final_confirmation_normal_career_tab",
         )
         waitSafe(0.8)

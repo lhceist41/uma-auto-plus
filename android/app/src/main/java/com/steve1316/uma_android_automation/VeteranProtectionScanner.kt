@@ -55,6 +55,7 @@ import com.steve1316.uma_android_automation.utils.filterDialogChromeRecognized
 import com.steve1316.uma_android_automation.utils.isDisplaySettingsTitle
 import com.steve1316.uma_android_automation.utils.readVeteranFilterFrame
 import com.steve1316.uma_android_automation.utils.rosterListBindingStable
+import com.steve1316.uma_android_automation.utils.swipeCanonical
 
 private const val TAG = "[VeteranProtectionScanner]"
 
@@ -429,7 +430,7 @@ class VeteranProtectionScanner(private val game: Game) {
     private fun scrollFilterListToTop() {
         repeat(FILTER_SCROLL_TO_BOTTOM_SWIPES) {
             OwnUiForeground.waitForGame()
-            game.gestureUtils.swipe(
+            game.gestureUtils.swipeCanonical(
                 FILTER_SCROLL_GUTTER_X.toFloat(),
                 FILTER_SCROLL_SWIPE_TO_Y.toFloat(),
                 FILTER_SCROLL_GUTTER_X.toFloat(),
@@ -443,7 +444,7 @@ class VeteranProtectionScanner(private val game: Game) {
 
     private fun scrollFilterListDown() {
         OwnUiForeground.waitForGame()
-        game.gestureUtils.swipe(
+        game.gestureUtils.swipeCanonical(
             FILTER_SCROLL_GUTTER_X.toFloat(), FILTER_SCROLL_SWIPE_FROM_Y.toFloat(),
             FILTER_SCROLL_GUTTER_X.toFloat(), FILTER_SCROLL_SWIPE_TO_Y.toFloat(),
             duration = FILTER_SCROLL_SWIPE_DURATION_MS,

@@ -42,6 +42,7 @@ import com.steve1316.uma_android_automation.components.DialogSongAcquired
 import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
 import com.steve1316.uma_android_automation.types.StatName
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
 import com.steve1316.uma_android_automation.utils.GrandConcertCareerComplete
 import com.steve1316.uma_android_automation.utils.GrandConcertEscort
 import com.steve1316.uma_android_automation.utils.GrandCutsceneCheckbox
@@ -1053,7 +1054,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         y: Int,
         band: ScreenBand,
         label: String,
-    ) = game.tapCoordinate(x.toDouble(), gameY(y.toDouble(), band, SharedData.displayWidth, SharedData.displayHeight), label)
+    ) = game.tapCoordinate(x.toDouble(), gameY(y.toDouble(), band, CanonicalScreen.width, CanonicalScreen.height), label)
 
     private fun logLessonScores(list: LessonList, context: LessonScoreContext) {
         val report = GrandConcertPolicy.describeLessonOffer(list, HypeTier.UNKNOWN, context)

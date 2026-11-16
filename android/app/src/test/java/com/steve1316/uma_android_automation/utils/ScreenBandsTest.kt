@@ -133,7 +133,7 @@ class ScreenBandsTest {
         @DisplayName("every capture the bot reads is cropped to the screen width before use")
         fun capturesAreCropped() {
             val src = repoFile("android/app/src/main/java/com/steve1316/uma_android_automation/utils/CustomImageUtils.kt").readText().replace("\r\n", "\n")
-            assertTrue(src.contains("val bitmap = cropToScreenWidth(super.getSourceBitmap(saveImage), SharedData.displayWidth)"))
+            assertTrue(src.contains("val bitmap = toCanonicalWidth(cropToScreenWidth(super.getSourceBitmap(saveImage), SharedData.displayWidth))"))
             val crop = src.substring(src.indexOf("private fun cropToScreenWidth("))
             assertTrue(crop.contains("if (!capturePaddedPastScreen(capture.width, screenWidth)) return capture"), "MuMu frames are returned as they are")
             assertTrue(crop.contains("Bitmap.createBitmap(capture, 0, 0, screenWidth, capture.height)"))

@@ -1,6 +1,5 @@
 package com.steve1316.uma_android_automation.bot.campaigns
 
-import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.CoordinateTap
@@ -8,6 +7,7 @@ import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.ButtonHomeFansInfo
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.types.StatName
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
 
 /**
  * Handles the URA Finale scenario with scenario-specific logic and handling.
@@ -32,10 +32,10 @@ class UraFinale(game: Game) : Campaign(game) {
      * once the confirm cleared the duel; a miss returns false so normal unknown-screen recovery applies.
      */
     private fun handleUraDuel(): Boolean {
-        val detectX = (SharedData.displayWidth * 0.10).toInt()
-        val detectY = (SharedData.displayHeight * 0.35).toInt()
-        val detectW = (SharedData.displayWidth * 0.80).toInt()
-        val detectH = (SharedData.displayHeight * 0.15).toInt()
+        val detectX = (CanonicalScreen.width * 0.10).toInt()
+        val detectY = (CanonicalScreen.height * 0.35).toInt()
+        val detectW = (CanonicalScreen.width * 0.80).toInt()
+        val detectH = (CanonicalScreen.height * 0.15).toInt()
 
         fun readDuelHeader(debugName: String): String =
             game.imageUtils.performOCROnRegion(
@@ -79,8 +79,8 @@ class UraFinale(game: Game) : Campaign(game) {
             "[URA_DUEL] Best duel stat: $targetStat (spd=${trainee.stats.speed}, sta=${trainee.stats.stamina}, pow=${trainee.stats.power}, guts=${trainee.stats.guts}, wit=${trainee.stats.wit}). Seeking \"$targetKeyword\".",
         )
 
-        val rightArrowX = SharedData.displayWidth * 0.88
-        val rightArrowY = SharedData.displayHeight * 0.48
+        val rightArrowX = CanonicalScreen.width * 0.88
+        val rightArrowY = CanonicalScreen.height * 0.48
 
         // Capped so a misread arrow or unexpected layout cannot spin forever (five stats + energy = six cells).
         for (attempt in 0 until 6) {
@@ -92,7 +92,7 @@ class UraFinale(game: Game) : Campaign(game) {
         }
 
         if (!ButtonOk.click(game.imageUtils)) {
-            CoordinateTap.tap(game.gestureUtils, SharedData.displayWidth * 0.5, SharedData.displayHeight * 0.88, "ura_duel_confirm")
+            CoordinateTap.tap(game.gestureUtils, CanonicalScreen.width * 0.5, CanonicalScreen.height * 0.88, "ura_duel_confirm")
         }
 
         game.wait(1.0)

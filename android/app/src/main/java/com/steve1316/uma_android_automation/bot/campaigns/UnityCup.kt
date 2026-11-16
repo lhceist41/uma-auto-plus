@@ -25,6 +25,7 @@ import com.steve1316.uma_android_automation.components.IconTrainingEventHorsesho
 import com.steve1316.uma_android_automation.components.IconUnityCupRaceEndLogo
 import com.steve1316.uma_android_automation.components.IconUnityCupTutorialHeader
 import com.steve1316.uma_android_automation.components.LabelUnityCupOpponentSelectionLaurel
+import com.steve1316.uma_android_automation.utils.tapCanonical
 import org.opencv.core.Point
 import kotlin.math.abs
 
@@ -116,7 +117,7 @@ class UnityCup(game: Game) : Campaign(game) {
                     val trainingOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
                     if (trainingOptionLocations.size >= 2) {
                         OwnUiForeground.waitForGame()
-                        game.gestureUtils.tap(trainingOptionLocations[1].x, trainingOptionLocations[1].y, IconTrainingEventHorseshoe.template.path)
+                        game.gestureUtils.tapCanonical(trainingOptionLocations[1].x, trainingOptionLocations[1].y, IconTrainingEventHorseshoe.template.path)
                         true
                     } else {
                         // A partial render can match fewer than 2 horseshoes (indexing [1] crashed the run); stay
@@ -261,7 +262,7 @@ class UnityCup(game: Game) : Campaign(game) {
                     selectedOpponentIndex = selectedOpponentIndex.coerceIn(0, opponents.lastIndex)
                     val opponent = opponents[selectedOpponentIndex]
                     OwnUiForeground.waitForGame()
-                    game.gestureUtils.tap(opponent.x, opponent.y, LabelUnityCupOpponentSelectionLaurel.template.path)
+                    game.gestureUtils.tapCanonical(opponent.x, opponent.y, LabelUnityCupOpponentSelectionLaurel.template.path)
                     // Tiny delay to allow the opponent selection click to register fully.
                     game.wait(0.1, skipWaitingForLoading = true)
                     MessageLog.i(TAG, "[UNITY_CUP] Selecting opponent #${selectedOpponentIndex + 1} at $opponent.")

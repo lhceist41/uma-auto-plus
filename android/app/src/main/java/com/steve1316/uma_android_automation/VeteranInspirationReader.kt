@@ -41,6 +41,7 @@ import com.steve1316.uma_android_automation.utils.inspirationTabActive
 import com.steve1316.uma_android_automation.utils.readInspirationRows
 import com.steve1316.uma_android_automation.utils.readInspirationScroll
 import com.steve1316.uma_android_automation.utils.segmentInspirationBlocks
+import com.steve1316.uma_android_automation.utils.swipeCanonical
 
 private const val TAG = "[VeteranInspirationReader]"
 
@@ -206,10 +207,10 @@ class VeteranInspirationReader(private val game: Game, private val factorDomain:
         val highY = lowY + distance
         if (down) {
             OwnUiForeground.waitForGame()
-            game.gestureUtils.swipe(gutterX, lowY, gutterX, highY, duration = SWIPE_DURATION_MS)
+            game.gestureUtils.swipeCanonical(gutterX, lowY, gutterX, highY, duration = SWIPE_DURATION_MS)
         } else {
             OwnUiForeground.waitForGame()
-            game.gestureUtils.swipe(gutterX, highY, gutterX, lowY, duration = SWIPE_DURATION_MS)
+            game.gestureUtils.swipeCanonical(gutterX, highY, gutterX, lowY, duration = SWIPE_DURATION_MS)
         }
         game.wait(SETTLE_SECONDS)
     }

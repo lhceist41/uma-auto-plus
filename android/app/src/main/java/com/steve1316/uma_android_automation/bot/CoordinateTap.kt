@@ -4,6 +4,7 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.utils.ProgressTracker
+import com.steve1316.uma_android_automation.utils.tapCanonical
 import kotlin.random.Random
 
 /**
@@ -38,7 +39,7 @@ object CoordinateTap {
         // A hold can outlast an accessibility rebind, which would leave the passed service dead.
         val live = if (OwnUiForeground.waitForGame()) MyAccessibilityService.getInstance() else service
         val (jx, jy) = resolve(x, y, label)
-        live.tap(jx.toDouble(), jy.toDouble(), null, taps = taps)
+        live.tapCanonical(jx.toDouble(), jy.toDouble(), null, taps = taps)
         ProgressTracker.noteAction()
         return Pair(jx, jy)
     }

@@ -241,8 +241,8 @@ class SparkPagerNavTest {
         @Test
         fun `pager navigation is swipe-only -- no tap is dispatched`() {
             val body = navigateBody()
-            assertTrue("gestureUtils.swipe(" in body, "the pager must page with a central swipe")
-            assertFalse("gestureUtils.tap(" in body, "no tap may be dispatched; taps at the chevron failed live")
+            assertTrue("gestureUtils.swipeCanonical(" in body, "the pager must page with a central swipe")
+            assertFalse("gestureUtils.tap" in body, "no tap may be dispatched; taps at the chevron failed live")
         }
 
         @Test
@@ -255,7 +255,7 @@ class SparkPagerNavTest {
         @Test
         fun `the swipe is verified by fresh captures, not by the settle timer`() {
             val body = navigateBody()
-            val swipeAt = body.indexOf("gestureUtils.swipe(")
+            val swipeAt = body.indexOf("gestureUtils.swipeCanonical(")
             val classifyAt = body.indexOf("classifySparkPagerRepaint(", swipeAt)
             val freshCapture = body.indexOf("getSourceBitmap()", swipeAt)
             assertTrue(classifyAt > swipeAt, "the repaint classifier must run after the swipe")

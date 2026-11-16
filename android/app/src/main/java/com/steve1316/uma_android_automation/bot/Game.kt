@@ -50,6 +50,10 @@ import com.steve1316.uma_android_automation.utils.RssGc
 import com.steve1316.uma_android_automation.utils.TesseractReinitSchedule
 import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.floatingButtonRect
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
+import com.steve1316.uma_android_automation.utils.canonicalRect
+import com.steve1316.uma_android_automation.utils.canonicalSizeNote
+import com.steve1316.uma_android_automation.utils.tapMapLine
 import com.steve1316.uma_android_automation.utils.screenTopInset
 import com.steve1316.uma_android_automation.utils.gameY
 import com.steve1316.uma_android_automation.utils.captureSizeMismatchWarning
@@ -65,6 +69,7 @@ import com.steve1316.uma_android_automation.utils.ownInputReachesScreen
 import com.steve1316.uma_android_automation.utils.TrainingSelectionProbe
 import com.steve1316.uma_android_automation.utils.grandConcertLessonConfirmationPresent
 import com.steve1316.uma_android_automation.utils.grandConcertLessonListPresent
+import com.steve1316.uma_android_automation.utils.tapCanonical
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -544,7 +549,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         OwnUiForeground.waitForGame()
         checkCurrentRun()
         // Perform the tap.
-        gestureUtils.tap(x, y, imageName, taps = taps)
+        gestureUtils.tapCanonical(x, y, imageName, taps = taps)
         ProgressTracker.noteAction()
 
         // If the gesture injector had deadlocked, the call above would have blocked past the watchdog threshold.
@@ -967,7 +972,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
     /** The capture as [frozenFrameGrid] compares it, without the floating button and the status bar. */
     internal fun frozenFrameGridOf(bitmap: Bitmap): IntArray =
-        frozenFrameGrid(bitmap.width, bitmap.height, runCatching { floatingButtonRect(myContext) }.getOrNull(), screenTopInset) { x, y -> bitmap.getPixel(x, y) }
+        frozenFrameGrid(bitmap.width, bitmap.height, runCatching { canonicalRect(floatingButtonRect(myContext)) }.getOrNull(), screenTopInset) { x, y -> bitmap.getPixel(x, y) }
 
     /** Another app in front means a still frame says nothing about the game; an unreadable window does not block (a hung game may not answer). */
     internal fun otherAppInFront(): Boolean = homeLeftGameByWindow(frontWindowPackage()) == true
@@ -1021,9 +1026,11 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
 
         // Print device and version information.
-        MessageLog.i(TAG, "[INFO] Device Information: ${SharedData.displayWidth}x${SharedData.displayHeight}, DPI ${SharedData.displayDPI}")
+        val canonicalNote = canonicalSizeNote(SharedData.displayWidth, SharedData.displayHeight)
+        MessageLog.i(TAG, "[INFO] Device Information: ${SharedData.displayWidth}x${SharedData.displayHeight}, DPI ${SharedData.displayDPI}$canonicalNote")
+        MessageLog.i(TAG, tapMapLine(SharedData.displayWidth, SharedData.displayHeight))
         val topInset = rememberScreenTopInset(myContext)
-        val bandOffsets = ScreenBand.entries.joinToString { "${it.name.lowercase()} +${gameY(0.0, it, SharedData.displayWidth, SharedData.displayHeight).toInt()}" }
+        val bandOffsets = ScreenBand.entries.joinToString { "${it.name.lowercase()} +${gameY(0.0, it, CanonicalScreen.width, CanonicalScreen.height).toInt()}" }
         MessageLog.i(TAG, "[LAYOUT] Top cutout inset $topInset px; offsets from 1080x1920: $bandOffsets.")
         screenSize(myContext)?.let { (screenWidth, screenHeight) ->
             captureSizeMismatchWarning(SharedData.displayWidth, SharedData.displayHeight, screenWidth, screenHeight)?.let { MessageLog.w(TAG, it) }
@@ -1038,8 +1045,8 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         MessageLog.i(TAG, imageUtils.measureTextScale())
         val coveredAreas =
             runCatching {
-                val (buttonX, buttonY, buttonSize) = floatingButtonRect(myContext)
-                overlayKeepClearHits(buttonX, buttonY, buttonSize, SharedData.displayWidth, SharedData.displayHeight, topInset)
+                val (buttonX, buttonY, buttonSize) = canonicalRect(floatingButtonRect(myContext))
+                overlayKeepClearHits(buttonX, buttonY, buttonSize, CanonicalScreen.width, CanonicalScreen.height, topInset)
             }.getOrDefault(emptyList())
         if (coveredAreas.isNotEmpty()) {
             MessageLog.w(TAG, "[OVERLAY] The floating button may cover the ${coveredAreas.joinToString(" and the ")}, where the bot reads or taps. Drag the button to the top right corner, above the goal banner.")

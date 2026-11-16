@@ -195,7 +195,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             StartModule.stopForLostCapture()
             throw InterruptedException("Screen capture stopped")
         }
-        val bitmap = cropToScreenWidth(super.getSourceBitmap(saveImage), SharedData.displayWidth)
+        val bitmap = toCanonicalWidth(cropToScreenWidth(super.getSourceBitmap(saveImage), SharedData.displayWidth))
         ProgressTracker.noteCapture(bitmap)
         // Never collect while holding the OCR lock: a GC with finalizers can take hundreds of ms.
         RssGc.shared.noteCapture(mayCollect = !Thread.holdsLock(ocrLock))
@@ -216,6 +216,38 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         lastCrop = capture to cropped
         return cropped
     }
+
+    @Volatile
+    private var lastCanonical: Pair<Bitmap, Bitmap>? = null
+
+    /** A capture of any width read at [CANONICAL_WIDTH]; a 1080-wide capture is returned as it is. */
+    private fun toCanonicalWidth(capture: Bitmap): Bitmap =
+        toCanonicalCapture(capture, capture.width, capture.height) { width, height ->
+            lastCanonical?.let { (source, scaled) -> if (source === capture) return@toCanonicalCapture scaled }
+            val source = Mat()
+            val resized = Mat()
+            try {
+                Utils.bitmapToMat(capture, source)
+                val interpolation = if (capture.width > width) Imgproc.INTER_AREA else Imgproc.INTER_LINEAR
+                Imgproc.resize(source, resized, Size(width.toDouble(), height.toDouble()), 0.0, 0.0, interpolation)
+                val scaled = createBitmap(width, height)
+                Utils.matToBitmap(resized, scaled)
+                lastCanonical = capture to scaled
+                scaled
+            } finally {
+                source.release()
+                resized.release()
+            }
+        }
+
+    /** Every crop, region and band is computed on the canonical capture, so the library's device size is the canonical one. */
+    override val displayWidth: Int get() = CanonicalScreen.width
+    override val displayHeight: Int get() = CanonicalScreen.height
+
+    /** Offsets are canonical already. The library would scale them by raw width / 1080 and stretch heights by H/2340 on any other width. */
+    override fun relWidth(oldX: Int): Int = oldX
+
+    override fun relHeight(oldY: Int): Int = oldY
 
     /**
      * The Wit cell is the stat table's last column: a full-width crop ends 8 px past the table's
@@ -1382,9 +1414,9 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @return A list of (centerX, centerY, radius) in full-screen pixels for each detected circle.
      */
     private fun findSupportFaceCircles(sourceBitmap: Bitmap): List<IntArray> {
-        val regionX = SharedData.displayWidth - SharedData.displayWidth / 3
-        val regionHeight = (SharedData.displayHeight * RAINBOW_SUPPORT_REGION_HEIGHT_FRACTION).toInt()
-        val roi = createSafeBitmap(sourceBitmap, regionX, 0, SharedData.displayWidth / 3, regionHeight, "findSupportFaceCircles") ?: return emptyList()
+        val regionX = displayWidth - displayWidth / 3
+        val regionHeight = (displayHeight * RAINBOW_SUPPORT_REGION_HEIGHT_FRACTION).toInt()
+        val roi = createSafeBitmap(sourceBitmap, regionX, 0, displayWidth / 3, regionHeight, "findSupportFaceCircles") ?: return emptyList()
 
         val rgbaMat = roi.toMat()
         val grayMat = Mat()
@@ -1399,7 +1431,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         val minRadius = 44
         val maxRadius = 72
 
-        val scale = SharedData.displayWidth.toDouble() / 1080.0
+        val scale = displayWidth.toDouble() / 1080.0
         val circles = Mat()
         Imgproc.HoughCircles(
             grayMat,
@@ -1443,9 +1475,9 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      */
     fun debugRainbowDetection(sourceBitmap: Bitmap? = null): String {
         val bitmap = sourceBitmap ?: getSourceBitmap()
-        val regionX = SharedData.displayWidth - SharedData.displayWidth / 3
+        val regionX = displayWidth - displayWidth / 3
         val annotated =
-            createSafeBitmap(bitmap, regionX, 0, SharedData.displayWidth / 3, (SharedData.displayHeight * RAINBOW_SUPPORT_REGION_HEIGHT_FRACTION).toInt(), "debugRainbowDetection annotate")?.toMat()
+            createSafeBitmap(bitmap, regionX, 0, displayWidth / 3, (displayHeight * RAINBOW_SUPPORT_REGION_HEIGHT_FRACTION).toInt(), "debugRainbowDetection annotate")?.toMat()
 
         val sb = StringBuilder("\n========== Rainbow Detection Debug ==========\n")
         var rainbowCount = 0
@@ -2262,6 +2294,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         val matchConfidence = 0.9
         val minPixelMatchRatio = 0.1
         val minPixelCorrelation = 0.85
+        val equalGrayLevels = StatGainDigits.equalGrayLevels(CanonicalScreen.resized)
 
         // Convert template to Mat and then to grayscale.
         val templateMat = Mat()
@@ -2328,12 +2361,12 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 templateGray.copyTo(templateValid, validPixels)
                 matchedRegion.copyTo(regionValid, validPixels)
 
-                // For the first test, the share of pixels whose gray is within EQUAL_GRAY_LEVELS of the template's.
+                // For the first test, the share of pixels whose gray is within equalGrayLevels of the template's.
                 val difference = Mat()
                 Core.absdiff(matchedRegion, templateGray, difference)
                 val differences = ByteArray(difference.total().toInt()).also { difference.get(0, 0, it) }
                 difference.release()
-                val equalPixels = StatGainDigits.withinGrayLevels(differences, StatGainDigits.EQUAL_GRAY_LEVELS)
+                val equalPixels = StatGainDigits.withinGrayLevels(differences, equalGrayLevels)
                 val pixelMatchRatio = StatGainDigits.equalRatio(templateName, equalPixels, alphaPixels)
                 if (pixelMatchRatio < minPixelMatchRatio) {
                     failedPixelMatchRatio = true
@@ -2933,8 +2966,8 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             BoundingBox(
                 x = relX(0.0, 365),
                 y =
-                    if (isMappedSurface(SharedData.displayWidth, SharedData.displayHeight)) {
-                        gameY(110.0, ScreenBand.TOP, SharedData.displayWidth, SharedData.displayHeight).toInt()
+                    if (isMappedSurface(displayWidth, displayHeight)) {
+                        gameY(110.0, ScreenBand.TOP, displayWidth, displayHeight).toInt()
                     } else {
                         relY(0.0, 110)
                     },
@@ -3866,7 +3899,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         val cannyLowerThreshold: Double = cannyLowerThreshold.coerceIn(0, 255).toDouble()
         val cannyUpperThreshold: Double = cannyUpperThreshold.coerceIn(0, 255).toDouble()
 
-        val screenArea: Int = SharedData.displayWidth * SharedData.displayHeight
+        val screenArea: Int = displayWidth * displayHeight
         val minArea: Int = (minArea ?: 0).coerceIn(0, screenArea)
         val maxArea: Int = (maxArea ?: screenArea).coerceIn(minArea, screenArea)
 
@@ -4026,7 +4059,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
         // Input sanitization
 
-        val screenArea: Int = SharedData.displayWidth * SharedData.displayHeight
+        val screenArea: Int = displayWidth * displayHeight
         val minArea: Int = (minArea ?: 0).coerceIn(0, screenArea)
         val maxArea: Int = (maxArea ?: screenArea).coerceIn(minArea, screenArea)
 
@@ -4256,7 +4289,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
         // Input sanitization
 
-        val screenArea: Int = SharedData.displayWidth * SharedData.displayHeight
+        val screenArea: Int = displayWidth * displayHeight
         val minArea: Int = (minArea ?: 0).coerceIn(0, screenArea)
         val maxArea: Int = (maxArea ?: screenArea).coerceIn(minArea, screenArea)
 

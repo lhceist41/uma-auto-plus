@@ -6,13 +6,14 @@ package com.steve1316.uma_android_automation.components
 
 import android.graphics.Bitmap
 import androidx.core.graphics.createBitmap
-import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.uma_android_automation.bot.DialogHandler
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.OwnUiForeground
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ProgressTracker
+import com.steve1316.uma_android_automation.utils.tapCanonical
 import org.opencv.core.Point
 
 /**
@@ -21,27 +22,27 @@ import org.opencv.core.Point
  * Used to refine search areas during OCR for performance.
  */
 object Region {
-    val topHalf: IntArray = intArrayOf(0, 0, SharedData.displayWidth, SharedData.displayHeight / 2)
-    val topQuarter: IntArray = intArrayOf(0, 0, SharedData.displayWidth, SharedData.displayHeight / 4)
-    val bottomHalf: IntArray = intArrayOf(0, SharedData.displayHeight / 2, SharedData.displayWidth, SharedData.displayHeight / 2)
-    val bottomQuarter: IntArray = intArrayOf(0, SharedData.displayHeight / 4, SharedData.displayWidth, SharedData.displayHeight / 4)
-    val middle: IntArray = intArrayOf(0, SharedData.displayHeight / 4, SharedData.displayWidth, SharedData.displayHeight / 2)
-    val leftHalf: IntArray = intArrayOf(0, 0, SharedData.displayWidth / 2, SharedData.displayHeight)
-    val rightHalf: IntArray = intArrayOf(SharedData.displayWidth / 2, 0, SharedData.displayWidth / 2, SharedData.displayHeight)
-    val threeQuarterRight: IntArray = intArrayOf((SharedData.displayWidth * 0.625).toInt(), 0, (SharedData.displayWidth * 0.375).toInt(), SharedData.displayHeight)
-    val topRightThird: IntArray = intArrayOf(SharedData.displayWidth - (SharedData.displayWidth / 3), 0, SharedData.displayWidth / 3, SharedData.displayHeight - (SharedData.displayHeight / 3))
+    val topHalf: IntArray = intArrayOf(0, 0, CanonicalScreen.width, CanonicalScreen.height / 2)
+    val topQuarter: IntArray = intArrayOf(0, 0, CanonicalScreen.width, CanonicalScreen.height / 4)
+    val bottomHalf: IntArray = intArrayOf(0, CanonicalScreen.height / 2, CanonicalScreen.width, CanonicalScreen.height / 2)
+    val bottomQuarter: IntArray = intArrayOf(0, CanonicalScreen.height / 4, CanonicalScreen.width, CanonicalScreen.height / 4)
+    val middle: IntArray = intArrayOf(0, CanonicalScreen.height / 4, CanonicalScreen.width, CanonicalScreen.height / 2)
+    val leftHalf: IntArray = intArrayOf(0, 0, CanonicalScreen.width / 2, CanonicalScreen.height)
+    val rightHalf: IntArray = intArrayOf(CanonicalScreen.width / 2, 0, CanonicalScreen.width / 2, CanonicalScreen.height)
+    val threeQuarterRight: IntArray = intArrayOf((CanonicalScreen.width * 0.625).toInt(), 0, (CanonicalScreen.width * 0.375).toInt(), CanonicalScreen.height)
+    val topRightThird: IntArray = intArrayOf(CanonicalScreen.width - (CanonicalScreen.width / 3), 0, CanonicalScreen.width / 3, CanonicalScreen.height - (CanonicalScreen.height / 3))
 
     /**
      * Where the persistent Skip pill's templates can legitimately match, scaled from its 1080x1920
      * baseline and clamped to the screen. Narrower than [bottomHalf]: the wider search let the launch
      * Quick Mode dialog's "Quick" button clear the match threshold and misread as a pill state.
      */
-    val persistentSkipPill: IntArray = persistentSkipPillRegion(SharedData.displayWidth, SharedData.displayHeight)
+    val persistentSkipPill: IntArray = persistentSkipPillRegion(CanonicalScreen.width, CanonicalScreen.height)
 }
 
 /**
  * The scaling and clamping arithmetic behind [Region.persistentSkipPill], factored out so it is
- * testable at arbitrary resolutions independent of [SharedData]'s process-wide, initialize-once state.
+ * testable at arbitrary resolutions independent of [Region]'s process-wide, initialize-once state.
  */
 internal fun persistentSkipPillRegion(displayWidth: Int, displayHeight: Int): IntArray {
     val x = (203 * displayWidth) / 1080
@@ -178,7 +179,7 @@ interface BaseComponentInterface {
      */
     fun tap(x: Double, y: Double, imageName: String? = null, taps: Int = 1) {
         OwnUiForeground.waitForGame()
-        MyAccessibilityService.getInstance().tap(x, y, imageName, taps = taps)
+        MyAccessibilityService.getInstance().tapCanonical(x, y, imageName, taps = taps)
         ProgressTracker.noteAction()
     }
 }
@@ -212,7 +213,7 @@ interface ComponentInterface : BaseComponentInterface {
         // full-screen capture slightly WIDER than displayWidth. Dropping the region for that case lost the half-screen
         // restriction and let corner templates cross-match into the wrong half. Only a narrower bitmap is a real crop.
         val searchRegion =
-            if (region == null && (sourceBitmap.width < SharedData.displayWidth || sourceBitmap.height != SharedData.displayHeight)) {
+            if (region == null && (sourceBitmap.width < CanonicalScreen.width || sourceBitmap.height != CanonicalScreen.height)) {
                 intArrayOf(0, 0, 0, 0)
             } else {
                 region ?: template.region
@@ -243,7 +244,7 @@ interface ComponentInterface : BaseComponentInterface {
         // if no specific region is provided. Width is `<` not `!=` so a row-stride-padded (wider-than-displayWidth)
         // full-screen capture keeps its region instead of being mistaken for a crop. See findImageWithBitmap above.
         val searchRegion =
-            if (region == null && (bitmap.width < SharedData.displayWidth || bitmap.height != SharedData.displayHeight)) {
+            if (region == null && (bitmap.width < CanonicalScreen.width || bitmap.height != CanonicalScreen.height)) {
                 intArrayOf(0, 0, 0, 0)
             } else {
                 region ?: template.region
@@ -448,7 +449,7 @@ interface ComplexComponentInterface : BaseComponentInterface {
         // Width is `<` not `!=`: a row-stride-padded full-screen capture is wider than displayWidth but still genuine,
         // so it must keep its region. See the matching note in ComponentInterface.findImageWithBitmap.
         val searchRegion =
-            if (region == null && (sourceBitmap.width < SharedData.displayWidth || sourceBitmap.height != SharedData.displayHeight)) {
+            if (region == null && (sourceBitmap.width < CanonicalScreen.width || sourceBitmap.height != CanonicalScreen.height)) {
                 intArrayOf(0, 0, 0, 0)
             } else {
                 region
