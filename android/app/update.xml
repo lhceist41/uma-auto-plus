@@ -1,13 +1,14 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.8.0</latestVersion>
+    <latestVersion>1.9.0</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.8.0 - Daily Legend Race, rewards after the last career, new outfits
+v1.9.0 - other screen sizes, sturdier training reads and sparks
 
-- New: Daily Legend Race in Settings, off by default. After Daily Races or Team Trials it races your free daily Legend ticket once and never buys a ticket.
-- Changed: Rewards and Club also run after the last career of a run, and a run queue started on the Club screen no longer stops. The Club item request reads Winner's Sash counts more reliably.
-- Added: Hokko Tarumae, three newly released outfits with presets, six support cards and updated skill rankings.
+- New: reads every screen at a fixed size and maps taps back; tested live on MuMu at 720x1280 and 1440x2560, other phones not (Grand Concert still needs 1080 wide). Optional Daily Sales buying.
+- Changed: training gains and spark rerolls read more reliably, a recovery skill before a 3000m+ goal race, a silent progress notification.
+- Fixed: fewer stops after the daily reset and on slow screens.
+- Presets: three new trainee cards, six support cards; four farming presets removed.
 
     </releaseNotes>
   </update>

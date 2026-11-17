@@ -10,6 +10,16 @@ export const RELEASE_NOTES_BASE_URL = "https://github.com/lhceist41/uma-auto-plu
  * no dialog. To announce a new release, add its entry here.
  */
 export const whatsNewEntries: Record<string, WhatsNewEntry> = {
+    "1.9.0": {
+        highlights: [
+            "The bot now reads every screen at a fixed 1080-wide size and maps its taps back to the real screen, and finds labels when the game draws text slightly smaller. Tested live on MuMu at 720x1280 and 1440x2560 at 240 DPI (two full careers at each width); other phones are not tested, and Grand Concert still needs a 1080-wide screen.",
+            "Training gains are read more reliably: repeated digits, gold gains and small side gains are read whole, and a gain the bot cannot read is estimated on the low side. Spark rerolls compare two reads of the spark list first.",
+            "Fewer stops after the daily reset, on slow screens between careers, and when Android says the game isn't responding.",
+            "One or two turns before a goal race of 3000m or longer, the bot buys a recovery skill if the trainee owns none that suits their running style, and trains Stamina when it is too low, for trainees whose goal races it knows.",
+            "New, off by default: Buy the Daily Sales in Settings, only when every item costs Monies. The progress notification now updates silently instead of popping up over the game every turn.",
+            "Six new support cards, presets for Daitaku Helios and the new Mejiro Ryan and Ines Fujin outfits, and the four farming presets are removed.",
+        ],
+    },
     "1.8.0": {
         highlights: [
             "New, off by default: Daily Legend Race in Settings. After Daily Races or Team Trials it races your free daily Legend ticket once, on the legend you pick, and never buys a ticket.",

@@ -1329,9 +1329,10 @@ contexts, and the breakpoint stop remains exclusively the high-water plan-disabl
 
 Every `skill_spend` record (`policy: trigger-v4`; older versions stay readable) carries the
 resolved `threshold`, `tier` (`manual` when no tier governs), `reason`, and `objective`;
-CRITICAL_RACE records add `criticalRace`/`criticalRaceSource`/`turnsUntilRace`,
-PLANNED_SKILL_AFFORDABLE records add `plannedSkill`/`plannedSkillObservedPrice`, and v4 adds
-`strategyTailAllowed` (below). The `trigger` field keeps recording what caused the spend itself.
+CRITICAL_RACE and LONG_GOAL_RECOVERY records add `criticalRace`/`criticalRaceSource`/
+`turnsUntilRace` (`goal_chain` for LONG_GOAL_RECOVERY), PLANNED_SKILL_AFFORDABLE records add
+`plannedSkill`/`plannedSkillObservedPrice`, and v4 adds `strategyTailAllowed` (below). The
+`trigger` field keeps recording what caused the spend itself.
 
 ### Planned-only spending (sparks objective)
 
@@ -1460,7 +1461,8 @@ was evaluated and `recoverySkill`/`recoveryObservedPrice` only when an injection
 bought something. The rule is armed in two cases only: an Adaptive career whose preferred distance and
 objective allow injection (above), and a `LONG_GOAL_RECOVERY` session that reaches the injection
 fallback (no recovery owned, none of the planned ones bought), which arms it in any mode and
-objective. Every other Manual career, and the `rank` and `sparks` objectives, never arm it.
+objective. Outside these two cases, Manual careers and the `rank` and `sparks` objectives
+never arm it.
 
 Live status: the first armed profile (Grass Wonder (Saintly Jade Cleric) Unity Cup,
 `safe_completion`, Long) completed a supervised career with the gate evaluated at five spend

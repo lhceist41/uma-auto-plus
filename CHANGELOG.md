@@ -10,7 +10,9 @@ New releases start with a one-line summary, then list what you need to do, what 
 
 ## [Unreleased]
 
-Sturdier spark rerolls and training reads, fewer stops after the daily reset and on slow screens, smarter Grand Concert fan racing, optional Daily Sales buying, and presets for three new trainee cards.
+## [1.9.0] - 2026-11-17
+
+The bot reads every screen at a fixed size, so it can run at other screen sizes (tested live at 720x1280 and 1440x2560; Grand Concert still needs 1080 wide), with sturdier spark rerolls and training reads, fewer stops after the daily reset and on slow screens, smarter Grand Concert fan racing, optional Daily Sales buying, and presets for three new trainee cards.
 
 ### New
 
@@ -20,19 +22,19 @@ Sturdier spark rerolls and training reads, fewer stops after the daily reset and
 
 ### Changed
 
-- **App:** the progress notification now updates silently instead of popping up over the game every turn.
-- **Skills:** one or two turns before a goal race of 3000m or longer, the bot buys one recovery skill if the trainee owns none that suits their running style.
+- **Phones and screens:** the bot now reads every screen at a fixed 1080-wide size and maps its taps back to the real resolution. Tested live on MuMu at 720x1280 and 1440x2560 at 240 DPI (two full careers at each width); 1080x1920 reads as before. Other phones are not tested. Grand Concert still needs a 1080-wide screen.
+- **Phones and screens:** if the game draws text smaller than MuMu at 240 DPI (seen at 480 DPI and on a Galaxy A13), more labels and buttons are found at slightly smaller sizes; MuMu at 240 DPI is unchanged. Seen live at 720x1280, where the text measured slightly smaller; other phones tested on screenshots only.
+- **App:** the progress notification now updates silently instead of popping up over the game every turn. Seen live at 720x1280 and 1080x1920.
+- **Skills:** one or two turns before a goal race of 3000m or longer, the bot buys one recovery skill if the trainee owns none that suits their running style, for trainees whose goal races it knows.
 - **Training:** before a goal race of 3000m or longer, the bot trains Stamina when it is below what the race needs (300, or 450 from 3200m), from the second year (the third in Unity Cup), for trainees whose goal races it knows.
 - **Sparks:** before spending 30 TP on a reroll the bot reads the spark list twice and keeps the original sparks if the reads differ; a name read differently or missing its first letters (such as "it" for Wit) no longer wastes a reroll.
 - **Sparks:** a Turf spark no longer counts as a useful pink, so the bot stops keeping a weaker set or skipping a reroll for one; every turf runner already has Turf A.
 - **Grand Concert:** while there is still time to earn the fans, the bot trains and follows your racing settings instead of racing for fans, so it no longer races from the first Junior turns.
 - **Grand Concert:** when it must race for fans, it picks a race the trainee suits over one that only pays more on paper, and keeps watching later fan goals after an earlier one is met.
-- **Phones and screens:** if the game draws text smaller than MuMu at 240 DPI (seen at 480 DPI and on a Galaxy A13), more labels and buttons are found at slightly smaller sizes; MuMu at 240 DPI is unchanged (tested on screenshots only).
-- **Phones and screens:** the bot now reads every screen at a fixed 1080-wide size and maps its taps back to the real resolution. Tested live on MuMu at 720x1280 and 1440x2560 at 240 DPI (one full career at each width); 1080x1920 reads as before. Other phones are not tested.
 
 ### Fixed
 
-- **Training:** gains are read whole: repeated digits (+11, +22), both digits at 1080x1920 (+13, +15), small side gains (+3, +6), and gold gains whose bonus 8 looks like a 6 or that sit next to the trainee's art (+24, +25). A correct Power gain on Guts training is no longer raised.
+- **Training:** gains are read whole: repeated digits (+11, +22), both digits at 1080x1920 (+13, +15), small side gains (+3, +6), and gold gains whose bonus 8 looks like a 6 or that sit next to the trainee's art (+24, +25). A correct Power gain on Guts training is no longer raised. Seen live: 31 of 31 gold gains right at 1440x2560.
 - **Training:** a gain the bot still cannot read is estimated on the low side from the game's own gains instead of guessed 10 higher.
 - **Training:** the failure chance is read after its bubble has finished sliding in, so a training is no longer judged on a half-drawn bubble.
 - **Run queue:** fewer unexplained stops after a career or a trip through the menus ends (one hit even between two careers), and an error that stops the bot between careers is reported as one instead of "Queue was stopped during navigation".
@@ -739,6 +741,7 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.8.0...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.9.0...main
+[1.9.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.5...v1.8.0
 [1.7.5]: https://github.com/lhceist41/uma-auto-plus/compare/v1.7.4...v1.7.5
