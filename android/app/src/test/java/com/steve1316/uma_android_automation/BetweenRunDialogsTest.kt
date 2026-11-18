@@ -245,8 +245,32 @@ class BetweenRunDialogsTest {
         @Test
         fun `in a run it stops like a Session Error, also under a loading screen`() {
             val handler = source("$main/bot/DialogHandler.kt")
-            assertTrue(handler.contains("\"session_error\", \"session_verification_error\" -> {\n                throw InterruptedException(\"Session error. Stopping bot...\")"))
+            assertTrue(handler.contains("\"session_error\", \"session_verification_error\" -> {\n                stopForSessionError(dialog)\n"))
+            assertBotStop(handler, "private fun stopForSessionError(", "SESSION_EXPIRED")
             assertTrue("session_verification_error" in Game.LOADING_ERROR_DIALOGS)
+        }
+
+        @Test
+        fun `in a run a purchase prompt stops as the bot's own stop with its between-run key`() {
+            val dialog = source("$main/components/Dialog.kt")
+            assertTrue(dialog.contains("if (dialog in dangerousDialogs) stopForPurchasePrompt(dialog)\n"))
+            assertBotStop(dialog, "private fun stopForPurchasePrompt(", "PURCHASE_PROMPT")
+        }
+
+        /** The stop sets the bot's own stop with [key], which has its own report words, and taps nothing. */
+        private fun assertBotStop(
+            src: String,
+            marker: String,
+            key: String,
+        ) {
+            val start = src.indexOf(marker)
+            assertTrue(start >= 0, marker)
+            val stop = src.substring(start, src.indexOf("\n    }\n", start))
+            for (line in listOf("StartModule.queueStopKey = \"$key\"", "StartModule.queueStopReason = reason", "StartModule.queueStopRequested = true", "throw InterruptedException(reason)")) {
+                assertTrue(stop.contains(line), line)
+            }
+            for (never in listOf(".click(", "tap(", ".ok(", ".close(")) assertFalse(stop.contains(never), never)
+            assertTrue(key in REPORT_REASON_KEYS, "the stop has its own words")
         }
 
         @Test

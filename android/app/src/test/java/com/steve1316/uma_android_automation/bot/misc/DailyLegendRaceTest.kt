@@ -260,11 +260,10 @@ class DailyLegendRaceTest {
     }
 
     @Test
-    fun `a dangerous dialog met by a follow-up ends the run as an error, a user Stop does not`() {
-        val dangerous = MiscTask.followUpStopResult(InterruptedException("Stopping bot due to a dangerous dialog: purchase_carats"))
-        assertTrue(dangerous is TaskResult.Error && dangerous.code == TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, "$dangerous")
-        assertNull(MiscTask.followUpStopResult(InterruptedException("Stopped by the user")))
-        assertNull(MiscTask.followUpStopResult(InterruptedException()))
+    fun `a purchase prompt met by a follow-up ends the run as the bot's stop, a user Stop does not`() {
+        val reason = "The game opened Purchase Carats, which can lead to a real-money purchase, so the bot stopped without touching it. Close it in the game, then press Start again."
+        assertEquals(TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, reason), MiscTask.followUpStopResult(reason))
+        assertNull(MiscTask.followUpStopResult(null))
     }
 
     @Test
@@ -340,7 +339,7 @@ class DailyLegendRaceTest {
         val legend = src.indexOf("runFollowUp(\"[LEGEND_RACE]\")")
         val extras = src.indexOf("?: runFollowUp(\"[DAILY_EXTRAS]\")")
         assertTrue(legend in 1 until extras, "the extras run only when the Legend step returned no interrupt")
-        assertTrue(src.contains("return stop?.let { followUpStopResult(it, StartModule.queueStopReason) } ?: result"))
+        assertTrue(src.contains("return stop?.let { followUpStopResult(StartModule.queueStopReason) } ?: result"))
         assertTrue(src.indexOf("if (result !is TaskResult.Success) return result") < legend, "only after a successful mode")
     }
 }

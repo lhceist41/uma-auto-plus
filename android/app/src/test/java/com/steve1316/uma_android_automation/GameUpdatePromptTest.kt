@@ -78,9 +78,9 @@ class GameUpdatePromptTest {
     @Test
     fun `a Home follow-up the bot stopped itself ends as that stop, a user Stop does not`() {
         val reason = "The game asks for an update."
-        assertEquals(TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, reason), MiscTask.followUpStopResult(InterruptedException(reason), botStopReason = reason))
-        assertNull(MiscTask.followUpStopResult(InterruptedException("Stopped by the user"), botStopReason = null))
-        assertTrue(source("bot/misc/MiscTask.kt").contains("return stop?.let { followUpStopResult(it, StartModule.queueStopReason) } ?: result"))
+        assertEquals(TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, reason), MiscTask.followUpStopResult(botStopReason = reason))
+        assertNull(MiscTask.followUpStopResult(botStopReason = null))
+        assertTrue(source("bot/misc/MiscTask.kt").contains("return stop?.let { followUpStopResult(StartModule.queueStopReason) } ?: result"))
     }
 
     @Test

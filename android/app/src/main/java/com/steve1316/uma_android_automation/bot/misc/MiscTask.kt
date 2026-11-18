@@ -26,16 +26,9 @@ abstract class MiscTask(game: Game) : Task(game) {
     companion object {
         const val MAX_ITERATIONS_SAFETY: Int = 300
 
-        /**
-         * A dangerous dialog met by a follow-up's shared handler ends the run as an error, and a stop the bot requested ([botStopReason]) as that stop,
-         * as in the mode's own loop; a user Stop leaves the mode's result.
-         */
-        internal fun followUpStopResult(e: InterruptedException, botStopReason: String? = null): TaskResult? =
-            when {
-                e.message?.startsWith(DialogUtils.DANGEROUS_DIALOG_STOP) == true -> TaskResult.Error(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, e.message!!)
-                botStopReason != null -> TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, botStopReason)
-                else -> null
-            }
+        /** A stop the bot requested in a follow-up ([botStopReason], a purchase prompt included) ends the run as that stop, as in the mode's own loop; a user Stop leaves the mode's result. */
+        internal fun followUpStopResult(botStopReason: String?): TaskResult? =
+            botStopReason?.let { TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, it) }
 
         const val MAX_CONSECUTIVE_UNKNOWNS: Int = 5
 
@@ -66,7 +59,7 @@ abstract class MiscTask(game: Game) : Task(game) {
         val stop =
             runFollowUp("[LEGEND_RACE]") { GameLegendDevice.runFromSettings(game, ::handleIncidentalPopups) }
                 ?: runFollowUp("[DAILY_EXTRAS]") { GameExtrasDevice.runFromSettings(game)?.let { "${it.joinToString("; ")}." } }
-        return stop?.let { followUpStopResult(it, StartModule.queueStopReason) } ?: result
+        return stop?.let { followUpStopResult(StartModule.queueStopReason) } ?: result
     }
 
     /** Runs one Home follow-up and logs its note; a plain failure leaves the mode's own result. Returns the interrupt that stopped it, if any. */

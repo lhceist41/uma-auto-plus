@@ -200,7 +200,7 @@ open class DialogHandler(val game: Game) {
             }
 
             "session_error", "session_verification_error" -> {
-                throw InterruptedException("Session error. Stopping bot...")
+                stopForSessionError(dialog)
             }
 
             // Racing Dialogs.
@@ -519,6 +519,16 @@ open class DialogHandler(val game: Game) {
     private fun stopForDataDownloadPrompt(dialog: DialogInterface): Nothing {
         val reason = "The game asked to download additional data, and the ${dialog.title} prompt's OK button was not found. Answer the prompt in the game (OK, or Title Screen for a data update), let any download finish, then press Start again."
         StartModule.queueStopKey = "DATA_DOWNLOAD_PROMPT"
+        StartModule.queueStopReason = reason
+        StartModule.queueStopRequested = true
+        MessageLog.e(TAG, "[DIALOG] $reason")
+        throw InterruptedException(reason)
+    }
+
+    /** Stops the run with its own reason. Taps nothing; between runs with a career in flight the same dialog stops with this key. */
+    private fun stopForSessionError(dialog: DialogInterface): Nothing {
+        val reason = "The game showed ${dialog.title} and needs to go back to its title screen. Tap Title Screen in the game, wait for its home screen, then press Start again."
+        StartModule.queueStopKey = "SESSION_EXPIRED"
         StartModule.queueStopReason = reason
         StartModule.queueStopRequested = true
         MessageLog.e(TAG, "[DIALOG] $reason")

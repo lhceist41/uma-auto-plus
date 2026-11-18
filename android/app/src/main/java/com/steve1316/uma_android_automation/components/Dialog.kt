@@ -65,9 +65,6 @@ import org.opencv.core.Point
 
 /** Utility class for detecting and handling dialogs in the game. */
 object DialogUtils {
-    /** Message prefix of the interrupt a dangerous dialog raises; the Home follow-ups turn it into a run error. */
-    const val DANGEROUS_DIALOG_STOP = "Stopping bot due to a dangerous dialog: "
-
     private val TAG: String = "[${MainActivity.loggerTag}]DialogUtils"
 
     /** List of templates used to detect the title bar gradient of a dialog. */
@@ -315,15 +312,23 @@ object DialogUtils {
     /**
      * Stop the bot if the specified dialog is in the hardcoded [dangerousDialogs] list.
      *
-     * Some dialogs are dangerous because they could lead to real-world purchases. This function throws an InterruptedException to immediately stop the bot if a dangerous dialog is detected.
+     * Some dialogs are dangerous because they could lead to real-world purchases. Each one stops the bot with its own reason, without a tap.
      *
      * @param dialog The dialog to check.
      */
     private fun handleDangerousDialogs(dialog: DialogInterface) {
         if (dialog == DialogApplicationUpdated) stopForGameUpdate()
-        if (dialog in dangerousDialogs) {
-            throw InterruptedException("$DANGEROUS_DIALOG_STOP${dialog.name}")
-        }
+        if (dialog in dangerousDialogs) stopForPurchasePrompt(dialog)
+    }
+
+    /** Stops the run on a Carat purchase or age check. Nothing is tapped: either can lead to a real-money purchase. */
+    private fun stopForPurchasePrompt(dialog: DialogInterface): Nothing {
+        val reason = "The game opened ${dialog.title}, which can lead to a real-money purchase, so the bot stopped without touching it. Close it in the game, then press Start again."
+        StartModule.queueStopKey = "PURCHASE_PROMPT"
+        StartModule.queueStopReason = reason
+        StartModule.queueStopRequested = true
+        MessageLog.e(TAG, "[DIALOG] $reason")
+        throw InterruptedException(reason)
     }
 
     /** True when the game's forced update prompt is up. The title is read only under a dialog banner. */
