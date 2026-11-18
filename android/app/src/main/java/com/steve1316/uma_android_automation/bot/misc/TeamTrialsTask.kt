@@ -27,6 +27,7 @@ import com.steve1316.uma_android_automation.components.ButtonTeamTrials
 import com.steve1316.uma_android_automation.components.LabelDailySale
 import com.steve1316.uma_android_automation.components.LabelItemsSelected
 import com.steve1316.uma_android_automation.components.LabelTeamTrials
+import com.steve1316.uma_android_automation.components.LabelWithEveryWin
 import com.steve1316.uma_android_automation.components.Region
 import com.steve1316.uma_android_automation.utils.ScreenBand
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
@@ -44,7 +45,8 @@ import kotlin.random.Random
  * Team Trials: Race tab -> Team Trials -> Team Race -> pick opponent -> Team Preview -> Items Selected
  * -> Race! (1 RP) -> standby -> See All Race Results -> Skip -> result screens -> back on Team Trials home.
  * Loops until the RP pips read 0 or [maxMatchesPerSession], then returns to Home. Opponents are listed
- * strongest to weakest, so the default `opponentPick` BOTTOM is the easiest fight. RP is never restored.
+ * strongest to weakest, so the default `opponentPick` BOTTOM is the easiest fight. Under BOTTOM or RANDOM an opponent
+ * with the "With Every Win!" bonus is picked instead; TOP and MIDDLE keep their row. RP is never restored.
  */
 class TeamTrialsTask(game: Game) : MiscTask(game) {
     enum class TeamTrialsScreenState {
@@ -120,6 +122,18 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             matchInProgress &&
                 consecutiveUnknowns >= 2 &&
                 (lastKnownState == TeamTrialsScreenState.STANDBY.name || lastKnownState == TeamTrialsScreenState.RESULT_REVEAL.name)
+
+        /** A player who picked a row did it on purpose; only BOTTOM and RANDOM give way to the bonus opponent. */
+        internal fun bonusMayOverride(pick: OpponentPick): Boolean = pick == OpponentPick.BOTTOM || pick == OpponentPick.RANDOM
+
+        /** The banner sits at the bottom of its card, so its row is the lowest card centre above it. */
+        internal fun bonusRow(
+            centres: List<Int>,
+            bannerY: Double,
+        ): Int? = centres.indexOfLast { it < bannerY }.takeIf { it >= 0 }
+
+        /** The banner plays a ~2 second entry animation, so it is looked for that long. */
+        const val BONUS_BANNER_WAIT_MS: Long = 2000
     }
 
     private val opponentPick: OpponentPick =
@@ -394,12 +408,29 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
     /** Opponent tile art is randomised, so the cards are found by their white bodies and tapped at their centres. */
     private fun handleSelectOpponent(bitmap: Bitmap) {
         val centres = findOpponentCardCentres(sampler(bitmap), bitmap.width, bitmap.height) ?: return
-        val row = opponentPick.rowIndex()
+        val bonus = if (bonusMayOverride(opponentPick)) withEveryWinRow(bitmap, centres) else null
+        val row = bonus ?: opponentPick.rowIndex()
         val x = bitmap.width / 2.0
         val y = centres[row].toDouble()
-        MessageLog.i(TAG, "[TEAM_TRIALS] Opponent row ${row + 1} of 3 (setting $opponentPick) at ($x, $y).")
+        val why = if (bonus != null) "\"With Every Win!\" bonus, setting $opponentPick" else "setting $opponentPick"
+        MessageLog.i(TAG, "[TEAM_TRIALS] Opponent row ${row + 1} of 3 ($why) at ($x, $y).")
         CoordinateTap.tap(game.gestureUtils, x, y, "select_opponent_row_${row + 1}")
         game.wait(2.5)
+    }
+
+    /** Row of the card with the "With Every Win!" banner, or null when none shows within [BONUS_BANNER_WAIT_MS]. The cards hold still, so [centres] stay valid. */
+    private fun withEveryWinRow(
+        first: Bitmap,
+        centres: List<Int>,
+    ): Int? {
+        val deadline = System.currentTimeMillis() + BONUS_BANNER_WAIT_MS
+        var frame = first
+        while (true) {
+            LabelWithEveryWin.findImageWithBitmap(game.imageUtils, frame)?.let { return bonusRow(centres, it.y) }
+            if (System.currentTimeMillis() >= deadline) return null
+            game.wait(0.25, skipWaitingForLoading = true)
+            frame = game.imageUtils.getSourceBitmap()
+        }
     }
 
     private fun handleTeamPreview() {

@@ -466,7 +466,7 @@ const Settings = () => {
                     }}
                     placeholder="Select opponent"
                     label="Opponent To Pick"
-                    description="Which of the three listed opponents to fight. They are listed strongest first, so Bottom is the safest and Top pays the most points. Random picks one of the three at random each match, for variety."
+                    description="Which of the three listed opponents to fight. They are listed strongest first, so Bottom is the safest and Top pays the most points. Random picks one of the three at random each match, for variety. With Bottom or Random, an opponent showing the With Every Win! bonus is picked instead, while Top and Middle always keep their row."
                     style={{ marginTop: 16 }}
                 />
 

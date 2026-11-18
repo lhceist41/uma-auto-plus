@@ -407,6 +407,11 @@ object LabelTeamTrials : ComponentInterface {
     override val template = Template("components/label/team_trials_header", region = Region.topHalf)
 }
 
+/** The "With Every Win!" bonus banner at the bottom of a Team Trials opponent card. */
+object LabelWithEveryWin : ComponentInterface {
+    override val template = Template("components/label/with_every_win", region = Region.rightHalf)
+}
+
 /** "Items Selected" header on the pre-match item-picker popup. Confidence raised to 0.9 to avoid false-matching the green Race-N header bands on the post-match Standby screen. */
 object LabelItemsSelected : ComponentInterface {
     override val template = Template("components/label/items_selected", region = Region.middle, confidence = 0.9)
