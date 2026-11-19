@@ -78,9 +78,12 @@ private class FakeGame(
     val spendingScreen: ExtrasScreen = SPENDING_DIALOG,
     /** Home's Shop button: true with the "Daily" badge, false without, null while it is not drawn. */
     var shopBadge: Boolean? = false,
-    val sale: SaleScan = SaleScan(LIVE_SALE, complete = true),
-    /** What the cost bar shows after Select All; null shows the sum of the buyable rows. */
-    val barTotal: Int? = null,
+    /** What the cost bar shows after Select All; null when it cannot be read. */
+    val barTotal: Int? = LIVE_SALE_TOTAL,
+    /** Select All taps the game ignores, as when the list has just opened. */
+    var selectAllIgnored: Int = 0,
+    /** Cost bar reads that still show 0 after a Select All that worked, as when the total is drawn late. */
+    var barLateReads: Int = 0,
     val balance: Int? = 5_683_820,
     /** After this tap a dialog the step does not know shows instead; its Close returns to the Daily Sales list. */
     val errorAfter: ExtrasTarget? = null,
@@ -173,7 +176,7 @@ private class FakeGame(
             HOME to SHOP_BUTTON -> if (shopBadge != null) SHOP_MENU else null
             SHOP_MENU to DAILY_SALES_BANNER -> DAILY_SALES
             SHOP_MENU to BACK -> HOME.also { if (bought) shopBadge = false }
-            DAILY_SALES to SELECT_ALL -> DAILY_SALES.also { selected = true }
+            DAILY_SALES to SELECT_ALL -> DAILY_SALES.also { if (selectAllIgnored > 0) selectAllIgnored-- else selected = true }
             DAILY_SALES to RESET -> DAILY_SALES.also { selected = false }
             // Confirm stays greyed out until something is selected.
             DAILY_SALES to CONFIRM -> if (selected) CONFIRM_EXCHANGE else DAILY_SALES
@@ -233,9 +236,7 @@ private class FakeGame(
 
     override fun shopBadge(): Boolean? = if (screen == HOME) shopBadge else null
 
-    override fun readSaleRows(): SaleScan = if (screen == DAILY_SALES) sale else SaleScan(emptyList(), complete = false)
-
-    override fun costBar(): Pair<Int?, Int?> = (if (selected) barTotal ?: sale.buyable.sumOf { it.cost ?: 0 } else 0) to balance
+    override fun costBar(): Pair<Int?, Int?> = (if (selected && barLateReads-- <= 0) barTotal else 0) to balance
 
     private fun rewardsOn(on: ExtrasTarget): Boolean = (on == openTab && missionRewards) || (on == MISSIONS_TAB_TITLES && titlesRewards)
 
@@ -287,177 +288,8 @@ private val LIVE_SASHES =
         "M.C. Nambu Hai" to 2,
     ).map { (race, held) -> "$race Winner's Sash" to held.toString() }
 
-/** Daily Sales rows seen on the 2026-11-05 account 1 frames, in list order (not the whole list). */
-private val LIVE_SALE =
-    listOf(
-        "[LOVE☆4EVER] Smart Falcon Star Piece" to 15_000,
-        "[RUN! RUIN! LAUNCHER!] Gold Ship Star Piece" to 15_000,
-        "[Wild Top Gear] Vodka Star Piece" to 10_000,
-        "[King of Emeralds] King Halo Star Piece" to 5_000,
-        "[Down the Line] Mejiro Ryan Star Piece" to 5_000,
-        "[El☆Número 1] El Condor Pasa Star Piece" to 10_000,
-        "Pleasing Parfait" to 5_000,
-        "Support Points" to 3_000,
-        "Takamatsunomiya Kinen Winner's Sash" to 5_000,
-        "Kikuka Sho Winner's Sash" to 5_000,
-        "Mile Ch. Winner's Sash" to 5_000,
-    ).map { (title, cost) -> SaleRow(title, monies = true, cost = cost) }
-
-private val LIVE_SALE_TOTAL = LIVE_SALE.sumOf { it.cost!! }
-
-/** The second Daily Sales offer of 2026-11-06 on account 2, in list order: 14 rows to buy, then the first offer's 7 rows sold out. */
-private val OFFER_2 =
-    listOf(
-        "[Red Strife]\nGold Ship Star Piece" to 10_000,
-        "[Blossom in Learning]\nSakura Bakushin O Star Piece" to 5_000,
-        "[Platanus Witch]\nSweep Tosho Star Piece" to 15_000,
-        "[unsigned]\nAir Shakur Star Piece" to 15_000,
-        "Alarm Clock" to 2_000,
-        "Alarm Clock" to 2_000,
-        "Pleasing Parfait" to 5_000,
-        "Pleasing Parfait" to 5_000,
-        "Sprint Racing Shoes" to 1_000,
-        "Sprint Racing Shoes" to 1_000,
-        "Support Points" to 3_000,
-        "Support Points" to 3_000,
-        "Shuka Sho Winner's Sash" to 5_000,
-        "Tenno Sho (Autumn) Winner's Sash" to 5_000,
-    ).map { (title, cost) -> SaleRow(title, monies = true, cost = cost) } +
-        listOf(
-            "[Rising☆Fortune]\nMatikanefukukitaru Star Piece" to 5_000,
-            "[Bestest Prize ♪]\nHaru Urara Star Piece" to 5_000,
-            "Alarm Clock" to 2_000,
-            "Pleasing Parfait" to 5_000,
-            "Sprint Racing Shoes" to 1_000,
-            "Support Points" to 3_000,
-            "Hopeful S. Winner's Sash" to 5_000,
-        ).map { (title, cost) -> SaleRow(title, monies = true, cost = cost, buyable = false) }
-
-private fun saleName(row: SaleRow): String = normalizeItemName(row.title.substringAfterLast('\n').substringAfter(']'))
-
-/** A 21-row Daily Sales list in list order, with three Alarm Clocks, Parfaits and Support Points in a row (93,000 Monies). */
-private val NOV7_P0 =
-    listOf(
-        "[Wild Top Gear]\nVodka Star Piece" to 10_000,
-        "[Red Strife]\nGold Ship Star Piece" to 10_000,
-        "[Poinsettia Ribbon]\nNice Nature Star Piece" to 5_000,
-        "[Down the Line]\nMejiro Ryan Star Piece" to 5_000,
-        "[Scramble☆Zone]\nMayano Top Gun Star Piece" to 10_000,
-        "[Bestest Prize ♪]\nHaru Urara Star Piece" to 5_000,
-        "Alarm Clock" to 2_000,
-        "Alarm Clock" to 2_000,
-        "Alarm Clock" to 2_000,
-        "Pleasing Parfait" to 5_000,
-        "Pleasing Parfait" to 5_000,
-        "Pleasing Parfait" to 5_000,
-        "Medium Racing Shoes" to 1_000,
-        "Long Racing Shoes" to 1_000,
-        "Long Racing Shoes" to 1_000,
-        "Support Points" to 3_000,
-        "Support Points" to 3_000,
-        "Support Points" to 3_000,
-        "M.C. Nambu Hai Winner's Sash" to 5_000,
-        "Kawasaki Kinen Winner's Sash" to 5_000,
-        "Shuka Sho Winner's Sash" to 5_000,
-    ).map { (title, cost) -> SaleRow(title, monies = true, cost = cost) }
-
-/** A 21-row Daily Sales list in list order, with two Haru Urara rows whose title the text reader splits differently (103,000 Monies). */
-private val NOV7_P1 =
-    listOf(
-        "[Red Strife]\nGold Ship Star Piece" to 10_000,
-        "[Red Strife]\nGold Ship Star Piece" to 10_000,
-        "[Crystalline]\nMejiro Ardan Star Piece" to 15_000,
-        "[Bestest Prize ♪]\nHaru Urara Star Piece" to 5_000,
-        "[Bestest Prize ♪]\nHaru Urara Star Piece" to 5_000,
-        "[El☆Número 1]\nEl Condor Pasa Star Piece" to 10_000,
-        "Alarm Clock" to 2_000,
-        "Alarm Clock" to 2_000,
-        "Alarm Clock" to 2_000,
-        "Pleasing Parfait" to 5_000,
-        "Pleasing Parfait" to 5_000,
-        "Pleasing Parfait" to 5_000,
-        "Long Racing Shoes" to 1_000,
-        "Long Racing Shoes" to 1_000,
-        "Dirt Racing Shoes" to 1_000,
-        "Support Points" to 3_000,
-        "Support Points" to 3_000,
-        "Support Points" to 3_000,
-        "Hopeful S. Winner's Sash" to 5_000,
-        "Oka Sho Winner's Sash" to 5_000,
-        "Hopeful S. Winner's Sash" to 5_000,
-    ).map { (title, cost) -> SaleRow(title, monies = true, cost = cost) }
-
-/** Track length and the last row's pill offset (from the first row's) at the list's end, measured on 1080x1920 frames. */
-private const val TRACK = 626
-private const val LAST_PILL_AT_END = 406
-
-/** The scroll bar of a list of [total] rows scrolled [offset] px, its thumb top read [error] px off. */
-private fun saleThumb(total: Int, offset: Int, error: Int = 0): SaleScroll {
-    val end = maxOf(0, SALE_ROW_PITCH * (total - 1) - LAST_PILL_AT_END)
-    val length = TRACK * SALE_LIST_VIEW_H / (end + SALE_LIST_VIEW_H)
-    if (offset >= end) return SaleScroll(end * length / SALE_LIST_VIEW_H, length, atEnd = true)
-    return SaleScroll((offset * length / SALE_LIST_VIEW_H + error).coerceIn(0, TRACK - length - 4), length, atEnd = false)
-}
-
-/** The pages the bot reads of [rows] with the list scrolled to each of [offsets] px: every pill in the band, and the scroll bar. */
-private fun salePages(vararg offsets: Int, rows: List<SaleRow> = LIVE_SALE, thumbErrors: List<Int> = emptyList()): List<SalePage> {
-    val end = maxOf(0, SALE_ROW_PITCH * (rows.size - 1) - LAST_PILL_AT_END)
-    return offsets.mapIndexed { i, wanted ->
-        val offset = minOf(wanted, end)
-        val shown = rows.indices.filter { SALE_ROW_PITCH * it - offset in -30..501 }
-        SalePage(shown.map { rows[it] }, shown.map { SALE_ROW_PITCH * it - offset }, saleThumb(rows.size, offset, thumbErrors.getOrElse(i) { 0 }))
-    }
-}
-
-/** Offsets from the top to the end of a list of [total] rows, cycling through [steps] px per swipe. */
-private fun swipes(total: Int, vararg steps: Int): IntArray {
-    val end = maxOf(0, SALE_ROW_PITCH * (total - 1) - LAST_PILL_AT_END)
-    return generateSequence(0 to 0) { (offset, i) -> if (offset >= end) null else minOf(offset + steps[i % steps.size], end) to i + 1 }.map { it.first }.toList().toIntArray()
-}
-
-/** A page whose [rows] start at list row [first], read with the list scrolled [offset] px in a list of [total] rows. */
-private fun salePageAt(first: Int, total: Int, vararg rows: SaleRow, offset: Int = SALE_ROW_PITCH * first): SalePage =
-    SalePage(rows.toList(), rows.indices.map { SALE_ROW_PITCH * (first + it) - offset }, saleThumb(total, offset))
-
-/** Pages read from real frames: thumb top and length, pill y from the first row's pill at the top, and the list row each pill shows. */
-private fun framePages(rows: List<SaleRow>, vararg frames: Triple<Pair<Int, Int>, List<Int>, List<Int>>): List<SalePage> =
-    frames.map { (thumb, ys, shown) -> SalePage(shown.map { rows[it] }, ys, SaleScroll(thumb.first, thumb.second, atEnd = thumb.first + thumb.second >= TRACK - 3)) }
-
-/** The 93,000 list read under hand swipes of about 1.6 rows: thumb tops, lengths and pill offsets measured on the frames. */
-private val NOV7_P0_FRAMES =
-    arrayOf(
-        Triple(0 to 87, listOf(0, 240, 480), listOf(0, 1, 2)),
-        Triple(47 to 88, listOf(94, 334), listOf(2, 3)),
-        Triple(95 to 87, listOf(186, 426), listOf(4, 5)),
-        Triple(143 to 87, listOf(37, 277), listOf(5, 6)),
-        Triple(190 to 88, listOf(127, 367), listOf(7, 8)),
-        Triple(238 to 88, listOf(-25, 215, 455), listOf(8, 9, 10)),
-        Triple(286 to 87, listOf(69, 309), listOf(10, 11)),
-        Triple(333 to 87, listOf(167, 407), listOf(12, 13)),
-        Triple(380 to 87, listOf(25, 265), listOf(13, 14)),
-        Triple(426 to 87, listOf(124, 364), listOf(15, 16)),
-        Triple(473 to 87, listOf(-18, 222, 462), listOf(16, 17, 18)),
-        Triple(520 to 87, listOf(80, 320), listOf(18, 19)),
-        Triple(539 to 87, listOf(166, 406), listOf(19, 20)),
-    )
-
-/** The 103,000 list read under hand swipes of about 1.6 rows: thumb tops, lengths and pill offsets measured on the frames. */
-private val NOV7_P1_FRAMES =
-    arrayOf(
-        Triple(0 to 87, listOf(0, 240, 480), listOf(0, 1, 2)),
-        Triple(47 to 87, listOf(99, 339), listOf(2, 3)),
-        Triple(95 to 87, listOf(186, 426), listOf(4, 5)),
-        Triple(143 to 87, listOf(33, 273), listOf(5, 6)),
-        Triple(190 to 88, listOf(127, 367), listOf(7, 8)),
-        Triple(239 to 88, listOf(207, 447), listOf(9, 10)),
-        Triple(287 to 87, listOf(62, 302), listOf(10, 11)),
-        Triple(333 to 87, listOf(163, 403), listOf(12, 13)),
-        Triple(381 to 87, listOf(15, 255, 495), listOf(13, 14, 15)),
-        Triple(428 to 87, listOf(108, 348), listOf(15, 16)),
-        Triple(475 to 88, listOf(203, 443), listOf(17, 18)),
-        Triple(524 to 87, listOf(49, 289), listOf(18, 19)),
-        Triple(539 to 87, listOf(166, 406), listOf(19, 20)),
-    )
+/** The cost bar's total after Select All on a 21-item list seen live on 2026-11-07. */
+private const val LIVE_SALE_TOTAL = 93_000
 
 private fun runSales(game: FakeGame): List<String> = DailyExtras(game, collectRewards = false, clubRequest = false, requestItem = "Dirt Racing Shoes", buyDailySales = true).run()
 
@@ -1123,7 +955,7 @@ class DailyExtrasTest {
     fun `with the badge every row is bought for Monies and the step ends on Home, after the other parts`() {
         val game = FakeGame(shopBadge = true, missionRewards = false, presentBatches = 0)
         val notes = DailyExtras(game, collectRewards = true, clubRequest = false, requestItem = "Dirt Racing Shoes", buyDailySales = true).run()
-        assertEquals(listOf("Presents: nothing to collect", "Missions: nothing to collect", "Daily Sales: bought 11 item(s) for $LIVE_SALE_TOTAL Monies"), notes)
+        assertEquals(listOf("Presents: nothing to collect", "Missions: nothing to collect", "Daily Sales: bought everything selected for $LIVE_SALE_TOTAL Monies"), notes)
         assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, CONFIRM, EXCHANGE, CLOSE, BACK, BACK), game.taps.dropWhile { it != SHOP_BUTTON })
         assertTrue(game.bought)
         assertEquals(HOME, game.screen)
@@ -1131,65 +963,57 @@ class DailyExtrasTest {
     }
 
     @Test
-    fun `a sold-out row is left out of the total and does not block the purchase`() {
-        val rows = LIVE_SALE + SaleRow("Medium Racing Shoes", monies = true, cost = 4_000, buyable = false)
-        val game = FakeGame(shopBadge = true, sale = SaleScan(rows, complete = true))
-        assertEquals(listOf("Daily Sales: bought 11 item(s) for $LIVE_SALE_TOTAL Monies"), runSales(game))
+    fun `too few Monies, a zero total or an unreadable cost bar is reset and never confirmed`() {
+        val once = listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, RESET, BACK, BACK)
+        val twice = listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, SELECT_ALL, RESET, BACK, BACK)
+        val cases =
+            listOf(
+                Triple(FakeGame(shopBadge = true, balance = 50_000), "it costs $LIVE_SALE_TOTAL Monies and 50000 are held", once),
+                Triple(FakeGame(shopBadge = true, balance = LIVE_SALE_TOTAL - 1), "it costs $LIVE_SALE_TOTAL Monies and ${LIVE_SALE_TOTAL - 1} are held", once),
+                Triple(FakeGame(shopBadge = true, barTotal = 0), "the selection costs nothing", twice),
+                Triple(FakeGame(shopBadge = true, balance = null), "the cost bar could not be read", once),
+                Triple(FakeGame(shopBadge = true, barTotal = null), "the cost bar could not be read", twice),
+            )
+        for ((game, reason, taps) in cases) {
+            assertEquals(listOf("Daily Sales: nothing bought: $reason"), runSales(game))
+            assertEquals(taps, game.taps, reason)
+            assertFalse(game.bought, reason)
+            assertEquals(HOME, game.screen, reason)
+        }
+    }
+
+    @Test
+    fun `a first Select All the game ignores is tapped once more and the list is bought`() {
+        val game = FakeGame(shopBadge = true, selectAllIgnored = 1)
+        val logs = mutableListOf<String>()
+        val notes = DailyExtras(game, collectRewards = false, clubRequest = false, requestItem = "Dirt Racing Shoes", buyDailySales = true) { logs += it }.run()
+        assertEquals(listOf("Daily Sales: bought everything selected for $LIVE_SALE_TOTAL Monies"), notes)
+        assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, SELECT_ALL, CONFIRM, EXCHANGE, CLOSE, BACK, BACK), game.taps)
+        assertEquals(1, logs.count { it == "Daily Sales: the first Select All showed no total" })
         assertTrue(game.bought)
     }
 
     @Test
-    fun `a Carats row whose checkbox was missed still buys nothing`() {
-        val rows = LIVE_SALE + SaleRow("Carat Pack", monies = false, cost = 500, buyable = false)
-        val game = FakeGame(shopBadge = true, sale = SaleScan(rows, complete = true))
-        assertEquals(listOf("Daily Sales: nothing bought: a row is not priced in Monies"), runSales(game))
-        assertFalse(SELECT_ALL in game.taps)
+    fun `a total drawn late is read again without a second Select All`() {
+        val game = FakeGame(shopBadge = true, barLateReads = 1)
+        assertEquals(listOf("Daily Sales: bought everything selected for $LIVE_SALE_TOTAL Monies"), runSales(game))
+        assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, CONFIRM, EXCHANGE, CLOSE, BACK, BACK), game.taps)
+        assertTrue(game.bought)
+    }
+
+    @Test
+    fun `two ignored Select All taps buy nothing and never tap a third time`() {
+        val game = FakeGame(shopBadge = true, selectAllIgnored = 2)
+        assertEquals(listOf("Daily Sales: nothing bought: the selection costs nothing"), runSales(game))
+        assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, SELECT_ALL, RESET, BACK, BACK), game.taps)
         assertFalse(game.bought)
     }
 
     @Test
-    fun `a row not priced in Monies leaves the whole list unselected`() {
-        val rows = LIVE_SALE.mapIndexed { i, row -> if (i == 3) row.copy(monies = false) else row }
-        val game = FakeGame(shopBadge = true, sale = SaleScan(rows, complete = true))
-        assertEquals(listOf("Daily Sales: nothing bought: a row is not priced in Monies"), runSales(game))
-        assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, BACK, BACK), game.taps)
-        assertFalse(game.bought)
-        assertEquals(HOME, game.screen)
-    }
-
-    @Test
-    fun `a list not read to its end, an unread price or an all sold-out list selects nothing`() {
-        val cases =
-            listOf(
-                SaleScan(LIVE_SALE, complete = false, gap = true) to "the list was not read to its end",
-                SaleScan(LIVE_SALE.mapIndexed { i, row -> if (i == 5) row.copy(cost = null) else row }, complete = true) to "a row could not be read",
-                SaleScan(LIVE_SALE.map { it.copy(buyable = false) }, complete = true) to "every row is sold out",
-                SaleScan(emptyList(), complete = true) to "no row was read",
-            )
-        for ((scan, reason) in cases) {
-            val game = FakeGame(shopBadge = true, sale = scan)
-            assertEquals(listOf("Daily Sales: nothing bought: $reason"), runSales(game))
-            assertFalse(SELECT_ALL in game.taps, reason)
-            assertFalse(game.bought, reason)
-        }
-    }
-
-    @Test
-    fun `a cost bar that disagrees with the rows is reset and never confirmed`() {
-        val game = FakeGame(shopBadge = true, barTotal = LIVE_SALE_TOTAL + 500)
-        assertEquals(listOf("Daily Sales: nothing bought: the cost bar shows ${LIVE_SALE_TOTAL + 500}, the rows add up to $LIVE_SALE_TOTAL"), runSales(game))
-        assertEquals(listOf(SHOP_BUTTON, DAILY_SALES_BANNER, SELECT_ALL, RESET, BACK, BACK), game.taps)
-        assertFalse(game.bought)
-    }
-
-    @Test
-    fun `too few Monies or an unreadable cost bar is never confirmed`() {
-        for ((balance, reason) in listOf(50_000 to "it costs $LIVE_SALE_TOTAL Monies and 50000 are held", null to "the cost bar could not be read")) {
-            val game = FakeGame(shopBadge = true, balance = balance)
-            assertEquals(listOf("Daily Sales: nothing bought: $reason"), runSales(game))
-            assertFalse(CONFIRM in game.taps, reason)
-            assertFalse(game.bought, reason)
-        }
+    fun `a total exactly equal to the Monies held is bought`() {
+        val game = FakeGame(shopBadge = true, balance = LIVE_SALE_TOTAL)
+        assertEquals(listOf("Daily Sales: bought everything selected for $LIVE_SALE_TOTAL Monies"), runSales(game))
+        assertTrue(game.bought)
     }
 
     @Test
@@ -1239,224 +1063,6 @@ class DailyExtrasTest {
     fun `the Daily Sales dialogs are told apart by their titles`() {
         assertEquals(CONFIRM_EXCHANGE, extrasDialogScreen("Confirm Exchange"))
         assertEquals(EXCHANGE_COMPLETE, extrasDialogScreen("Exchange Complete"))
-    }
-
-    @Test
-    fun `one-row and two-row swipes read the whole list down to the scroll bar's end`() {
-        for (steps in listOf(intArrayOf(240), intArrayOf(480), intArrayOf(300, 420), intArrayOf(240, 480, 360))) {
-            val scan = mergeSalePages(salePages(*swipes(LIVE_SALE.size, *steps)))
-            assertTrue(scan.complete, steps.toList().toString())
-            assertEquals(LIVE_SALE, scan.rows)
-        }
-    }
-
-    @Test
-    fun `the 2026-11-07 list with three Alarm Clocks in a row is read whole`() {
-        val reads = listOf(swipes(NOV7_P0.size, 240), swipes(NOV7_P0.size, 400, 240, 320), swipes(NOV7_P0.size, 480, 240))
-        for (offsets in reads) {
-            val errors = offsets.indices.map { listOf(0, 1, -1, 1, 0)[it % 5] }
-            val scan = mergeSalePages(salePages(*offsets, rows = NOV7_P0, thumbErrors = errors))
-            assertTrue(scan.complete, offsets.toList().toString())
-            assertEquals(NOV7_P0, scan.rows)
-            assertEquals(93_000, scan.buyable.sumOf { it.cost!! })
-            assertNull(saleRowsProblem(scan))
-        }
-    }
-
-    @Test
-    fun `the 2026-11-07 frames of both lists place every row`() {
-        for ((rows, frames, total) in listOf(Triple(NOV7_P0, NOV7_P0_FRAMES, 93_000), Triple(NOV7_P1, NOV7_P1_FRAMES, 103_000))) {
-            val scan = mergeSalePages(framePages(rows, *frames))
-            assertTrue(scan.complete)
-            assertEquals(rows, scan.rows)
-            assertEquals(total, scan.buyable.sumOf { it.cost!! })
-        }
-    }
-
-    @Test
-    fun `the 2026-11-07 pages read without a scroll bar are refused, not ended early`() {
-        fun row(title: String, cost: Int) = SaleRow(title, monies = true, cost = cost)
-        val alarms = listOf(row("Alarm Clock", 2_000), row("Alarm Clock", 2_000))
-        val pages =
-            listOf(
-                listOf(row("[Wild Top Gear]\nVodka Star Piece", 10_000), row("[Red Strife]\nGold Ship Star Piece", 10_000), row("[Poinsettia Ribbon]\nNice Nature Star Piece", 5_000)),
-                listOf(row("[Poinsettia Ribbon]\nNice Nature Star Piece", 5_000), row("[Down the Line]\nMejiro Ryan Star Piece", 5_000)),
-                listOf(row("[Down the Line]\nMejiro Ryan Star Piece", 5_000), row("[ScrambletZone]\nMayano Top Gun Star Piece", 10_000)),
-                listOf(row("[ScrambletZone]\nMayano Top Gun Star Piece", 10_000), row("[Bestest Prize >]\nHaru Urara Star Piece", 5_000), row("Alarm Clock", 2_000)),
-                alarms,
-                alarms,
-            ).map { SalePage(it, it.indices.map { i -> SALE_ROW_PITCH * i }, scroll = null) }
-        val scan = mergeSalePages(pages)
-        assertFalse(scan.complete)
-        assertEquals("the list was not read to its end: page 1 shows no scroll bar", saleRowsProblem(scan))
-    }
-
-    @Test
-    fun `the 2026-11-07 offer 3 pages with a title split differently are read whole`() {
-        fun row(title: String, cost: Int) = SaleRow(title, monies = true, cost = cost)
-        val total = NOV7_P1.size
-        val pages =
-            listOf(
-                salePageAt(0, total, row("[Red Strife]\nGold Ship Star Piece", 10_000), row("[Red Strife]\nGold Ship Star Piece", 10_000), row("[Crystallinel\nMejiro Ardan Star Piece", 15_000)),
-                salePageAt(2, total, row("[Crystallinel\nMejiro Ardan Star Piece", 15_000), row("[Bestest Prize >]\nHaru Urara Star Piece", 5_000), offset = 400),
-                salePageAt(3, total, row("[Bestest Prize D] Haru\nUrara Star Piece", 5_000), row("[Bestest Prize D]\nHaru Urara Star\nPiece", 5_000), offset = 640),
-            ) + salePages(*swipes(total, 240, 360).filter { it > 640 }.toIntArray(), rows = NOV7_P1)
-        val scan = mergeSalePages(pages)
-        assertTrue(scan.complete)
-        assertEquals(NOV7_P1.map { it.cost }, scan.rows.map { it.cost })
-        assertEquals(21, scan.rows.size)
-        assertEquals(103_000, scan.buyable.sumOf { it.cost!! })
-        assertNull(saleRowsProblem(scan))
-    }
-
-    @Test
-    fun `identical rows at a page seam are never merged into one`() {
-        val rows =
-            listOf("Vodka Star Piece" to 10_000, "Alarm Clock" to 2_000, "Alarm Clock" to 2_000, "Alarm Clock" to 2_000, "Support Points" to 3_000, "Pleasing Parfait" to 5_000)
-                .map { (title, cost) -> SaleRow(title, monies = true, cost = cost) }
-        // x,A,A then A,A,y after a two-row swipe: the pages share one row, not the two that look alike.
-        val scan = mergeSalePages(salePages(0, 480, 794, rows = rows))
-        assertTrue(scan.complete)
-        assertEquals(rows, scan.rows)
-        assertEquals(3, scan.rows.count { it.title == "Alarm Clock" })
-    }
-
-    @Test
-    fun `each way a read can go wrong refuses the list with its reason`() {
-        val total = LIVE_SALE.size
-        val noBar = salePages(0, 240) + SalePage(LIVE_SALE.subList(2, 4), listOf(0, 240), scroll = null)
-        val cases =
-            listOf(
-                salePages(0, 240, 1200) to "row 5 was not read",
-                salePages(0, 480, 960, 1440) + SalePage(emptyList(), emptyList(), saleThumb(total, 1994)) to "page 5 shows no row",
-                salePages(0, 480, 960, 1440, 1994).let { it.dropLast(1) + it.last().let { end -> end.copy(rows = end.rows.dropLast(1), pillYs = end.pillYs.dropLast(1)) } } to
-                    "the last row of the list was not read",
-                salePages(0, 240, 240) to "a swipe did not move the list",
-                noBar to "page 3 shows no scroll bar",
-                salePages(480, 720, 960, 1200, 1440, 1680, 1920, 1994) to "row 1 was not read",
-                listOf(SalePage(LIVE_SALE.subList(0, 3), listOf(0, 240, 480), SaleScroll(0, 709, false)), SalePage(LIVE_SALE.subList(1, 3), listOf(120, 360), SaleScroll(240, 709, false))) to
-                    "page 2 is -120 px off the row grid",
-                listOf(salePageAt(0, total, *LIVE_SALE.subList(0, 3).toTypedArray()), salePageAt(2, total, LIVE_SALE[3], LIVE_SALE[4])) to
-                    "row 3 reads \"${saleRowText(LIVE_SALE[2])}\" and \"${saleRowText(LIVE_SALE[3])}\"",
-            )
-        for ((pages, reason) in cases) {
-            val scan = mergeSalePages(pages)
-            assertFalse(scan.complete, reason)
-            assertEquals("the list was not read to its end: $reason", saleRowsProblem(scan))
-            val game = FakeGame(shopBadge = true, sale = scan)
-            assertEquals(listOf("Daily Sales: nothing bought: the list was not read to its end: $reason"), runSales(game))
-            assertFalse(SELECT_ALL in game.taps, reason)
-        }
-        assertFalse(mergeSalePages(salePages(0, 240, 480)).complete, "never reached the end")
-        assertFalse(mergeSalePages(emptyList()).complete)
-    }
-
-    @Test
-    fun `the scroll bar is one dark run down its track, at the end when it touches the bottom`() {
-        fun track(top: Int, length: Int, size: Int = TRACK) = List(size) { it in top until top + length }
-        assertEquals(SaleScroll(0, 87, atEnd = false), saleScroll(track(0, 87)))
-        assertEquals(SaleScroll(539, 87, atEnd = true), saleScroll(track(539, 87)))
-        assertEquals(SaleScroll(0, TRACK, atEnd = true), saleScroll(track(0, TRACK)), "a thumb filling the track is a list on one screen")
-        assertNull(saleScroll(track(0, 0)), "no thumb")
-        assertNull(saleScroll(track(0, 40).mapIndexed { i, dark -> dark || i in 300..340 }), "two dark runs")
-    }
-
-    @Test
-    fun `sold-out rows are placed like any other row`() {
-        val rows = LIVE_SALE.mapIndexed { i, row -> if (i in 3..6) row.copy(buyable = false) else row }
-        val scan = mergeSalePages(salePages(*swipes(rows.size, 240), rows = rows))
-        assertTrue(scan.complete)
-        assertEquals(7, scan.buyable.size)
-        assertEquals(rows, scan.rows)
-    }
-
-    @Test
-    fun `a page that reads a row's epithet differently still overlaps the page before`() {
-        val total = OFFER_2.size
-        val pages =
-            listOf(
-                salePageAt(
-                    0,
-                    total,
-                    SaleRow("[Red Strife]\nGold Ship Star Piece", monies = true, cost = 10_000),
-                    SaleRow("Sakura Bakushin O Star Piece", monies = true, cost = 5_000),
-                    SaleRow("[Platanus Witch]\nSweep Tosho Star Piece", monies = true, cost = 15_000),
-                ),
-                salePageAt(2, total, SaleRow("[Platanus Witch]\nSweep Tosho Star Piece", monies = true, cost = 15_000), SaleRow("Air Shakur Star Piece", monies = true, cost = 15_000)),
-                salePageAt(3, total, SaleRow("Lunsigned]\nAir Shakur Star Piece", monies = true, cost = 15_000), SaleRow("Alarm Clock", monies = true, cost = 2_000)),
-            )
-        val scan = mergeSalePages(pages)
-        assertFalse(scan.gap)
-        assertFalse(scan.complete)
-        assertEquals(pages[0].rows + pages[1].rows[1] + pages[2].rows[1], scan.rows)
-    }
-
-    @Test
-    fun `an epithet read without its closing bracket still overlaps the page before`() {
-        fun row(title: String, cost: Int) = SaleRow(title, monies = true, cost = cost)
-        val total = 14
-        val pages =
-            listOf(
-                salePageAt(
-                    0,
-                    total,
-                    row("[RisingtFortune]\nMatikanefukukitaru Star Piece", 5_000),
-                    row("[RisingtFortune]\nMatikanefukukitaru Star Piece", 5_000),
-                    row("[Bestest Prize >]\nHaru Urara Star Piece", 5_000),
-                ),
-                salePageAt(2, total, row("[Bestest Prize >]\nHaru Urara Star Piece", 5_000), row("[Get to Winning!l\nWinning Ticket Star Piece", 5_000)),
-                salePageAt(3, total, row("[Get to Winning!]\nWinning Ticket Star Piece", 5_000), row("Alarm Clock", 2_000)),
-            )
-        val scan = mergeSalePages(pages)
-        assertFalse(scan.gap)
-        assertFalse(scan.complete)
-        assertEquals(pages[0].rows + pages[1].rows[1] + pages[2].rows[1], scan.rows)
-    }
-
-    @Test
-    fun `a long list with sold-out rows and garbled or missing epithets is read whole`() {
-        fun misread(page: Int, row: SaleRow) =
-            when {
-                ']' !in row.title -> row
-                page % 5 == 1 -> row.copy(title = row.title.substringAfter('\n'))
-                page % 5 == 2 -> row.copy(title = "L" + row.title.drop(1))
-                page % 5 == 3 -> row.copy(title = row.title.replace(']', 'l'))
-                page % 5 == 4 -> row.copy(title = row.title.replace('\n', ' '))
-                else -> row
-            }
-        for (steps in listOf(intArrayOf(240), intArrayOf(240, 480), intArrayOf(480, 360))) {
-            val pages = salePages(*swipes(OFFER_2.size, *steps), rows = OFFER_2).mapIndexed { i, page -> page.copy(rows = page.rows.map { misread(i, it) }) }
-            val scan = mergeSalePages(pages)
-            assertTrue(scan.complete, "steps ${steps.toList()}")
-            assertEquals(OFFER_2.map(::saleName), scan.rows.map(::saleName))
-            assertEquals(OFFER_2.map { it.buyable }, scan.rows.map { it.buyable })
-            assertEquals(14, scan.buyable.size)
-            assertEquals(77_000, scan.buyable.sumOf { it.cost!! })
-            assertEquals(null, saleRowsProblem(scan))
-        }
-    }
-
-    @Test
-    fun `two outfits of one Star Piece at one price next to each other never buy a wrong list`() {
-        val rows =
-            listOf("Alarm Clock" to 2_000, "[Red Strife]\nGold Ship Star Piece" to 10_000, "[Run! Ruin! Launcher!]\nGold Ship Star Piece" to 10_000, "Support Points" to 3_000, "Pleasing Parfait" to 5_000)
-                .map { (title, cost) -> SaleRow(title, monies = true, cost = cost) }
-        val total = rows.sumOf { it.cost!! }
-        val reads = listOf(listOf(0, 240, 480, 554), listOf(0, 480, 554), listOf(0, 554), listOf(0, 0), listOf(240, 554))
-        val bought = mutableListOf<List<Int>>()
-        for (offsets in reads) {
-            val scan = mergeSalePages(salePages(*offsets.toIntArray(), rows = rows))
-            val game = FakeGame(shopBadge = true, sale = scan, barTotal = total)
-            val note = runSales(game).single()
-            if (game.bought) {
-                bought += offsets
-                assertEquals(rows, scan.rows, "offsets $offsets")
-                assertEquals("Daily Sales: bought 5 item(s) for $total Monies", note)
-            } else {
-                assertTrue(note.startsWith("Daily Sales: nothing bought: "), "offsets $offsets: $note")
-            }
-        }
-        assertEquals(reads.take(3), bought, "every read that reached the end from the top buys the whole list")
     }
 
     @Test

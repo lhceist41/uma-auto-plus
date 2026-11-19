@@ -286,8 +286,3 @@ object IconDialogScrollListTopLeft : ComponentInterface {
 object IconDialogScrollListBottomRight : ComponentInterface {
     override val template = Template("components/icon/dialog_scroll_list_bottom_right", region = Region.rightHalf)
 }
-
-/** The Monies coin a Daily Sales row shows next to its price. */
-object IconMonies : ComponentInterface {
-    override val template = Template("components/icon/monies")
-}

@@ -10,6 +10,10 @@ New releases start with a one-line summary, then list what you need to do, what 
 
 ## [Unreleased]
 
+### Changed
+
+- **Rewards and Club:** Buy the Daily Sales selects every item as soon as the list opens instead of scrolling through it first, since Daily Sales items always cost Monies. It still buys nothing if the total cannot be read or is more than the Monies you hold.
+
 ## [1.9.0] - 2026-11-17
 
 The bot reads every screen at a fixed size, so it can run at other screen sizes (tested live at 720x1280 and 1440x2560; Grand Concert still needs 1080 wide), with sturdier spark rerolls and training reads, fewer stops after the daily reset and on slow screens, smarter Grand Concert fan racing, optional Daily Sales buying, and presets for three new trainee cards.

@@ -159,7 +159,7 @@ export interface Settings {
         enableClubItemRequest: boolean
         // An exact item name from CLUB_REQUEST_ITEMS, or "Lowest held Winner's Sash".
         clubRequestItem: string
-        // After Daily Races, Team Trials or the last career ends on Home: buy the whole Daily Sales list when every item costs Monies.
+        // After Daily Races, Team Trials or the last career ends on Home: buy the whole Daily Sales list when the Monies held cover its total.
         buyDailySales: boolean
         // After Daily Races or Team Trials ends on Home: race the Daily Legend Race once with the free ticket (never buys one).
         enableDailyLegendRace: boolean

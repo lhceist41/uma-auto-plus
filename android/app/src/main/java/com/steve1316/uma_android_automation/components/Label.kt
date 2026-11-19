@@ -478,8 +478,3 @@ object LabelHomeShopDailyBadge : ComponentInterface {
 object LabelDailySalesPrompt : ComponentInterface {
     override val template = Template("components/label/daily_sales_prompt", region = Region.bottomHalf)
 }
-
-/** The grey "Cost" pill on every Daily Sales row, sold out or not. No region: the list reaches above the screen's middle. */
-object LabelDailySalesCostPill : ComponentInterface {
-    override val template = Template("components/label/daily_sales_cost_pill")
-}

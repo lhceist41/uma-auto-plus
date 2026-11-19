@@ -28,7 +28,6 @@ import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabD
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabMain
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabSpecial
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabTitles
-import com.steve1316.uma_android_automation.components.CheckboxShopItem
 import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.DialogApplicationUpdated
 import com.steve1316.uma_android_automation.components.DialogConfirmExchange
@@ -36,10 +35,8 @@ import com.steve1316.uma_android_automation.components.DialogExchangeComplete
 import com.steve1316.uma_android_automation.components.DialogObjects
 import com.steve1316.uma_android_automation.components.DialogRewardsCollected
 import com.steve1316.uma_android_automation.components.DialogUtils
-import com.steve1316.uma_android_automation.components.IconMonies
 import com.steve1316.uma_android_automation.components.LabelClubMenu
 import com.steve1316.uma_android_automation.components.LabelConfirmRequestHeader
-import com.steve1316.uma_android_automation.components.LabelDailySalesCostPill
 import com.steve1316.uma_android_automation.components.LabelDailySalesPrompt
 import com.steve1316.uma_android_automation.components.LabelHomeShopDailyBadge
 import com.steve1316.uma_android_automation.components.LabelItemRequestExpired
@@ -53,7 +50,6 @@ import com.steve1316.uma_android_automation.components.LabelPresentsHeader
 import com.steve1316.uma_android_automation.components.LabelRewardsCollectedHeader
 import com.steve1316.uma_android_automation.utils.swipeCanonical
 import org.opencv.core.Point
-import kotlin.math.abs
 
 /** The Club item request picker offers only these: five shoes and the Winner's Sashes. */
 object ClubRequestItems {
@@ -242,117 +238,14 @@ internal fun parseMonies(ocr: String): Int? {
     return if (digits.length in 1..9) digits.toInt() else null
 }
 
-/** One Daily Sales row as read: its title (any "[epithet]" line, then the name line), whether its price shows the Monies coin, the price, and whether it has a checkbox (a sold-out row has none). */
-internal data class SaleRow(val title: String, val monies: Boolean, val cost: Int?, val buyable: Boolean = true)
-
-/** The rows of the Daily Sales list. [complete] once the scroll bar reached its end; [gap] and [reason] when the pages could not be placed in the list. */
-internal data class SaleScan(val rows: List<SaleRow>, val complete: Boolean, val gap: Boolean = false, val reason: String? = null) {
-    val buyable: List<SaleRow> get() = rows.filter { it.buyable }
-}
-
-/** The list's scroll bar thumb: its top within the track, its length, and whether it touches the track's end. */
-internal data class SaleScroll(val thumbTop: Int, val thumbLength: Int, val atEnd: Boolean)
-
-/** One screenful: its rows top to bottom, each pill's y measured from where the first row's pill sits with the list at its top, and the scroll bar (null when none was found). */
-internal data class SalePage(val rows: List<SaleRow>, val pillYs: List<Int>, val scroll: SaleScroll?)
-
-/** Daily Sales rows are 240 px apart; a page whose pills land more than 60 px off the row grid the scroll bar predicts is refused. */
-internal const val SALE_ROW_PITCH = 240
-internal const val SALE_ROW_SLACK = 60
-
-/** A thumb length of scroll bar stands for 709 px of list (measured on 7- and 21-row lists at 1080x1920). */
-internal const val SALE_LIST_VIEW_H = 709
-
-/** At the list's end the last row's pill sits 406 px below where the first row's pill sits at the top (every list measured), and the thumb ends within 3 px of the track's end. */
-internal const val SALE_LAST_PILL_AT_END = 406
-internal const val SALE_THUMB_END_SLACK = 3
-
-internal fun saleRowText(row: SaleRow): String = "${row.title.replace('\n', ' ')}=${row.cost ?: "?"}" + (if (row.monies) "" else " (not Monies)") + (if (row.buyable) "" else " (sold out)")
-
-/** OCR reads a row's "[epithet]" unreliably (dropped, "Lunsigned]", "Winning!l") and breaks the title into lines differently, so rows compare by the name after it. */
-private fun saleKey(row: SaleRow): Pair<String, Int?> {
-    val flat = row.title.replace('\n', ' ')
-    return normalizeItemName(if (']' in flat) flat.substringAfterLast(']') else row.title.substringAfterLast('\n')) to row.cost
-}
-
-/** The thumb of a scroll bar track read top to bottom ([thumb] true where a pixel is the thumb's colour), or null unless it is one run. */
-internal fun saleScroll(thumb: List<Boolean>, endSlack: Int = SALE_THUMB_END_SLACK): SaleScroll? {
-    val top = thumb.indexOf(true)
-    val end = thumb.lastIndexOf(true)
-    if (top < 0 || (top..end).any { !thumb[it] }) return null
-    return SaleScroll(top, end - top + 1, atEnd = end >= thumb.size - 1 - endSlack)
-}
-
-/**
- * Places every row of the pages read top to bottom at its index in the list: the scroll bar says how far each swipe moved the list,
- * and the pills snap that onto the row grid. Content alone cannot place rows, because a list repeats identical rows.
- */
-internal fun mergeSalePages(
-    pages: List<SalePage>,
-    pitch: Int = SALE_ROW_PITCH,
-    slack: Int = SALE_ROW_SLACK,
-    viewHeight: Int = SALE_LIST_VIEW_H,
-    lastPillAtEnd: Int = SALE_LAST_PILL_AT_END,
-): SaleScan {
-    val rows = sortedMapOf<Int, SaleRow>()
-
-    fun refused(reason: String) = SaleScan(rows.values.toList(), complete = false, gap = true, reason = reason)
-    var offset = 0
-    var before: SaleScroll? = null
-    for ((i, page) in pages.withIndex()) {
-        val scroll = page.scroll ?: return refused("page ${i + 1} shows no scroll bar")
-        val last = before
-        if (last != null && scroll.thumbTop == last.thumbTop && !scroll.atEnd) return refused("a swipe did not move the list")
-        val estimate = if (last == null) scroll.thumbTop * viewHeight / scroll.thumbLength else offset + (scroll.thumbTop - last.thumbTop) * viewHeight / scroll.thumbLength
-        before = scroll
-        if (page.pillYs.isEmpty()) return refused("page ${i + 1} shows no row")
-        val first = page.pillYs.first() + estimate
-        val off = first - Math.floorDiv(first + pitch / 2, pitch) * pitch
-        if (abs(off) > slack) return refused("page ${i + 1} is $off px off the row grid")
-        offset = estimate - off
-        for ((row, y) in page.rows.zip(page.pillYs)) {
-            val position = y + offset
-            val index = Math.floorDiv(position + pitch / 2, pitch)
-            if (index < 0 || abs(position - index * pitch) > slack) return refused("page ${i + 1} is off the row grid")
-            val known = rows[index]
-            if (known == null) {
-                rows[index] = row
-            } else if (saleKey(known) != saleKey(row)) {
-                return refused("row ${index + 1} reads \"${saleRowText(known)}\" and \"${saleRowText(row)}\"")
-            }
-        }
-    }
-    if (rows.isEmpty()) return SaleScan(emptyList(), complete = false)
-    val missing = (0..rows.lastKey()).firstOrNull { it !in rows }
-    if (missing != null) return refused("row ${missing + 1} was not read")
-    val tail = pages.last()
-    val complete = tail.scroll?.atEnd == true
-    if (complete && abs(tail.pillYs.last() - lastPillAtEnd) > slack) return refused("the last row of the list was not read")
-    return SaleScan(rows.values.toList(), complete = complete)
-}
-
-/** Why the read list must not be bought, or null when it can be paid for in Monies. Sold-out rows are checked too: a missed checkbox must not hide another currency. */
-internal fun saleRowsProblem(scan: SaleScan): String? =
+/** Why the selection must not be confirmed, or null when the cost bar's [total] is above 0 and the held [balance] covers it. */
+internal fun saleTotalProblem(total: Int?, balance: Int?): String? =
     when {
-        !scan.complete -> "the list was not read to its end" + (scan.reason?.let { ": $it" } ?: "")
-        scan.rows.isEmpty() -> "no row was read"
-        scan.rows.any { it.title.isBlank() || it.cost == null } -> "a row could not be read"
-        scan.rows.any { !it.monies } -> "a row is not priced in Monies"
-        scan.buyable.isEmpty() -> "every row is sold out"
-        else -> null
-    }
-
-/** Why the selection must not be confirmed, or null when the cost bar's [total] is the sum of the buyable [rows] and the held [balance] covers it. */
-internal fun saleTotalProblem(rows: List<SaleRow>, total: Int?, balance: Int?): String? {
-    val sum = rows.sumOf { it.cost ?: 0 }
-    return when {
         total == null || balance == null -> "the cost bar could not be read"
-        total != sum -> "the cost bar shows $total, the rows add up to $sum"
         total <= 0 -> "the selection costs nothing"
         total > balance -> "it costs $total Monies and $balance are held"
         else -> null
     }
-}
 
 internal enum class ExtrasScreen {
     HOME,
@@ -431,9 +324,6 @@ internal interface ExtrasDevice {
 
     /** Whether Home's Shop button shows the "Daily" badge; null while the button is not drawn. */
     fun shopBadge(): Boolean?
-
-    /** Every buyable row of the Daily Sales list, read from where it opened down to its end. */
-    fun readSaleRows(): SaleScan
 
     /** The cost bar under the Daily Sales list: the selection's total and the Monies held. */
     fun costBar(): Pair<Int?, Int?>
@@ -624,20 +514,30 @@ internal class DailyExtras(
         return if (awaitScreen(ExtrasScreen.CLUB) == ExtrasScreen.CLUB) "requested $item" else "confirmed $item, then lost the screen"
     }
 
-    /** Buys the whole Daily Sales list when Home's Shop shows the "Daily" badge, only when every row is priced in Monies and the cost bar agrees. */
+    /**
+     * Buys the whole Daily Sales list when Home's Shop shows the "Daily" badge. Daily Sales items are always priced in Monies,
+     * so the list is not read: the cost bar after Select All must show a total above 0 that the held Monies cover.
+     */
     private fun dailySales(): String {
         val badge = awaitShopBadge() ?: return "Shop button not found"
         if (!badge) return "no Daily badge on the Shop"
         if (!device.press(ExtrasTarget.SHOP_BUTTON)) return "Shop button not found"
         if (awaitScreen(ExtrasScreen.SHOP_MENU) != ExtrasScreen.SHOP_MENU) return "the Shop did not open"
         if (!device.press(ExtrasTarget.DAILY_SALES_BANNER) || awaitScreen(ExtrasScreen.DAILY_SALES) != ExtrasScreen.DAILY_SALES) return "Daily Sales did not open"
-        // Read before Select All, so a list that fails the checks is never selected.
-        val scan = device.readSaleRows()
-        log("Daily Sales rows: " + scan.rows.joinToString(transform = ::saleRowText))
-        saleRowsProblem(scan)?.let { return "nothing bought: $it" }
         if (!device.press(ExtrasTarget.SELECT_ALL)) return "nothing bought: Select All not found"
-        val (total, balance) = device.costBar()
-        saleTotalProblem(scan.buyable, total, balance)?.let {
+        var bar = device.costBar()
+        if ((bar.first ?: 0) <= 0) {
+            // A Select All tapped as the list opens can be ignored, or the total drawn late: read again, then tap once more.
+            log("Daily Sales: the first Select All showed no total")
+            device.pause(1.0)
+            bar = device.costBar()
+            if ((bar.first ?: 0) <= 0) {
+                device.press(ExtrasTarget.SELECT_ALL)
+                bar = device.costBar()
+            }
+        }
+        val (total, balance) = bar
+        saleTotalProblem(total, balance)?.let {
             device.press(ExtrasTarget.RESET)
             return "nothing bought: $it"
         }
@@ -649,7 +549,7 @@ internal class DailyExtras(
         if (!device.press(ExtrasTarget.EXCHANGE)) return "nothing bought: Exchange not found"
         if (awaitScreen(ExtrasScreen.EXCHANGE_COMPLETE) != ExtrasScreen.EXCHANGE_COMPLETE) return "Exchange pressed for $total Monies, but no Exchange Complete was seen"
         device.press(ExtrasTarget.CLOSE)
-        return "bought ${scan.buyable.size} item(s) for $total Monies"
+        return "bought everything selected for $total Monies"
     }
 
     /** Home draws its buttons late: waits for the Shop button, then reads its badge. */
@@ -750,36 +650,6 @@ private const val SWIPE_FROM_PROMPT = -400
 private const val SWIPE_TO_PROMPT = -1040
 private const val SWIPE_MS = 1200L
 private const val MAX_PICKER_PAGES = 20
-
-/** Measured on 1080x1920 Daily Sales frames, rows 240 px apart: from the "Select an item" prompt, a "Cost" pill in this band has its title and price in view. */
-private const val SALE_ROWS_TOP_FROM_PROMPT = -604
-private const val SALE_ROWS_BOTTOM_FROM_PROMPT = -73
-
-/** From the prompt: the first row's pill with the list at its top, and the scroll bar's track column (thumb grey under 170, track over it). */
-private const val SALE_FIRST_PILL_FROM_PROMPT = -574
-private const val SALE_TRACK_DX = 512
-private const val SALE_TRACK_TOP_FROM_PROMPT = -699
-private const val SALE_TRACK_BOTTOM_FROM_PROMPT = -74
-private const val SALE_THUMB_MAX_GREY = 170
-private const val SALE_SWIPE_FROM = -250
-private const val SALE_SWIPE_TO = -490
-private const val MAX_SALE_PAGES = 30
-
-/** From a row's "Cost" pill centre: the price coin, the checkbox, the price digits and the one- or two-line title. */
-private const val SALE_COIN_DX = 36
-private const val SALE_COIN_DY = -41
-private const val SALE_COIN_SIZE = 80
-private const val SALE_BOX_DX = 574
-private const val SALE_BOX_DY = -85
-private const val SALE_BOX_SIZE = 120
-private const val SALE_COST_DX = 122
-private const val SALE_COST_DY = -27
-private const val SALE_COST_W = 160
-private const val SALE_COST_H = 52
-private const val SALE_TITLE_DX = -58
-private const val SALE_TITLE_DY = -125
-private const val SALE_TITLE_W = 575
-private const val SALE_TITLE_H = 88
 
 /** From the prompt's centre: the selection total and the Monies held in the cost bar. */
 private const val COST_BAR_DY = 49
@@ -945,25 +815,6 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
         return LabelHomeShopDailyBadge.check(imageUtils, region = above, sourceBitmap = bitmap)
     }
 
-    override fun readSaleRows(): SaleScan {
-        val pages = mutableListOf<SalePage>()
-
-        fun merge() =
-            mergeSalePages(
-                pages,
-                imageUtils.relHeight(SALE_ROW_PITCH),
-                imageUtils.relHeight(SALE_ROW_SLACK),
-                imageUtils.relHeight(SALE_LIST_VIEW_H),
-                imageUtils.relHeight(SALE_LAST_PILL_AT_END),
-            )
-        while (pages.size < MAX_SALE_PAGES) {
-            pages += readSalePage() ?: break
-            val scan = merge()
-            if (scan.complete || scan.gap || !swipeSales()) break
-        }
-        return merge()
-    }
-
     override fun costBar(): Pair<Int?, Int?> {
         val bitmap = imageUtils.getSourceBitmap()
         val prompt = LabelDailySalesPrompt.findImageWithBitmap(imageUtils, bitmap) ?: return null to null
@@ -983,87 +834,6 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
                 ),
             )
         return read(COST_BAR_TOTAL_DX, "daily_sales_total") to read(COST_BAR_HELD_DX, "daily_sales_held")
-    }
-
-    /** The rows whose title and price are in view, top to bottom, each found by its "Cost" pill, with the scroll bar. Null when the list is not on screen. */
-    private fun readSalePage(): SalePage? {
-        val bitmap = imageUtils.getSourceBitmap()
-        val prompt = LabelDailySalesPrompt.findImageWithBitmap(imageUtils, bitmap) ?: return null
-        val top = imageUtils.relY(prompt.y, SALE_ROWS_TOP_FROM_PROMPT)
-        val bottom = imageUtils.relY(prompt.y, SALE_ROWS_BOTTOM_FROM_PROMPT)
-        val pills = LabelDailySalesCostPill.findAll(imageUtils, sourceBitmap = bitmap).filter { it.y.toInt() in top..bottom }.sortedBy { it.y }
-        val page =
-            pills.map { pill ->
-                fun near(dx: Int, dy: Int, size: Int) = intArrayOf(imageUtils.relX(pill.x, dx), imageUtils.relY(pill.y, dy), imageUtils.relWidth(size), imageUtils.relHeight(size))
-                val title =
-                    imageUtils.performOCRFromReference(
-                        pill,
-                        SALE_TITLE_DX,
-                        SALE_TITLE_DY,
-                        imageUtils.relWidth(SALE_TITLE_W),
-                        imageUtils.relHeight(SALE_TITLE_H),
-                        useThreshold = false,
-                        debugName = "daily_sales_title",
-                        sourceBitmap = bitmap,
-                    )
-                val cost =
-                    imageUtils.performOCRFromReference(
-                        pill,
-                        SALE_COST_DX,
-                        SALE_COST_DY,
-                        imageUtils.relWidth(SALE_COST_W),
-                        imageUtils.relHeight(SALE_COST_H),
-                        useThreshold = false,
-                        ocrEngine = "tesseract_digits",
-                        debugName = "daily_sales_cost",
-                        sourceBitmap = bitmap,
-                    )
-                SaleRow(
-                    title.trim(),
-                    monies = IconMonies.check(imageUtils, region = near(SALE_COIN_DX, SALE_COIN_DY, SALE_COIN_SIZE), sourceBitmap = bitmap),
-                    cost = parseMonies(cost),
-                    buyable = CheckboxShopItem.check(imageUtils, region = near(SALE_BOX_DX, SALE_BOX_DY, SALE_BOX_SIZE), sourceBitmap = bitmap),
-                )
-            }
-        val firstPill = imageUtils.relY(prompt.y, SALE_FIRST_PILL_FROM_PROMPT)
-        val scroll = readSaleScroll(bitmap, prompt)
-        val pillYs = pills.map { it.y.toInt() - firstPill }
-        val where =
-            if (scroll == null) {
-                "no scroll bar"
-            } else {
-                val offset = scroll.thumbTop * imageUtils.relHeight(SALE_LIST_VIEW_H) / scroll.thumbLength
-                val pitch = imageUtils.relHeight(SALE_ROW_PITCH)
-                val first = pillYs.firstOrNull()?.let { Math.floorDiv(it + offset + pitch / 2, pitch) + 1 }
-                "thumb ${scroll.thumbTop}/${scroll.thumbLength}${if (scroll.atEnd) " at the end" else ""}, first row ~${first ?: "-"}"
-            }
-        MessageLog.d(TAG, "[DAILY_EXTRAS] Daily Sales page ($where): " + page.joinToString(transform = ::saleRowText))
-        return SalePage(page, pillYs, scroll)
-    }
-
-    /** Reads the list's scroll bar down its track column; the thumb is a dark grey (about 125,120,142) on a light track (211,209,219). */
-    private fun readSaleScroll(bitmap: Bitmap, prompt: Point): SaleScroll? {
-        val x = imageUtils.relX(prompt.x, SALE_TRACK_DX)
-        val top = imageUtils.relY(prompt.y, SALE_TRACK_TOP_FROM_PROMPT)
-        val bottom = imageUtils.relY(prompt.y, SALE_TRACK_BOTTOM_FROM_PROMPT)
-        if (x !in 0 until bitmap.width || top < 0 || bottom >= bitmap.height) return null
-        return saleScroll(
-            (top..bottom).map { y ->
-                val pixel = bitmap.getPixel(x, y)
-                ((pixel shr 16 and 0xFF) + (pixel shr 8 and 0xFF) + (pixel and 0xFF)) / 3 < SALE_THUMB_MAX_GREY
-            },
-            imageUtils.relHeight(SALE_THUMB_END_SLACK),
-        )
-    }
-
-    /** Drags the Daily Sales list up by one row, so each page repeats a row of the one before. False when the list is not on screen. */
-    private fun swipeSales(): Boolean {
-        val prompt = LabelDailySalesPrompt.findImageWithBitmap(imageUtils, imageUtils.getSourceBitmap()) ?: return false
-        val x = prompt.x.toFloat()
-        OwnUiForeground.waitForGame()
-        game.gestureUtils.swipeCanonical(x, imageUtils.relY(prompt.y, SALE_SWIPE_FROM).toFloat(), x, imageUtils.relY(prompt.y, SALE_SWIPE_TO).toFloat(), SWIPE_MS)
-        game.wait(1.0)
-        return true
     }
 
     override fun pause(seconds: Double) = game.wait(seconds)

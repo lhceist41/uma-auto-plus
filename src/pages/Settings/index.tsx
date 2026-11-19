@@ -572,7 +572,7 @@ const Settings = () => {
                         bsc.setSettings({ ...bsc.settings, misc: { ...bsc.settings.misc, buyDailySales: checked } })
                     }}
                     label="Buy the Daily Sales"
-                    description="When the Shop on Home shows the Daily badge, opens Daily Sales, selects every item and pays with Monies. If an item costs anything other than Monies, or the total does not add up, nothing is bought."
+                    description="When the Shop on Home shows the Daily badge, opens Daily Sales, selects every item and pays with Monies. If the total cannot be read, is zero or is more than the Monies you hold, nothing is bought."
                     className="mt-4"
                 />
             </View>
