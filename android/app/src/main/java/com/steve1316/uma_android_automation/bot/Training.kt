@@ -25,6 +25,7 @@ import com.steve1316.uma_android_automation.components.LabelTrainingFailureChanc
 import com.steve1316.uma_android_automation.types.DateYear
 import com.steve1316.uma_android_automation.types.GameDate
 import com.steve1316.uma_android_automation.types.StatName
+import com.steve1316.uma_android_automation.utils.CanonicalScreen
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.StatusBoard
 import org.opencv.core.Point
@@ -229,6 +230,21 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
         /** Grand Concert only: performance-point type(s) this facility grants, read from its analysis frame's panel annotation; null amount = glyph seen, number unread. */
         var performanceGains: Map<PerformancePointType, Int?> = emptyMap()
+
+        fun toSkippedOption(skipReason: String): TrainingOption =
+            TrainingOption(
+                name = name,
+                statGains = statGains,
+                correctedStats = correctedStats,
+                failureChance = failureChance,
+                relationshipBars = relationshipBars,
+                numRainbow = numRainbow,
+                numSpiritGaugesCanFill = numSpiritGaugesCanFill,
+                numSpiritGaugesReadyToBurst = numSpiritGaugesReadyToBurst,
+                numSkillHints = numSkillHints,
+                trainingLevel = trainingLevel,
+                skipReason = skipReason,
+            )
     }
 
     /**
@@ -384,6 +400,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
     companion object {
         /** The logging tag for this class. */
         private val TAG: String = "[${MainActivity.loggerTag}]Training"
+
+        /** Skip reason for a training whose failure chance could not be read. */
+        const val SKIP_UNREADABLE_FAILURE_CHANCE = "unreadable failure chance"
 
         /**
          * Estimated failure chance at the given energy: non-Wit facilities follow ~2% per energy point below 50 and 0% at
@@ -1230,6 +1249,13 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     },
             )
 
+        /**
+         * The skipped training a forced selection may execute: the top-scored one whose failure chance was read. An unread one is
+         * never forced, since the guards on a forced pick compare its failure chance and -1 passes them all.
+         */
+        internal fun topForcedSkipped(skippedScores: Map<TrainingOption, Double>): Map.Entry<TrainingOption, Double>? =
+            skippedScores.entries.filter { it.key.failureChance >= 0 }.maxByOrNull { it.value }
+
         /** Resolves decision-time evidence for a forced/fallback [stat] pick from this turn's [trainingMap], then the failure-gated
          * [skippedTrainingMap], else nulls. Pure; the maps are rebuilt each turn so it never reads prior-turn state. A negative
          * raw failure chance maps to null. */
@@ -1717,7 +1743,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 return -1
             }
 
-            val retried = game.imageUtils.findTrainingFailureChance(tries = 3)
+            val retried = game.imageUtils.findTrainingFailureChance(tries = 3, region = failureBubbleColumn(StatName.SPEED, CanonicalScreen.width, CanonicalScreen.height))
             if (retried == -1) {
                 MessageLog.w(TAG, "[WARN] recoverAndRetryFailureChance:: Retry of findTrainingFailureChance still returned -1.")
             } else {
@@ -1737,7 +1763,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
         // Check if failure chance is acceptable: either within regular threshold or within risky threshold (if enabled).
         // This acts as an early exit from training analysis to speed up training.
-        var failureChance: Int = game.imageUtils.findTrainingFailureChance(tries = 3)
+        // A single-training read does not know the selected facility yet and switched no tab, so it keeps the whole bottom half.
+        val gateRegion = if (singleTraining) null else failureBubbleColumn(StatName.SPEED, CanonicalScreen.width, CanonicalScreen.height)
+        var failureChance: Int = game.imageUtils.findTrainingFailureChance(tries = 3, region = gateRegion)
         if (failureChance == -1 && !singleTraining) {
             MessageLog.w(
                 TAG,
@@ -1812,9 +1840,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             captures++
                             game.imageUtils.getSourceBitmap()
                         },
-                        locate = { LabelTrainingFailureChance.findImageWithBitmap(game.imageUtils, it) },
+                        locate = { LabelTrainingFailureChance.findImageWithBitmap(game.imageUtils, it, failureBubbleColumn(statName, CanonicalScreen.width, CanonicalScreen.height)) },
                         nowMs = { System.currentTimeMillis() },
                         pause = { game.wait(0.1, skipWaitingForLoading = true) },
+                        settle = { game.wait(FAILURE_BUBBLE_SETTLE_S, skipWaitingForLoading = true) },
                     )
                 val settleMs = System.currentTimeMillis() - settleStart
                 // [GC_TELEMETRY] Dev-only, debug-gated: persist this facility's analysis frame so the "+N" gain reads can be measured offline.
@@ -2031,14 +2060,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             maximumFailureChance
                         }
 
-                    // If we failed to detect a failure chance, fallback to the initial failure chance that was read as we first entered the training screen.
+                    // Another facility's value says nothing about this one, so an unread failure chance leaves the training out.
                     if (result.failureChance == -1) {
-                        MessageLog.w(TAG, "[WARN] analyzeTrainings:: ${result.name} failure chance OCR failed. Falling back to the initial robustly read value of $failureChance%.")
-                        result.failureChance = failureChance
-                    }
-
-                    if (result.failureChance == -1) {
-                        MessageLog.w(TAG, "[WARN] analyzeTrainings:: Failed to analyze failure chance for $statName.")
+                        MessageLog.w(TAG, "[TRAINING] Skipping $statName training: unreadable failure chance.")
+                        skippedTrainingMap[statName] = result.toSkippedOption(SKIP_UNREADABLE_FAILURE_CHANCE)
                         continue
                     }
 
@@ -2122,14 +2147,6 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     applyContextualStatGainBoost(result)
                 }
 
-                // Apply the initial failure chance as a fallback if OCR failed during individual stat analysis.
-                for (result in analysisResults) {
-                    if (result.failureChance == -1) {
-                        MessageLog.i(TAG, "[TRAINING] [${result.name}] Failure chance OCR failed. Falling back to the initial robustly read value of $failureChance%.")
-                        result.failureChance = failureChance
-                    }
-                }
-
                 normalizeFailureChances(analysisResults)
 
                 // Process results and populate training maps.
@@ -2182,6 +2199,14 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 } else {
                     maximumFailureChance
                 }
+
+            // A training whose failure chance could not be read is left out, also when a Good-Luck Charm would be used: the charm
+            // check reads the failure chance, and another facility's value can let a 32% facility train as 1%.
+            if (!test && result.failureChance < 0) {
+                MessageLog.w(TAG, "[TRAINING] Skipping ${result.name} training: unreadable failure chance.")
+                skippedTrainingMap[result.name] = result.toSkippedOption(SKIP_UNREADABLE_FAILURE_CHANCE)
+                continue
+            }
 
             // Filter out trainings that exceed the effective failure chance threshold.
             if (!test && !ignoreFailureChance && result.failureChance > effectiveFailureChance) {
@@ -2479,7 +2504,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         // Analysis produced no winning training. Pick a fallback and log which branch fired so that
         // a downstream `Selected Training: X` is never preceded by an unexplained "no training selected".
         if (forceSelection) {
-            val topSkipped = skippedScores.maxByOrNull { it.value }
+            val topSkipped = topForcedSkipped(skippedScores)
             if (topSkipped != null) {
                 val pick = topSkipped.key
                 val mainGain = pick.statGains[pick.name] ?: 0

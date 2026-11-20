@@ -539,6 +539,26 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         /** Sentinel for a failure-chance read that could not be trusted (bubble missing, OCR garbage, >100%). */
         const val INVALID_FAILURE_CHANCE: Int = -1
 
+        private val PERCENT_DIGITS_REGEX = Regex("""(\d+)\s*%""")
+        private val DIGITS_REGEX = Regex("""\d+""")
+
+        /**
+         * Parses a failure chance bubble read: the digits right before the "%" sign, else the first digit run. OCR adds stray
+         * glyphs around the number ("5 14%"), so joining every digit made values like 514.
+         *
+         * A value above 100 is rejected, never trimmed: a digit-drop "correction" once turned a real 55% with a stray leading 1
+         * into a trusted 15% and the bot trained into the risk.
+         *
+         * @param requirePercent True to reject a read with no "%" sign. ML Kit reads a 0% bubble as "U70", for example.
+         * @return The failure chance (0-100), or null when nothing valid was read.
+         */
+        fun parseFailureChance(text: String, requirePercent: Boolean): Int? {
+            val normalized = text.lowercase().replace("o", "0").replace("failure", "")
+            PERCENT_DIGITS_REGEX.find(normalized)?.let { return it.groupValues[1].toIntOrNull()?.takeIf { value -> value <= 100 } }
+            if (requirePercent) return null
+            return DIGITS_REGEX.find(normalized)?.value?.toIntOrNull()?.takeIf { it <= 100 }
+        }
+
         /**
          * Parses the unmet-fan shortfall from a goal-criteria line ("Criteria: 1,223 fan(s) to go").
          * Null when no number precedes a "fan" token - "Entry criteria met!" and unrelated text
@@ -966,9 +986,10 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @param sourceBitmap Optional source bitmap to use. Defaults to null.
      * @param trainingSelectionLocation Optional point location of the training selection icon. Defaults to null.
      * @param tries The number of retry attempts to make. Defaults to 1.
+     * @param region Where a self-captured frame is searched for the bubble's label; null searches the template's own region.
      * @return Integer representing the failure percentage, or -1 if detection fails.
      */
-    fun findTrainingFailureChance(sourceBitmap: Bitmap? = null, trainingSelectionLocation: Point? = null, tries: Int = 1): Int {
+    fun findTrainingFailureChance(sourceBitmap: Bitmap? = null, trainingSelectionLocation: Point? = null, tries: Int = 1, region: IntArray? = null): Int {
         // The frame the last attempt read, so a miss saves what the OCR saw rather than a later capture.
         var readBitmap: Bitmap? = sourceBitmap
         fun detectTrainingFailureChance(sourceBitmap: Bitmap? = null, trainingSelectionLocation: Point? = null): Int {
@@ -978,7 +999,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
             val (trainingSelectionLocation, sourceBitmap) =
                 if (sourceBitmap == null && trainingSelectionLocation == null) {
-                    LabelTrainingFailureChance.find(this)
+                    LabelTrainingFailureChance.find(this, region = region)
                 } else {
                     Pair(trainingSelectionLocation, sourceBitmap)
                 }
@@ -1009,28 +1030,16 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                     debugName = "TrainingFailureChance",
                 )
 
-            // Parse the result.
-            return try {
-                // Replace OCR misidentification of 'o/O' with '0'.
-                val cleanedResult = detectedText.lowercase().replace("o", "0").replace("%", "").replace("failure", "").replace("\n", "").replace(Regex("[^0-9]"), "").trim()
-
-                val value = cleanedResult.toInt()
-
-                // A failure chance above 100% is an impossible read (a stray extra OCR digit). The old
-                // digit-drop "correction" fabricated a plausible-but-wrong value - a real 55% that picked
-                // up a stray leading 1 became a trusted 15% and the bot trained into the risk. Reject it
-                // instead: the retry loop takes a fresh bitmap, and the caller's robust fallback covers
-                // exhaustion.
-                if (value > 100) {
-                    Log.w(TAG, "[WARN] findTrainingFailureChance:: Failure chance $value% exceeds 100%; treating as an invalid read.")
-                    return -1
-                }
-
-                value
-            } catch (_: NumberFormatException) {
-                MessageLog.e(TAG, "[ERROR] findTrainingFailureChance:: Could not convert \"$detectedText\" to integer for training failure chance.")
-                -1
+            // A read with no "%" is never trusted: the retry loop takes a fresh frame, and a per-tile miss leaves that facility out.
+            val value = parseFailureChance(detectedText, requirePercent = true)
+            val oneLine = detectedText.replace("\n", " ")
+            if ('%' !in detectedText) {
+                val unsigned = parseFailureChance(detectedText, requirePercent = false) ?: "nothing"
+                MessageLog.i(TAG, "[TRAINING] Failure chance read \"$oneLine\" has no % sign. Rejected it (without the sign it reads as $unsigned).")
+            } else if (value == null) {
+                MessageLog.w(TAG, "[WARN] findTrainingFailureChance:: No failure chance of 0 to 100% in \"$oneLine\"; treating it as an invalid read.")
             }
+            return value ?: INVALID_FAILURE_CHANCE
         }
 
         val tries: Int = maxOf(1, tries)

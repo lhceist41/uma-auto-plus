@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
@@ -125,5 +126,46 @@ class FailureChanceReadsTest {
             )
         assertEquals(50, result)
         assertEquals(listOf(1, 2), reported)
+    }
+
+    @Test
+    @DisplayName("The digits right before the % sign are the value, not every digit joined")
+    fun `parse takes the digits before the percent sign`() {
+        assertEquals(14, CustomImageUtils.parseFailureChance("5 14%", requirePercent = true))
+        assertEquals(14, CustomImageUtils.parseFailureChance("14 %", requirePercent = true))
+        assertEquals(14, CustomImageUtils.parseFailureChance("Failure\n14%", requirePercent = true))
+        assertEquals(0, CustomImageUtils.parseFailureChance("0%", requirePercent = true))
+        assertEquals(0, CustomImageUtils.parseFailureChance("O%", requirePercent = true), "an O read for a zero is a zero")
+        assertEquals(100, CustomImageUtils.parseFailureChance("100%", requirePercent = true))
+    }
+
+    @Test
+    @DisplayName("A value above 100 is rejected, never trimmed to two digits")
+    fun `parse rejects values above 100`() {
+        for (requirePercent in listOf(true, false)) {
+            assertNull(CustomImageUtils.parseFailureChance("120%", requirePercent), "120% requirePercent=$requirePercent")
+            assertNull(CustomImageUtils.parseFailureChance("101%", requirePercent), "101% requirePercent=$requirePercent")
+            assertNull(CustomImageUtils.parseFailureChance("5 143%", requirePercent), "a stray digit before 43% must not give 14 or 43")
+        }
+        assertNull(CustomImageUtils.parseFailureChance("143", requirePercent = false), "\"14%\" read as 143 is not guessed as 14")
+        assertNull(CustomImageUtils.parseFailureChance("1451 14", requirePercent = false), "the first digit run decides, and 1451 is invalid")
+    }
+
+    @Test
+    @DisplayName("A read with no % sign is rejected where the sign is required, else its first digit run is taken")
+    fun `parse without a percent sign`() {
+        assertNull(CustomImageUtils.parseFailureChance("U70", requirePercent = true), "a 0% bubble read as U70 must not become 70%")
+        assertEquals(70, CustomImageUtils.parseFailureChance("U70", requirePercent = false))
+        assertEquals(5, CustomImageUtils.parseFailureChance("5 14", requirePercent = false), "the first run, not 514")
+        assertNull(CustomImageUtils.parseFailureChance("14", requirePercent = true))
+    }
+
+    @Test
+    @DisplayName("No digits is no read")
+    fun `parse with no digits`() {
+        for (text in listOf("", "%", "Failure", "\n")) {
+            assertNull(CustomImageUtils.parseFailureChance(text, requirePercent = false), "\"$text\"")
+            assertNull(CustomImageUtils.parseFailureChance(text, requirePercent = true), "\"$text\"")
+        }
     }
 }
