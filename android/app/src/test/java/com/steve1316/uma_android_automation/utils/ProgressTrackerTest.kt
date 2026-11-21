@@ -239,10 +239,13 @@ class ProgressTrackerTest {
                 Regex("^val progress = ProgressTracker\\.endWindow\\(\\)$"),
                 // The dashboard's STATUS shows when progress last happened; the server thread decides nothing with it.
                 Regex("^val lastProgress = ProgressTracker\\.lastProgressWallMs\\.takeIf \\{ it > 0 \\}$"),
+                // The same-turn freeze check reads the tap count (a lock-free counter) as the taps between its captures, and nothing else.
+                Regex("^val reads = sameTurn\\.dateRead\\(date\\.day, game\\.frozenFrameGridOf\\(sourceBitmap\\), ProgressTracker\\.taps\\(\\), System\\.currentTimeMillis\\(\\)\\)$"),
+                Regex("^sameTurn\\.frame\\(game\\.frozenFrameGridOf\\(game\\.imageUtils\\.getSourceBitmap\\(\\)\\), ProgressTracker\\.taps\\(\\), System\\.currentTimeMillis\\(\\)\\)$"),
             )
 
         @Test
-        fun `every use of the tracker is a bare recording statement, so no decision depends on it`() {
+        fun `every use of the tracker is a bare recording statement, so no decision depends on it but the freeze check's tap count`() {
             val root = repoFile("$main/StartModule.kt").parentFile
             val files = root.walkTopDown().filter { it.isFile && it.name.endsWith(".kt") && it.name != "ProgressTracker.kt" }.toList()
             val lines = files.flatMap { file -> file.readText().replace("\r\n", "\n").lines().map { file.name to it.trim() } }
@@ -252,7 +255,7 @@ class ProgressTrackerTest {
             val uses =
                 lines.filter { (_, l) -> !l.startsWith("//") && !l.startsWith("*") && !l.startsWith("/**") && !l.startsWith("import ") }
                     .filter { (_, l) -> Regex("\\b(ProgressTracker|ProgressEvent|ProgressWindow)\\b|\\bframeHash\\(").containsMatchIn(l) }
-            assertEquals(12, uses.size, uses.joinToString("\n"))
+            assertEquals(14, uses.size, uses.joinToString("\n"))
             for ((file, line) in uses) assertTrue(allowed.any { it.matches(line) }, "$file: $line")
         }
 

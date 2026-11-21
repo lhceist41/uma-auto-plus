@@ -8,7 +8,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 // Detect-only progress measurement. The heartbeat only shows that something called wait(); these
 // record when the bot last made real progress and whether the captured frame froze while it acted,
-// for the queue ledger. Nothing in the bot reads them back to stop, retry, tap or relaunch.
+// for the queue ledger. Nothing in the bot reads them back to stop, retry, tap or relaunch, except the
+// tap count: the same-turn freeze check needs the taps sent between its captures.
 
 /** The meaningful events that count as progress, with their ledger key. */
 internal enum class ProgressEvent(val key: String) {
@@ -167,6 +168,9 @@ internal object ProgressTracker {
     fun noteAction() {
         actions.incrementAndGet()
     }
+
+    /** Every tap so far in this process; only differences between two reads mean anything. */
+    fun taps(): Long = actions.get()
 
     /** Samples every [SAMPLE_EVERY]th capture: a grid of pixel reads and a hash, never blocking the capture for long. */
     fun noteCapture(bitmap: Bitmap) {

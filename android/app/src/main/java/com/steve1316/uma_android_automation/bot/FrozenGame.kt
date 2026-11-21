@@ -133,6 +133,80 @@ internal class BackStreakWatch {
     }
 }
 
+/**
+ * Main screen date reads of one turn before the run stops as a loop. Grand Concert pre-debut reads every real turn as 12: up to 14 reads in a row
+ * measured, so a date-only count must stay well above that.
+ */
+internal const val SAME_TURN_STOP_READS = 30
+
+/**
+ * The Main screen frames of one turn, one per date read. A frozen game that still shows the Main screen never moves the turn; a live one changes
+ * stats, energy or the turn box between reads, which starts the frames over. The probe runs once per turn.
+ */
+internal class SameTurnWatch {
+    private val frames = FrozenFrameTracker()
+    private var day: Int? = null
+    private var last: IntArray? = null
+    private var probed = false
+
+    var reads = 0
+        private set
+
+    /** Cells that changed since the previous frame of this turn; null on its first. */
+    var changedCells: Int? = null
+        private set
+
+    /** After each Main screen date read. [day] is the date after the read, so a failed read counts as the same day. */
+    fun dateRead(
+        day: Int,
+        grid: IntArray,
+        taps: Long,
+        nowMs: Long,
+    ): Int {
+        if (day != this.day) {
+            reset()
+            this.day = day
+        }
+        reads++
+        frame(grid, taps, nowMs)
+        return reads
+    }
+
+    /** A frame of the same turn that is no date read (the energy stop's), so a freeze can show before a third read. */
+    fun frame(
+        grid: IntArray,
+        taps: Long,
+        nowMs: Long,
+    ) {
+        changedCells =
+            last?.let { prev ->
+                prev.indices.count { prev[it] != FROZEN_GRID_MASKED && grid[it] != FROZEN_GRID_MASKED && abs(prev[it] - grid[it]) > HOME_CELL_DELTA }
+            }
+        last = grid
+        frames.record(grid, taps, nowMs)
+    }
+
+    /** True once per turn, when the frame reads frozen with the game in front; the caller then probes. */
+    fun probeNow(
+        nowMs: Long,
+        otherAppInFront: () -> Boolean,
+    ): Boolean {
+        if (probed || !frames.frozen(nowMs) || otherAppInFront()) return false
+        probed = true
+        return true
+    }
+
+    /** After a reopen. */
+    fun reset() {
+        frames.reset()
+        day = null
+        last = null
+        probed = false
+        reads = 0
+        changedCells = null
+    }
+}
+
 internal enum class BackStreakStep {
     CONTINUE,
 
@@ -144,7 +218,7 @@ internal enum class BackStreakStep {
 
 /**
  * Only an ARRIVED probe goes to the restart. LOST, INCONCLUSIVE or no probe leave the streak as it was before this check:
- * it runs on to [maxPresses], where it stops with the old reason.
+ * it runs on to [maxPresses], where it stops with the old reason. The same-turn watch steps the same way, with its reads as presses.
  */
 internal fun backStreakStep(
     presses: Int,

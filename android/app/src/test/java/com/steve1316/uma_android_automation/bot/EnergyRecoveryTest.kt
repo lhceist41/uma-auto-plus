@@ -42,6 +42,7 @@ class EnergyRecoveryTest {
                     turnMoves
                 },
                 warn = { warnings += it },
+                reopenFrozenGame = { false },
                 stop = { throw Stopped(it) },
             )
     }
@@ -131,6 +132,7 @@ class EnergyRecoveryTest {
                     raceDay = { false },
                     turnMoved = { confirmTurnMoved(12, baseline, Mood.NORMAL, read = { TurnScreen(mainScreen = true, day = 12, energy = 20) }, wait = {}) },
                     warn = {},
+                    reopenFrozenGame = { false },
                     stop = { throw Stopped(it) },
                 )
             assertFalse(moved, "proven unmoved returns false; with the baseline dropped it read as unconfirmed (true)")
@@ -328,6 +330,7 @@ class EnergyRecoveryTest {
                     raceDay = { false },
                     turnMoved = { confirmTurnMoved(stuckDay, before, null, read = { TurnScreen(mainScreen = true, day = stuckDay, energy = energy) }, wait = {}) },
                     warn = {},
+                    reopenFrozenGame = { false },
                     stop = { throw Stopped(it) },
                 )
             }

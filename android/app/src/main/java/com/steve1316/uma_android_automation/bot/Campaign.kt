@@ -345,6 +345,9 @@ abstract class Campaign(game: Game) : Task(game) {
     /** A Back streak on a frozen game reaches the bound without ever leaving the screen, so its frames are watched for a freeze. */
     private val backStreak = BackStreakWatch()
 
+    /** A frozen game that still shows the Main screen never moves the turn, so the Main screen frames of one turn are watched for a freeze. */
+    private val sameTurn = SameTurnWatch()
+
     private var bMiscBackPressedThisTick: Boolean = false
 
     /** Each Next undoes a Back, so a Next/Back ping-pong never reaches the Back-press bound. Stop bound, ~80s at the observed tick rate. */
@@ -2376,6 +2379,36 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
+     * Counts the Main screen date reads of one turn. A frozen game is reopened once its frames read frozen and the probe shows the bot's taps
+     * arriving; a live game that never moves the turn stops at [SAME_TURN_STOP_READS].
+     *
+     * @return True when the game was reopened, so this pass ends.
+     */
+    private fun watchSameTurn(sourceBitmap: Bitmap): Boolean {
+        val reads = sameTurn.dateRead(date.day, game.frozenFrameGridOf(sourceBitmap), ProgressTracker.taps(), System.currentTimeMillis())
+        Log.d(TAG, "[DEBUG] watchSameTurn:: Main screen read $reads of turn ${date.day}, cells changed since the last read: ${sameTurn.changedCells}.")
+        val probe = sameTurnProbe()
+        when (backStreakStep(reads, SAME_TURN_STOP_READS, probe)) {
+            BackStreakStep.REOPEN_FROZEN_GAME -> {
+                // No MessageLog before the reopen: its lock is process-wide, so a blocked log line would hold the recovery back.
+                stopForStuckInput(RebindEpisode(), "The Main screen showed turn ${date.day} $reads times in a row on a screen that never changed. Stopping.", probe)
+                return true
+            }
+            BackStreakStep.STOP -> {
+                // A breakpoint, so a queue halts: its next run would re-enter this career on the same turn and loop again.
+                val reason =
+                    "The bot read turn ${date.day} on the Main screen $reads times in a row and the turn never moved on, so the run stopped instead of " +
+                        "repeating it. Play that turn in the game, then press Start."
+                game.notificationMessage = reason
+                throw CampaignBreakpointException(reason)
+            }
+            BackStreakStep.CONTINUE -> return false
+        }
+    }
+
+    private fun sameTurnProbe(): OwnInputProbeResult? = if (sameTurn.probeNow(System.currentTimeMillis()) { game.otherAppInFront() }) game.ownInputReachesScreen() else null
+
+    /**
      * Handles the Inheritance event if detected on the screen.
      *
      * @return True if the Inheritance event occurred and was accepted, false otherwise.
@@ -2461,6 +2494,18 @@ abstract class Campaign(game: Game) : Task(game) {
                 raceDay = { IconRaceDayRibbon.check(game.imageUtils) },
                 turnMoved = { turnMovedSince(day, energyBefore.takeUnless { outingOpened }, moodBefore).also { moved = it } },
                 warn = { MessageLog.w(TAG, "[WARN] recoverEnergy:: $it") },
+                reopenFrozenGame = {
+                    // The bound comes on the 2nd unmoved Rest, before a 3rd Main screen read could show the freeze, so one more frame goes in first.
+                    sameTurn.frame(game.frozenFrameGridOf(game.imageUtils.getSourceBitmap()), ProgressTracker.taps(), System.currentTimeMillis())
+                    val probe = sameTurnProbe()
+                    if (probe == OwnInputProbeResult.ARRIVED) {
+                        // No MessageLog before the reopen, as in watchSameTurn.
+                        stopForStuckInput(RebindEpisode(), "Energy recovery did not move turn $day on a screen that never changed. Stopping.", probe)
+                        true
+                    } else {
+                        false
+                    }
+                },
                 stop = { reason ->
                     game.notificationMessage = reason
                     throw CampaignBreakpointException(reason)
@@ -3248,6 +3293,7 @@ abstract class Campaign(game: Game) : Task(game) {
         // Skip if we've already checked the date this turn and no game-advancing action was taken.
         if (!bHasCheckedDateThisTurn) {
             val dateChanged = updateDate()
+            if (watchSameTurn(sourceBitmap)) return true
             val newTurn = dateChanged || !trainee.bHasUpdatedStats
             racing.encounteredRacingPopup = racingPopupTurn.armedAfterDateRead(newTurn, racing.encounteredRacingPopup)
             if (newTurn) {
@@ -4775,6 +4821,7 @@ abstract class Campaign(game: Game) : Task(game) {
                         "closing try $attempt/$MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN"
                     }
                 MessageLog.w(TAG, "[RECOVERY] The game stopped responding on a screen the bot knows (its own taps still reach the screen): $tried ${reopenOutcomeWords(reopen)}.")
+                sameTurn.reset()
                 consecutiveUnknownScreenCount = 0
                 lobbyReentryAttempts = 0
                 consecutiveDialogTicks = 0
@@ -4807,6 +4854,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "[RECOVERY] Android reported the game as not responding; pressed Close app and relaunched it " +
                     "(closing try $unresponsiveGameReopens/$MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN): ${reopenOutcomeWords(reopen)}.",
             )
+            sameTurn.reset()
             consecutiveUnknownScreenCount = 0
             lobbyReentryAttempts = 0
             return
@@ -4912,6 +4960,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 )
                 // Fresh window for the reopened game: the lobby re-entry branch resumes the career. If the game did not come back,
                 // the counter climbs to the threshold again and the next attempt fires.
+                sameTurn.reset()
                 consecutiveUnknownScreenCount = 0
                 lobbyReentryAttempts = 0
                 return

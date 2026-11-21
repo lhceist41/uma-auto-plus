@@ -51,6 +51,8 @@ internal const val MAX_UNCONFIRMED_ENERGY_RECOVERIES = 3
  * @param rest True when a Rest button was tapped.
  * @param raceDay True when the screen shows a race day, whose missing Rest button is not a failed recovery: the race goes first.
  * @param turnMoved See [confirmTurnMoved].
+ * @param reopenFrozenGame Asked once the bound is reached, before [stop]: true when the screen was a frozen game and it was reopened. A frozen game
+ *   that still shows the Main screen drops every Rest the same way, so its bound is a freeze, not a Rest the player must make.
  * @return False only when the turn provably did not move. An unconfirmed recovery (most often a dialog or transition after a real tap) counts as
  *   spent for the caller's turn bookkeeping, but still counts toward the bound.
  */
@@ -62,20 +64,25 @@ internal fun recoverEnergyAndConfirmTurn(
     raceDay: () -> Boolean,
     turnMoved: () -> Boolean?,
     warn: (String) -> Unit,
+    reopenFrozenGame: () -> Boolean,
     stop: (String) -> Nothing,
 ): Boolean {
-    fun recordUnmoved(provenUnmoved: Boolean) {
+    /** True when the bound was reached on a frozen game that was reopened; the turn did not move. */
+    fun recordUnmoved(provenUnmoved: Boolean): Boolean {
         val tries = unmoved.record(day, provenUnmoved)
-        if (unmoved.limitReached()) {
-            stop("Energy recovery did not move turn $day after $tries tries, so the run stopped instead of looping. Rest once in the game, then press Start.")
+        if (!unmoved.limitReached()) return false
+        if (reopenFrozenGame()) {
+            unmoved.clear()
+            return true
         }
+        stop("Energy recovery did not move turn $day after $tries tries, so the run stopped instead of looping. Rest once in the game, then press Start.")
     }
 
     val outingAllowed = unmoved.on(day) == 0
     val tapped = (outingAllowed && tryOuting()) || rest()
     if (!tapped && raceDay()) {
         // Counted like an unconfirmed try, so a ribbon the turn-start read keeps missing cannot send the bot back here forever.
-        recordUnmoved(provenUnmoved = false)
+        if (recordUnmoved(provenUnmoved = false)) return false
         warn("No Rest button on race day $day. The race goes first.")
         return false
     }
@@ -86,7 +93,7 @@ internal fun recoverEnergyAndConfirmTurn(
         return true
     }
 
-    recordUnmoved(provenUnmoved = moved == false)
+    if (recordUnmoved(provenUnmoved = moved == false)) return false
     val what = if (moved == false) "left turn $day unchanged" else "on turn $day could not be confirmed (a dialog, a transition or an unreadable screen)"
     warn("Energy recovery $what. The next try goes straight to Rest.")
     return moved == null
