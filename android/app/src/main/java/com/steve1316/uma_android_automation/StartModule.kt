@@ -3096,7 +3096,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                         // Wait between runs.
                         sendQueueProgressEvent(i, totalRuns, "waiting")
-                        MessageLog.i(TAG, "[QUEUE] Waiting ${delayBetweenRuns}s before next run...")
+                        if (nextRunCareerLaunched) {
+                            MessageLog.i(TAG, "[QUEUE] Run ${i + 1}'s career has started; waiting ${delayBetweenRuns}s before playing it.")
+                        } else {
+                            MessageLog.i(TAG, "[QUEUE] Waiting ${delayBetweenRuns}s before next run...")
+                        }
 
                         if (!interruptibleWait(delayBetweenRuns)) {
                             // Nothing claimed the abort: the device going to sleep interrupts the

@@ -156,7 +156,7 @@ const RunQueueSettings = () => {
                                     labelUnit="s"
                                     showValue={true}
                                     showLabels={true}
-                                    description="Seconds to wait between runs. This allows the game to settle and gives you a window to intervene if needed."
+                                    description="Seconds to pause between runs. In a career queue the next career has normally started by then, so this only lets the game settle. To stop before the next career starts, use Stop after this career."
                                 />
 
                                 <CustomSlider

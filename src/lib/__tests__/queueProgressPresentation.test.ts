@@ -47,6 +47,15 @@ describe("presentQueueProgress", () => {
         expect(p.isTerminal).toBe(false)
     })
 
+    it("presents the wait between runs under the run whose career already started, not the one that finished", () => {
+        expect(presentQueueProgress({ currentRun: 1, totalRuns: 2, status: "waiting" })).toEqual({ kind: "running", title: "Run 2/2 - Starting...", isTerminal: false })
+        expect(presentQueueProgress({ currentRun: 3, totalRuns: 6, status: "waiting" }).title).toBe("Run 4/6 - Starting...")
+        expect(presentQueueProgress({ currentRun: 2, totalRuns: 2, status: "waiting" }).title).toBe("Run 2/2 - Starting...")
+        expect(presentQueueProgress({ currentRun: 0, totalRuns: 0, status: "waiting" }).title).toBe("Run 0/0 - Starting...")
+        // Only the title moves: the stop-after-career offer still follows the event's own run.
+        expect(offersStopAfterCareer(true, { currentRun: 1, totalRuns: 2, status: "waiting" })).toBe(false)
+    })
+
     it("presents a run being retried, distinctly from a fresh start", () => {
         const p = presentQueueProgress({ currentRun: 2, totalRuns: 6, status: "retrying" })
         expect(p).toEqual({ kind: "running", title: "Run 2/6 - Retrying...", isTerminal: false })

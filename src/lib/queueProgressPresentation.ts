@@ -65,8 +65,12 @@ export function presentQueueProgress(event: QueueProgressEvent): QueueProgressPr
             return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Resuming...`, detail: event.message, isTerminal: false }
         case "navigating":
             return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Navigating...`, isTerminal: false }
-        case "waiting":
-            return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Waiting...`, isTerminal: false }
+        case "waiting": {
+            // The wait comes after the next career has started, and its event still carries the run
+            // that just finished: the title names the run that is about to be played.
+            const nextRun = totalRuns > 0 ? Math.min(currentRun + 1, totalRuns) : currentRun
+            return { kind: "running", title: `Run ${nextRun}/${totalRuns} - Starting...`, isTerminal: false }
+        }
         case "retrying":
             return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Retrying...`, isTerminal: false }
         case "completed": {

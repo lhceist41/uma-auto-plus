@@ -17,6 +17,7 @@ New releases start with a one-line summary, then list what you need to do, what 
 ### Fixed
 
 - **Careers:** a game that froze on the main career screen is now restarted (still at most twice per run) instead of the bot looping or stopping with a request to rest in the game. On Android 14 and newer the bot can still only bring it to the front once. When the same turn keeps coming back without progress, the bot stops the queue with a reason that names the turn.
+- **Run Queue:** Home and the "Delay Between Runs" text now say that the wait between two runs normally comes after the next career has started. To stop before the next career starts, use Stop after this career.
 
 ## [1.9.0] - 2026-11-17
 
