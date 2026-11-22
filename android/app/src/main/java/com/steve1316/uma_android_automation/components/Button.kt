@@ -765,9 +765,16 @@ object ButtonItemRequestSashTab : ButtonInterface {
     override val template = Template("components/button/item_request_sash_tab", region = Region.topQuarter, confidence = 0.9)
 }
 
-/** The Shop button on Home. Cropped inside its white circle, so the "Daily" badge above it and the art behind it do not change the match. */
-object ButtonHomeShop : ButtonInterface {
-    override val template = Template("components/button/home_shop", region = Region.bottomHalf)
+/**
+ * The Shop button on Home. Cropped inside its white circle, so the "Daily" badge above it and the art behind it do not change the match.
+ * The 2nd Anniversary layout covers the "Shop" label with a sparkling "Special Shop!" ribbon, so its template is the cart above the ribbon, left of the corner where a "!" notice can sit.
+ */
+object ButtonHomeShop : MultiStateButtonInterface {
+    override val templates: List<Template> =
+        listOf(
+            Template("components/button/home_shop", region = Region.bottomHalf),
+            Template("components/button/home_shop_special", region = Region.bottomHalf),
+        )
 }
 
 /** The Daily Sales banner on the Shop menu. */
