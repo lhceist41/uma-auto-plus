@@ -239,11 +239,16 @@ const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({
 
         try {
             const newName = profileName.trim()
-            await updateProfile(editingProfileId, { name: newName })
+            const oldName = profiles.find((p) => p.id === editingProfileId)?.name
+            const saved = await updateProfile(editingProfileId, { name: newName })
             setProfileName("")
             setEditingProfileId(null)
-            // Notify parent that a profile was updated.
-            onProfileUpdated?.()
+            // Notify parent that a profile was updated, with both names only if the rename was saved.
+            if (saved) {
+                onProfileUpdated?.(oldName, newName)
+            } else {
+                onProfileUpdated?.()
+            }
         } catch (error) {
             const errorMessage = `Failed to update profile: ${error instanceof Error ? error.message : String(error)}`
             onError?.(errorMessage)

@@ -137,7 +137,7 @@ export const useProfileManager = (onError?: (message: string) => void) => {
      * Update an existing profile.
      * @param id - The ID of the profile to update.
      * @param updates - The updates to apply to the profile.
-     * @returns A promise that resolves when the profile is updated.
+     * @returns A promise that resolves to true once the profile is saved, false if it was refused or failed.
      */
     const updateProfile = useCallback(
         async (
@@ -146,14 +146,14 @@ export const useProfileManager = (onError?: (message: string) => void) => {
                 name?: string
                 settings?: Partial<Settings>
             }
-        ): Promise<void> => {
+        ): Promise<boolean> => {
             try {
                 const existingProfile = findProfileById(id)
                 if (!existingProfile) {
                     const errorMessage = `Profile with id ${id} not found.`
                     logErrorWithTimestamp(`[ProfileManager] ${errorMessage}`)
                     onError?.(errorMessage)
-                    return
+                    return false
                 }
 
                 // Prevent renaming to Default Profile.
@@ -161,7 +161,7 @@ export const useProfileManager = (onError?: (message: string) => void) => {
                     const errorMessage = `Cannot use the reserved name '${DEFAULT_PROFILE_NAME}'.`
                     logErrorWithTimestamp(`[ProfileManager] ${errorMessage}`)
                     onError?.(errorMessage)
-                    return
+                    return false
                 }
 
                 // Check for name conflicts if name is being updated.
@@ -169,7 +169,7 @@ export const useProfileManager = (onError?: (message: string) => void) => {
                     const errorMessage = `Profile with name "${updates.name}" already exists.`
                     logErrorWithTimestamp(`[ProfileManager] ${errorMessage}`)
                     onError?.(errorMessage)
-                    return
+                    return false
                 }
 
                 // Merge existing settings with updates.
@@ -181,15 +181,23 @@ export const useProfileManager = (onError?: (message: string) => void) => {
                     settings: mergedSettings,
                 })
 
+                // The active profile keeps its place under the new name.
+                if (updates.name && currentProfileName === existingProfile.name) {
+                    await databaseManager.setCurrentProfileName(updates.name)
+                    setCurrentProfileName(updates.name)
+                }
+
                 await loadProfiles()
                 logWithTimestamp(`[ProfileManager] Updated profile: ${updates.name || existingProfile.name}`)
+                return true
             } catch (error) {
                 const errorMessage = `Failed to update profile ${id}: ${error instanceof Error ? error.message : String(error)}`
                 logErrorWithTimestamp(`[ProfileManager] ${errorMessage}`, error)
                 onError?.(errorMessage)
+                return false
             }
         },
-        [profiles, loadProfiles, findProfileById, hasNameConflict, onError]
+        [profiles, currentProfileName, loadProfiles, findProfileById, hasNameConflict, setCurrentProfileName, onError]
     )
 
     /**
