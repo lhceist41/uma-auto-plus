@@ -5,7 +5,7 @@ import { parsePresetName, presetTraineeName } from "./presetNames"
 import { presetObjectiveOf } from "./adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "./moodFloorPolicy"
 import { keepPersonalSettings } from "./personalSettings"
-import { convertSettingsToBatch } from "./settingsUtils"
+import { BUNDLED_DATA_KEYS, convertSettingsToBatch } from "./settingsUtils"
 
 export { parsePresetName, presetLine, presetOutfitLabel, presetSubtitle, presetTraineeName } from "./presetNames"
 
@@ -104,10 +104,7 @@ const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState", "discord", "debug"]
 // stale snapshots of the moment the rotation was built and reapplying them per-switch would clobber
 // the live profile label / settings echo. Mirrors the fields the export path already strips.
 const SNAPSHOT_KEY_DENYLIST = new Set([
-    "trainingEvent.characterEventData",
-    "trainingEvent.supportEventData",
-    "trainingEvent.scenarioEventData",
-    "racing.racingPlanData",
+    ...BUNDLED_DATA_KEYS.map(([category, key]) => `${category}.${key}`),
     "misc.currentProfileName",
     "misc.formattedSettingsString",
 ])

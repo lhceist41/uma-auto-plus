@@ -8,7 +8,7 @@ import { defaultSettings, Settings, BotStateContext } from "../context/BotStateC
 import { databaseManager } from "../lib/database"
 import { startTiming } from "../lib/performanceLogger"
 import { logWithTimestamp, logErrorWithTimestamp } from "../lib/logger"
-import { deepMerge, convertSettingsToBatch, applyMigrations, withBundledData, changedSettingsRows, rememberPersistedRows, PersistedSettingsRows } from "../lib/settingsUtils"
+import { deepMerge, convertSettingsToBatch, applyMigrations, withBundledData, changedSettingsRows, rememberPersistedRows, PersistedSettingsRows, BUNDLED_DATA_KEYS } from "../lib/settingsUtils"
 import { buildRotationSnapshotRows, BuildRotationResult } from "../lib/rotationSnapshots"
 import { LaunchBarrierResult, launchConfigIdentity, identityFromRows, verifyLaunchConfigPersisted } from "../lib/launchConfig"
 import { performSettingsImport, ImportSettingsResult, ImportedProfile } from "../lib/settingsImport"
@@ -446,9 +446,7 @@ export const useSettingsManager = () => {
             const settingsForExport = JSON.parse(JSON.stringify(bsc.settings))
 
             // Remove unnecessary fields before export.
-            delete settingsForExport.racing.racingPlanData
-            delete settingsForExport.trainingEvent.characterEventData
-            delete settingsForExport.trainingEvent.supportEventData
+            for (const [category, key] of BUNDLED_DATA_KEYS) delete settingsForExport[category][key]
             delete settingsForExport.misc.formattedSettingsString
             delete settingsForExport.misc.currentProfileName
 

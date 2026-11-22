@@ -3,7 +3,7 @@ import path from "path"
 import { transformSync } from "@babel/core"
 import { defaultSettings } from "../../context/BotStateContext"
 import { identityFromRows, launchConfigIdentity, verifyLaunchConfigPersisted } from "../launchConfig"
-import { applyMigrations, convertSettingsToBatch, deepMerge, rememberPersistedRows, withBundledData } from "../settingsUtils"
+import { applyMigrations, BUNDLED_DATA_KEYS, convertSettingsToBatch, deepMerge, rememberPersistedRows, withBundledData } from "../settingsUtils"
 import { performSettingsImport } from "../settingsImport"
 import { acknowledgeDiagnosticRequest, checkDiagnosticLaunch, diagnosticLaunch, diagnosticRequest, markDiagnosticClearedByImport, requestDiagnostic, startRefusal } from "../diagnosticLaunch"
 
@@ -123,6 +123,7 @@ function exported(settings: any, change: (s: any) => void) {
     delete file.racing.racingPlanData
     delete file.trainingEvent.characterEventData
     delete file.trainingEvent.supportEventData
+    delete file.trainingEvent.scenarioEventData
     delete file.misc.formattedSettingsString
     delete file.misc.currentProfileName
     change(file)
@@ -181,6 +182,54 @@ describe("Start after importing or resetting settings", () => {
         expect(result.ok).toBe(false)
         expect(result.stage).toBe("verify")
         expect(result.reason).toMatch(/config hash/)
+    })
+})
+
+/** Runs the real Export Settings callback on the device's live settings and returns the written file. */
+async function exportFile(d: ReturnType<typeof device>) {
+    let written = ""
+    const fileUri = await callback("exportSettings", {
+        bsc: d.bsc,
+        isSQLiteInitialized: true,
+        databaseManager: { getAllProfiles: async () => [] },
+        FileSystem: {
+            documentDirectory: "file:///export/",
+            writeAsStringAsync: async (_uri: string, text: string) => {
+                written = text
+            },
+        },
+        BUNDLED_DATA_KEYS,
+        startTiming: () => jest.fn(),
+        logWithTimestamp: jest.fn(),
+        logErrorWithTimestamp: jest.fn(),
+    })()
+    expect(fileUri).toMatch(/^file:\/\/\/export\/UAA-settings-/)
+    return written
+}
+
+describe("Export Settings", () => {
+    it("leaves out every bundled reference table", async () => {
+        const file = JSON.parse(await exportFile(device()))
+        expect(file.general.scenario).toBe(defaultSettings.general.scenario)
+        expect(file.trainingEvent).toBeDefined()
+        expect(file.trainingEvent.characterEventData).toBeUndefined()
+        expect(file.trainingEvent.supportEventData).toBeUndefined()
+        expect(file.trainingEvent.scenarioEventData).toBeUndefined()
+        expect(file.racing.racingPlanData).toBeUndefined()
+        expect(file.misc.formattedSettingsString).toBeUndefined()
+        expect(file.misc.currentProfileName).toBeUndefined()
+    })
+
+    it("an exported file imports and passes the Start check, with the app's own event and race data", async () => {
+        const d = device()
+        d.setFile(await exportFile(d))
+        expect((await d.importSettings("file")).outcome).toBe("success")
+        const result = await d.start()
+        expect(result.reason).toBeUndefined()
+        expect(result.ok).toBe(true)
+        expect(d.bsc.settings.trainingEvent.scenarioEventData).toEqual(BUNDLED.scenarioEventData)
+        expect(JSON.parse(d.rows["trainingEvent.scenarioEventData"])).toEqual(BUNDLED.scenarioEventData)
+        expect(d.bsc.settings.racing.racingPlanData).toBe(BUNDLED.racingPlanData)
     })
 })
 

@@ -1,5 +1,6 @@
 import type { Settings } from "../context/BotStateContext"
 import { createSingleFlight } from "./launchConfig"
+import { BUNDLED_DATA_KEYS } from "./settingsUtils"
 import { saveToPhone, type SaveToPhoneDeps } from "./saveToPhone"
 
 /** Settings that identify the player or open access to something. They never go into a bug report. */
@@ -13,13 +14,7 @@ const SECRET_PATHS: readonly (readonly [string, string])[] = [
 export const SECRET_KEY_PATTERN = /token|secret|password|passcode|webhook|pairing|api[_-]?key|authorization|user[_-]?id/i
 
 /** Large reference tables the report does not need (the same ones Export Settings drops). */
-const BULKY_PATHS: readonly (readonly [string, string])[] = [
-    ["racing", "racingPlanData"],
-    ["trainingEvent", "characterEventData"],
-    ["trainingEvent", "supportEventData"],
-    ["trainingEvent", "scenarioEventData"],
-    ["misc", "formattedSettingsString"],
-]
+const BULKY_PATHS: readonly (readonly [string, string])[] = [...BUNDLED_DATA_KEYS, ["misc", "formattedSettingsString"]]
 
 const isSecretKey = (key: string) => SECRET_KEY_PATTERN.test(key)
 
