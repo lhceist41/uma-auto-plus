@@ -569,5 +569,4 @@ data class SmartBorrowSelectRehearsalResult(
     val stageC: SmartBorrowSelectResult? = null,
     val repeatable: Boolean = false,
     val finalSlotEmpty: Boolean = false,
-    val noCareerStarted: Boolean = true,
 )

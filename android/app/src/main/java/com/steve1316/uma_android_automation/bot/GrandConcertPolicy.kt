@@ -27,7 +27,6 @@ object GrandConcertPolicy {
         val missing = mutableListOf<String>()
         val notes = mutableListOf<String>()
         val satisfied = mutableListOf<String>()
-        val atRisk = mutableListOf<String>()
 
         if (state.lessonUnlocked == false) {
             return GrandConcertDecision(

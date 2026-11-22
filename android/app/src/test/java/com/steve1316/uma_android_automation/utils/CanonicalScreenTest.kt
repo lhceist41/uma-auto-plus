@@ -308,7 +308,7 @@ class CanonicalScreenTest {
                     "utils/OwnInputProbe.kt" to 4,
                     "utils/CustomImageUtils.kt" to 1,
                     "utils/ScreenBands.kt" to 1,
-                    "utils/CanonicalScreen.kt" to 10,
+                    "utils/CanonicalScreen.kt" to 8,
                 )
             val base = File(root(), "android/app/src/main/java/com/steve1316/uma_android_automation")
             val raw = Regex("""SharedData\.display(Width|Height)""")

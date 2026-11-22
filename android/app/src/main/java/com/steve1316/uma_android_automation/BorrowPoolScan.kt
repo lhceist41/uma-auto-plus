@@ -378,10 +378,6 @@ object BorrowRowGeometry {
     fun ownerName(pillY: Int): GlyphBox = GlyphBox(230, pillY - 165, 760, pillY - 125)
 
     fun provenancePill(pillY: Int): GlyphBox = GlyphBox(770, pillY - 170, 1000, pillY - 130)
-
-    /** The two-line card-name band. The launch's Smart Borrow reader anchors this at pillY-87 +-70;
-     * the recon put the name lower, at pillY-90..pillY+5. Stage A decides which the live screen uses. */
-    fun cardNameBand(pillY: Int): GlyphBox = GlyphBox(230, pillY - 90, 760, pillY + 5)
 }
 
 // -- Serialization (org.json) ---------------------------------------------------------------------

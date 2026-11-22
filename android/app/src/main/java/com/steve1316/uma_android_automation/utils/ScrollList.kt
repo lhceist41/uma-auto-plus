@@ -879,10 +879,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         // screenful. A forced swipe on a genuinely single-screen list is a harmless no-op.
         if (bScrollBottomToTop) scrollToBottom(bitmap) else scrollToTop(bitmap, force = keyExtractor != null)
 
-        // Max time for the scroll loop, in ms. Use the caller-supplied value: an earlier version
-        // shadowed the parameter with a hardcoded 60_000 local, pinning every caller to 60s.
         val startTime: Long = System.currentTimeMillis()
-        val maxTimeMsLong: Long = maxTimeMs.toLong()
 
         // Track bounding boxes for average entry height calculation.
         val entryBboxes: MutableList<BoundingBox> = mutableListOf()

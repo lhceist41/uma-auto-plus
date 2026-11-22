@@ -1190,13 +1190,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         stopProjection()
     }
 
-    /** Stops the entire queue after the current run finishes. The current run is interrupted. */
-    @ReactMethod
-    fun stopQueue() {
-        Log.d(TAG, "stopQueue() called: requesting full queue stop.")
-        queueStopRequested = true
-    }
-
     /**
      * Checks if there is an interrupted queue state from a previous crash.
      *
@@ -3189,7 +3182,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 MessageLog.w(TAG, "[QUEUE] ========================================\n")
                             }
                             queueStopRequested -> {
-                                // Only the app's Stop button and stopQueue() set this flag, so the
+                                // Only the app's Stop button sets this flag, so the
                                 // user attribution is provable on this branch.
                                 sendQueueProgressEvent(completedRuns, totalRuns, "queueStopped", message = "Stopped by the user after $completedRuns of ${runsPhrase(totalRuns)}.")
                                 MessageLog.i(TAG, "\n[QUEUE] ========================================")

@@ -77,10 +77,6 @@ object CanonicalScreen {
 
     /** True when every capture is resized to the canonical width, so its pixels are resampled rather than the game's own. */
     val resized: Boolean get() = canonicalCaptureSize(SharedData.displayWidth, SharedData.displayHeight) != null
-
-    fun toRaw(canonical: Double): Double = canonicalToRaw(canonical, SharedData.displayWidth)
-
-    fun fromRaw(raw: Double): Double = rawToCanonical(raw, SharedData.displayWidth)
 }
 
 internal fun rawTapPoint(

@@ -338,8 +338,3 @@ fun segmentLegacyBlocks(rows: List<LegacyRowCell>): List<LegacyAncestorBlock> {
  * longer OCRs as a spurious leading "O"/"0" that polluted displayText / factorFingerprint. Right
  * edge held at x=720, well left of the first star column (816). */
 fun legacyNameOcrRegion(rowY: Int): IntArray = intArrayOf(284, rowY - 34, 436, 68)
-
-/** The rail portrait+rank crop for a stat row at [rowY], retained as identity evidence. Rank text
- * is a stylized badge that is not reliably OCR-able offline, so this task keeps the crop reference
- * and leaves rank/character unresolved rather than fabricating a read. */
-fun legacyPortraitCropRegion(rowY: Int): IntArray = intArrayOf(30, rowY - 60, 175, 130)

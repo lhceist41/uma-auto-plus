@@ -80,8 +80,6 @@ class GrandConcert(game: Game) : Campaign(game) {
     /** No finale-win banner is claimed: the finale has not been captured, so no win/lose signal is recorded. */
     override val capturesFinaleWins: Boolean = false
 
-    private var announcedSupportLevel = false
-
     /** Reads the live Lesson list into telemetry. Never taps - navigation stays here in the campaign. */
     private val lessonReader = GrandConcertLessonReader(game)
 
@@ -173,19 +171,6 @@ class GrandConcert(game: Game) : Campaign(game) {
             throw e
         } catch (_: Exception) {
         }
-    }
-
-    fun announceSupportLevelOnce() {
-        if (announcedSupportLevel) return
-        announcedSupportLevel = true
-        MessageLog.w(
-            TAG,
-            "[GRAND_CONCERT] Supported scenario: training, races, events, skills, the Lesson shop " +
-                "(with a verify-before-Learn purchase gate), the concerts, and the career-end sequence through to the " +
-                "home screen are all automated. A Lesson shop screen the bot does not recognize is backed out of and " +
-                "retried later; a concert screen it still does not recognize after a few retries stops the run " +
-                "safely with the career preserved, so Start can resume it.",
-        )
     }
 
     /** Stops before any Grand Concert probe or tap on a screen its geometry was not measured on; the career is kept in the game. */

@@ -237,12 +237,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Which race grades the active trophy goal accepts, or null when a trophy goal is active but its criteria line matched none of the known tiers. */
     var goalCriteriaTier: GoalCriteriaTier? = null
 
-    /** Indicates that a Pre-OP or above requirement has been detected. */
-    val hasPreOpOrAboveRequirement: Boolean get() = goalCriteriaTier == GoalCriteriaTier.PRE_OP_OR_ABOVE
-
-    /** Indicates that a G3 or above requirement has been detected. */
-    val hasG3OrAboveRequirement: Boolean get() = goalCriteriaTier == GoalCriteriaTier.G3_OR_ABOVE
-
     /** True only for a positively read G1-only requirement, never from a failed read of the other tiers (see [restrictsToG1Only]). */
     val hasG1OnlyRequirement: Boolean get() = restrictsToG1Only(goalCriteriaTier)
 

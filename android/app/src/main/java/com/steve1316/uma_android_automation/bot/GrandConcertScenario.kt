@@ -34,12 +34,6 @@ object GrandConcertScenario {
     const val KEY = "Grand Concert"
 
     /**
-     * The Global client's title on Scenario Select (two lines, no colon or exclamation mark). Display only, never a
-     * persistence key.
-     */
-    const val DISPLAY_TITLE = "Brighter Together Our Grand Concert"
-
-    /**
      * Every spelling that must resolve to [KEY], including the client's internal name ("Our Grand Concert", also its
      * spark name).
      */
@@ -75,8 +69,6 @@ object GrandConcertScenario {
      * Whether it equals the community "18 learned songs" plus automatic songs is unconfirmed; see [GrandConcertPolicy.SPECIAL_SONG_TARGET].
      */
     val GRAND_CONCERT_SONG_THRESHOLD = Sourced(20, Provenance.GLOBAL_CONFIRMED)
-
-    const val SPARK_NAME = "Our Grand Concert"
 
     /** The badge is Global-observed; the roster is JP-confirmed plus Global guide agreement. */
     val SCENARIO_LINK_TRAINEES =

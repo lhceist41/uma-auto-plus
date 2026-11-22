@@ -344,62 +344,6 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Calculates the bounding region for detecting the Skill Up (+) buttons.
-     *
-     * This region is relative to the provided skill list entries' bounding box.
-     *
-     * @param bitmap Optional [Bitmap] used for debugging snapshots.
-     * @param bboxSkillListEntries The overall [BoundingBox] of all skill entries currently on screen.
-     * @param debugString Identifier string for debugging files.
-     * @return The calculated [BoundingBox] for the Skill Up buttons.
-     */
-    private fun getSkillListSkillUpBoundingRegion(bitmap: Bitmap? = null, bboxSkillListEntries: BoundingBox, debugString: String = ""): BoundingBox {
-        // Focus on the right-hand side of each entry where the (+) button is located.
-        val bbox =
-            BoundingBox(
-                x = game.imageUtils.relX((bboxSkillListEntries.x + bboxSkillListEntries.w).toDouble(), -125),
-                y = bboxSkillListEntries.y,
-                w = game.imageUtils.relWidth(70),
-                h = bboxSkillListEntries.h,
-            )
-
-        if (game.debugMode) {
-            val debugBitmap: Bitmap = bitmap ?: game.imageUtils.getSourceBitmap()
-            game.imageUtils.saveBitmapWithBbox(debugBitmap, "skillUpRegion_$debugString", bbox)
-        }
-
-        return bbox
-    }
-
-    /**
-     * Calculates the bounding region for detecting the "Obtained" pill icons.
-     *
-     * This region is relative to the provided skill list entries' bounding box.
-     *
-     * @param bitmap Optional [Bitmap] used for debugging snapshots.
-     * @param bboxSkillListEntries The overall [BoundingBox] of all skill entries currently on screen.
-     * @param debugString Identifier string for debugging files.
-     * @return The calculated [BoundingBox] for the Obtained pill icons.
-     */
-    private fun getSkillListObtainedPillBoundingRegion(bitmap: Bitmap? = null, bboxSkillListEntries: BoundingBox, debugString: String = ""): BoundingBox {
-        // Focus on the right-hand side of each entry where the "Obtained" icon is located.
-        val bbox =
-            BoundingBox(
-                x = game.imageUtils.relX((bboxSkillListEntries.x + bboxSkillListEntries.w).toDouble(), -260),
-                y = bboxSkillListEntries.y,
-                w = game.imageUtils.relWidth(140),
-                h = bboxSkillListEntries.h,
-            )
-
-        if (game.debugMode) {
-            val debugBitmap: Bitmap = bitmap ?: game.imageUtils.getSourceBitmap()
-            game.imageUtils.saveBitmapWithBbox(debugBitmap, "obtainedPillRegion_$debugString", bbox)
-        }
-
-        return bbox
-    }
-
-    /**
      * Extracts text from a specific bitmap region using OCR.
      *
      * @param bitmap The bitmap to perform OCR on.

@@ -726,19 +726,9 @@ object ButtonMultiRaceOff : ButtonInterface {
     override val template = Template("components/button/multi_race_off", region = Region.bottomHalf)
 }
 
-/** Generic "Use" button on the Recover TP/RP item-select popup. Shared across Carats and F2P item rows. */
-object ButtonUseItem : ButtonInterface {
-    override val template = Template("components/button/use_item", region = Region.middle)
-}
-
 /** "Max" button on the Recover TP/RP quantity popup. */
 object ButtonMax : ButtonInterface {
     override val template = Template("components/button/max", region = Region.middle)
-}
-
-/** The refresh (circular arrow) button on the Team Trials Select Opponent screen. */
-object ButtonRefreshOpponents : ButtonInterface {
-    override val template = Template("components/button/refresh_opponents", region = Region.bottomHalf)
 }
 
 /** The "See All Race Results" chibi-decorated button on the post-Team-Trials-match summary screen. */

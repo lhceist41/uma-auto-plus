@@ -275,10 +275,6 @@ data class NavigationResult(
  * back through the game menus to start a new career run. It uses explicit screen state
  * detection via template matching and transitions via known button components.
  *
- * States that cannot be reliably detected or transitioned (because the required template
- * images have not been provided yet) will fail cleanly with structured diagnostics
- * instead of guessing with approximate tap coordinates.
- *
  * @property context The Android application context.
  */
 class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
@@ -596,14 +592,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         /** Game main menu with the bottom menu bar. */
         HOME_SCREEN,
 
-        /** Career entry / mode selection. Requires CAREER button template (not yet provided). */
-        CAREER_ENTRY,
-
         /** Scenario Select carousel. Paged to the run's target scenario before advancing. */
         SCENARIO_SELECT,
-
-        /** Trainee/character selection or reuse. Requires template (not yet provided). */
-        TRAINEE_SETUP,
 
         /**
          * Trainee Select roster (the grid of owned units). The game shows it on every launch with a
@@ -612,9 +602,6 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
          * trainee and verifying her name (match-or-stop).
          */
         TRAINEE_SELECT_SCREEN,
-
-        /** Inheritance selection popup. */
-        INHERITANCE_SCREEN,
 
         /** Legacy / Inheritance selection screen with Auto-Select button (and Carnival event banner during the Racing Carnival event). The Next button is disabled until Auto-Select fills both legacy slots. */
         LEGACY_SELECT_SCREEN,
@@ -887,11 +874,6 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
     // Whether the finalization guard applies to this navigation (global Skill Spend Mode is
     // Adaptive). Manual navigations keep the pre-guard behavior bit-for-bit.
     private var finalizeGuardActive: Boolean = false
-
-    // Vertical offset from the Borrow Card list's "Remove" bar to the center of the first
-    // card row. Both supported screen configs render game content at 1080px width, so this
-    // dialog-internal offset is stable across them.
-    private val borrowListFirstRowOffsetPx: Int = 220
 
     private val gestureUtils: MyAccessibilityService get() = MyAccessibilityService.getInstance()
 
@@ -2261,33 +2243,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
             LaunchScreenState.QUICK_MODE_PROMPT -> handleQuickModePrompt()
             LaunchScreenState.TAP_TO_CONTINUE -> handleTapToContinue()
 
-            // --- States that require templates not yet provided ---
-
-            LaunchScreenState.CAREER_ENTRY ->
-                TransitionResult.Failed(
-                    reason = "Reached CAREER_ENTRY state but no template exists for the Career mode button. Cannot navigate further.",
-                    transition = "CAREER_ENTRY -> SCENARIO_SELECT",
-                    isRecoverable = true,
-                    recommendedAction = "Provide the 'career_home' template image, or manually enter Career mode and restart the queue.",
-                )
-
             LaunchScreenState.SCENARIO_SELECT -> handleScenarioSelect()
-
-            LaunchScreenState.TRAINEE_SETUP ->
-                TransitionResult.Failed(
-                    reason = "Reached TRAINEE_SETUP state. Trainee selection requires manual input or a reuse-setup template.",
-                    transition = "TRAINEE_SETUP -> SUPPORT_DECK_SCREEN",
-                    isRecoverable = true,
-                    recommendedAction = "Manually select the trainee and restart the queue.",
-                )
-
-            LaunchScreenState.INHERITANCE_SCREEN ->
-                TransitionResult.Failed(
-                    reason = "Reached INHERITANCE_SCREEN state. Inheritance selection requires manual input.",
-                    transition = "INHERITANCE_SCREEN -> next screen",
-                    isRecoverable = true,
-                    recommendedAction = "Manually handle the inheritance selection and restart the queue.",
-                )
 
             LaunchScreenState.UNKNOWN -> {
                 // Handled in the main loop - should not be dispatched here.

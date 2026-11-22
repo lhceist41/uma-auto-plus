@@ -13,10 +13,9 @@ import com.steve1316.uma_android_automation.bot.PerformancePointType
  * wraps a Bitmap in a [SparkPixelSampler], the JUnit fixtures wrap a decoded PNG. Probes that take the
  * capture size read their points in the [ScreenBand] measured on a tall phone (fixtures/tallphone).
  *
- * Scope discipline: only screens the maintainer has actually captured are probed here. The
- * Lesson shop, the concert screens, and the unlocked Lesson button have no capture yet, so
- * they are deliberately absent rather than guessed - an unknown screen must stay unknown and
- * reach the manual-handoff boundary instead of being driven blind.
+ * Scope discipline: only screens the maintainer has actually captured are probed here. An
+ * unknown screen must stay unknown and reach the manual-handoff boundary instead of being
+ * driven blind.
  */
 
 /** Measured geometry of the mandatory "Quick Mode Settings" dialog shown when a career starts.
@@ -26,10 +25,6 @@ object QuickModeGeometry {
     /** Green title band ("Quick Mode Settings"), measured (152, 215, 62). */
     const val HEADER_X = 540
     const val HEADER_Y = 491
-
-    /** White card body between the header and the first option row. */
-    const val CARD_X = 540
-    const val CARD_Y = 700
 
     /** Radio-button column and the four row centers (pitch ~121 px). */
     const val RADIO_X = 104
@@ -269,7 +264,6 @@ object GrandConcertLessonGeometry {
     val CARD_HEADER_YS = listOf(375, 783, 1190)
     val CARD_LEARNABLE_YS = listOf(338, 746, 1154)
     val CARD_COST_STRIP_YS = listOf(675, 1083, 1490)
-    const val CARD_HEADER_X = 300
     const val CARD_KIND_BADGE_X = 880
     const val CARD_COST_STRIP_X = 460
 
@@ -848,7 +842,6 @@ object GrandConcertEscort {
     val CONFIRM_START_POINTS = listOf(700 to 1377, 850 to 1377)
     const val CONFIRM_START_X = 775
     const val CONFIRM_START_Y = 1377
-    val CONFIRM_READY_OCR_REGION = intArrayOf(250, 1205, 580, 62)
 
     /** The playback skip control: a white disc at the bottom right with a brown glyph. */
     const val SKIP_GLYPH_X = 1000
@@ -884,7 +877,6 @@ object GrandConcertEscort {
      * activate (Close / Confirm over the career screen). Close DISMISSES it; Confirm opens the
      * Active Concert Bonuses detail panel instead (learned the hard way on the second validation
      * career's first concert, where the escort confirmed itself onto the panel). */
-    val BONUSES_TITLE_POINTS = listOf(200 to 610, 880 to 610)
     val BONUSES_CONFIRM_POINTS = listOf(700 to 1250, 850 to 1250)
     const val BONUSES_CLOSE_X = 300
     const val BONUSES_CLOSE_Y = 1250

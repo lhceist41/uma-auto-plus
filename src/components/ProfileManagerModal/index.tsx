@@ -63,7 +63,7 @@ const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({
     const [overwriteProfileId, setOverwriteProfileId] = useState<number | null>(null)
     const [comparisonData, setComparisonData] = useState<Record<string, { current: any; profile: any }> | null>(null)
 
-    /** Manual touch-to-scroll mechanism, same pattern as MultiSelector.tsx. */
+    /** Manual touch-to-scroll mechanism. */
     const scrollViewRef = useRef<ScrollView | null>(null)
     const lastTouchY = useRef(0)
     const currentScrollY = useRef(0)
