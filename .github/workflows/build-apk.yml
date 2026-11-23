@@ -52,9 +52,6 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Generate JS bundle
-        run: node android/generate-bundle.js
-
       - name: Copy icon fonts
         run: |
           mkdir -p android/app/src/main/assets/fonts

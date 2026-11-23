@@ -40,27 +40,13 @@ jobs:
       - name: Jest
         run: yarn jest --ci
 
-      # Proves the checked-in Grand Concert fan-runtime asset is regenerated whenever its root data
-      # changes. Narrow by design: only this generator's test runs here (it uses node:test + node:fs
-      # and is Node 20 compatible), NOT a scripts/*.test.mjs glob that would pull in node:sqlite tooling.
-      - name: Grand Concert fan-runtime asset freshness
+      # The checked-in generated assets must match their source data (yarn data:check), and every
+      # generator test must pass. Five of those tests read SQLite through node:sqlite, which the
+      # pinned Node 24 provides.
+      - name: Generated data freshness and generator tests
         run: |
-          node --test scripts/generate-gc-fan-runtime-data.test.mjs
-          node scripts/generate-gc-fan-runtime-data.mjs --check
-
-      # Same contract for the Veteran identity asset: the character/outfit domain the roster reader
-      # matches against must never drift from src/data/characters.json + character_outfits.json.
-      - name: Veteran identity asset freshness
-        run: |
-          node --test scripts/generate-veteran-identity-data.test.mjs
-          node scripts/generate-veteran-identity-data.mjs --check
-
-      # Same contract for the Veteran factor-name domain: the canonical skill/race/scenario names the
-      # Inspiration reader snaps its factor OCR onto must never drift from src/data skills/races/scenarios.
-      - name: Veteran factor domain asset freshness
-        run: |
-          node --test scripts/generate-veteran-factor-domain.test.mjs
-          node scripts/generate-veteran-factor-domain.mjs --check
+          yarn data:check
+          node --test scripts/*.test.mjs
 
   android:
     name: Kotlin unit tests
