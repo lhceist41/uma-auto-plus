@@ -1511,8 +1511,8 @@ class Trackblazer(game: Game) : Campaign(game) {
 
         // Reset Whistle Check: Use if recommendations are poor.
         // We define "poor" as no training being selected or certain other conditions.
-        // Block whistling during irregular training evaluations.
-        if (date.day >= 13 && !bUsedWhistleToday && trainingSelected == null && !bIsIrregularTraining && !training.needsEnergyRecovery) {
+        // Block whistling during irregular training evaluations, and after a read that stopped early: no selection then says nothing about the trainings.
+        if (date.day >= 13 && !bUsedWhistleToday && trainingSelected == null && !bIsIrregularTraining && !training.needsEnergyRecovery && training.analysisCompleted) {
             val hasWhistle = (currentInventory["Reset Whistle"] ?: 0) > 0
 
             // Below NORMAL mood a reshuffle won't recover the capped gains, so refuse the Whistle if enough non-blacklisted trainings are already low-gain (0 -> 3-of-5, 1 -> 2-of-4, 2+ -> 1).

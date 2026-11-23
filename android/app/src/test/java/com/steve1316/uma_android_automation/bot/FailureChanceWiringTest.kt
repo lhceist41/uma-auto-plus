@@ -54,7 +54,7 @@ class FailureChanceWiringTest {
 
     @Test
     fun `a single-training tile with an unread failure chance is left out and goes no further`() {
-        val skip = between(training, "                    if (result.failureChance == -1) {", "                    // For Risky Training")
+        val skip = between(training, "                if (result.failureChance == -1) {", "                // For Risky Training")
         val record = skip.indexOf("skippedTrainingMap[statName] = result.toSkippedOption(SKIP_UNREADABLE_FAILURE_CHANCE)")
         val leave = skip.indexOf("continue", record)
         assertTrue(record >= 0 && leave > record, "the unread tile must be recorded as skipped and then left")
