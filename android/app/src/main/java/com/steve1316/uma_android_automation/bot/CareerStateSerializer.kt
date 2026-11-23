@@ -16,7 +16,7 @@ object CareerStateSerializer {
     /** Bump only on a change a reader cannot absorb by tolerating new fields. */
     const val SCHEMA_VERSION: Int = 1
 
-    /** Byte cap matching [DecisionTrace.MAX_FILE_BYTES]; past it the writer drops records rather than filling the device. */
+    /** Byte cap matching [DecisionTrace.MAX_FILE_BYTES]; past it the writer rotates the file to `<name>.1` rather than filling the device. */
     const val MAX_FILE_BYTES: Long = 32L * 1024 * 1024
 
     /** Fixed stat order, matching [DecisionTrace] so every corpus reads stat maps the same way. */

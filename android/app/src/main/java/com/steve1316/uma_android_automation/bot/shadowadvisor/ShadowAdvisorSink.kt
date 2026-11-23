@@ -61,7 +61,7 @@ class ShadowAdvisorSink {
     companion object {
         private const val TAG: String = "ShadowAdvisorSink"
 
-        /** Per-file byte cap, matching the decision_trace / career_state streams (32 MiB, hard ceiling not rotation). */
+        /** Per-file byte cap, matching the decision_trace / career_state streams (32 MiB, rotated to `<name>.1` at the cap). */
         const val MAX_FILE_BYTES: Long = 32L * 1024 * 1024
     }
 }

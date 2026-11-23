@@ -131,9 +131,10 @@ A career-state record with no matching trace, or a trace with a `seq` but no mat
   of the source device files.
 - **No root writes into telemetry.** A previous file-ownership incident came from root-side scratch tooling
   writing into the outcomes directory. Normal collection never touches device file ownership or permissions.
-- **Byte-cap warning.** The per-turn files stop appending once they pass `MAX_FILE_BYTES` (32 MB each);
-  nothing already written is deleted, and the writer logs `[OUTCOME] <path> reached its <n> byte cap` once.
-  Archive before a long accumulator approaches the cap. `careers.jsonl` is uncapped.
+- **Byte-cap rotation.** At `MAX_FILE_BYTES` (32 MB) a per-turn file is renamed to `<name>.1` (replacing an
+  older backup) and a fresh file continues; the writer logs `[OUTCOME] <path> reached its <n> byte cap; the
+  previous file is now <path>.1.` If the rename fails, records are dropped and `... could not be rotated ...`
+  is logged once. Archive before a second rotation replaces the backup. `careers.jsonl` is uncapped.
 - **Uninstall wipes external files.** `adb install -r` (an in-place reinstall) retains the app external files
   directory; a full uninstall/reinstall does not. Archive before any uninstall.
 - **Atomic-ish.** The collector builds into a sibling `.tmp` directory and renames it to the final bundle only

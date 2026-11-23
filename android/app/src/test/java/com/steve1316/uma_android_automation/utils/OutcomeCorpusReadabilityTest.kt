@@ -202,10 +202,13 @@ class OutcomeCorpusReadabilityTest {
     fun `the public append routes through the readable-mode writer and keeps the exact newline format`() {
         val body = functionBody("fun append(context: Context, record: JSONObject, path: String = CORPUS_PATH, maxBytes: Long? = null) {")
         assertTrue(
-            body.contains("appendLineAndMakeReadable(file, record.toString() + \"\\n\")"),
-            "append delegates the write to the readable-mode helper with the unchanged `record + newline` format",
+            body.contains("appendCapped(file, record.toString() + \"\\n\", maxBytes)"),
+            "append hands the unchanged `record + newline` format to the capped writer",
         )
+        val capped = functionBody("internal fun appendCapped(file: File, line: String, maxBytes: Long?, onRotate: () -> Unit): Boolean {")
+        assertTrue(capped.contains("appendLineAndMakeReadable(file, line)"), "the capped writer delegates the write to the readable-mode helper")
         assertFalse(body.contains("file.appendText("), "append no longer writes directly without the mode repair")
+        assertFalse(capped.contains("file.appendText("), "appendCapped no longer writes directly without the mode repair")
     }
 
     @Test

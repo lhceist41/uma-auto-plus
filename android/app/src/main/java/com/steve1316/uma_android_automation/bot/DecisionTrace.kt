@@ -27,7 +27,7 @@ object DecisionTrace {
     /** Bump on a change readers cannot absorb by tolerating new fields (rename, removal, new meaning); additive fields keep it. */
     const val SCHEMA_VERSION: Int = 1
 
-    /** Past 32 MiB the writer drops records rather than filling the device (about 1.9 KB per turn measured live). Nothing is rotated. */
+    /** Past 32 MiB the writer rotates the file to `<name>.1`, so at most about 64 MiB stays on the device (about 1.9 KB per turn measured live). */
     const val MAX_FILE_BYTES: Long = 32L * 1024 * 1024
 
     private const val CANDIDATE_ACTION: String = "action"

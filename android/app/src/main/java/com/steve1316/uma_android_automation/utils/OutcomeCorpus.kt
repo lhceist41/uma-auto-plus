@@ -151,25 +151,44 @@ object OutcomeCorpus {
      * worker-thread contexts rather than watchdog/recovery ones - and it puts the data loss in
      * the pulled session log where an empty corpus can actually be diagnosed.
      *
-     * [maxBytes], when set, stops appending once the file has grown past it. This is a ceiling on
-     * disk use for the high-volume per-turn file, not rotation: nothing already written is
-     * deleted, and the drop is reported once so a truncated corpus is never mistaken for a quiet
-     * run. The career corpus passes null and is unaffected.
+     * [maxBytes], when set, caps the file: once it has grown past the cap it is renamed to `<name>.1`
+     * (replacing any older backup) and a fresh file takes the record, so the newest data is kept and
+     * at most about twice the cap stays on disk. Each rotation is logged. If the rename fails the
+     * record is dropped and reported once per path so a truncated corpus is never mistaken for a quiet
+     * run. The career corpus passes null: it never rotates and is unaffected.
      */
     fun append(context: Context, record: JSONObject, path: String = CORPUS_PATH, maxBytes: Long? = null) {
         try {
             val file = File(context.getExternalFilesDir(null), path)
-            if (maxBytes != null && file.length() >= maxBytes) {
-                if (droppedPaths.add(path)) {
-                    MessageLog.w(TAG, "[OUTCOME] $path reached its $maxBytes byte cap; further records this session are dropped.")
-                }
-                return
-            }
             file.parentFile?.mkdirs()
-            appendLineAndMakeReadable(file, record.toString() + "\n")
+            val written =
+                appendCapped(file, record.toString() + "\n", maxBytes) {
+                    droppedPaths.remove(path)
+                    MessageLog.w(TAG, "[OUTCOME] $path reached its $maxBytes byte cap; the previous file is now $path.1.")
+                }
+            if (!written && droppedPaths.add(path)) {
+                MessageLog.w(TAG, "[OUTCOME] $path reached its $maxBytes byte cap and could not be rotated; records are dropped until a rotation succeeds.")
+            }
         } catch (e: Exception) {
             MessageLog.w(TAG, "[OUTCOME] Failed to append the outcome record: $e")
         }
+    }
+
+    /**
+     * Appends [line] to [file], first rotating it to `<name>.1` when [maxBytes] is set and the file has
+     * reached it. [onRotate] runs after a successful rotation. Returns false, writing nothing, when the
+     * file is full and the rotation failed. `File.renameTo` replaces an existing backup on Android; the
+     * delete-and-retry covers hosts where it does not. Split out so rotation can be tested against a
+     * real temp directory without an Android Context.
+     */
+    internal fun appendCapped(file: File, line: String, maxBytes: Long?, onRotate: () -> Unit): Boolean {
+        if (maxBytes != null && file.length() >= maxBytes) {
+            val backup = File(file.path + ".1")
+            if (!file.renameTo(backup) && !(backup.delete() && file.renameTo(backup))) return false
+            onRotate()
+        }
+        appendLineAndMakeReadable(file, line)
+        return true
     }
 
     /**
@@ -224,6 +243,6 @@ object OutcomeCorpus {
         }
     }
 
-    /** Paths already reported as capped, so the drop warns once per path per process. */
+    /** Paths already reported as unrotatable, so the drop warns once per path per process. */
     private val droppedPaths: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 }
