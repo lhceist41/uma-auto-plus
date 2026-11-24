@@ -10,6 +10,7 @@ import com.steve1316.uma_android_automation.bot.CampaignBreakpointException
 import com.steve1316.uma_android_automation.bot.ConcertSegment
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.LessonCardKind
+import com.steve1316.uma_android_automation.bot.GrandConcertCycle
 import com.steve1316.uma_android_automation.bot.GrandConcertFanFacts
 import com.steve1316.uma_android_automation.bot.GrandConcertFanPolicy
 import com.steve1316.uma_android_automation.bot.GrandConcertFanPressure
@@ -28,12 +29,16 @@ import com.steve1316.uma_android_automation.bot.GrandConcertState
 import com.steve1316.uma_android_automation.bot.HypeTier
 import com.steve1316.uma_android_automation.bot.LearnVerdict
 import com.steve1316.uma_android_automation.bot.LessonList
+import com.steve1316.uma_android_automation.bot.LessonOfferLine
 import com.steve1316.uma_android_automation.bot.LessonListCard
 import com.steve1316.uma_android_automation.bot.LessonScoreContext
+import com.steve1316.uma_android_automation.bot.MainScreenAction
+import com.steve1316.uma_android_automation.bot.RaceFallbackOutcome
 import com.steve1316.uma_android_automation.bot.PerformancePointType
 import com.steve1316.uma_android_automation.bot.PerformancePointVector
 import com.steve1316.uma_android_automation.bot.Racing
 import com.steve1316.uma_android_automation.bot.ScenarioState
+import com.steve1316.uma_android_automation.types.Mood
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
@@ -101,19 +106,14 @@ class GrandConcert(game: Game) : Campaign(game) {
      */
     private var lastNoBuyVisitDay = -1
 
-    /**
-     * Songs bought this concert cycle: a floor on the true count (blind to free or pre-attach songs), so the deadline
-     * term can only overestimate urgency.
-     */
-    private var songsBoughtThisCycle = 0
+    /** Songs bought this concert cycle (a floor on the true count, so the deadline term can only overestimate urgency) and the visit's turn. */
+    private val cycle = GrandConcertCycle()
 
     /**
      * Songs bought across the career (milestone telemetry); a floor on the true total, like the cycle
      * counter.
      */
     private var songsBoughtThisCareer = 0
-
-    private var lastConcertBoundary = 0
 
     /**
      * Escort attempts spent on the pending concert. A give-up is a recognition miss, not a timeout (concerts finish in
@@ -252,7 +252,7 @@ class GrandConcert(game: Game) : Campaign(game) {
                     skillPointsReadsAtConcert = trainee.skillPointsReads
                     skillEconomy.noteConcertStart(
                         date.day.takeIf { date.dayObserved },
-                        songsBoughtThisCycle,
+                        cycle.songsThisCycle,
                         songsBoughtThisCareer,
                         trainee.skillPoints.takeIf { trainee.skillPointsReads > 0 },
                     )
@@ -265,6 +265,9 @@ class GrandConcert(game: Game) : Campaign(game) {
             )
             if (runConcertEscort()) {
                 concertEscortAttempts = 0
+                cycle.noteConcertPerformed(date.day.takeIf { date.dayObserved })?.let { turn ->
+                    MessageLog.i(TAG, "[GRAND_CONCERT] [LESSON_BUY] New concert cycle (turn ${turn + 1}); song counter reset after the turn-$turn concert.")
+                }
                 return true
             }
             if (concertEscortAttempts < MAX_CONCERT_ESCORT_ATTEMPTS) {
@@ -298,7 +301,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         // Logged for the analysis scripts: this count decides the result tier.
         MessageLog.i(
             TAG,
-            "[GRAND_CONCERT] [CONCERT] Entering the concert with $songsBoughtThisCycle new song(s) this cycle " +
+            "[GRAND_CONCERT] [CONCERT] Entering the concert with ${cycle.songsThisCycle} new song(s) this cycle " +
                 "(Great Success needs ${GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value}; career purchased total " +
                 "$songsBoughtThisCareer).",
         )
@@ -548,6 +551,7 @@ class GrandConcert(game: Game) : Campaign(game) {
                 context,
                 MAX_PURCHASES_CAREER_COMPLETE,
                 GrandConcertPolicy.SPEND_MIN_SCORE_CAREER_COMPLETE,
+                stage = null,
             ).purchases
         exitLessonShop()
         return spent
@@ -606,9 +610,9 @@ class GrandConcert(game: Game) : Campaign(game) {
      */
     override fun scenarioStateSnapshot(): ScenarioState {
         return GrandConcertState(
-            songsBoughtThisCycle = songsBoughtThisCycle,
+            songsBoughtThisCycle = cycle.songsThisCycle,
             songsBoughtThisCareer = songsBoughtThisCareer,
-            lastConcertBoundary = lastConcertBoundary,
+            lastConcertBoundary = cycle.lastConcertTurn,
         )
     }
 
@@ -619,7 +623,8 @@ class GrandConcert(game: Game) : Campaign(game) {
     override fun onBeforeMainScreenUpdate() {
         stopOnUnsupportedScreen()
         if (lessonVisitsThisRun >= MAX_LESSON_VISITS_PER_RUN) return
-        val visitDay = date.day
+        syncCycleToDate()
+        val visitDay = cycle.visitTurn(date.day)
         if (visitDay > 1 && visitDay == lastNoBuyVisitDay) return
 
         val careerBitmap = game.imageUtils.getSourceBitmap()
@@ -633,17 +638,18 @@ class GrandConcert(game: Game) : Campaign(game) {
         MessageLog.i(
             TAG,
             "[GRAND_CONCERT] [LESSON_READ] Lessons button state=$slot; opening shop for visit " +
-                "$lessonVisitsThisRun/$MAX_LESSON_VISITS_PER_RUN.",
+                "$lessonVisitsThisRun/$MAX_LESSON_VISITS_PER_RUN on turn $visitDay.",
         )
         tap(GrandConcertTheme.LESSON_SLOT_X, GrandConcertTheme.LESSON_SLOT_Y, ScreenBand.BOTTOM, "gc_open_lessons")
         game.wait(1.0)
 
         val list = readLessonListSettled()
         if (list != null) {
-            val context = buildLessonContext()
+            val context = buildLessonContext(visitDay)
             lessonReader.logLessonList(list)
             logLessonScores(list, context)
-            val outcome = spendVisit(list, context, MAX_PURCHASES_PER_VISIT, GrandConcertPolicy.SPEND_MIN_SCORE)
+            val stage = if (visitDay > 1) CONCERT_TURNS.count { it < visitDay } + 1 else null
+            val outcome = spendVisit(list, context, MAX_PURCHASES_PER_VISIT, GrandConcertPolicy.SPEND_MIN_SCORE, stage)
             // A no-buy or gate-advance-only visit blocks later ticks this turn; a real purchase leaves the door open
             // for the restock. Chaining gate advances would drain points into junk techniques.
             lastNoBuyVisitDay = if (outcome.purchases > outcome.gateAdvances) -1 else visitDay
@@ -654,34 +660,31 @@ class GrandConcert(game: Game) : Campaign(game) {
         exitLessonShop()
     }
 
-    private fun buildLessonContext(): LessonScoreContext {
-        val day = date.day
-        // day<=1 means the date is not read yet (a real turn 1 cannot reach the shop): score without turn context, not
+    /** A date read past a concert proves it was performed; covers an escort that did not see the concert finish. */
+    private fun syncCycleToDate() {
+        cycle.syncToDate(date.day)?.let { MessageLog.i(TAG, "[GRAND_CONCERT] [LESSON_BUY] New concert cycle (turn ${date.day}); song counter reset.") }
+    }
+
+    private fun buildLessonContext(turn: Int): LessonScoreContext {
+        // turn<=1 means the date is not read yet (a real turn 1 cannot reach the shop): score without turn context, not
         // as pre-1st-concert, which inflated a song to 365.
-        if (day <= 1) {
-            return LessonScoreContext(songsLearnedThisCycle = songsBoughtThisCycle, energyPercent = trainee.energy, statPriority = statPriority)
+        if (turn <= 1) {
+            return LessonScoreContext(songsLearnedThisCycle = cycle.songsThisCycle, energyPercent = trainee.energy, statPriority = statPriority)
         }
-        // STRICTLY before: the concert turn still belongs to the ending cycle; with <= the counter reset early.
-        val boundary = CONCERT_TURNS.lastOrNull { it < day } ?: 0
-        if (boundary != lastConcertBoundary) {
-            lastConcertBoundary = boundary
-            songsBoughtThisCycle = 0
-            MessageLog.i(TAG, "[GRAND_CONCERT] [LESSON_BUY] New concert cycle (turn $day); song counter reset.")
-        }
-        val nextConcert = CONCERT_TURNS.firstOrNull { it > day }
+        val turnsUntilConcert = GrandConcertCycle.turnsUntilConcert(turn)
         val segment =
             when {
-                day <= 24 -> ConcertSegment.BEFORE_PROMO_1
-                day <= 36 -> ConcertSegment.BEFORE_PROMO_2
-                day <= 48 -> ConcertSegment.BEFORE_PROMO_3
-                day <= 60 -> ConcertSegment.BEFORE_PROMO_4
+                turn <= 24 -> ConcertSegment.BEFORE_PROMO_1
+                turn <= 36 -> ConcertSegment.BEFORE_PROMO_2
+                turn <= 48 -> ConcertSegment.BEFORE_PROMO_3
+                turn <= 60 -> ConcertSegment.BEFORE_PROMO_4
                 else -> ConcertSegment.BEFORE_GRAND
             }
         return LessonScoreContext(
-            songsLearnedThisCycle = songsBoughtThisCycle,
-            cycleSongTarget = GrandConcertPolicy.songTargetForCycle(CONCERT_TURNS.count { it < day }),
-            turnsUntilConcert = nextConcert?.let { it - day },
-            turnsAfterNextConcert = nextConcert?.let { (CAREER_END_TURN - it).coerceAtLeast(0) },
+            songsLearnedThisCycle = cycle.songsThisCycle,
+            cycleSongTarget = GrandConcertPolicy.songTargetForCycle(CONCERT_TURNS.count { it < turn }),
+            turnsUntilConcert = turnsUntilConcert,
+            turnsAfterNextConcert = turnsUntilConcert?.let { (CAREER_END_TURN - (turn + it)).coerceAtLeast(0) },
             segment = segment,
             energyPercent = trainee.energy,
             statPriority = statPriority,
@@ -694,7 +697,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * balance or cost is omitted so the scorer never biases on a guess.
      */
     override fun grandConcertPointContext(balances: Map<PerformancePointType, Int?>?): GrandConcertPointContext? {
-        val lessonContext = buildLessonContext()
+        syncCycleToDate()
         val day = date.day
         if (day <= 1) return null
         val concertsPassed = CONCERT_TURNS.count { it < day }
@@ -728,9 +731,10 @@ class GrandConcert(game: Game) : Campaign(game) {
             balances = balancesMap,
             caps = caps,
             deficit = demand.deficit,
-            songsBoughtThisCycle = songsBoughtThisCycle,
+            songsBoughtThisCycle = cycle.songsThisCycle,
             purchasedFloor = GrandConcertPolicy.songTargetForCycle(concertsPassed),
-            turnsUntilConcert = lessonContext.turnsUntilConcert,
+            // The concert turn's training pays out after that concert, so the scorer counts down to the one after it.
+            turnsUntilConcert = CONCERT_TURNS.firstOrNull { it > day }?.let { it - day },
             songTargetTitle = lastSongTargetTitle,
             songsBoughtThisCareer = songsBoughtThisCareer,
             // Cadence total a healthy run has by the start of this cycle; behind it, the bias stays armed after the
@@ -826,20 +830,21 @@ class GrandConcert(game: Game) : Campaign(game) {
     /**
      * Greedy spend loop with a stop rule over an open lesson list. Two concert protections precede the greedy pick:
      * [GrandConcertPolicy.chooseSongFirst] under the three-song floor, and the technique reserve
-     * [GrandConcertPolicy.TECH_RESERVE_TOTAL] while a concert remains.
+     * [GrandConcertPolicy.TECH_RESERVE_TOTAL] while a concert remains. [stage] is the concert cycle (1-5) whose songs the next trio can
+     * draw, or null when the turn is unknown.
      */
-    private fun spendVisit(initialList: LessonList, context: LessonScoreContext, maxPurchases: Int, minScore: Int): SpendVisitOutcome {
-        // Pre-concert hold: with the Great Success songs secured and the concert next turn, a purchase is a net loss:
-        // an unbought revealed song survives as the next cycle's first credit, a purchase refreshes the trio away, and
-        // technique progress resets at the concert.
+    private fun spendVisit(initialList: LessonList, context: LessonScoreContext, maxPurchases: Int, minScore: Int, stage: Int?): SpendVisitOutcome {
+        // Pre-concert hold: with the Great Success songs secured on the concert turn, a purchase is a net loss: an unbought
+        // revealed song survives as the next cycle's first credit, a purchase refreshes the trio away, and technique progress
+        // resets at the concert.
         if (!context.careerComplete &&
             (context.songsLearnedThisCycle ?: 0) >= GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value &&
-            (context.turnsUntilConcert ?: Int.MAX_VALUE) <= 1
+            (context.turnsUntilConcert ?: Int.MAX_VALUE) <= 0
         ) {
             MessageLog.i(
                 TAG,
                 "[GRAND_CONCERT] [LESSON_BUY] Pre-concert hold: ${context.songsLearnedThisCycle} song(s) secured and the concert " +
-                    "is next turn, so this visit buys nothing (a revealed song carries across the concert; a purchase would " +
+                    "is this turn, so this visit buys nothing (a revealed song carries across the concert; a purchase would " +
                     "refresh it away).",
             )
             return SpendVisitOutcome(0, 0)
@@ -872,6 +877,8 @@ class GrandConcert(game: Game) : Campaign(game) {
                         ", so \"${songPick.title}\" is bought regardless of its score (${songPick.score}).",
                 )
             }
+            val nextSongCosts = GrandConcertPolicy.nextSongCosts(list, stage, purchasedSongTitles)
+            val songTargetCost = nextSongCosts.minByOrNull { it.total() ?: Int.MAX_VALUE }
             var pick = songPick
             if (pick == null) {
                 pick =
@@ -880,9 +887,11 @@ class GrandConcert(game: Game) : Campaign(game) {
                         minScore,
                         list.balances.total(),
                         reserveActive,
-                        songTargetCost = lastSongTargetCost,
+                        songTargetCost = songTargetCost,
                         balances = list.balances,
+                        nextSongCosts = nextSongCosts,
                     )
+                logSparedTypes(pick, GrandConcertPolicy.chooseSpend(report, minScore, list.balances.total(), reserveActive, songTargetCost, list.balances))
             }
             if (pick == null) {
                 pick =
@@ -892,10 +901,15 @@ class GrandConcert(game: Game) : Campaign(game) {
                         urgent,
                         totalBalance = list.balances.total(),
                         reserveActive = reserveActive,
-                        songTargetCost = lastSongTargetCost,
+                        songTargetCost = songTargetCost,
                         balances = list.balances,
+                        nextSongCosts = nextSongCosts,
                     )
                 gateAdvance = pick != null
+                logSparedTypes(
+                    pick,
+                    GrandConcertPolicy.chooseGateAdvance(report, minScore, urgent, list.balances.total(), reserveActive, songTargetCost, list.balances),
+                )
             }
             if (pick == null) {
                 MessageLog.i(
@@ -917,7 +931,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             purchases++
             if (gateAdvance) gateAdvances++
             if (intended.kind == LessonCardKind.SONG) {
-                songsBoughtThisCycle++
+                cycle.noteSongBought()
                 songsBoughtThisCareer++
                 intended.title?.let { purchasedSongTitles.add(it) }
             }
@@ -942,6 +956,36 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     private data class SpendVisitOutcome(val purchases: Int, val gateAdvances: Int)
+
+    /** Names the technique the score or cost order would have bought when sparing the next song's types changed the pick. */
+    private fun logSparedTypes(pick: LessonOfferLine?, byOrder: LessonOfferLine?) {
+        if (pick == null || byOrder == null || pick.slot == byOrder.slot) return
+        MessageLog.i(TAG, "[GRAND_CONCERT] [LESSON_BUY] Sparing the next song's point types: \"${pick.title}\" instead of \"${byOrder.title}\".")
+    }
+
+    /** The visit hook runs before this read: a step that moved the turn since the last read means the hook saw the previous turn's date. */
+    override fun updateDate(isOnMainScreen: Boolean): Boolean {
+        val changed = super.updateDate(isOnMainScreen)
+        cycle.noteDateRead()
+        return changed
+    }
+
+    // The turn is marked from each step whose result says the turn moved, also outside executeAction (a race day, a mood recovery).
+
+    override fun handleRaceEvents(isScheduledRace: Boolean): Boolean = cycle.trackStep(date.day, { it }) { super.handleRaceEvents(isScheduledRace) }
+
+    override fun handleRaceEventFallback(): RaceFallbackOutcome = cycle.trackStep(date.day, { it.turnAdvanced }) { super.handleRaceEventFallback() }
+
+    override fun recoverEnergy(sourceBitmap: Bitmap?): Boolean = cycle.trackStep(date.day, { it }) { super.recoverEnergy(sourceBitmap) }
+
+    override fun recoverMood(sourceBitmap: Bitmap?, targetMood: Mood): Boolean = cycle.trackStep(date.day, { it }) { super.recoverMood(sourceBitmap, targetMood) }
+
+    override fun handleRecreationDate(recoverMoodIfCompleted: Boolean, allowFinalOuting: Boolean, doDateRecreation: Boolean): Boolean =
+        cycle.trackStep(date.day, { it }) { super.handleRecreationDate(recoverMoodIfCompleted, allowFinalOuting, doDateRecreation) }
+
+    /** Training reports no outcome here; its only non-advancing exits are a Training screen that did not open or return. */
+    override fun executeAction(action: MainScreenAction, bIsScheduledRaceDay: Boolean): Boolean =
+        cycle.trackStep(date.day, { it && action == MainScreenAction.TRAIN }) { super.executeAction(action, bIsScheduledRaceDay) }
 
     /**
      * Tap the card, verify the confirmation dialog names exactly the intended card, and only then tap Learn. Every

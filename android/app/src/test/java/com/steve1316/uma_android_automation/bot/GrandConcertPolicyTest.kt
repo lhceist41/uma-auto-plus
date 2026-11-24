@@ -832,6 +832,101 @@ class GrandConcertPolicyTest {
             val withNormalPick = report(line(0, 40, true).copy(weightedCost = 8.5), line(1, 10, true).copy(weightedCost = 5.0))
             assertNull(GrandConcertPolicy.chooseGateAdvance(withNormalPick), "the normal pick owns this trio")
         }
+
+        private fun tech(slot: Int, title: String, score: Int, cost: PerformancePointVector, weightedCost: Double) =
+            LessonOfferLine(slot, title, LessonCardKind.TECHNIQUE, true, false, score, weightedCost, rawCostTotal = cost.total(), rawCost = cost)
+
+        // Logged 2026-09-29 (Biwa Hayahide, cycle to the turn-60 concert): with Passion 20 and Composure 33 short, the bot
+        // bought Idol History (Pa 10, Co 14) over Vocal Training Advanced (Vo 24) from a 43 Vocal pile, and the trio drawn
+        // next needed Composure. The next trio draws from the unbought stage-4 songs.
+        private val loggedBalances = PerformancePointVector.of(169, 20, 43, 35, 33)
+        private val loggedOffer =
+            GrandConcertLessonReport(
+                listOf(
+                    tech(0, "Idol History Intermediate Class", 49, PerformancePointVector.of(0, 10, 0, 0, 14), 22.9),
+                    tech(1, "Vocal Training Advanced Class", 30, PerformancePointVector.of(0, 0, 24, 0, 0), 31.2),
+                    tech(2, "Full-Body Detox", 22, PerformancePointVector.of(0, 0, 35, 0, 0), 45.5),
+                ),
+                emptyList(),
+                emptyList(),
+            )
+        private val loggedNextSongs =
+            GrandConcertSongCatalog.unpurchasedInStage(
+                4,
+                setOf(
+                    "Full Speed Ahead! Umadol Power", "Getaway! Fallin' Love", "Here Comes Our Time", "Hey, Guess What!",
+                    "Ring Ring Diary", "Run for Our Dream!", "Sunbeam Cheer",
+                ),
+            ).map { it.cost }
+
+        @Test
+        fun `a technique is paid from the types the next songs do not need`() {
+            assertEquals(14, loggedNextSongs.size)
+            assertEquals(
+                1,
+                GrandConcertPolicy.chooseSpend(loggedOffer, balances = loggedBalances, nextSongCosts = loggedNextSongs)?.slot,
+                "Vocal Training Advanced spends the Vocal surplus; Idol History cuts Passion and Composure under what the next songs need",
+            )
+            assertEquals(0, GrandConcertPolicy.chooseSpend(loggedOffer, balances = loggedBalances)?.slot, "no known song demand: the score order stands")
+        }
+
+        @Test
+        fun `the gate advance spares the next songs' types and keeps the cheapest pick without a demand`() {
+            // Same offer with nothing clearing the bar: the urgent cap admits Idol History (22.9) and Vocal Training Advanced (31.2).
+            fun gatePick(balances: PerformancePointVector, nextSongs: List<PerformancePointVector>) =
+                GrandConcertPolicy.chooseGateAdvance(loggedOffer, minScore = 50, urgent = true, balances = balances, nextSongCosts = nextSongs)?.slot
+            assertEquals(1, gatePick(loggedBalances, loggedNextSongs))
+            assertEquals(0, gatePick(loggedBalances, emptyList()), "cheapest weighted cost")
+            assertEquals(
+                0,
+                gatePick(loggedBalances.copy(values = loggedBalances.values + (PerformancePointType.VOCAL to null)), loggedNextSongs),
+                "an unreadable balance the choice depends on falls back to the cheapest pick",
+            )
+        }
+
+        @Test
+        fun `a low-energy Energy technique keeps its pick over a technique that spares a short type`() {
+            val r =
+                GrandConcertLessonReport(
+                    listOf(
+                        tech(0, "Facial-Slimming Massage", 239, PerformancePointVector.of(0, 0, 0, 0, 25), 21.3),
+                        tech(1, "Idol History Basics", 52, PerformancePointVector.of(0, 6, 0, 0, 10), 15.1),
+                    ),
+                    emptyList(),
+                    emptyList(),
+                )
+            val balances = PerformancePointVector.of(60, 37, 42, 12, 25)
+            assertEquals(0, GrandConcertPolicy.chooseSpend(r, balances = balances, nextSongCosts = loggedNextSongs)?.slot, "skipping it costs a Rest turn")
+        }
+
+        @Test
+        fun `the next-song demand is every unbought stage song, not the cheapest one`() {
+            // Stage 1, nothing bought: the cheapest song (Believe in Miracles) needs Passion, but four of the eight songs need Dance.
+            val danceTech = tech(0, "spends Dance", 10, PerformancePointVector.of(10, 0, 0, 0, 0), 8.5)
+            val passionTech = tech(1, "spends Passion", 10, PerformancePointVector.of(0, 10, 0, 0, 0), 11.0)
+            val r = GrandConcertLessonReport(listOf(danceTech, passionTech), emptyList(), emptyList())
+            val balances = PerformancePointVector.of(25, 25, 40, 40, 40)
+            fun card(slot: Int, kind: LessonCardKind, cost: PerformancePointVector) = LessonListCard(slot, "card$slot", kind, null, null, cost, true, false)
+            val techniqueTrio =
+                LessonList(
+                    balances,
+                    listOf(card(0, LessonCardKind.TECHNIQUE, danceTech.rawCost!!), card(1, LessonCardKind.TECHNIQUE, passionTech.rawCost!!)),
+                    hasFullStats = true,
+                    hasConcertInfo = true,
+                )
+
+            val demand = GrandConcertPolicy.nextSongCosts(techniqueTrio, stage = 1, purchasedTitles = emptySet())
+            assertEquals(8, demand.size)
+            assertEquals(1, GrandConcertPolicy.chooseGateAdvance(r, balances = balances, nextSongCosts = demand)?.slot, "Passion hurts two songs, Dance four")
+            val cheapestOnly = listOfNotNull(GrandConcertSongCatalog.cheapestUnpurchasedInStage(1, emptySet())?.cost)
+            assertEquals(0, GrandConcertPolicy.chooseGateAdvance(r, balances = balances, nextSongCosts = cheapestOnly)?.slot, "the single-song rule picks the other card")
+            assertEquals(0, GrandConcertPolicy.chooseGateAdvance(r, balances = balances)?.slot)
+
+            val songCost = PerformancePointVector.of(0, 0, 32, 0, 12)
+            val songTrio = techniqueTrio.copy(cards = listOf(card(0, LessonCardKind.SONG, songCost)))
+            assertEquals(listOf(songCost), GrandConcertPolicy.nextSongCosts(songTrio, stage = 1, purchasedTitles = emptySet()), "a song on offer is the demand")
+            assertTrue(GrandConcertPolicy.nextSongCosts(techniqueTrio, stage = null, purchasedTitles = emptySet()).isEmpty(), "an unknown turn has no demand")
+        }
     }
 
     @Nested

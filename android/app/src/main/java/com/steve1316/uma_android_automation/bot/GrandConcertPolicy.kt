@@ -318,6 +318,9 @@ object GrandConcertPolicy {
      * check is type-aware: a technique may not spend a type below what that song still needs, since the total-only rule fails (a cycle held 101 total
      * points with 69 of them Vocal and could afford neither the song nor any gate technique). Without vectors, total balance minus the technique's cost
      * must stay at or above [TECH_RESERVE_TOTAL]; unreadable costs fail toward the reserve.
+     *
+     * When the top pick is a technique and [nextSongCosts] is known, the eligible techniques are ranked by score minus
+     * [SONG_SHORTFALL_SCORE_PER_POINT] per point of [addedSongShortfall] averaged over those songs, so the next song stays affordable.
      */
     fun chooseSpend(
         report: GrandConcertLessonReport,
@@ -326,11 +329,57 @@ object GrandConcertPolicy {
         reserveActive: Boolean = false,
         songTargetCost: PerformancePointVector? = null,
         balances: PerformancePointVector? = null,
-    ): LessonOfferLine? =
-        report.ranked.firstOrNull { line ->
-            line.affordable == true && !line.scheduled && line.score >= minScore &&
-                !(reserveActive && line.kind == LessonCardKind.TECHNIQUE && reserveBlocksTechnique(line, totalBalance, songTargetCost, balances))
+        nextSongCosts: List<PerformancePointVector> = emptyList(),
+    ): LessonOfferLine? {
+        val eligible =
+            report.ranked.filter { line ->
+                line.affordable == true && !line.scheduled && line.score >= minScore &&
+                    !(reserveActive && line.kind == LessonCardKind.TECHNIQUE && reserveBlocksTechnique(line, totalBalance, songTargetCost, balances))
+            }
+        val top = eligible.firstOrNull() ?: return null
+        if (top.kind != LessonCardKind.TECHNIQUE) return top
+        val techniques = eligible.filter { it.kind == LessonCardKind.TECHNIQUE }
+        val shortfalls = techniques.map { addedSongShortfall(it, balances, nextSongCosts) ?: return top }
+        return techniques.indices
+            .maxByOrNull { techniques[it].score - SONG_SHORTFALL_SCORE_PER_POINT * shortfalls[it] / nextSongCosts.size }
+            ?.let { techniques[it] } ?: top
+    }
+
+    /**
+     * What the next song will cost: the songs on [list] when it offers any, else every unbought song of [stage] the next trio can draw (a song
+     * remembered from an earlier trio is gone once a technique trio shows). Empty when the stage is unknown.
+     */
+    fun nextSongCosts(list: LessonList, stage: Int?, purchasedTitles: Set<String>): List<PerformancePointVector> {
+        val offered = list.cards.filter { it.readable && it.scheduled != true && it.kind == LessonCardKind.SONG }.map { it.cost }
+        return offered.ifEmpty { stage?.let { GrandConcertSongCatalog.unpurchasedInStage(it, purchasedTitles).map { song -> song.cost } }.orEmpty() }
+    }
+
+    /**
+     * Score charged per point of next-song shortfall a technique adds, averaged over the candidate songs. Replaying 1294 logged technique buys
+     * (2026-09-30 to 11-05) against the trio the game drew next, a weight of 12 cut the songs a pick made unaffordable from 363 to 321 and never
+     * outranked a low-energy Energy technique (about 236); a weight of 20 began to.
+     */
+    private const val SONG_SHORTFALL_SCORE_PER_POINT = 12.0
+
+    /**
+     * Points [line] pushes below what each of [songs] needs, summed over the songs; zero for a technique paid only from types none of them
+     * needs. Null when no demand is known or a spent type's cost or balance is unreadable.
+     */
+    internal fun addedSongShortfall(line: LessonOfferLine, balances: PerformancePointVector?, songs: List<PerformancePointVector>): Int? {
+        if (songs.isEmpty() || balances == null) return null
+        val cost = line.rawCost ?: return null
+        var added = 0
+        for (type in PerformancePointType.entries) {
+            val spend = cost[type] ?: return null
+            if (spend <= 0) continue
+            val have = balances[type] ?: return null
+            for (song in songs) {
+                val need = song[type] ?: continue
+                added += maxOf(0, need - (have - spend)) - maxOf(0, need - have)
+            }
         }
+        return added
+    }
 
     private fun reserveBlocksTechnique(
         line: LessonOfferLine,
@@ -385,7 +434,8 @@ object GrandConcertPolicy {
      *
      * The defer guard must judge lines as [chooseSpend] does: a line the type-aware reserve blocks was not going to be bought, or the reserve and this
      * guard deadlock (the reserve refuses, this defers to it, nothing is bought, the cycle ends songless). The pick itself stays reserve-exempt:
-     * minimum-cost gate movement is what un-stalls songs.
+     * minimum-cost gate movement is what un-stalls songs. With [nextSongCosts] known, the least [addedSongShortfall] goes first and weighted cost
+     * breaks ties.
      */
     fun chooseGateAdvance(
         report: GrandConcertLessonReport,
@@ -395,6 +445,7 @@ object GrandConcertPolicy {
         reserveActive: Boolean = false,
         songTargetCost: PerformancePointVector? = null,
         balances: PerformancePointVector? = null,
+        nextSongCosts: List<PerformancePointVector> = emptyList(),
     ): LessonOfferLine? {
         if (report.ranked.any { it.kind == LessonCardKind.SONG }) return null
         val clearsUnblocked =
@@ -404,12 +455,13 @@ object GrandConcertPolicy {
             }
         if (clearsUnblocked) return null
         val cap = if (urgent) GATE_ADVANCE_MAX_WEIGHTED_COST_URGENT else GATE_ADVANCE_MAX_WEIGHTED_COST
-        return report.ranked
-            .filter {
+        val candidates =
+            report.ranked.filter {
                 it.kind == LessonCardKind.TECHNIQUE && it.affordable == true && !it.scheduled &&
                     it.score >= 1 && it.weightedCost <= cap
             }
-            .minByOrNull { it.weightedCost }
+        val shortfalls = candidates.map { addedSongShortfall(it, balances, nextSongCosts) ?: return candidates.minByOrNull { c -> c.weightedCost } }
+        return candidates.indices.minWithOrNull(compareBy({ shortfalls[it] }, { candidates[it].weightedCost }))?.let { candidates[it] }
     }
 
     /** Pre-Grand, immediate mastery bonuses gain relative value because compounding runway is gone. */

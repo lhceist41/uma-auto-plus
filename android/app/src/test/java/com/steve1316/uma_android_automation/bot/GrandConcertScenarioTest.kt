@@ -380,12 +380,13 @@ class GrandConcertScenarioTest {
             // Strictly-before boundary: the concert turn belongs to the ENDING cycle. The <=
             // variant reset the song counter on the concert day before the concert ran (live,
             // 2026-07-27: entered logging 0 songs with 2 bought).
+            val cycle = source("bot/GrandConcertCycle.kt")
             assertTrue(
-                campaign.contains("CONCERT_TURNS.lastOrNull { it < day }"),
+                cycle.contains("CONCERT_TURNS.lastOrNull { it < dateDay }"),
                 "the cycle boundary regressed to including the concert day",
             )
             assertFalse(
-                campaign.contains("CONCERT_TURNS.lastOrNull { it <= day }"),
+                (campaign + cycle).contains("CONCERT_TURNS.lastOrNull { it <= "),
                 "the early-reset cycle boundary is back",
             )
             assertFalse(

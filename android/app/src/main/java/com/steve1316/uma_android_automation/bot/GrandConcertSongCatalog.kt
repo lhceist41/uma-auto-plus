@@ -90,13 +90,17 @@ object GrandConcertSongCatalog {
             CatalogSong("GIRLS' LEGEND U", MasteryBonusType.FREE_ALL, ConcertBonusType.FRIENDSHIP_10, v(0, 0, 0, 0, 0), phase = 5, free = true, alwaysBuy = true),
         )
 
-    /** Cheapest unpurchased non-free song in [currentPhase] or earlier, for the one-step next-song lookahead. Purchased titles and [excludeTitle] (the song on offer) are canonicalized through [match]. Null when none remain. */
-    fun cheapestUnpurchasedInStage(currentPhase: Int, purchasedTitles: Set<String>, excludeTitle: String? = null): CatalogSong? {
+    /** Unpurchased non-free songs in [currentPhase] or earlier: what the next song trio can draw. Purchased titles are canonicalized through [match]. */
+    fun unpurchasedInStage(currentPhase: Int, purchasedTitles: Set<String>): List<CatalogSong> {
         val purchasedCanonical = purchasedTitles.mapNotNull { match(it)?.title }.toSet()
+        return songs.filter { !it.free && it.phase <= currentPhase && it.title !in purchasedCanonical && (it.cost.total() ?: 0) > 0 }
+    }
+
+    /** Cheapest of [unpurchasedInStage], for the one-step next-song lookahead; [excludeTitle] (the song on offer) is canonicalized through
+     * [match]. Null when none remain. */
+    fun cheapestUnpurchasedInStage(currentPhase: Int, purchasedTitles: Set<String>, excludeTitle: String? = null): CatalogSong? {
         val excludedCanonical = excludeTitle?.let { match(it)?.title }
-        return songs
-            .filter { !it.free && it.phase <= currentPhase && it.title !in purchasedCanonical && it.title != excludedCanonical && (it.cost.total() ?: 0) > 0 }
-            .minByOrNull { it.cost.total() ?: Int.MAX_VALUE }
+        return unpurchasedInStage(currentPhase, purchasedTitles).filter { it.title != excludedCanonical }.minByOrNull { it.cost.total() ?: Int.MAX_VALUE }
     }
 
     /** Finds the catalog song for an OCR'd title: exact fold, then prefix (cards truncate long titles), then small edit distance. Fuzzy layers need a UNIQUE winner; a wrong catalog hit is worse than none. */
