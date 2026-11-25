@@ -168,7 +168,7 @@
     "S"
   ],
   "counts": {
-    "factorGroups": 407,
+    "factorGroups": 408,
     "factorsByFamily": {
       "stat": 5,
       "aptitude": 10,
@@ -176,10 +176,10 @@
       "skill": 236,
       "scenario": 4,
       "bonus": 3,
-      "unique": 115
+      "unique": 116
     },
-    "traineeCards": 117,
-    "traineeBaseRows": 370,
+    "traineeCards": 118,
+    "traineeBaseRows": 373,
     "trainingEffectRows": 72
   },
   "careerTurns": [
@@ -19231,6 +19231,102 @@
       ]
     },
     {
+      "groupId": 104301,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Ding Dong, Boo!",
+      "maxRarity": 3,
+      "factorIds": [
+        10430101,
+        10430102,
+        10430103
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            900431,
+            900431,
+            900431,
+            900431
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            2,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 63,
+          "kind": "MAX_STAT",
+          "stat": "Power",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 104401,
       "factorType": 3,
       "family": "unique",
@@ -23700,6 +23796,21 @@
         "power": 0,
         "guts": 0,
         "wit": 20
+      },
+      "runningStyle": 2
+    },
+    {
+      "cardId": 104301,
+      "charaId": 1043,
+      "character": "Shinko Windy",
+      "outfit": "[Wicked Punk]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 10,
+        "stamina": 0,
+        "power": 10,
+        "guts": 10,
+        "wit": 0
       },
       "runningStyle": 2
     },
@@ -29853,6 +29964,75 @@
         "pace": "A",
         "late": "A",
         "end": "B"
+      }
+    },
+    {
+      "cardId": 104301,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 76,
+        "Power": 107,
+        "Guts": 81,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "A",
+        "medium": "B",
+        "long": "G",
+        "turf": "F",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "B",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 104301,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 110,
+        "Stamina": 85,
+        "Power": 119,
+        "Guts": 90,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "A",
+        "medium": "B",
+        "long": "G",
+        "turf": "F",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "B",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 104301,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 121,
+        "Stamina": 93,
+        "Power": 131,
+        "Guts": 98,
+        "Wit": 107
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "A",
+        "medium": "B",
+        "long": "G",
+        "turf": "F",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "B",
+        "end": "F"
       }
     },
     {

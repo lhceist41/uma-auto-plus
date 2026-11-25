@@ -34,7 +34,7 @@ New releases start with a one-line summary, then list what you need to do, what 
 
 ### Presets and game data
 
-- **Game data:** Shinko Windy (Wicked Punk) is in, so the bot knows her events, objectives and Grand Concert fan goals. She has no preset yet.
+- **Game data and new presets:** Shinko Windy (Wicked Punk) is in, so the bot knows her events, objectives and Grand Concert fan goals, and she has research-graded presets for all four scenarios (464 presets across 116 trainee cards). She runs as a dirt Mile Pace Chaser: her URA Finale preset races dirt from Junior on for the 3000 fans due at the start of her Classic year and aims at the four dirt Mile G1s her secret event asks for. Unity Cup and Trackblazer show a caution for her turf F aptitude.
 
 ## [1.9.0] - 2026-11-17
 

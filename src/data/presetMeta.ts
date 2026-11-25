@@ -7,7 +7,7 @@
  * model the character's base card, whose outfit title comes from characterBaseOutfits.
  * Base-outfit names come from the cards' gametora pages, except Nakayama Festa, Wonder Acute, Agnes Digital,
  * Inari One, Ines Fujin, Mejiro Bright, Satono Diamond, Aston Machan, Kawakami Princess, Seeking the Pearl,
- * Yamanin Zephyr and Yukino Bijin, which come from the game's master data. The base card is the character's
+ * Yamanin Zephyr, Yukino Bijin and Shinko Windy, which come from the game's master data. The base card is the character's
  * lowest card id in build_budget_data.json.
  */
 
@@ -63,6 +63,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Satono Diamond": "Natural Brilliance",
     "Seeking the Pearl": "Rocket☆Star",
     "Seiun Sky": "Reeling in the Big One",
+    "Shinko Windy": "Wicked Punk",
     "Silence Suzuka": "Innocent Silence",
     "Smart Falcon": "LOVE☆4EVER",
     "Special Week": "Special Dreamer",

@@ -147,8 +147,9 @@ Stamina first.
 **A curated race schedule instead of smart racing.** Most presets let the smart-racing scheduler
 fill fan gaps dynamically. A trainee gets a hand-built schedule instead when her viable race pool is
 too sparse for that to work: dirt specialists, trainees with a near-empty Junior year, and trainees
-facing a hard fan checkpoint. When a preset runs a mandatory plan, voluntary races happen only on
-its planned turns.
+facing a hard fan checkpoint. Some of these schedules also include the races a trainee's secret
+event asks her to win. When a preset runs a mandatory plan, voluntary races happen only on its
+planned turns.
 
 **Deliberately buying a negative skill.** A trainee who starts with a built-in stat debuff gets
 negative-skill buying enabled, so the buy pass can clear it.
