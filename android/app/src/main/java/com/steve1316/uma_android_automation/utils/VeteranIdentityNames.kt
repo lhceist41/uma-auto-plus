@@ -74,6 +74,7 @@ object VeteranIdentityNames {
             "Satono Diamond",
             "Seeking the Pearl",
             "Seiun Sky",
+            "Shinko Windy",
             "Silence Suzuka",
             "Smart Falcon",
             "Special Week",

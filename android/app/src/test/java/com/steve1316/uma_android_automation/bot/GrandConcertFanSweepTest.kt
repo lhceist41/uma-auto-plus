@@ -231,9 +231,9 @@ class GrandConcertFanSweepTest {
     }
 
     @Test
-    @DisplayName("bounded limitation: the five trainees no rule can carry under pessimistic payouts race every short turn instead of deferring")
+    @DisplayName("bounded limitation: the six trainees no rule can carry under pessimistic payouts race every short turn instead of deferring")
     fun infeasibleTraineesNeverDeferWhileShort() {
-        val infeasible = listOf("Copano Rickey", "Curren Chan", "Hokko Tarumae", "Smart Falcon", "Wonder Acute")
+        val infeasible = listOf("Copano Rickey", "Curren Chan", "Hokko Tarumae", "Shinko Windy", "Smart Falcon", "Wonder Acute")
         val outcomes = run(Model.PESSIMISTIC, Policy.NEW)
         assertEquals(infeasible.toSet(), summary(Model.PESSIMISTIC, Policy.ORACLE).misses)
         for (name in infeasible) {
@@ -250,14 +250,15 @@ class GrandConcertFanSweepTest {
             val oracle = summary(model, Policy.ORACLE, parity = true).misses
             return "${s.misses.size} ${(s.misses - oracle).size} ${s.forced} ${s.juniorForced} ${s.juniorTrainees}"
         }
-        assertEquals("5 0 3085 750 71", row(Model.PESSIMISTIC, Policy.ORACLE))
-        assertEquals("38 33 805 345 65", row(Model.PESSIMISTIC, Policy.OLD))
-        // The simulation has 980: production fails safe on a goal due this turn or overdue. That adds one race on Wonder
-        // Acute's deadline turn and leaves seven fewer after a miss (Copano Rickey, Hokko Tarumae, Smart Falcon, Wonder
+        assertEquals("6 0 3131 761 72", row(Model.PESSIMISTIC, Policy.ORACLE))
+        assertEquals("39 33 818 356 66", row(Model.PESSIMISTIC, Policy.OLD))
+        // The external simulation (71 trainees, without Shinko Windy) has 980; the 991 here includes her row, which the simulation
+        // lacks (without her the port gives 974). Production fails safe on a goal due this turn or overdue. That adds one race on
+        // Wonder Acute's deadline turn and leaves seven fewer after a miss (Copano Rickey, Hokko Tarumae, Smart Falcon, Wonder
         // Acute), on turns where the game would already have ended the career.
-        assertEquals("5 0 974 414 71", row(Model.PESSIMISTIC, Policy.NEW))
-        assertEquals("0 0 153 134 33", row(Model.REALISTIC, Policy.OLD))
-        assertEquals("0 0 103 70 45", row(Model.REALISTIC, Policy.NEW))
+        assertEquals("6 0 991 420 72", row(Model.PESSIMISTIC, Policy.NEW))
+        assertEquals("0 0 159 140 34", row(Model.REALISTIC, Policy.OLD))
+        assertEquals("0 0 106 72 46", row(Model.REALISTIC, Policy.NEW))
     }
 
     private fun placeShare(place: Int): Double =

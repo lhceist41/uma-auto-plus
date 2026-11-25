@@ -828,6 +828,20 @@
       "downgrade": null
     },
     {
+      "id": 100431,
+      "name": "Ding Dong, Boo!",
+      "desc": "Very slightly increase velocity when dueling. If it's a dirt race, also slightly increase acceleration.",
+      "iconId": 20011,
+      "cost": 200,
+      "evalPt": 180,
+      "condition": "compete_fight_count>0&ground_type==2@compete_fight_count>0",
+      "precondition": "",
+      "inherited": true,
+      "tier": 2,
+      "upgrade": null,
+      "downgrade": null
+    },
+    {
       "id": 100441,
       "name": "Victory belongs to me\u2014Strelitzia! ☆",
       "desc": "If positioned toward the back and racing calmly until the start of the final corner, when there are 300m remaining, slightly increase velocity continuously.",

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "outfitSource": "gametora character-cards title_en_gl",
-  "characterCount": 71,
-  "outfitCount": 115,
+  "characterCount": 72,
+  "outfitCount": 116,
   "characters": {
     "Admire Vega": {
       "outfits": [
@@ -300,6 +300,11 @@
       "outfits": [
         "Reeling in the Big One",
         "Soirée des Chatons"
+      ]
+    },
+    "Shinko Windy": {
+      "outfits": [
+        "Wicked Punk"
       ]
     },
     "Silence Suzuka": {

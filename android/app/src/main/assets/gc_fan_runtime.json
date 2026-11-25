@@ -4989,6 +4989,82 @@
         }
       ]
     },
+    "Shinko Windy": {
+      "fanGoals": [
+        {
+          "turn": 25,
+          "targetFans": 3000
+        }
+      ],
+      "mandatoryRaces": [
+        {
+          "turn": 36,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Unicorn Stakes",
+              "fansNeeded": 750,
+              "distanceMeters": 1600
+            }
+          ]
+        },
+        {
+          "turn": 37,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Japan Dirt Derby",
+              "fansNeeded": 4000,
+              "distanceMeters": 2000
+            }
+          ]
+        },
+        {
+          "turn": 50,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Tokai Stakes",
+              "fansNeeded": 1800,
+              "distanceMeters": 1800
+            }
+          ]
+        },
+        {
+          "turn": 52,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "February Stakes",
+              "fansNeeded": 12000,
+              "distanceMeters": 1600
+            }
+          ]
+        },
+        {
+          "turn": 60,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Teio Sho",
+              "fansNeeded": 12000,
+              "distanceMeters": 2000
+            }
+          ]
+        },
+        {
+          "turn": 71,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Champions Cup",
+              "fansNeeded": 12000,
+              "distanceMeters": 1800
+            }
+          ]
+        }
+      ]
+    },
     "Silence Suzuka": {
       "fanGoals": [
         {

@@ -734,6 +734,16 @@
             }
         ]
     },
+    "Shinko Windy": {
+        "name": "Shinko Windy",
+        "outfits": [
+            {
+                "title": "Wicked Punk",
+                "cardId": 104301,
+                "releasedEn": "2026-11-21"
+            }
+        ]
+    },
     "Silence Suzuka": {
         "name": "Silence Suzuka",
         "outfits": [

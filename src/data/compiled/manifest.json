@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "4a6bf80722f5eaaba29aecf5434c5beedf268a35491997222feb2efcef3ffc0d",
+  "fingerprint": "b9ec60824d84d00b9cf70ab07ce22e8a05f93120b09f3eb0004f1bc08bd5dc59",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -17,8 +17,8 @@
     {
       "family": "objectives",
       "path": "src/data/character_objectives.json",
-      "sha256": "81be8fbc4285f54cf85d0c7b54e02dae9b0c0f45849702049f5be7b490ad43e8",
-      "recordCount": 71,
+      "sha256": "fba767c5def4d3d26913d3a0e0118e016e2b1c92f5540d651357184287c1c958",
+      "recordCount": 72,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -27,8 +27,8 @@
     {
       "family": "characters",
       "path": "src/data/characters.json",
-      "sha256": "d18cd5e1f40d92dad03e0d63703c76e02b515131a125cde35be88244275d6047",
-      "recordCount": 71,
+      "sha256": "a3c8f0b323fb9385d5dd7686dbf7361ab10cf105847f9c915b512cdc395067f6",
+      "recordCount": 72,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -57,8 +57,8 @@
     {
       "family": "skills",
       "path": "src/data/skills.json",
-      "sha256": "4c086fafd8ef92c81bb0aa12f7c62f7deca4fde4c45524cb7e5b6cd9a12aa317",
-      "recordCount": 633,
+      "sha256": "eda1cfcc9f1aff7c5425e138534a9b6050b8a4c894e487a2bd95c004346bf291",
+      "recordCount": 634,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -83,8 +83,8 @@
     },
     {
       "path": "src/data/compiled/skills.json",
-      "sha256": "254d44f1e39b7c59a8298ec5f416f0c99649b951a224b7794295a8a25e6c125d",
-      "recordCount": 633
+      "sha256": "9389efeda1b7c46c6c214f9dfd361417c1482c97ea3ae58fb3bcd3ba8b0a8622",
+      "recordCount": 634
     }
   ],
   "validation": {
@@ -100,7 +100,7 @@
       },
       {
         "code": "nullFieldPrevalence",
-        "detail": "skills: tier is null on 85/633 records"
+        "detail": "skills: tier is null on 85/634 records"
       },
       {
         "code": "provenanceUnavailable",

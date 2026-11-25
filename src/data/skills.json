@@ -1539,6 +1539,20 @@
         "upgrade": null,
         "downgrade": 201342
     },
+    "Ding Dong, Boo!": {
+        "id": 100431,
+        "name_en": "Ding Dong, Boo!",
+        "desc_en": "Very slightly increase velocity when dueling. If it's a dirt race, also slightly increase acceleration.",
+        "icon_id": 20011,
+        "cost": 200,
+        "eval_pt": 180,
+        "condition": "compete_fight_count>0&ground_type==2@compete_fight_count>0",
+        "precondition": "",
+        "inherited": true,
+        "community_tier": 2,
+        "upgrade": null,
+        "downgrade": null
+    },
     "Dirt Race Enthusiast": {
         "id": 1200051,
         "name_en": "Dirt Race Enthusiast",
