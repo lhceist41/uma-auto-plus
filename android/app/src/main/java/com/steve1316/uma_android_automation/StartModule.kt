@@ -578,6 +578,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         /** The library treats an InterruptedException as a manual stop; any other posted exception is a crash. */
         fun isCrash(exception: Throwable): Boolean = exception !is InterruptedException
 
+        /**
+         * An exception that ended a run outside the task loop. A stop the bot requested itself sets [queueStopReason] and throws
+         * InterruptedException, also while `Game` is being built: it reads as that stop, with its reason, the way [Task] ends one inside its loop.
+         */
+        fun resultForRunException(exception: Exception, botStopReason: String?): TaskResult =
+            if (exception is InterruptedException && botStopReason != null) {
+                TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, botStopReason)
+            } else {
+                TaskResult.Error(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, "Unhandled exception: ${exception.message}")
+            }
+
         /** Judged from the run's own result: an earlier errored or skipped run is not counted as completed. */
         fun finishesLastCareer(runIndex: Int, totalRuns: Int, resultCode: TaskResultCode): Boolean =
             runIndex == totalRuns && resultCode == TaskResultCode.TASK_RESULT_COMPLETE
@@ -1736,11 +1747,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
                     lastRunPostedException = isCrash(e)
-                    taskResult =
-                        TaskResult.Error(
-                            TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
-                            "Unhandled exception: ${e.message}",
-                        )
+                    taskResult = resultForRunException(e, queueStopReason)
                 }
             }
 
@@ -2628,6 +2635,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // recognize - but it is still evidence against an empty Home lobby.
                             coldStartConfirmedCareer = true
                         }
+                    } catch (e: InterruptedException) {
+                        // A bot stop while the probe builds its Game: the loop's first stop check exits and the post-loop branch reports it.
+                        if (queueStopReason == null) throw e
+                        Thread.interrupted()
+                        queueStopRequested = true
                     } finally {
                         coldStartNavigator?.close()
                     }
