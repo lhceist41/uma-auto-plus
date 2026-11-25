@@ -87,15 +87,15 @@ class Training(private val game: Game, private val campaign: Campaign) {
     /** List of training names that are restricted or unavailable. */
     private var restrictedTrainingNames: MutableSet<StatName> = mutableSetOf()
 
-    /** List of analysis results cached for reuse during the current turn. */
+    /**
+     * List of analysis results cached for reuse during the current turn. [processAnalysisResults] filters them per call without
+     * changing them, so the Trackblazer irregular pre-screen's read also serves the turn's regular analysis.
+     */
     var cachedAnalysisResults: List<TrainingAnalysisResult>? = null
         private set
 
     /** `ignoreFailureChance` when [cachedAnalysisResults] was written; a cache hit must match it or failure-chance filtering replays inconsistent inputs. */
     private var cachedIgnoreFailureChance: Boolean = false
-
-    /** `isIrregularEvaluation` when cached; irregular mode applies a stricter min-gain filter to the in-place-mutated results, so a hit must match. */
-    private var cachedIsIrregularEvaluation: Boolean = false
 
     /** Whether Speed's first read was over every limit when cached, so a hit replays the same rest decision. */
     private var cachedSpeedOverLimit: Boolean = false
@@ -1538,8 +1538,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             MessageLog.v(TAG, "\n[TRAINING] Now starting process to analyze the training on screen.")
         } else if (cachedAnalysisResults != null &&
             cachedAnalysisTurn == campaign.date.day &&
-            cachedIgnoreFailureChance == ignoreFailureChance &&
-            cachedIsIrregularEvaluation == isIrregularEvaluation
+            cachedIgnoreFailureChance == ignoreFailureChance
         ) {
             MessageLog.i(TAG, "[TRAINING] Using cached training analysis results for this turn.")
             processAnalysisResults(cachedAnalysisResults!!, ignoreFailureChance, isIrregularEvaluation, test)
@@ -1550,7 +1549,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             // and old failure chances no longer hold after energy changed, so re-run fresh.
             MessageLog.d(
                 TAG,
-                "[DEBUG] analyzeTrainings:: Cached results not reusable (cached turn=$cachedAnalysisTurn now=${campaign.date.day}; cached ignore=$cachedIgnoreFailureChance/irregular=$cachedIsIrregularEvaluation, requested ignore=$ignoreFailureChance/irregular=$isIrregularEvaluation). Re-analyzing from scratch.",
+                "[DEBUG] analyzeTrainings:: Cached results not reusable (cached turn=$cachedAnalysisTurn now=${campaign.date.day}; cached ignore=$cachedIgnoreFailureChance, requested ignore=$ignoreFailureChance). Re-analyzing from scratch.",
             )
         } else {
             MessageLog.v(TAG, "\n[TRAINING] Now starting process to analyze all 5 Trainings.")
@@ -2169,7 +2168,6 @@ class Training(private val game: Game, private val campaign: Campaign) {
             if (!test && !singleTraining) {
                 cachedAnalysisResults = analysisResults.toList()
                 cachedIgnoreFailureChance = ignoreFailureChance
-                cachedIsIrregularEvaluation = isIrregularEvaluation
                 cachedSpeedOverLimit = speedOverLimit
                 cachedAnalysisTurn = campaign.date.day
             }
@@ -2372,7 +2370,6 @@ class Training(private val game: Game, private val campaign: Campaign) {
         Log.d(TAG, "[DEBUG] clearAnalysisCache:: Clearing the training analysis cache.")
         cachedAnalysisResults = null
         cachedIgnoreFailureChance = false
-        cachedIsIrregularEvaluation = false
         cachedSpeedOverLimit = false
         cachedAnalysisTurn = null
         trainingMap.clear()
