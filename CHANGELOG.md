@@ -30,6 +30,7 @@ New releases start with a one-line summary, then list what you need to do, what 
 - **Rewards and Club:** the Shop button on Home is found on the 2nd Anniversary "Special Shop!" layout, which covers its "Shop" label.
 - **Profiles:** renaming the active profile keeps it selected and active.
 - **Careers:** a game that froze on the main career screen is now restarted (still at most twice per run) instead of the bot looping or stopping with a request to rest in the game. On Android 14 and newer the bot can still only bring it to the front once. When the same turn keeps coming back without progress, the bot stops the queue with a reason that names the turn.
+- **Racing:** a race planned as mandatory in the Racing Plan is now entered by name even with fan farming off or in the Junior Year, instead of the bot's usual pick (rival first, then prediction, then fans). If the planned race is not on the list, the bot skips racing that turn. Force Racing still comes first, and with fan farming off so does an unmet fan goal near its deadline. Races picked by the usual selection now show their real name and grade in the log instead of no name and OP, so the Alarm Clock options "G1 only" and "G1 + Twinkle Star Climax finale" can now also buy an Alarm Clock to retry such a G1 race when it is lost (default still Never).
 - **Run Queue:** Home and the "Delay Between Runs" text now say that the wait between two runs normally comes after the next career has started. To stop before the next career starts, use Stop after this career.
 
 ### Presets and game data

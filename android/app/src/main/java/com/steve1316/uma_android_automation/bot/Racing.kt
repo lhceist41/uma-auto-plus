@@ -604,6 +604,30 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 hasInsufficientGoalRacePtsRequirement
 
         /**
+         * Whether the extra race goes through [processSmartRacing] (true) or the standard picker. A fan or goal-points requirement forces the standard picker and a
+         * trophy requirement filters by grade in smart racing, both ahead of the plan. Force racing (which overrides every other racing setting) and a fan emergency
+         * (the standard picker admits single-star rows and scrolls for an enterable race) also keep the old rule. Otherwise a mandatory planned race takes the
+         * by-name search in every year whatever the fan-farming setting says, since the standard picker never looks for it.
+         */
+        internal fun usesSmartRacing(
+            fanOrGoalPtsRequirement: Boolean,
+            hasTrophyRequirement: Boolean,
+            hasMandatoryPlannedRace: Boolean,
+            fanEmergency: Boolean,
+            enableRacingPlan: Boolean,
+            enableFarmingFans: Boolean,
+            enableForceRacing: Boolean,
+            isJuniorYear: Boolean,
+        ): Boolean =
+            when {
+                fanOrGoalPtsRequirement -> false
+                hasTrophyRequirement -> !isJuniorYear
+                hasMandatoryPlannedRace && !fanEmergency && !enableForceRacing -> true
+                enableRacingPlan && !isJuniorYear -> enableFarmingFans && !enableForceRacing
+                else -> false
+            }
+
+        /**
          * True only for a positively read [GoalCriteriaTier.G1_ONLY]; Pre-OP, G3 and an unread tier stay permissive. Inferring G1-only from two
          * failed template reads once filtered a G1-less list to zero and cancelled required racing until the goal expired.
          */
@@ -3894,24 +3918,24 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
             // Determine whether to use smart racing with user-selected races or standard racing.
             val useSmartRacing =
-                if (fanRequirementForcesRace || hasInsufficientGoalRacePtsRequirement) {
-                    // If fan or goal pts requirement is needed, force standard racing to ensure the race proceeds and picks double stars.
-                    false
-                } else if (hasTrophyRequirement) {
-                    // Trophy requirement can use smart racing as it filters to the goal's grade internally.
-                    // Use smart racing for all years except Year 1 (Junior Year).
-                    campaign.date.year != DateYear.JUNIOR
-                } else if (enableRacingPlan && campaign.date.year != DateYear.JUNIOR) {
-                    // Year 2 and 3: Use smart racing if conditions are met.
-                    enableFarmingFans && !enableForceRacing
-                } else {
-                    false
-                }
+                usesSmartRacing(
+                    fanOrGoalPtsRequirement = fanRequirementForcesRace || hasInsufficientGoalRacePtsRequirement,
+                    hasTrophyRequirement = hasTrophyRequirement,
+                    hasMandatoryPlannedRace = mandatoryExtraRaceData != null,
+                    fanEmergency = bFanEmergencyActive,
+                    enableRacingPlan = enableRacingPlan,
+                    enableFarmingFans = enableFarmingFans,
+                    enableForceRacing = enableForceRacing,
+                    isJuniorYear = campaign.date.year == DateYear.JUNIOR,
+                )
 
             val success =
-                if (useSmartRacing && campaign.date.year != DateYear.JUNIOR) {
-                    // Use the smart racing logic.
-                    MessageLog.v(TAG, "[RACE] Using smart racing for Year ${campaign.date.year}.")
+                if (useSmartRacing) {
+                    if (mandatoryExtraRaceData != null) {
+                        MessageLog.v(TAG, "[RACE] Searching the list for planned race \"${mandatoryExtraRaceData.name}\" by name for Year ${campaign.date.year}.")
+                    } else {
+                        MessageLog.v(TAG, "[RACE] Using smart racing for Year ${campaign.date.year}.")
+                    }
                     processSmartRacing(mandatoryExtraRaceData)
                 } else {
                     // Use the standard racing logic.
@@ -4531,6 +4555,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val sourceBitmap: Bitmap = game.imageUtils.getSourceBitmap()
         val listOfRaces = ArrayList<RaceDetails>()
         val extraRaceLocations = ArrayList<Point>()
+        // The prediction anchor of each row in extraRaceLocations: extractRaceName is calibrated for it, and the bracket point puts its crop off-frame.
+        val rowAnchors = ArrayList<Point>()
         val raceNamesList = ArrayList<String>()
 
         for (anchor in usableAnchors) {
@@ -4541,6 +4567,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
             val selectedExtraRace = IconRaceListSelectionBracketBottomRight.find(game.imageUtils).first ?: break
             extraRaceLocations.add(selectedExtraRace)
+            rowAnchors.add(anchor.location)
 
             // Extract race name for the goal-grade filter if trophy requirement is active.
             if (hasTrophyRequirement) {
@@ -4553,6 +4580,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
 
         // Filter to the goal's grade only for a positively read goal tier; an unread tier keeps the full list.
+        var filteredAnchors: List<Point> = rowAnchors
         val (filteredRaces, filteredLocations, filteredNames) =
             if (minimumGrade != null) {
                 val label = goalGradeLabel(minimumGrade)
@@ -4573,6 +4601,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     val filtered = goalIndices.map { listOfRaces[it] }
                     val filteredLocations = goalIndices.map { extraRaceLocations[it] }
                     val filteredNames = goalIndices.map { raceNamesList[it] }
+                    filteredAnchors = goalIndices.map { rowAnchors[it] }
                     Triple(filtered, filteredLocations, filteredNames)
                 }
             } else {
@@ -4606,13 +4635,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Determine the grade of the selected race and store it for retry purposes.
         // IMPORTANT: `index` is a position into `filteredRaces` (potentially a subset of the original list
-        // when the trophy-G1 filter applied). Use `filteredNames` / `filteredLocations` here so we look up
+        // when the trophy-G1 filter applied). Use `filteredNames` / `filteredAnchors` here so we look up
         // the grade/fans for the actually-selected race rather than misindexing into the unfiltered lists.
         val selectedRaceName =
             if (hasTrophyRequirement && index < filteredNames.size) {
                 filteredNames[index]
             } else {
-                game.imageUtils.extractRaceName(filteredLocations[index])
+                game.imageUtils.extractRaceName(filteredAnchors[index])
             }
         val raceDataList = lookupRaceInDatabase(campaign.date.day, selectedRaceName)
         val (selectedGrade, selectedFans) = sharedGradeAndFans(raceDataList)

@@ -97,7 +97,7 @@ class GrandConcertFanDeferredTurnTest {
         val extra = body("handleExtraRace")
         val planGate = extra.indexOf("if (fanRequirementForcesRace || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {")
         assertTrue(planGate in 0 until extra.indexOf("findMandatoryExtraRaceForCurrentTurn()"), "the plan lookup must be skipped only for a forcing fan arm")
-        assertTrue(extra.contains("if (fanRequirementForcesRace || hasInsufficientGoalRacePtsRequirement) {"), "the smart-vs-standard choice must follow the deferral")
+        assertTrue(extra.contains("fanOrGoalPtsRequirement = fanRequirementForcesRace || hasInsufficientGoalRacePtsRequirement,"), "the smart-vs-standard choice must follow the deferral")
         assertNoRawFanFlag(extra, "handleExtraRace")
     }
 
