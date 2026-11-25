@@ -311,7 +311,11 @@ class BetweenRunRecoveryTest {
             val limitAt = navigator.indexOf("val unknownLimit = betweenRunRecovery.unknownScreenLimit(MAX_CONSECUTIVE_UNKNOWNS)\n                if (consecutiveUnknowns >= unknownLimit) {")
             assertTrue(limitAt > navigator.indexOf("consecutiveUnknowns++"))
             // No forced rebinds while the game loads its way back: its splash screens are unknown by design.
-            assertTrue(navigator.contains("if (consecutiveUnknowns >= 2 && !betweenRunRecovery.gameComingBack) {\n                    rebindAccessibility()"))
+            assertTrue(
+                navigator.contains(
+                    "if (consecutiveUnknowns >= 2 && !betweenRunRecovery.gameComingBack) {\n                    if (unknownScreenNeedsRebind(ownInputProbe())) rebindAccessibility() else checkAccessibility()",
+                ),
+            )
             val decided = navigator.indexOf("when (betweenRunRecovery.onUnknownScreenLimit(")
             assertTrue(decided in navigator.indexOf("consecutiveUnknowns++") until navigator.indexOf("captureFailureScreenshot(\"unknown_state\")"))
             val unrecoverable = body(navigator, "private fun gameUnrecoverable(")

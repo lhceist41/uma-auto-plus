@@ -201,6 +201,27 @@ internal fun borrowRowMatchesPreference(rowText: String, preference: String): Bo
 internal fun careerStillInSlotAfterFinish(followsFinishedCareer: Boolean, newCareerLaunched: Boolean, careerInSlot: () -> Boolean): Boolean =
     followsFinishedCareer && !newCareerLaunched && careerInSlot()
 
+/**
+ * The word that confirms Home's CAREER button in an OCR read of its position: "CAREER", or the plain "Event" label below it. The
+ * Missions screens keep the Home tab selected and show an "Event Missions" button in the same region, so a read naming Missions
+ * is not the button.
+ */
+internal fun careerLabelWord(ocrText: String): String? {
+    val upper = ocrText.uppercase()
+    return when {
+        upper.contains("CAREER") -> "CAREER"
+        upper.contains("MISSION") -> null
+        upper.contains("EVENT") -> "Event"
+        else -> null
+    }
+}
+
+/**
+ * Whether an unrecognised screen gets a forced accessibility rebind (with the grant). The screen not moving says nothing about taps,
+ * since the bot taps nothing there, so a rebind needs the own-input probe to not see the bot's tap arrive.
+ */
+internal fun unknownScreenNeedsRebind(probe: OwnInputProbeResult): Boolean = probe != OwnInputProbeResult.ARRIVED
+
 /** Back presses from Support Formation, the furthest setup screen past Trainee Select, to Trainee Select. */
 internal const val TRAINEE_SELECT_MAX_BACKS = 2
 
@@ -1486,20 +1507,19 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                 }
                 // Wait and retry detection - do NOT tap blindly.
                 MessageLog.w(TAG, "[NAV] Unknown screen state ($consecutiveUnknowns/$unknownLimit). Waiting before retry...")
-                // An UNKNOWN screen is the exact signature of a dead accessibility service (taps stop
-                // landing, so the game never advances to a recognised screen). Rebind before retrying
-                // rather than burning all attempts against a service that will never respond. The
-                // first unknown does the cheap string check (catches the grant being wiped); from the
-                // second on, MuMu's nastier "enabled-but-dispatch-dead" mode is likely, so force a
-                // hard off->on rebind that the string check can't see. Not while the game loads its way
-                // back through its title: no tap is waiting to land then, and its splash screens are
-                // unknown by design.
+                // A dead accessibility service also leaves the bot on an unrecognised screen. The first
+                // unknown does the cheap string check (catches the grant being wiped); from the second
+                // on, MuMu's "enabled-but-dispatch-dead" mode, which the string check can't see, is
+                // possible. The bot taps nothing on an unknown screen, so the screen holding still is no
+                // sign of it: the own-input probe decides, each tick, and only a tap that did not arrive
+                // gets the hard off->on rebind. Not while the game loads its way back through its title:
+                // no tap is waiting to land then, and its splash screens are unknown by design.
                 if (!StartModule.secureSettingsGrant && consecutiveUnknowns >= 2 && !betweenRunRecovery.gameComingBack) {
                     // Without the grant: one probe per unknown episode, not a rebind every tick.
                     if (consecutiveUnknowns == 2) tapsStoppedWithoutGrant(detectedState)?.let { return it }
                     checkAccessibility()
                 } else if (consecutiveUnknowns >= 2 && !betweenRunRecovery.gameComingBack) {
-                    rebindAccessibility()
+                    if (unknownScreenNeedsRebind(ownInputProbe())) rebindAccessibility() else checkAccessibility()
                 } else {
                     checkAccessibility()
                 }
@@ -4941,9 +4961,10 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * screen (common during seasonal promos) cannot match; vertically 80%-92% gives OCR room
      * around the 85-88% label band. The "CAREER" text uses a decorative gold font Tesseract
      * often can't read, but the "Event" label directly below it is plain and reads reliably -
-     * either word confirms the button is present.
+     * either word confirms the button, unless the read names Missions ([careerLabelWord]).
      *
-     * @return The matched word ("CAREER" or "Event"), or null when neither was read.
+     * @return The matched word ("CAREER" or "Event"), or null when neither was read or the read
+     * names Missions.
      */
     private fun ocrCareerLabelAtHomePosition(bitmap: Bitmap): String? {
         return try {
@@ -4960,12 +4981,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                     debugName = "nav_career_ocr",
                 )
             MessageLog.i(TAG, "[NAV] [HOME] OCR result: '$ocrText'")
-            val ocrUpper = ocrText.uppercase()
-            when {
-                ocrUpper.contains("CAREER") -> "CAREER"
-                ocrUpper.contains("EVENT") -> "Event"
-                else -> null
-            }
+            careerLabelWord(ocrText)
         } catch (e: InterruptedException) {
             throw e
         } catch (e: Exception) {
