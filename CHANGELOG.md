@@ -13,11 +13,27 @@ New releases start with a one-line summary, then list what you need to do, what 
 ### Changed
 
 - **Rewards and Club:** Buy the Daily Sales selects every item as soon as the list opens instead of scrolling through it first, since Daily Sales items always cost Monies. It still buys nothing if the total cannot be read or is more than the Monies you hold.
+- **Training:** when Speed's failure chance is over every limit, the bot now reads the other trainings before resting, so one within its limit (usually Wit) can still be trained. It rests only when none is.
+- **Team Trials:** with the opponent setting on Bottom or Random, an opponent showing the "With Every Win!" bonus is picked instead. Top and Middle keep their row.
+- **Grand Concert:** when buying a technique, the bot prefers one that keeps the next song affordable, and the "buy nothing before the concert" hold now applies on the concert turn instead of the turn before.
+- **Errors:** a Session Error in a career or a daily mode, a Carat purchase or age check prompt, and a preset whose scenario this version does not play now stop the bot with a reason that says what to do. It taps nothing on the first two.
+- **Settings:** Export leaves out every bundled reference table, scenario events included.
 
 ### Fixed
 
+- **Training:** the failure chance is read from the selected training's own bubble, and a training whose failure chance cannot be read is skipped instead of taking another training's value.
+- **Team Trials:** during the weekly tallying period, when Team Race is greyed out on two frames in a row, Team Trials ends for that run and the Legend Race and Daily Extras still follow, instead of the bot tapping the dead button until it stopped with an error.
+- **Grand Concert:** songs are counted for the right concert cycle and Lessons visits get the right turn, also when a step moves the turn before the date is read, and a later date read corrects a no-buy mark that would have skipped the next visit.
+- **Run Queue:** between careers the bot no longer takes the Missions screens for Home and taps the Home tab to leave them. On an unrecognised screen it restarts the accessibility service unless it saw its own tap arrive.
+- **Run Queue:** a stop the bot requests while it is still setting up a run is reported as that stop with its reason instead of as an unhandled exception.
+- **Rewards and Club:** the Shop button on Home is found on the 2nd Anniversary "Special Shop!" layout, which covers its "Shop" label.
+- **Profiles:** renaming the active profile keeps it selected and active.
 - **Careers:** a game that froze on the main career screen is now restarted (still at most twice per run) instead of the bot looping or stopping with a request to rest in the game. On Android 14 and newer the bot can still only bring it to the front once. When the same turn keeps coming back without progress, the bot stops the queue with a reason that names the turn.
 - **Run Queue:** Home and the "Delay Between Runs" text now say that the wait between two runs normally comes after the next career has started. To stop before the next career starts, use Stop after this career.
+
+### Presets and game data
+
+- **Game data:** Shinko Windy (Wicked Punk) is in, so the bot knows her events, objectives and Grand Concert fan goals. She has no preset yet.
 
 ## [1.9.0] - 2026-11-17
 
