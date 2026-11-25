@@ -222,6 +222,14 @@ internal fun careerLabelWord(ocrText: String): String? {
  */
 internal fun unknownScreenNeedsRebind(probe: OwnInputProbeResult): Boolean = probe != OwnInputProbeResult.ARRIVED
 
+/**
+ * Whether an unrecognised screen gets the navigation's one Home-tab tap. Menu screens opened from another tab, such as Event Missions
+ * or the Veteran Roster, show the Home tab unselected and so never read as Home. The tab must be on screen and the own-input probe must
+ * see the bot's tap arrive; a lost or unread tap is left to the rebind.
+ */
+internal fun unknownScreenTapsHomeTab(homeTabRetried: Boolean, homeTabShows: () -> Boolean, probe: () -> OwnInputProbeResult): Boolean =
+    !homeTabRetried && homeTabShows() && probe() == OwnInputProbeResult.ARRIVED
+
 /** Back presses from Support Formation, the furthest setup screen past Trainee Select, to Trainee Select. */
 internal const val TRAINEE_SELECT_MAX_BACKS = 2
 
@@ -729,7 +737,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
     // navigator would re-enter Legacy Select handling each iteration instead of clicking Next.
     private var legacyAutoSelectAlreadyDone: Boolean = false
 
-    /** The Home tab was tapped once this navigation because Home showed no CAREER button. */
+    /** The Home tab was tapped once this navigation: Home showed no CAREER button, or an unknown screen showed the tab unselected. */
     private var homeTabRetried: Boolean = false
 
     // Back presses this navigation spent returning to Trainee Select from a later setup screen.
@@ -1522,6 +1530,25 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                     if (unknownScreenNeedsRebind(ownInputProbe())) rebindAccessibility() else checkAccessibility()
                 } else {
                     checkAccessibility()
+                }
+                // The check and the tap capture and tap outside detection's guard: anything but an interrupt is
+                // left to the loop head (a stop) or the next guarded detection (a dead capture or service).
+                try {
+                    if (consecutiveUnknowns >= 2 &&
+                        !betweenRunRecovery.gameComingBack &&
+                        unknownScreenTapsHomeTab(homeTabRetried, { ButtonMenuBarHomeUnselected.check(iu, region = Region.bottomHalf) }, { ownInputProbe() })
+                    ) {
+                        homeTabRetried = true
+                        if (ButtonMenuBarHomeUnselected.click(iu, region = Region.bottomHalf)) {
+                            MessageLog.i(TAG, "[NAV] Unknown screen with the Home tab unselected; tapped the Home tab once.")
+                        } else {
+                            MessageLog.w(TAG, "[NAV] Unknown screen: the Home tab was gone at the tap; the one Home-tab retry is used.")
+                        }
+                    }
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (e: Exception) {
+                    MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} at the unknown screen's Home-tab tap: ${e.message}. Leaving it to the next detection.")
                 }
                 waitSafe(2.0)
                 continue
