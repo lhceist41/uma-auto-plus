@@ -1856,6 +1856,21 @@
             }
         },
         {
+            "name": "bot stop: the scenario setting names no scenario this version plays",
+            "report": {
+                "kind": "STOPPED_BY_BOT",
+                "queueEnabled": true,
+                "totalRuns": 4,
+                "completedRuns": 1,
+                "reasonKey": "SCENARIO_UNSUPPORTED"
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The bot stopped the queue with 1 of 4 runs done: the selected scenario is not one this version of UMA Auto+ plays.",
+                "nextAction": "Select another preset on Home, or check for an UMA Auto+ update, then press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "bot stop: trainee mismatch, queue kept",
             "report": {
                 "kind": "STOPPED_BY_BOT",

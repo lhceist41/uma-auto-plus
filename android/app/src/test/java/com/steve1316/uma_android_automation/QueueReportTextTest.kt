@@ -130,6 +130,7 @@ class QueueReportTextTest {
             set += Regex("reasonKey = \"(\\w+)\"").findAll(startModule).map { it.groupValues[1] }
             set += Regex("queueStopKey = \"(\\w+)\"").findAll(startModule).map { it.groupValues[1] }
             set += Regex("queueStopKey = \"(\\w+)\"").findAll(source("$main/bot/Campaign.kt")).map { it.groupValues[1] }
+            set += Regex("queueStopKey = \"(\\w+)\"").findAll(source("$main/bot/Game.kt")).map { it.groupValues[1] }
             assertEquals(set, REPORT_REASON_KEYS.keys)
         }
     }

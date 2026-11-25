@@ -145,7 +145,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             GrandConcertScenario.KEY -> GrandConcert(this)
             "Daily Races" -> com.steve1316.uma_android_automation.bot.misc.DailyRaceTask(this)
             "Team Trials" -> com.steve1316.uma_android_automation.bot.misc.TeamTrialsTask(this)
-            else -> throw InterruptedException("Invalid scenario: $scenario")
+            else -> stopForUnknownScenario(scenario)
         }
 
     val isMiscTask: Boolean = task is com.steve1316.uma_android_automation.bot.misc.MiscTask
@@ -161,6 +161,17 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]Game"
+
+        /** Stops the run when the scenario setting names no mode this version plays, with the bot's own stop reason. */
+        internal fun stopForUnknownScenario(scenario: String): Nothing {
+            val reason = "The selected scenario is not one this version of UMA Auto+ plays. Select another preset on Home, then press Start again."
+            StartModule.queueStopKey = "SCENARIO_UNSUPPORTED"
+            StartModule.queueStopReason = reason
+            StartModule.queueStopRequested = true
+            // The reason reaches Home's banner verbatim, so the raw setting value stays in the log only.
+            MessageLog.e(TAG, "[ERROR] $reason Scenario setting: \"$scenario\".")
+            throw InterruptedException(reason)
+        }
 
         internal const val LOADING_DIALOG_CHECK_MS: Long = 90_000L
 

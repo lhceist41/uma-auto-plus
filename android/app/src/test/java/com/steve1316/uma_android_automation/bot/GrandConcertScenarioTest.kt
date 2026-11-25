@@ -292,7 +292,7 @@ class GrandConcertScenarioTest {
         @Test
         fun `an unknown scenario still aborts rather than defaulting to a campaign`() {
             val game = source("bot/Game.kt")
-            assertTrue(game.contains("else -> throw InterruptedException(\"Invalid scenario:"), "unknown-scenario abort was removed")
+            assertTrue(game.contains("else -> stopForUnknownScenario(scenario)"), "unknown-scenario abort was removed")
         }
 
         /**

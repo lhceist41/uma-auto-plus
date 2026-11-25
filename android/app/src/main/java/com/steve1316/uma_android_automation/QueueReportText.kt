@@ -405,6 +405,7 @@ internal val REPORT_REASON_KEYS =
                 "the game's scenario list never showed the scenario this run needs. A game update may have changed the list.",
                 "Check for an UMA Auto+ update",
             ),
+        "SCENARIO_UNSUPPORTED" to KeyText("the selected scenario is not one this version of UMA Auto+ plays.", "Select another preset on Home, or check for an UMA Auto+ update"),
         CAREER_NOT_FINISHED to
             KeyText("the game's daily reset or another interruption stopped the career's Finish. The career is kept, and Start finishes it.", null),
         "CONNECTION_LOST" to KeyText("the game lost its connection to its server and did not reconnect in time.", "Check the device's internet connection and clear the error in the game"),
