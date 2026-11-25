@@ -69,6 +69,22 @@ class LaunchIdentityHashTest {
         }
 
         @Test
+        fun `queueIdentity reproduces every queue vector, kept across a queue's own writes and changed for another queue`() {
+            val a = vectors.getJSONArray("queueIdentity")
+            assertTrue(a.length() >= 7)
+            val all = (0 until a.length()).map { a.getJSONObject(it) }
+            val byName = all.associateBy { it.getString("name") }
+            for (v in all) {
+                val name = v.getString("name")
+                assertEquals(v.getString("identity"), LaunchIdentityGate.queueIdentity(rows(v), v.getBoolean("rotation")), name)
+                val slashKeyed = rows(v).mapKeys { (key, _) -> key.replaceFirst('.', '/') }
+                assertEquals(v.getString("identity"), LaunchIdentityGate.snapshotQueueIdentity(slashKeyed, v.getBoolean("rotation")), name)
+                if (v.has("sameAs")) assertEquals(byName.getValue(v.getString("sameAs")).getString("identity"), v.getString("identity"), name)
+                if (v.has("differsFrom")) assertNotEquals(byName.getValue(v.getString("differsFrom")).getString("identity"), v.getString("identity"), name)
+            }
+        }
+
+        @Test
         fun `the bot's slash-keyed snapshot hashes the same as the app's dot-keyed rows`() {
             val v = identity("a key containing a dot belongs to the category before the first dot")
             val snapshot = rows(v).mapKeys { (key, _) -> key.replaceFirst('.', '/') }

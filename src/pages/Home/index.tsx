@@ -26,7 +26,7 @@ import { useWhatsNew } from "../../hooks/useWhatsNew"
 import { useKeyboardHeight } from "../../hooks/useKeyboardHeight"
 import { useBugReport } from "../../hooks/useBugReport"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../../data/characterPresets"
-import { bumpSettingsRevision, createSingleFlight } from "../../lib/launchConfig"
+import { bumpSettingsRevision, createSingleFlight, isSameQueue, rowsFromSettingsObject } from "../../lib/launchConfig"
 import { presetCharacter } from "../../data/presetMeta"
 import { deriveInGameName, deriveExcludeOutfits, presetLine, presetSubtitle } from "../../lib/rotationSnapshots"
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
@@ -158,7 +158,7 @@ const Home = () => {
     const [avoidWarnings, setAvoidWarnings] = useState<{ label: string; reason: string }[]>([])
     const [showPreflightDialog, setShowPreflightDialog] = useState<boolean>(false)
     const [preflightItems, setPreflightItems] = useState<PreflightItem[]>([])
-    const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number; phase: string } | null>(null)
+    const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number; phase: string; identity: string | null } | null>(null)
     const [lastSession, setLastSession] = useState<LastSessionView | null>(null)
     // The self-repair grant as last read: undefined until the first read, null when the probe failed.
     const [secureSettingsGrant, setSecureSettingsGrant] = useState<boolean | null | undefined>(undefined)
@@ -189,6 +189,7 @@ const Home = () => {
                               totalRuns: state.totalRuns,
                               ageMinutes: state.ageMinutes,
                               phase: state.phase,
+                              identity: state.identity ?? null,
                           }
                         : null
                 )
@@ -436,19 +437,21 @@ const Home = () => {
 
     /**
      * Why pressing Start will not auto-resume the saved run, or null when it will. Mirrors the
-     * three ways Kotlin's plain-Start resume (onStartEvent) declines to re-enter a saved queue,
-     * so the banner can never promise a resume that will not happen.
+     * ways Kotlin's plain-Start resume (onStartEvent, resumeRefusal) declines to re-enter a saved
+     * queue, so the banner can never promise a resume that will not happen.
      */
-    const noAutoResumeReason: "queueDisabled" | "totalsDiffer" | "noRunLeft" | null = useMemo(() => {
+    const noAutoResumeReason: "queueDisabled" | "totalsDiffer" | "settingsChanged" | "noRunLeft" | null = useMemo(() => {
         if (!interruptedQueue) return null
         if (!bsc.settings.runQueue.enableRunQueue) return "queueDisabled"
         if (bsc.settings.runQueue.totalRuns !== interruptedQueue.totalRuns) return "totalsDiffer"
+        // Start saves these settings before the bot hashes them, so they predict the bot's identity.
+        if (!isSameQueue(interruptedQueue.identity, rowsFromSettingsObject(bsc.settings))) return "settingsChanged"
         // Kotlin re-enters the saved run whenever its career was in flight (resumePlanFor), rotation
         // or not; after a finished career it starts the next run. When that next run is past the
         // end, Kotlin clears the state and reports that there was nothing to resume.
         const nextRun = interruptedQueue.phase === "career" ? interruptedQueue.currentRun : interruptedQueue.currentRun + 1
         return nextRun > interruptedQueue.totalRuns ? "noRunLeft" : null
-    }, [interruptedQueue, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])
+    }, [interruptedQueue, bsc.settings])
 
     /**
      * Action label for the center button: what pressing it will do, not which scenario is
@@ -973,11 +976,13 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
                             ? "Run Queue is turned off, so this saved run will not resume. Pressing Start plays a single career instead and leaves the saved run alone."
                             : noAutoResumeReason === "totalsDiffer"
                               ? "Your queue length changed since this run was saved, so it cannot be resumed. Pressing Start discards it and begins a new queue with your current settings."
-                              : noAutoResumeReason === "noRunLeft"
-                                ? "This saved queue has no run left to resume. Pressing Start reports the queue as complete without playing another career."
-                                : interruptedReport?.paused
-                                  ? `Pressing Start continues this queue with run ${interruptedQueue.currentRun + 1}.`
-                                  : "Pressing Start resumes this queue automatically from where it left off. Make sure the game is at the training menu first."}
+                              : noAutoResumeReason === "settingsChanged"
+                                ? "This run was saved with different settings or by an earlier app version, so it cannot be resumed. Pressing Start discards it and begins a new queue at run 1 with your current settings."
+                                : noAutoResumeReason === "noRunLeft"
+                                  ? "This saved queue has no run left to resume. Pressing Start reports the queue as complete without playing another career."
+                                  : interruptedReport?.paused
+                                    ? `Pressing Start continues this queue with run ${interruptedQueue.currentRun + 1}.`
+                                    : "Pressing Start resumes this queue automatically from where it left off. Make sure the game is at the training menu first."}
                     </Text>
                     {noAutoResumeReason !== null && (
                         <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 8 }}>
@@ -987,7 +992,9 @@ If your phone is not 1080 wide, switch its screen resolution to FHD+ if it offer
                                     ? "Run Queue is currently disabled."
                                     : noAutoResumeReason === "totalsDiffer"
                                       ? `Configured runs (${bsc.settings.runQueue.totalRuns}) differs from the saved run's total (${interruptedQueue.totalRuns}).`
-                                      : "The saved run was already the last one in its queue."}
+                                      : noAutoResumeReason === "settingsChanged"
+                                        ? "The saved run does not match your current settings or app version."
+                                        : "The saved run was already the last one in its queue."}
                             </Text>
                         </View>
                     )}

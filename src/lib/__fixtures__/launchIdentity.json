@@ -1,5 +1,5 @@
 {
-    "note": "Golden vectors shared by launchIdentityVectors.test.ts (JS) and LaunchIdentityHashTest.kt (Kotlin). Generated from src/lib/launchConfig.ts; both implementations must reproduce every hash.",
+    "note": "Golden vectors shared by launchIdentityVectors.test.ts (JS) and LaunchIdentityHashTest.kt (Kotlin), including the queue identity a saved queue resume record carries. Generated from src/lib/launchConfig.ts; both implementations must reproduce every hash.",
     "categories": ["general", "training", "trainingEvent", "skills", "racing", "runQueue"],
     "excludedKeys": ["general.settingsRevision", "racing.racingPlanData"],
     "stableHash": [
@@ -119,6 +119,139 @@
                 "RUNQUEUE.reuseLastLaunchSetup": "true"
             },
             "hash": "811c9dc5"
+        }
+    ],
+    "queueIdentity": [
+        {
+            "name": "a queue's settings",
+            "rows": {
+                "general.scenario": "Unity Cup",
+                "general.appliedPresetTrainee": "King Halo",
+                "training.statPrioritization": "[\"Speed\",\"Power\",\"Wit\"]",
+                "racing.racingPlan": "[]",
+                "runQueue.enableRunQueue": "true",
+                "runQueue.totalRuns": "2",
+                "runQueue.enableTraineeRotation": "false",
+                "runQueue.traineeRotation": "[]",
+                "general.settingsRevision": "7",
+                "debug.enableDebugMode": "false",
+                "discord.enableDiscordNotifications": "false"
+            },
+            "rotation": false,
+            "identity": "settings:8c973d18"
+        },
+        {
+            "name": "the same queue with another scenario",
+            "rows": {
+                "general.scenario": "Team Trials",
+                "general.appliedPresetTrainee": "King Halo",
+                "training.statPrioritization": "[\"Speed\",\"Power\",\"Wit\"]",
+                "racing.racingPlan": "[]",
+                "runQueue.enableRunQueue": "true",
+                "runQueue.totalRuns": "2",
+                "runQueue.enableTraineeRotation": "false",
+                "runQueue.traineeRotation": "[]",
+                "general.settingsRevision": "7",
+                "debug.enableDebugMode": "false",
+                "discord.enableDiscordNotifications": "false"
+            },
+            "rotation": false,
+            "differsFrom": "a queue's settings",
+            "identity": "settings:1ab59133"
+        },
+        {
+            "name": "the same queue with debug, discord and revision rows changed",
+            "rows": {
+                "general.scenario": "Unity Cup",
+                "general.appliedPresetTrainee": "King Halo",
+                "training.statPrioritization": "[\"Speed\",\"Power\",\"Wit\"]",
+                "racing.racingPlan": "[]",
+                "runQueue.enableRunQueue": "true",
+                "runQueue.totalRuns": "2",
+                "runQueue.enableTraineeRotation": "false",
+                "runQueue.traineeRotation": "[]",
+                "general.settingsRevision": "8",
+                "debug.enableDebugMode": "true",
+                "discord.enableDiscordNotifications": "true"
+            },
+            "rotation": false,
+            "sameAs": "a queue's settings",
+            "identity": "settings:8c973d18"
+        },
+        {
+            "name": "a rotation queue",
+            "rows": {
+                "general.scenario": "Unity Cup",
+                "general.appliedPresetTrainee": "King Halo",
+                "training.statPrioritization": "[\"Speed\",\"Power\",\"Wit\"]",
+                "racing.racingPlan": "[]",
+                "runQueue.enableRunQueue": "true",
+                "runQueue.totalRuns": "4",
+                "runQueue.enableTraineeRotation": "true",
+                "runQueue.traineeRotation": "[{\"inGameName\":\"King Halo\"},{\"inGameName\":\"Special Week\"}]",
+                "general.settingsRevision": "7",
+                "debug.enableDebugMode": "false",
+                "discord.enableDiscordNotifications": "false"
+            },
+            "rotation": true,
+            "identity": "runQueue:a7f6f679"
+        },
+        {
+            "name": "the rotation queue after a snapshot apply rewrote its general and training rows",
+            "rows": {
+                "general.scenario": "URA Finale",
+                "general.appliedPresetTrainee": "Special Week",
+                "training.statPrioritization": "[\"Stamina\",\"Speed\"]",
+                "racing.racingPlan": "[]",
+                "runQueue.enableRunQueue": "true",
+                "runQueue.totalRuns": "4",
+                "runQueue.enableTraineeRotation": "true",
+                "runQueue.traineeRotation": "[{\"inGameName\":\"King Halo\"},{\"inGameName\":\"Special Week\"}]",
+                "general.settingsRevision": "7",
+                "debug.enableDebugMode": "false",
+                "discord.enableDiscordNotifications": "false"
+            },
+            "rotation": true,
+            "sameAs": "a rotation queue",
+            "identity": "runQueue:a7f6f679"
+        },
+        {
+            "name": "the rotation queue with another trainee list",
+            "rows": {
+                "general.scenario": "Unity Cup",
+                "general.appliedPresetTrainee": "King Halo",
+                "training.statPrioritization": "[\"Speed\",\"Power\",\"Wit\"]",
+                "racing.racingPlan": "[]",
+                "runQueue.enableRunQueue": "true",
+                "runQueue.totalRuns": "4",
+                "runQueue.enableTraineeRotation": "true",
+                "runQueue.traineeRotation": "[{\"inGameName\":\"King Halo\"}]",
+                "general.settingsRevision": "7",
+                "debug.enableDebugMode": "false",
+                "discord.enableDiscordNotifications": "false"
+            },
+            "rotation": true,
+            "differsFrom": "a rotation queue",
+            "identity": "runQueue:55b0537c"
+        },
+        {
+            "name": "the rotation queue with another run count",
+            "rows": {
+                "general.scenario": "Unity Cup",
+                "general.appliedPresetTrainee": "King Halo",
+                "training.statPrioritization": "[\"Speed\",\"Power\",\"Wit\"]",
+                "racing.racingPlan": "[]",
+                "runQueue.enableRunQueue": "true",
+                "runQueue.totalRuns": "6",
+                "runQueue.enableTraineeRotation": "true",
+                "runQueue.traineeRotation": "[{\"inGameName\":\"King Halo\"},{\"inGameName\":\"Special Week\"}]",
+                "general.settingsRevision": "7",
+                "debug.enableDebugMode": "false",
+                "discord.enableDiscordNotifications": "false"
+            },
+            "rotation": true,
+            "differsFrom": "a rotation queue",
+            "identity": "runQueue:c99f3c4b"
         }
     ]
 }

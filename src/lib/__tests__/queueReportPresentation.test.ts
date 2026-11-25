@@ -3,6 +3,7 @@ import path from "path"
 import { transformSync } from "@babel/core"
 import { interruptedBannerReport, interruptedQueueTitle, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../queueReportPresentation"
 import { sendStopAfterCareer } from "../stopAfterCareer"
+import { isSameQueue, queueIdentity, rowsFromSettingsObject } from "../launchConfig"
 
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, "../__fixtures__/queueReportText.json"), "utf8")) as {
     cases: { name: string; report: Record<string, unknown>; text: { title: string; reason: string; nextAction: string | null } }[]
@@ -431,7 +432,73 @@ describe("Home wiring", () => {
         expect(memo).not.toContain("enableTraineeRotation")
     })
 
-    it("says \"1 run\" on the queue start button for a one-run queue", () => {
+    describe("a saved run from another queue", () => {
+        // The actual memo body, run with host substitutes for React.
+        function reason(interruptedQueue: unknown, settings: unknown) {
+            const start = home.indexOf("    const noAutoResumeReason")
+            const end = home.indexOf("\n", home.indexOf("\n    }, [", start) + 1)
+            const code = transformSync(`${home.slice(start, end)}\nreturn noAutoResumeReason`, {
+                configFile: false,
+                babelrc: false,
+                parserOpts: { allowReturnOutsideFunction: true },
+                presets: ["@babel/preset-typescript"],
+                filename: "memo.ts",
+            })!.code!
+            return new Function("useMemo", "interruptedQueue", "bsc", "isSameQueue", "rowsFromSettingsObject", code)(
+                (f: () => unknown) => f(),
+                interruptedQueue,
+                { settings },
+                isSameQueue,
+                rowsFromSettingsObject
+            )
+        }
+
+        const settings = (scenario: string, rotation = false) => ({
+            general: { scenario, settingsRevision: 3 },
+            training: { statPrioritization: ["Speed", "Power"] },
+            runQueue: { enableRunQueue: true, totalRuns: 2, enableTraineeRotation: rotation, traineeRotation: rotation ? [{ inGameName: "King Halo" }] : [] },
+            debug: { enableDebugMode: false },
+        })
+        const saved = (identity: string | null, phase = "launching") => ({ currentRun: 1, totalRuns: 2, ageMinutes: 1233, phase, identity })
+        const kingHalo = settings("Unity Cup")
+        const identityOf = (s: ReturnType<typeof settings>, rotation = false) => queueIdentity(rowsFromSettingsObject(s as any), rotation)
+
+        it("says Start begins a new queue when the settings changed, e.g. a Team Trials queue after a career queue", () => {
+            expect(reason(saved(identityOf(kingHalo)), settings("Team Trials"))).toBe("settingsChanged")
+            expect(reason(saved(null), kingHalo)).toBe("settingsChanged")
+        })
+
+        it("still promises the resume of the same queue, and keeps a rotation queue's resume across its own rewrites", () => {
+            expect(reason(saved(identityOf(kingHalo)), { ...kingHalo, debug: { enableDebugMode: true }, general: { ...kingHalo.general, settingsRevision: 4 } })).toBeNull()
+            const rotation = settings("Unity Cup", true)
+            expect(reason(saved(identityOf(rotation, true)), { ...rotation, general: { scenario: "URA Finale", settingsRevision: 3 } })).toBeNull()
+            expect(reason(saved(identityOf(rotation, true)), { ...rotation, runQueue: { ...rotation.runQueue, traineeRotation: [{ inGameName: "Special Week" }] } })).toBe("settingsChanged")
+        })
+
+        it("keeps the earlier reasons first, as Kotlin checks them", () => {
+            expect(reason(saved(null), { ...kingHalo, runQueue: { ...kingHalo.runQueue, enableRunQueue: false } })).toBe("queueDisabled")
+            expect(reason(saved(null), { ...kingHalo, runQueue: { ...kingHalo.runQueue, totalRuns: 3 } })).toBe("totalsDiffer")
+            expect(reason({ ...saved(identityOf(kingHalo)), currentRun: 2 }, kingHalo)).toBe("noRunLeft")
+        })
+
+        it("reads the identity from the bridge and words the refusal at the banner", async () => {
+            const shown: unknown[] = []
+            const refresh = callback("refreshInterruptedQueue", {
+                useCallback: (f: unknown) => f,
+                StartModule: { getInterruptedQueueState: () => Promise.resolve({ currentRun: 1, totalRuns: 2, ageMinutes: 5, phase: "launching", identity: "settings:8c973d18" }) },
+                setInterruptedQueue: (v: unknown) => shown.push(v),
+            })
+            refresh()
+            await flush()
+            expect(shown).toEqual([{ currentRun: 1, totalRuns: 2, ageMinutes: 5, phase: "launching", identity: "settings:8c973d18" }])
+            expect(home).toContain(
+                '? "This run was saved with different settings or by an earlier app version, so it cannot be resumed. Pressing Start discards it and begins a new queue at run 1 with your current settings."'
+            )
+            expect(home).toContain('? "The saved run does not match your current settings or app version."')
+        })
+    })
+
+    it('says "1 run" on the queue start button for a one-run queue', () => {
         expect(home).toContain('return `Start Queue (${runs} ${runs === 1 ? "run" : "runs"})`')
     })
 

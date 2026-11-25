@@ -122,6 +122,23 @@ export function identityFromRows(rows: Record<string, any>): LaunchConfigIdentit
     }
 }
 
+/**
+ * The identity a saved queue resume record carries (LaunchIdentityGate.queueIdentity in Kotlin). A
+ * rotation queue hashes its runQueue rows only, because its snapshot applies rewrite the other hashed
+ * rows between runs; the prefix names the form.
+ */
+export function queueIdentity(rows: Record<string, any>, rotation: boolean): string {
+    if (!rotation) return `settings:${identityFromRows(rows).hash}`
+    const runQueueRows = Object.fromEntries(Object.entries(rows).filter(([rowKey]) => rowKey.split(".")[0] === "runQueue"))
+    return `runQueue:${identityFromRows(runQueueRows).hash}`
+}
+
+/** Whether a saved queue identity is the queue [rows] describe, in the form the saved identity names. A record without one never is. */
+export function isSameQueue(savedIdentity: string | null | undefined, rows: Record<string, any>): boolean {
+    if (!savedIdentity) return false
+    return savedIdentity === queueIdentity(rows, savedIdentity.startsWith("runQueue:"))
+}
+
 /** Flatten the in-memory Settings object into the "category.key" row map [identityFromRows] eats. */
 export function rowsFromSettingsObject(settings: Settings): Record<string, any> {
     const rows: Record<string, any> = {}

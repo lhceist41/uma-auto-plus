@@ -1,6 +1,6 @@
 import { readFileSync } from "fs"
 import { join } from "path"
-import { LAUNCH_CRITICAL_CATEGORIES, LAUNCH_IDENTITY_EXCLUDED_KEYS, identityFromRows, stableHash } from "../launchConfig"
+import { LAUNCH_CRITICAL_CATEGORIES, LAUNCH_IDENTITY_EXCLUDED_KEYS, identityFromRows, isSameQueue, queueIdentity, stableHash } from "../launchConfig"
 
 // Shared with LaunchIdentityHashTest.kt: the bot recomputes this hash from its own read of the
 // settings and refuses a launch whose hash differs from the one this side verified, so both
@@ -11,6 +11,7 @@ interface Vectors {
     excludedKeys: string[]
     stableHash: { name: string; input: string; hash: string }[]
     identity: { name: string; rows: Record<string, string>; hash: string; sameHashAs?: string }[]
+    queueIdentity: { name: string; rows: Record<string, string>; rotation: boolean; identity: string; sameAs?: string; differsFrom?: string }[]
 }
 
 const vectors: Vectors = JSON.parse(readFileSync(join(__dirname, "..", "__fixtures__", "launchIdentity.json"), "utf8"))
@@ -44,6 +45,34 @@ describe("launch identity golden vectors", () => {
         expect(byName["the same rows with reuse flipped to true"].hash).not.toBe(byName["launch-critical rows in shuffled order, with a JSON-looking value"].hash)
         const surrogate = vectors.identity.find((v) => Object.values(v.rows).some((value) => /[\ud800-\udbff]/.test(value)) && Object.keys(v.rows).some((key) => /[\ud800-\udbff]/.test(key)))
         expect(surrogate).toBeDefined()
+    })
+})
+
+describe("queue identity golden vectors", () => {
+    const byName = Object.fromEntries(vectors.queueIdentity.map((v) => [v.name, v]))
+
+    it.each(vectors.queueIdentity.map((v) => [v.name, v] as const))("queue identity: %s", (_name, v) => {
+        expect(queueIdentity(v.rows, v.rotation)).toBe(v.identity)
+        expect(isSameQueue(v.identity, v.rows)).toBe(true)
+    })
+
+    it("keep a queue's identity across what it does to itself and change it for another queue", () => {
+        for (const v of vectors.queueIdentity) {
+            if (v.sameAs) expect(v.identity).toBe(byName[v.sameAs].identity)
+            if (v.differsFrom) expect(v.identity).not.toBe(byName[v.differsFrom].identity)
+        }
+        // A rotation apply rewrites general and training rows; only a non-rotation identity sees them.
+        const applied = byName["the rotation queue after a snapshot apply rewrote its general and training rows"]
+        expect(queueIdentity(applied.rows, false)).not.toBe(queueIdentity(byName["a rotation queue"].rows, false))
+    })
+
+    it("refuse a record without an identity or from another queue", () => {
+        const queue = byName["a queue's settings"]
+        expect(isSameQueue(null, queue.rows)).toBe(false)
+        expect(isSameQueue(undefined, queue.rows)).toBe(false)
+        expect(isSameQueue("", queue.rows)).toBe(false)
+        expect(isSameQueue(queue.identity, byName["the same queue with another scenario"].rows)).toBe(false)
+        expect(isSameQueue(byName["a rotation queue"].identity, queue.rows)).toBe(false)
     })
 })
 

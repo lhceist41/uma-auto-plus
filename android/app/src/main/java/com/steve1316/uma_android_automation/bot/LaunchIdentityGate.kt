@@ -123,4 +123,15 @@ object LaunchIdentityGate {
 
     /** [identityHash] of the bot's launch snapshot, whose rows are keyed "category/key". */
     fun snapshotIdentityHash(snapshot: Map<String, String>): String = identityHash(snapshot.mapKeys { (key, _) -> key.replaceFirst('/', '.') })
+
+    /**
+     * The identity a saved queue resume record carries: queueIdentity in src/lib/launchConfig.ts. A rotation queue
+     * hashes its runQueue rows only, because its snapshot applies rewrite the other hashed rows between runs; the
+     * prefix names the form, so the app can recompute it without parsing the rotation list.
+     */
+    fun queueIdentity(rows: Map<String, String>, rotation: Boolean): String =
+        if (rotation) "runQueue:" + identityHash(rows.filterKeys { it.substringBefore('.') == "runQueue" }) else "settings:" + identityHash(rows)
+
+    /** [queueIdentity] of the bot's launch snapshot, whose rows are keyed "category/key". */
+    fun snapshotQueueIdentity(snapshot: Map<String, String>, rotation: Boolean): String = queueIdentity(snapshot.mapKeys { (key, _) -> key.replaceFirst('/', '.') }, rotation)
 }

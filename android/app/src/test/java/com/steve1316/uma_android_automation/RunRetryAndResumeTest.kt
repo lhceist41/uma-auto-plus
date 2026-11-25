@@ -206,7 +206,7 @@ class RunRetryAndResumeTest {
         @Test
         fun `every saved position carries the count, and a resume reads it back`() {
             assertTrue(loop.contains("saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_CAREER, completedRuns = completedRuns)"))
-            assertTrue(startModule.contains("QueueState(active, currentRun, totalRuns, ageMs, phase, raw[\"completedRuns\"]?.toIntOrNull(), raw[\"rotationOffset\"]?.toIntOrNull() ?: 0)"))
+            assertTrue(startModule.contains("QueueState(active, currentRun, totalRuns, ageMs, phase, raw[\"completedRuns\"]?.toIntOrNull(), raw[\"rotationOffset\"]?.toIntOrNull() ?: 0, identity)"))
             assertTrue(startModule.contains("val plan = resumePlanFor(saved.phase, saved.currentRun, saved.completedRuns)"))
             assertTrue(startModule.contains("val next = plan.startFromRun"))
             assertFalse(startModule.contains("rotation.enabled && saved.phase"), "the resume no longer depends on rotation")

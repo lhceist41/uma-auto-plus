@@ -300,6 +300,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                         arrayOf("queueState", "rotationOffset", rotationCursorOffset.toString()),
                     )
+                    db.execSQL(
+                        "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                        arrayOf("queueState", "queueIdentity", queueIdentity),
+                    )
                 }
                 db.execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
@@ -330,6 +334,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          *           state saved before the count was persisted.
          * @property rotationOffset The rotation resync offset in force when this was saved; 0 for a
          *           state saved before the offset was persisted.
+         * @property identity The queue identity of the session that saved this, or null for a state
+         *           saved before the identity was persisted.
          */
         data class QueueState(
             val active: Boolean,
@@ -339,6 +345,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             val phase: String,
             val completedRuns: Int? = null,
             val rotationOffset: Int = 0,
+            val identity: String? = null,
         )
 
         /**
@@ -406,7 +413,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             // than skip. A redundant re-run is harmless; skipping the wrong way is the bug.
             val phase = raw["phase"] ?: PHASE_CAREER
 
-            return QueueState(active, currentRun, totalRuns, ageMs, phase, raw["completedRuns"]?.toIntOrNull(), raw["rotationOffset"]?.toIntOrNull() ?: 0)
+            val identity = raw["queueIdentity"]?.takeIf { it.isNotEmpty() }
+            return QueueState(active, currentRun, totalRuns, ageMs, phase, raw["completedRuns"]?.toIntOrNull(), raw["rotationOffset"]?.toIntOrNull() ?: 0, identity)
         }
 
         /**
@@ -538,6 +546,18 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             val prior = savedCompletedRuns?.coerceIn(0, ceiling) ?: ceiling
             return ResumePlan(if (phase == PHASE_CAREER) currentRun else currentRun + 1, prior)
         }
+
+        /**
+         * Why Start may not resume [saved] in a queue of [totalRuns] runs whose queue identity is [identity], or null when it
+         * may. A record stopped by the player keeps its run for the next Start, so without the identity a later, different
+         * queue of the same length resumed it: it skipped its own first run and counted the earlier queue's career as its own.
+         */
+        fun resumeRefusal(saved: QueueState, totalRuns: Int, identity: String): String? =
+            when {
+                saved.totalRuns != totalRuns -> "saved totalRuns=${saved.totalRuns} differs from current totalRuns=$totalRuns"
+                saved.identity != identity -> "the settings or the app version changed since it was saved (saved ${saved.identity ?: "without an identity"}, now $identity)"
+                else -> null
+            }
 
         /**
          * A stop keeps the resume record so Start re-enters the saved run: a bot stop always, a player's stop only when it ended a run whose
@@ -926,6 +946,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         private var rotationCursorOffset: Int = 0
 
+        /** This session's queue identity ([LaunchIdentityGate.queueIdentity]), stamped into every active resume record. */
+        @Volatile
+        private var queueIdentity: String = ""
+
         /**
          * Rotation slot the mismatch guard resynced the in-flight run onto, or -1. Consumed (and
          * cleared) by the next [applyRotationForRun] so its switch-boundary check compares against
@@ -1208,7 +1232,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      *
      * Delegates to [loadQueueState], the same validated source the auto-resume decision in
      * [onStartEvent] reads, instead of maintaining a second copy of the active/stale/malformed
-     * checks. Returns a WritableMap with {currentRun, totalRuns, ageMinutes, phase}, or null if
+     * checks. Returns a WritableMap with {currentRun, totalRuns, ageMinutes, phase, identity}, or null if
      * there is nothing resumable.
      */
     @ReactMethod
@@ -1223,6 +1247,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         map.putInt("totalRuns", saved.totalRuns)
         map.putDouble("ageMinutes", saved.ageMs / 60000.0)
         map.putString("phase", saved.phase)
+        map.putString("identity", saved.identity)
         promise.resolve(map)
     }
 
@@ -1707,6 +1732,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     @Volatile
     private var launchSnapshotReadFinished = false
 
+    /** The rows this session's launch snapshot read, for its queue identity. */
+    @Volatile
+    private var launchSnapshotRows: Map<String, String> = emptyMap()
+
     /** Whether the last [runSingleGame] ended by posting an ExceptionEvent, which also stops the service. */
     @Volatile
     private var lastRunPostedException = false
@@ -2089,6 +2118,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
             }
         }
+        launchSnapshotRows = rows
         launchSnapshotReadFinished = true
         return rows
     }
@@ -2312,6 +2342,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
                 launchSnapshotReadStarted = false
                 launchSnapshotReadFinished = false
+                launchSnapshotRows = emptyMap()
 
                 // BotService has initialized SettingsHelper; read one SQLite snapshot after restoration.
                 val nonUiEntry = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.current == null
@@ -2383,6 +2414,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // skip to the next trainee's snapshot) from a normal single-trainee queue. Also used
                 // by the cold-start snapshot load and the between-run switch further down.
                 val rotation = loadRotationConfig()
+                queueIdentity = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.snapshotQueueIdentity(launchSnapshotRows, rotation.enabled)
                 if (enableRunQueue && rotation.enabled) {
                     MessageLog.i(TAG, "[ROTATION] Enabled: ${rotation.count} trainees, switching every ${rotation.switchEvery} run(s).")
                     // A rotation queue depends on the per-trainee snapshots the app's Start flow
@@ -2414,9 +2446,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // If a queue was running when the previous process was killed (TRIM_EMPTY,
                 // watchdog self-restart, etc.), SQLite still has queueState.active=true with
                 // the run number that was in flight. Re-enter that run if its career was in
-                // flight, else start the next one. Only applies when queueing is currently enabled AND the saved totalRuns
-                // matches the current setting. If the user changed queue config after the
-                // crash, the saved state is no longer applicable and we ignore it.
+                // flight, else start the next one. Only applies when queueing is currently enabled AND the saved record
+                // belongs to this queue (resumeRefusal: same totalRuns and queue identity). If the
+                // settings changed since it was saved, it is cleared and the queue starts at run 1.
                 // Careers already finished before this process started, per the persisted queue
                 // state (resumePlanFor). Feeds completedRuns below so a queue resumed at run 4 of 6
                 // that goes on to finish runs 4-6 reports 6/6 completed, not 3/6 (2026-07-28 undercount).
@@ -2431,11 +2463,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     run {
                         if (!enableRunQueue) return@run 1
                         val saved = loadQueueState(context) ?: return@run 1
-                        if (saved.totalRuns != totalRuns) {
-                            MessageLog.i(
-                                TAG,
-                                "[RESUME] Ignoring saved queue state (saved totalRuns=${saved.totalRuns} differs from current totalRuns=$totalRuns).",
-                            )
+                        val refusal = resumeRefusal(saved, totalRuns, queueIdentity)
+                        if (refusal != null) {
+                            val slot = if (saved.phase == PHASE_CAREER) " A career from that queue may still be in the game." else ""
+                            MessageLog.i(TAG, "[RESUME] Ignoring saved queue state ($refusal); starting a new queue at run 1.$slot")
                             clearQueueState(context)
                             return@run 1
                         }
