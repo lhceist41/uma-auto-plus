@@ -5982,13 +5982,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * and start the bot. Logs the raw OCR, the parsed deck number, and the OCR box so
      * [deckNumberColFraction] / [deckNumberRowYFraction] / deckNumberBox* can be tuned. Taps nothing.
      */
-    fun debugDeckNumberRead(injectedUtils: CustomImageUtils? = null) {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[DECK-NUM-TEST] Failed to initialise image utils.")
-            return
-        }
+    fun debugDeckNumberRead(injectedUtils: CustomImageUtils) {
+        imageUtils = injectedUtils
         val bitmap = iu.getSourceBitmap()
         val boxW = (bitmap.width * deckNumberBoxW).toInt()
         val boxH = (bitmap.height * deckNumberBoxH).toInt()
@@ -6050,8 +6045,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * few-pixel row drift a positional digest cannot. The signature is never logged or persisted.
      * This path does not select a row, close the picker, or continue the launch.
      */
-    internal fun rehearseHostBorrowSwipe(injectedUtils: CustomImageUtils? = null): HostSwipeDiagnosticReport {
-        prepareHostSwipeDiagnostic(injectedUtils)?.let { return unavailableHostSwipeReport(HostInputScope.BORROW_LIST_SCROLL, it) }
+    internal fun rehearseHostBorrowSwipe(injectedUtils: CustomImageUtils): HostSwipeDiagnosticReport {
+        imageUtils = injectedUtils
         val beforeBitmap = iu.getSourceBitmap()
         val before = borrowHostSwipeFingerprint(beforeBitmap)
         val request = borrowHostSwipeRequest(beforeBitmap)
@@ -6065,8 +6060,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * stat/aptitude/unique factor pattern proves the screen before transport is contacted. This path
      * does not open or close the panel, choose a Legacy, or continue the launch.
      */
-    internal fun rehearseHostLegacySwipe(injectedUtils: CustomImageUtils? = null): HostSwipeDiagnosticReport {
-        prepareHostSwipeDiagnostic(injectedUtils)?.let { return unavailableHostSwipeReport(HostInputScope.LEGACY_LIST_SCROLL, it) }
+    internal fun rehearseHostLegacySwipe(injectedUtils: CustomImageUtils): HostSwipeDiagnosticReport {
+        imageUtils = injectedUtils
         val beforeBitmap = iu.getSourceBitmap()
         val before = legacyHostSwipeFingerprint(beforeBitmap)
         val startX = beforeBitmap.width * 0.5f
@@ -6085,14 +6080,6 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         return runHostSwipeDiagnostic(HostInputScope.LEGACY_LIST_SCROLL, before, request) {
             legacyHostSwipeFingerprint(iu.getSourceBitmap())
         }
-    }
-
-    private fun prepareHostSwipeDiagnostic(injectedUtils: CustomImageUtils?): String? {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-            return null
-        }
-        return if (ensureInitialised()) null else "IMAGE_UTILS_UNAVAILABLE"
     }
 
     private fun runHostSwipeDiagnostic(
@@ -6183,13 +6170,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * Fails closed (logs + returns) on an off/invalid setting, the wrong screen, an unreadable deck, or
      * a selector block. Taps only the saved-deck arrows -- never Start Career.
      */
-    internal fun rehearseRequiredSupportDeck(injectedUtils: CustomImageUtils? = null): SupportDeckRehearsalResult {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[DECK-REHEARSAL] Failed to initialise image utils. Stopping.")
-            return SupportDeckRehearsalResult(SupportDeckRehearsalResult.Status.NOT_ON_SUPPORT_FORMATION, failureReason = "image utils unavailable")
-        }
+    internal fun rehearseRequiredSupportDeck(injectedUtils: CustomImageUtils): SupportDeckRehearsalResult {
+        imageUtils = injectedUtils
         MessageLog.i(TAG, "[DECK-REHEARSAL] ===== Support-deck selector rehearsal (never presses Start Career) =====")
 
         val requested = SupportDeckSelector.requestedIndexOrNull(SettingsHelper.getIntSetting("runQueue", "supportDeckIndex", 0))
@@ -6299,14 +6281,9 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * deck. The saved-deck SELECTOR is intentionally NOT driven here (it has its own rehearsal); the
      * operator establishes the required deck before the rehearsal.
      */
-    internal fun rehearseSmartBorrowForRequiredDeck(injectedUtils: CustomImageUtils? = null): SmartBorrowRehearsalResult {
+    internal fun rehearseSmartBorrowForRequiredDeck(injectedUtils: CustomImageUtils): SmartBorrowRehearsalResult {
         borrowPostSelectionAuthority = BorrowPostSelectionAuthority.REHEARSAL
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[BORROW-REHEARSAL] Failed to initialise image utils. Stopping.")
-            return SmartBorrowRehearsalResult(SmartBorrowRehearsalResult.Status.NOT_ON_SUPPORT_FORMATION, failureReason = "image utils unavailable")
-        }
+        imageUtils = injectedUtils
         MessageLog.i(TAG, "[BORROW-REHEARSAL] ===== Smart Borrow rehearsal (never presses Start Career) =====")
 
         val requested = SupportDeckSelector.requestedIndexOrNull(SettingsHelper.getIntSetting("runQueue", "supportDeckIndex", 0))
@@ -6642,15 +6619,10 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * tapping anything. Driven by the `debugMode_startTraineeSelectTest` debug toggle: park the game
      * on the Trainee Select screen, enable it, and start the bot.
      *
-     * @param injectedUtils reuse the running bot's image utils instead of constructing a fresh Game.
+     * @param injectedUtils the running bot's image utils.
      */
-    fun debugTraineeSelectRead(injectedUtils: CustomImageUtils? = null) {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[ROTATION-TEST] Failed to initialise image utils.")
-            return
-        }
+    fun debugTraineeSelectRead(injectedUtils: CustomImageUtils) {
+        imageUtils = injectedUtils
         val bitmap = iu.getSourceBitmap()
         MessageLog.i(TAG, "[ROTATION-TEST] ===== Trainee Select read-only diagnostic (${bitmap.width}x${bitmap.height}) =====")
 
@@ -6850,13 +6822,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * `debugMode_startDeckStatReadTest`, and start the bot. Logs every stat count and its OCR box so
      * the [deckCountColFractions] / [deckCountRowYFraction] / box-size estimates can be tuned.
      */
-    fun debugDeckStatRead(injectedUtils: CustomImageUtils? = null) {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[DECK-TEST] Failed to initialise image utils.")
-            return
-        }
+    fun debugDeckStatRead(injectedUtils: CustomImageUtils) {
+        imageUtils = injectedUtils
         val bitmap = iu.getSourceBitmap()
         MessageLog.i(TAG, "[DECK-TEST] ===== Deck composition read-only diagnostic (${bitmap.width}x${bitmap.height}) =====")
         val counts = readDeckTypeCounts(bitmap)
@@ -8087,13 +8054,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * de-duplicated across overlapping pages by their scroll-stable fingerprint, so the same card seen
      * on two pages is counted once.
      */
-    internal fun scanBorrowPoolReadOnly(injectedUtils: CustomImageUtils? = null, entryLimit: Int = 0, captureEvidence: Boolean = false): BorrowPoolScanResult {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[BORROW-POOL] Failed to initialise image utils. Stopping.")
-            return BorrowPoolScanResult("uninitialised", BorrowPoolTermination.PRECONDITION_FAILED, 0, 0, false)
-        }
+    internal fun scanBorrowPoolReadOnly(injectedUtils: CustomImageUtils, entryLimit: Int = 0, captureEvidence: Boolean = false): BorrowPoolScanResult {
+        imageUtils = injectedUtils
         val startedAt = System.currentTimeMillis()
         val scanId = "bp-$startedAt-${java.util.UUID.randomUUID().toString().substring(0, 8)}"
         MessageLog.i(TAG, "[BORROW-POOL] ===== Read-only borrow pool census scanId=$scanId entryLimit=${if (entryLimit > 0) entryLimit else "none"} evidence=${if (captureEvidence) "on" else "off"} =====")
@@ -8251,13 +8213,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * as "the intent's canonical identity matched exactly one borrowable row"; that identity is what the
      * offline recommendation tied to the intent's supportCardId. Tagged [BORROW-LOCATE].
      */
-    internal fun locateSmartBorrowIntentReadOnly(injectedUtils: CustomImageUtils? = null): SmartBorrowLocateResult {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[BORROW-LOCATE] Failed to initialise image utils. Stopping.")
-            return SmartBorrowLocateResult(SmartBorrowLocateResult.Status.INTENT_MISSING, failureReason = "image utils unavailable")
-        }
+    internal fun locateSmartBorrowIntentReadOnly(injectedUtils: CustomImageUtils): SmartBorrowLocateResult {
+        imageUtils = injectedUtils
         val startedAt = System.currentTimeMillis()
         MessageLog.i(TAG, "[BORROW-LOCATE] ===== Read-only Smart Borrow locate rehearsal (taps no card, never presses Start Career) =====")
 
@@ -8465,13 +8422,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * future select+rollback stage needs. It spends nothing and never presses Start Career. Fails closed
      * on the wrong screen or an already-empty slot. Tagged [BORROW-REMOVE-PROBE].
      */
-    internal fun probeBorrowRemoveBehavior(injectedUtils: CustomImageUtils? = null): BorrowRemoveProbeResult {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[BORROW-REMOVE-PROBE] Failed to initialise image utils. Stopping.")
-            return BorrowRemoveProbeResult(BorrowRemoveProbeResult.Status.NOT_ON_SUPPORT_FORMATION, failureReason = "image utils unavailable")
-        }
+    internal fun probeBorrowRemoveBehavior(injectedUtils: CustomImageUtils): BorrowRemoveProbeResult {
+        imageUtils = injectedUtils
         val startedAt = System.currentTimeMillis()
         MessageLog.i(TAG, "[BORROW-REMOVE-PROBE] ===== Borrow Remove behaviour probe (removes a throwaway borrow; never presses Start Career) =====")
 
@@ -8652,14 +8604,9 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * repeats the whole cycle once from the restored empty state. It NEVER presses Start Career and
      * spends nothing. Tagged [BORROW-SELECT].
      */
-    internal fun rehearseSmartBorrowSelectAndRollback(injectedUtils: CustomImageUtils? = null): SmartBorrowSelectRehearsalResult {
+    internal fun rehearseSmartBorrowSelectAndRollback(injectedUtils: CustomImageUtils): SmartBorrowSelectRehearsalResult {
         borrowPostSelectionAuthority = BorrowPostSelectionAuthority.REHEARSAL
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[BORROW-SELECT] Failed to initialise image utils. Stopping.")
-            return SmartBorrowSelectRehearsalResult(SmartBorrowSelectResult(SmartBorrowSelectResult.Status.INTENT_MISSING, failureReason = "image utils unavailable"))
-        }
+        imageUtils = injectedUtils
         MessageLog.i(TAG, "[BORROW-SELECT] ===== Smart Borrow select-verify-rollback rehearsal (taps one row, removes it, never presses Start Career) =====")
 
         val stageB = runSmartBorrowSelectCycle(1)
@@ -9252,13 +9199,8 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
      * build-aware launch calls; the dry-run only suppresses the tap. Fails closed (no legacy fallback) and
      * never spends. Tagged [LAUNCH-GATE].
      */
-    internal fun dryRunBuildAwareLaunchGate(injectedUtils: CustomImageUtils? = null): BuildAwareLaunchResult {
-        if (injectedUtils != null) {
-            imageUtils = injectedUtils
-        } else if (!ensureInitialised()) {
-            MessageLog.e(TAG, "[LAUNCH-GATE] Failed to initialise image utils. Stopping.")
-            return BuildAwareLaunchResult(LaunchTransactionState.LAUNCH_BLOCKED, LaunchPreconditions(), LaunchTransactionState.PREPARING, reason = "image utils unavailable")
-        }
+    internal fun dryRunBuildAwareLaunchGate(injectedUtils: CustomImageUtils): BuildAwareLaunchResult {
+        imageUtils = injectedUtils
         val startedAt = System.currentTimeMillis()
         MessageLog.i(TAG, "[LAUNCH-GATE] ===== build-aware launch-gate dry-run (reaches READY, NEVER presses Start Career) =====")
 

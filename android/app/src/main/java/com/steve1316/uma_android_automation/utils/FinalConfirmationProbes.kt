@@ -70,12 +70,6 @@ object FinalConfirmationTabGeometry {
     const val WHITE_FRACTION_MIN = 0.6
 }
 
-private fun red(argb: Int): Int = (argb shr 16) and 0xFF
-
-private fun green(argb: Int): Int = (argb shr 8) and 0xFF
-
-private fun blue(argb: Int): Int = argb and 0xFF
-
 private inline fun tabPixelFraction(
     sampler: SparkPixelSampler,
     cx: Int,

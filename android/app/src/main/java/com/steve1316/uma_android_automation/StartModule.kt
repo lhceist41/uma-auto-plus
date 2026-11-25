@@ -2982,8 +2982,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         // finished career: an unfinished one plays on under the usual rules, and the
                         // request waits for the next finished career.
                         if (careerFinished && stopAfterCareerRequested) {
-                            val finalizeScenario = SettingsHelper.getStringSetting("general", "scenario")
-                            if (finalizeScenario != "Daily Races" && finalizeScenario != "Team Trials") {
+                            if (runsDailyExtrasAfterFinalize(SettingsHelper.getStringSetting("general", "scenario"))) {
                                 MessageLog.i(TAG, "[QUEUE] Stop after this career: run $i finished. Finishing its career-end flow, then pausing the queue.")
                                 val navResult = navigateWithDeadline(reuseLastLaunchSetup, finalizeToHome = true)
                                 attachCareerEndSparks(ledger, i, runCareerEndSeq)

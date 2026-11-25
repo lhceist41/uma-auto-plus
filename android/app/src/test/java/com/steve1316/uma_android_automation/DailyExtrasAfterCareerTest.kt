@@ -71,7 +71,7 @@ class DailyExtrasAfterCareerTest {
     fun `a stop after the career runs it once its end flow succeeded, before the queue pauses`() {
         val stop = start.indexOf("if (careerFinished && stopAfterCareerRequested) {")
         val branch = block(start, stop, 24)
-        val gate = branch.indexOf("if (finalizeScenario != \"Daily Races\" && finalizeScenario != \"Team Trials\") {")
+        val gate = branch.indexOf("if (runsDailyExtrasAfterFinalize(SettingsHelper.getStringSetting(\"general\", \"scenario\"))) {")
         val failed = branch.indexOf("if (!navResult.success) {")
         val call = branch.indexOf("runDailyExtrasAfterCareer()")
         assertTrue(branch.contains("navigateWithDeadline(reuseLastLaunchSetup, finalizeToHome = true)"))

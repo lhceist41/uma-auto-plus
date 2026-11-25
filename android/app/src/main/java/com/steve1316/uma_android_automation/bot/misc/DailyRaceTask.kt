@@ -18,9 +18,7 @@ import com.steve1316.uma_android_automation.components.ButtonDailyRaces
 import com.steve1316.uma_android_automation.components.ButtonDailyRacesJupiterCup
 import com.steve1316.uma_android_automation.components.ButtonDailyRacesMoonlightSho
 import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeSelected
-import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeUnselected
 import com.steve1316.uma_android_automation.components.ButtonMenuBarRaceSelected
-import com.steve1316.uma_android_automation.components.ButtonMenuBarRaceUnselected
 import com.steve1316.uma_android_automation.components.ButtonMultiRaceOff
 import com.steve1316.uma_android_automation.components.ButtonMultiRaceOn
 import com.steve1316.uma_android_automation.components.ButtonRaceConfirm
@@ -225,7 +223,7 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
 
         return when (currentState) {
             DailyRaceScreenState.HOME_SCREEN -> {
-                handleHomeScreen()
+                tapRaceTab()
                 null
             }
 
@@ -271,7 +269,7 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             }
 
             DailyRaceScreenState.DAILY_SALE_POPUP -> {
-                handleDailySalePopup()
+                handleDailySalePopup("[DAILY_RACES]")
                 null
             }
 
@@ -361,25 +359,6 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
     // ------------------------------------------------------------------------
     // Per-state handlers
     // ------------------------------------------------------------------------
-
-    private fun handleHomeScreen() {
-        MessageLog.v(TAG, "[STATE] handleHomeScreen:: clicking Race tab in bottom nav.")
-        if (ButtonMenuBarRaceUnselected.click(game.imageUtils, region = Region.bottomHalf)) {
-            game.wait(2.0)
-        } else {
-            MessageLog.w(TAG, "[WARN] handleHomeScreen:: Race tab (unselected) button not found.")
-            game.wait(1.0)
-        }
-    }
-
-    private fun goHome() {
-        if (ButtonMenuBarHomeUnselected.click(game.imageUtils, region = Region.bottomHalf)) {
-            game.wait(2.0)
-        } else {
-            MessageLog.w(TAG, "[WARN] goHome:: Home tab not found.")
-            game.wait(1.0)
-        }
-    }
 
     private fun finish(
         reason: String,
@@ -614,16 +593,5 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             MessageLog.v(TAG, "[STATE] handleRaceResults:: Complete.")
         }
         game.wait(2.0)
-    }
-
-    /** Cancel, so the session spends nothing but tickets; the offer stays in Home's Shop, where the Daily Sales extras part buys it. */
-    private fun handleDailySalePopup() {
-        MessageLog.i(TAG, "[DAILY_RACES] Daily Sale shown; dismissing via Cancel.")
-        if (ButtonCancel.click(game.imageUtils, region = Region.bottomHalf)) {
-            game.wait(2.0)
-        } else {
-            MessageLog.w(TAG, "[WARN] handleDailySalePopup:: Cancel button not found; retrying.")
-            game.wait(1.5)
-        }
     }
 }

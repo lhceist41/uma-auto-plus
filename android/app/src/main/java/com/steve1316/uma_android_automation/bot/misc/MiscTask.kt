@@ -14,7 +14,11 @@ import com.steve1316.uma_android_automation.bot.TaskResultCode
 import com.steve1316.uma_android_automation.bot.dismissUmaOutingPopup
 import com.steve1316.uma_android_automation.bot.miscFrozenGameReopens
 import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
+import com.steve1316.uma_android_automation.components.ButtonCancel
+import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeUnselected
+import com.steve1316.uma_android_automation.components.ButtonMenuBarRaceUnselected
 import com.steve1316.uma_android_automation.components.DialogUtils
+import com.steve1316.uma_android_automation.components.Region
 
 /**
  * Base for non-career ("misc") tasks that automate standalone game modes from the Home Screen, each a
@@ -163,6 +167,37 @@ abstract class MiscTask(game: Game) : Task(game) {
         lastKnownStateName = ""
         frames.reset()
         return true
+    }
+
+    /** Home to the Race tab through the bottom nav. */
+    protected fun tapRaceTab() {
+        MessageLog.v(TAG, "[STATE] handleHomeScreen:: clicking Race tab in bottom nav.")
+        if (ButtonMenuBarRaceUnselected.click(game.imageUtils, region = Region.bottomHalf)) {
+            game.wait(2.0)
+        } else {
+            MessageLog.w(TAG, "[WARN] handleHomeScreen:: Race tab (unselected) button not found.")
+            game.wait(1.0)
+        }
+    }
+
+    protected fun goHome() {
+        if (ButtonMenuBarHomeUnselected.click(game.imageUtils, region = Region.bottomHalf)) {
+            game.wait(2.0)
+        } else {
+            MessageLog.w(TAG, "[WARN] goHome:: Home tab not found.")
+            game.wait(1.0)
+        }
+    }
+
+    /** Cancels the Daily Sale, so the mode spends nothing extra; the offer stays in Home's Shop, where the Daily Sales extras part buys it. [tag] is the mode's log tag. */
+    protected fun handleDailySalePopup(tag: String) {
+        MessageLog.i(TAG, "$tag Daily Sale shown; dismissing via Cancel.")
+        if (ButtonCancel.click(game.imageUtils, region = Region.bottomHalf)) {
+            game.wait(2.0)
+        } else {
+            MessageLog.w(TAG, "[WARN] handleDailySalePopup:: Cancel button not found; retrying.")
+            game.wait(1.5)
+        }
     }
 
     /** One bitmap shared across the template checks of an iteration, as Campaign.checkMainScreen does. */

@@ -120,7 +120,7 @@ fun exactFilterTargetState(readings: Map<VeteranFilterDimension, FilterDimension
 
 private fun light(argb: Int): Int = (((argb shr 16) and 255) + ((argb shr 8) and 255) + (argb and 255)) / 3
 
-private fun green(argb: Int): Boolean {
+private fun isGreen(argb: Int): Boolean {
     val r = (argb shr 16) and 255
     val g = (argb shr 8) and 255
     val b = argb and 255
@@ -146,7 +146,7 @@ fun classifyFilterCheckbox(sampler: SparkPixelSampler, cx: Int, cy: Int): Filter
     if (!hasNativeFilterCheckbox(sampler, cx, cy)) return FilterControlState.UNKNOWN
     var greenInk = 0
     for (dy in -22..20 step 2) for (dx in -22..22 step 2) {
-        if (green(sampler.argb(cx + dx, cy + dy))) greenInk++
+        if (isGreen(sampler.argb(cx + dx, cy + dy))) greenInk++
     }
     if (greenInk >= 15) return FilterControlState.ACTIVE
     if (greenInk > 0) return FilterControlState.UNKNOWN
@@ -168,7 +168,7 @@ fun classifyFilterRadio(sampler: SparkPixelSampler, cx: Int, cy: Int): FilterCon
     var grey = 0
     for (dy in -10..10 step 2) for (dx in -10..10 step 2) {
         val pixel = sampler.argb(cx + dx, cy + dy)
-        if (green(pixel)) greens++ else if (light(pixel) in 70..230 &&
+        if (isGreen(pixel)) greens++ else if (light(pixel) in 70..230 &&
             kotlin.math.abs(((pixel shr 16) and 255) - ((pixel shr 8) and 255)) < 15) grey++
     }
     return when {

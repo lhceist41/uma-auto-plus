@@ -11,9 +11,7 @@ import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonConfirm
 import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeSelected
-import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeUnselected
 import com.steve1316.uma_android_automation.components.ButtonMenuBarRaceSelected
-import com.steve1316.uma_android_automation.components.ButtonMenuBarRaceUnselected
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextWithImage
 import com.steve1316.uma_android_automation.components.ButtonNo
@@ -199,7 +197,7 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             }
 
             TeamTrialsScreenState.DAILY_SALE_POPUP -> {
-                handleDailySalePopup()
+                handleDailySalePopup("[TEAM_TRIALS]")
                 null
             }
 
@@ -323,13 +321,7 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             MessageLog.i(TAG, "[TEAM_TRIALS] Back on Home after $matchesCompleted match(es): $reason")
             return TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "TeamTrialsTask completed. Matches run this session: $matchesCompleted. $reason")
         }
-        MessageLog.v(TAG, "[STATE] handleHomeScreen:: clicking Race tab in bottom nav.")
-        if (ButtonMenuBarRaceUnselected.click(game.imageUtils, region = Region.bottomHalf)) {
-            game.wait(2.0)
-        } else {
-            MessageLog.w(TAG, "[WARN] handleHomeScreen:: Race tab (unselected) button not found.")
-            game.wait(1.0)
-        }
+        tapRaceTab()
         return null
     }
 
@@ -343,15 +335,6 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             game.wait(2.5)
         } else {
             MessageLog.w(TAG, "[WARN] handleRaceTab:: Team Trials tile not found.")
-            game.wait(1.0)
-        }
-    }
-
-    private fun goHome() {
-        if (ButtonMenuBarHomeUnselected.click(game.imageUtils, region = Region.bottomHalf)) {
-            game.wait(2.0)
-        } else {
-            MessageLog.w(TAG, "[WARN] goHome:: Home tab not found.")
             game.wait(1.0)
         }
     }
@@ -468,17 +451,6 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             game.wait(2.0)
         } else {
             MessageLog.w(TAG, "[WARN] handleRestoreRpPrompt:: No button not found; retrying.")
-            game.wait(1.5)
-        }
-    }
-
-    /** Daily Sale is dismissed; the offer stays in Home's Shop, where the Daily Sales extras part buys it. */
-    private fun handleDailySalePopup() {
-        MessageLog.i(TAG, "[TEAM_TRIALS] Daily Sale shown; dismissing via Cancel.")
-        if (ButtonCancel.click(game.imageUtils, region = Region.bottomHalf)) {
-            game.wait(2.0)
-        } else {
-            MessageLog.w(TAG, "[WARN] handleDailySalePopup:: Cancel button not found; retrying.")
             game.wait(1.5)
         }
     }

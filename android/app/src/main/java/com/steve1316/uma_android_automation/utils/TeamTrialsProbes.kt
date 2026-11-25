@@ -70,12 +70,6 @@ object TeamTrialsGeometry {
     const val CLASS_RESULT_NEXT_Y = 1620
 }
 
-private fun red(argb: Int): Int = (argb shr 16) and 0xFF
-
-private fun green(argb: Int): Int = (argb shr 8) and 0xFF
-
-private fun blue(argb: Int): Int = argb and 0xFF
-
 private fun isCardWhite(argb: Int): Boolean {
     val r = red(argb)
     val g = green(argb)

@@ -21,11 +21,11 @@ fun interface SparkPixelSampler {
     fun argb(x: Int, y: Int): Int
 }
 
-private fun red(argb: Int): Int = (argb shr 16) and 0xFF
+internal fun red(argb: Int): Int = (argb shr 16) and 0xFF
 
-private fun green(argb: Int): Int = (argb shr 8) and 0xFF
+internal fun green(argb: Int): Int = (argb shr 8) and 0xFF
 
-private fun blue(argb: Int): Int = argb and 0xFF
+internal fun blue(argb: Int): Int = argb and 0xFF
 
 /** Pixel geometry of one spark list layout on 1080-wide captures. */
 data class SparkListGeometry(
@@ -98,8 +98,21 @@ private fun mean5(sampler: SparkPixelSampler, cx: Int, cy: Int, channel: (Int) -
     return sum / 25
 }
 
-private fun meanRgb(sampler: SparkPixelSampler, cx: Int, cy: Int): Triple<Int, Int, Int> =
-    Triple(mean5(sampler, cx, cy, ::red), mean5(sampler, cx, cy, ::green), mean5(sampler, cx, cy, ::blue))
+/** 5x5 mean of each channel around (cx, cy), one pass over the pixels. */
+internal fun meanRgb(sampler: SparkPixelSampler, cx: Int, cy: Int): Triple<Int, Int, Int> {
+    var r = 0
+    var g = 0
+    var b = 0
+    for (dy in -2..2) {
+        for (dx in -2..2) {
+            val p = sampler.argb(cx + dx, cy + dy)
+            r += red(p)
+            g += green(p)
+            b += blue(p)
+        }
+    }
+    return Triple(r / 25, g / 25, b / 25)
+}
 
 /** Bar-color row kind, or null on the pure-white end-of-grid sample. Thresholds are the
  * live-validated production values (55 kept records) and hold on all three layouts: blue

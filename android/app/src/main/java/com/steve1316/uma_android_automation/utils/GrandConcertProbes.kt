@@ -62,28 +62,6 @@ enum class QuickModeOption(val wire: String, val label: String) {
     }
 }
 
-private fun red(argb: Int): Int = (argb shr 16) and 0xFF
-
-private fun green(argb: Int): Int = (argb shr 8) and 0xFF
-
-private fun blue(argb: Int): Int = argb and 0xFF
-
-/** 5x5 mean around (cx, cy), matching the smoothing the spark probes use. */
-private fun mean(sampler: SparkPixelSampler, cx: Int, cy: Int): Triple<Int, Int, Int> {
-    var r = 0
-    var g = 0
-    var b = 0
-    for (dy in -2..2) {
-        for (dx in -2..2) {
-            val p = sampler.argb(cx + dx, cy + dy)
-            r += red(p)
-            g += green(p)
-            b += blue(p)
-        }
-    }
-    return Triple(r / 25, g / 25, b / 25)
-}
-
 /** Dialog header / title-band green, measured (152, 215, 62) on both Quick Mode captures. */
 private fun isDialogGreen(r: Int, g: Int, b: Int): Boolean = g >= 150 && g - r >= 40 && g - b >= 100
 
@@ -106,14 +84,14 @@ private fun isBlackBackdrop(r: Int, g: Int, b: Int): Boolean = r <= 24 && g <= 2
  * Confirm, and the pure-black backdrop above the card.
  */
 fun quickModeDialogPresent(sampler: SparkPixelSampler): Boolean {
-    val (hr, hg, hb) = mean(sampler, QuickModeGeometry.HEADER_X, QuickModeGeometry.HEADER_Y)
+    val (hr, hg, hb) = meanRgb(sampler, QuickModeGeometry.HEADER_X, QuickModeGeometry.HEADER_Y)
     if (!isDialogGreen(hr, hg, hb)) return false
-    val (br, bg, bb) = mean(sampler, QuickModeGeometry.BACKDROP_X, QuickModeGeometry.BACKDROP_Y)
+    val (br, bg, bb) = meanRgb(sampler, QuickModeGeometry.BACKDROP_X, QuickModeGeometry.BACKDROP_Y)
     if (!isBlackBackdrop(br, bg, bb)) return false
-    val (cr, cg, cb) = mean(sampler, QuickModeGeometry.CONFIRM_X, QuickModeGeometry.CONFIRM_Y)
+    val (cr, cg, cb) = meanRgb(sampler, QuickModeGeometry.CONFIRM_X, QuickModeGeometry.CONFIRM_Y)
     if (!isButtonGreen(cr, cg, cb)) return false
     return QuickModeGeometry.ROW_YS.all { y ->
-        val (r, g, b) = mean(sampler, QuickModeGeometry.RADIO_X, y)
+        val (r, g, b) = meanRgb(sampler, QuickModeGeometry.RADIO_X, y)
         isRadioSelected(r, g, b) || isRadioUnselected(r, g, b)
     }
 }
@@ -126,7 +104,7 @@ fun quickModeDialogPresent(sampler: SparkPixelSampler): Boolean {
 fun quickModeSelectedIndex(sampler: SparkPixelSampler): Int? {
     val selected =
         QuickModeGeometry.ROW_YS.indices.filter { i ->
-            val (r, g, b) = mean(sampler, QuickModeGeometry.RADIO_X, QuickModeGeometry.ROW_YS[i])
+            val (r, g, b) = meanRgb(sampler, QuickModeGeometry.RADIO_X, QuickModeGeometry.ROW_YS[i])
             isRadioSelected(r, g, b)
         }
     return selected.singleOrNull()
@@ -155,7 +133,7 @@ object GrandConcertTheme {
 }
 
 fun grandConcertPinkStatLabelRow(sampler: SparkPixelSampler): Boolean {
-    val (r, g, b) = mean(sampler, GrandConcertTheme.STAT_LABEL_X, GrandConcertTheme.STAT_LABEL_Y)
+    val (r, g, b) = meanRgb(sampler, GrandConcertTheme.STAT_LABEL_X, GrandConcertTheme.STAT_LABEL_Y)
     // Strong magenta: red and blue high, green clearly suppressed.
     return r >= 230 && b >= 190 && r - g >= 90 && b - g >= 60
 }
@@ -164,7 +142,7 @@ fun grandConcertPinkStatLabelRow(sampler: SparkPixelSampler): Boolean {
  * shared grayscale stat OCR depends on). */
 fun grandConcertStatValueCellsAreLight(sampler: SparkPixelSampler): Boolean =
     GrandConcertTheme.STAT_VALUE_BG_POINTS.all { (x, y) ->
-        val (r, g, b) = mean(sampler, x, y)
+        val (r, g, b) = meanRgb(sampler, x, y)
         r >= 235 && g >= 235 && b >= 235
     }
 
@@ -201,13 +179,13 @@ private fun isScheduledBadgePink(r: Int, g: Int, b: Int): Boolean = r >= 230 && 
 /** True when the pink "Scheduled" badge is present above the Lessons button. Detected
  * independently of the button state so the two signals cannot mask each other. */
 fun grandConcertScheduledBadgePresent(sampler: SparkPixelSampler): Boolean {
-    val (r, g, b) = mean(sampler, LESSON_SCHEDULED_BADGE_X, LESSON_SCHEDULED_BADGE_Y)
+    val (r, g, b) = meanRgb(sampler, LESSON_SCHEDULED_BADGE_X, LESSON_SCHEDULED_BADGE_Y)
     return isScheduledBadgePink(r, g, b)
 }
 
 /** True when the scheduled song-note marker is present by the Lessons label. */
 fun grandConcertLessonNoteMarkerPresent(sampler: SparkPixelSampler): Boolean {
-    val (r, g, b) = mean(sampler, LESSON_NOTE_MARKER_X, LESSON_NOTE_MARKER_Y)
+    val (r, g, b) = meanRgb(sampler, LESSON_NOTE_MARKER_X, LESSON_NOTE_MARKER_Y)
     // Magenta/purple note glyph: red and blue elevated, green suppressed.
     return r >= 170 && b >= 170 && r - g >= 50 && b - g >= 50
 }
@@ -225,7 +203,7 @@ fun grandConcertLessonSlotState(
     height: Int = 1920,
 ): LessonSlotState {
     val sampler = screen.onScreen(ScreenBand.BOTTOM, width, height)
-    val (r, g, b) = mean(sampler, GrandConcertTheme.LESSON_SLOT_X, GrandConcertTheme.LESSON_SLOT_Y)
+    val (r, g, b) = meanRgb(sampler, GrandConcertTheme.LESSON_SLOT_X, GrandConcertTheme.LESSON_SLOT_Y)
     val maxC = maxOf(r, g, b)
     val minC = minOf(r, g, b)
     val lit = maxC >= 150
@@ -337,7 +315,7 @@ fun grandConcertLessonListPresent(
     width: Int = 1080,
     height: Int = 1920,
 ): Boolean {
-    val (tr, tg, tb) = mean(sampler.onScreen(ScreenBand.TOP, width, height), GrandConcertLessonGeometry.LIST_TOP_BAND_X, GrandConcertLessonGeometry.LIST_TOP_BAND_Y)
+    val (tr, tg, tb) = meanRgb(sampler.onScreen(ScreenBand.TOP, width, height), GrandConcertLessonGeometry.LIST_TOP_BAND_X, GrandConcertLessonGeometry.LIST_TOP_BAND_Y)
     val darkBlueTop = tb >= 100 && tb - tr >= 40 && tb - tg >= 30 && tr < 120
     if (!darkBlueTop) return false
     return GrandConcertLessonGeometry.CARD_HEADER_YS.indices.any {
@@ -353,7 +331,7 @@ fun grandConcertDialogHeaderPresent(
     height: Int = 1920,
 ): Boolean {
     val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
-    val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.HEADER_GREEN_X, GrandConcertLessonGeometry.HEADER_TOP_Y)
+    val (r, g, b) = meanRgb(sampler, GrandConcertLessonGeometry.HEADER_GREEN_X, GrandConcertLessonGeometry.HEADER_TOP_Y)
     return isLessonDialogGreen(r, g, b)
 }
 
@@ -364,15 +342,15 @@ fun grandConcertLessonConfirmationPresent(
     height: Int = 1920,
 ): Boolean {
     if (!grandConcertDialogHeaderPresent(sampler, width, height)) return false
-    val (r, g, b) = mean(sampler.onScreen(ScreenBand.DIALOG, width, height), GrandConcertLessonGeometry.CONFIRM_KIND_PILL_X, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_Y)
+    val (r, g, b) = meanRgb(sampler.onScreen(ScreenBand.DIALOG, width, height), GrandConcertLessonGeometry.CONFIRM_KIND_PILL_X, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_Y)
     return maxOf(r, g, b) - minOf(r, g, b) >= 60
 }
 
 /** True when the "Scheduling Complete" dialog is up: the green header sits mid-screen (a smaller
  * centred dialog over the dimmed list) rather than at the very top. */
 fun grandConcertSchedulingCompletePresent(sampler: SparkPixelSampler): Boolean {
-    val (tr, tg, tb) = mean(sampler, GrandConcertLessonGeometry.HEADER_GREEN_X, GrandConcertLessonGeometry.HEADER_TOP_Y)
-    val (mr, mg, mb) = mean(sampler, GrandConcertLessonGeometry.HEADER_GREEN_X, GrandConcertLessonGeometry.HEADER_MID_Y)
+    val (tr, tg, tb) = meanRgb(sampler, GrandConcertLessonGeometry.HEADER_GREEN_X, GrandConcertLessonGeometry.HEADER_TOP_Y)
+    val (mr, mg, mb) = meanRgb(sampler, GrandConcertLessonGeometry.HEADER_GREEN_X, GrandConcertLessonGeometry.HEADER_MID_Y)
     return !isLessonDialogGreen(tr, tg, tb) && isLessonDialogGreen(mr, mg, mb)
 }
 
@@ -401,7 +379,7 @@ fun grandConcertScheduleShortfallPresent(
  * sub-header. */
 fun grandConcertConcertInfoPresent(sampler: SparkPixelSampler): Boolean {
     if (!grandConcertDialogHeaderPresent(sampler)) return false
-    val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.CONCERT_SETLIST_HEADER_X, GrandConcertLessonGeometry.CONCERT_SETLIST_HEADER_Y)
+    val (r, g, b) = meanRgb(sampler, GrandConcertLessonGeometry.CONCERT_SETLIST_HEADER_X, GrandConcertLessonGeometry.CONCERT_SETLIST_HEADER_Y)
     // Pale green sub-header: green elevated over red and blue, but far paler than the top band.
     return g >= 210 && g - b >= 25 && g - r >= 10
 }
@@ -428,7 +406,7 @@ fun grandConcertLessonCardKind(
     var n = 0
     var x = 80
     while (x <= 860) {
-        val (r, g, b) = mean(sampler, x, y)
+        val (r, g, b) = meanRgb(sampler, x, y)
         if (maxOf(r, g, b) - minOf(r, g, b) >= 40) {
             rs += r
             gs += g
@@ -462,14 +440,14 @@ fun grandConcertLessonCardKind(
  * marker is the corroborating signal in [grandConcertCardLearnableMarker]. */
 fun grandConcertCardAffordable(sampler: SparkPixelSampler, cardIndex: Int): Boolean {
     if (cardIndex !in GrandConcertLessonGeometry.CARD_COST_STRIP_YS.indices) return false
-    val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.CARD_COST_STRIP_X, GrandConcertLessonGeometry.CARD_COST_STRIP_YS[cardIndex])
+    val (r, g, b) = meanRgb(sampler, GrandConcertLessonGeometry.CARD_COST_STRIP_X, GrandConcertLessonGeometry.CARD_COST_STRIP_YS[cardIndex])
     return maxOf(r, g, b) >= 200
 }
 
 /** True when card [cardIndex] shows the gold "Learnable!" marker above its kind badge. */
 fun grandConcertCardLearnableMarker(sampler: SparkPixelSampler, cardIndex: Int): Boolean {
     if (cardIndex !in GrandConcertLessonGeometry.CARD_LEARNABLE_YS.indices) return false
-    val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.CARD_KIND_BADGE_X, GrandConcertLessonGeometry.CARD_LEARNABLE_YS[cardIndex])
+    val (r, g, b) = meanRgb(sampler, GrandConcertLessonGeometry.CARD_KIND_BADGE_X, GrandConcertLessonGeometry.CARD_LEARNABLE_YS[cardIndex])
     // Gold marker text: red and green high, blue low (measured (203, 161, 64)).
     return r >= 180 && g >= 140 && b <= 110 && r - b >= 90
 }
@@ -577,7 +555,7 @@ private fun isFailurePillBlue(r: Int, g: Int, b: Int): Boolean = b >= 200 && b -
 /** True when the training screen's Failure pill is present where expected. Cheap structural
  * confirmation that a training preview is actually on screen before trusting the OCR regions. */
 fun grandConcertTrainingFailurePillPresent(sampler: SparkPixelSampler): Boolean {
-    val (r, g, b) = mean(sampler, GrandConcertTrainingGeometry.FAILURE_PILL_X, GrandConcertTrainingGeometry.FAILURE_PILL_Y)
+    val (r, g, b) = meanRgb(sampler, GrandConcertTrainingGeometry.FAILURE_PILL_X, GrandConcertTrainingGeometry.FAILURE_PILL_Y)
     return isFailurePillBlue(r, g, b)
 }
 
@@ -651,7 +629,7 @@ fun grandConcertPerformancePanelPresent(
     height: Int = 1920,
 ): Boolean {
     val sampler = screen.onScreen(ScreenBand.TOP, width, height)
-    val (hr, hg, hb) = mean(sampler, GrandConcertTrainingGeometry.PANEL_HEADER_X, GrandConcertTrainingGeometry.PANEL_HEADER_Y)
+    val (hr, hg, hb) = meanRgb(sampler, GrandConcertTrainingGeometry.PANEL_HEADER_X, GrandConcertTrainingGeometry.PANEL_HEADER_Y)
     if (!(hr in 160..210 && hg in 130..180 && hb >= 225)) return false
     val checks =
         listOf<(Int, Int, Int) -> Boolean>(
@@ -663,7 +641,7 @@ fun grandConcertPerformancePanelPresent(
         )
     var ok = 0
     for (i in 0..4) {
-        val (r, g, b) = mean(sampler, GrandConcertTrainingGeometry.PERF_TAB_X - 2, GrandConcertTrainingGeometry.PANEL_CHIP_YS[i])
+        val (r, g, b) = meanRgb(sampler, GrandConcertTrainingGeometry.PERF_TAB_X - 2, GrandConcertTrainingGeometry.PANEL_CHIP_YS[i])
         if (checks[i](r, g, b)) ok++
     }
     return ok >= 4
@@ -747,7 +725,7 @@ object GrandConcertHypeGauge {
 }
 
 fun grandConcertHypeGaugePresent(sampler: SparkPixelSampler): Boolean {
-    val (r, g, b) = mean(sampler, GrandConcertHypeGauge.TITLE_X, GrandConcertHypeGauge.TITLE_Y)
+    val (r, g, b) = meanRgb(sampler, GrandConcertHypeGauge.TITLE_X, GrandConcertHypeGauge.TITLE_Y)
     // Pale violet title band: blue highest, red elevated, green suppressed relative to blue.
     return b >= 220 && r >= 170 && b - g >= 30 && r - g >= 10
 }
@@ -815,13 +793,13 @@ fun grandConcertConcertPendingScreenPresent(
     val bottom = sampler.onScreen(ScreenBand.BOTTOM, width, height)
     val banner =
         GrandConcertConcertPending.HYPE_BANNER_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(top, x, y)
+            val (r, g, b) = meanRgb(top, x, y)
             b >= 225 && b - g >= 70 && r in 150..215
         } >= 5
     if (!banner) return false
     val ribbon =
         GrandConcertConcertPending.GOAL_RIBBON_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(bottom, x, y)
+            val (r, g, b) = meanRgb(bottom, x, y)
             r >= 225 && g <= 95 && b <= 95
         } >= 3
     return ribbon
@@ -920,12 +898,12 @@ fun grandConcertConcertConfirmPresent(
     val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val header =
         GrandConcertEscort.CONFIRM_HEADER_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = meanRgb(sampler, x, y)
             isEscortGreen(r, g, b)
         } == 2
     if (!header) return false
     return GrandConcertEscort.CONFIRM_START_POINTS.count { (x, y) ->
-        val (r, g, b) = mean(sampler, x, y)
+        val (r, g, b) = meanRgb(sampler, x, y)
         isEscortGreen(r, g, b)
     } == 2
 }
@@ -945,13 +923,13 @@ fun grandConcertCutsceneCheckboxState(
     val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val banner =
         GrandConcertEscort.GRAND_CONFIRM_HYPE_BANNER_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = meanRgb(sampler, x, y)
             b >= 225 && b - g >= 70 && r in 150..215
         } == 2
     if (!banner) return GrandCutsceneCheckbox.ABSENT
     // The white box around the glyph dilutes the mean below the escort-green thresholds, so the
     // checked state gets its own softer classifier (checked mean (157,211,77), unchecked gray).
-    val (r, g, b) = mean(sampler, GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_X, GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_Y)
+    val (r, g, b) = meanRgb(sampler, GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_X, GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_Y)
     val checked = g >= 180 && g - b >= 90 && g - r >= 35
     return if (checked) GrandCutsceneCheckbox.CHECKED else GrandCutsceneCheckbox.UNCHECKED
 }
@@ -1009,13 +987,13 @@ private fun isGlyphBrown(r: Int, g: Int, b: Int): Boolean = r >= 100 && r - b >=
 
 private fun allGlyphBrown(sampler: SparkPixelSampler, points: List<Pair<Int, Int>>): Boolean =
     points.all { (x, y) ->
-        val (r, g, b) = mean(sampler, x, y)
+        val (r, g, b) = meanRgb(sampler, x, y)
         isGlyphBrown(r, g, b)
     }
 
 private fun allGlyphClear(sampler: SparkPixelSampler, points: List<Pair<Int, Int>>): Boolean =
     points.all { (x, y) ->
-        val (r, g, b) = mean(sampler, x, y)
+        val (r, g, b) = meanRgb(sampler, x, y)
         minOf(r, g, b) >= 225
     }
 
@@ -1030,7 +1008,7 @@ fun grandConcertResultNextPresent(
 ): Boolean {
     val bottom = sampler.onScreen(ScreenBand.BOTTOM, width, height)
     return GrandConcertEscort.NEXT_BUTTON_GREEN_POINTS.count { (x, y) ->
-        val (r, g, b) = mean(bottom, x, y)
+        val (r, g, b) = meanRgb(bottom, x, y)
         isEscortGreen(r, g, b)
     } == 2
 }
@@ -1045,7 +1023,7 @@ fun grandConcertOnStagePresent(
 ): Boolean {
     val sampler = screen.onScreen(ScreenBand.MIDDLE, width, height)
     return GrandConcertEscort.ON_STAGE_MEDALLION_POINTS.count { (x, y) ->
-        val (r, g, b) = mean(sampler, x, y)
+        val (r, g, b) = meanRgb(sampler, x, y)
         r >= 200 && b >= 230 && r - g >= 25 && b - g >= 25
     } == 4
 }
@@ -1060,12 +1038,12 @@ fun grandConcertBonusesUpdatedPresent(
     val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val title =
         listOf(540 to 655, 880 to 610).count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = meanRgb(sampler, x, y)
             g >= 170 && g - b >= 60 && g - r >= 40
         } == 2
     if (!title) return false
     return GrandConcertEscort.BONUSES_CONFIRM_POINTS.count { (x, y) ->
-        val (r, g, b) = mean(sampler, x, y)
+        val (r, g, b) = meanRgb(sampler, x, y)
         isEscortGreen(r, g, b)
     } == 2
 }
@@ -1081,18 +1059,18 @@ fun grandConcertActiveBonusesPanelPresent(
     val sampler = screen.onScreen(ScreenBand.DIALOG, width, height)
     val title =
         GrandConcertEscort.ACTIVE_BONUSES_TITLE_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = meanRgb(sampler, x, y)
             isEscortGreen(r, g, b)
         } == 2
     if (!title) return false
     val effectsBand =
         GrandConcertEscort.ACTIVE_BONUSES_EFFECTS_BAND_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = meanRgb(sampler, x, y)
             b >= 225 && b - g >= 70 && r in 150..215
         } == 2
     if (!effectsBand) return false
     return GrandConcertEscort.ACTIVE_BONUSES_CLOSE_POINTS.count { (x, y) ->
-        val (r, g, b) = mean(sampler, x, y)
+        val (r, g, b) = meanRgb(sampler, x, y)
         minOf(r, g, b) >= 225
     } == 2
 }
@@ -1106,7 +1084,7 @@ fun grandConcertCareerCompleteScreenPresent(
     // Banner: flat (183, 150, 255) fill; require most points so one text stroke cannot veto.
     val banner =
         GrandConcertCareerComplete.BANNER_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = meanRgb(sampler, x, y)
             b >= 225 && b - g >= 70 && r in 150..215
         } >= 4
     if (!banner) return false
@@ -1123,7 +1101,7 @@ fun grandConcertCareerCompleteScreenPresent(
 
     val pinkButton =
         GrandConcertCareerComplete.COMPLETE_BUTTON_POINTS.count { (x, y) ->
-            val (r, g, b) = mean(sampler, x, y)
+            val (r, g, b) = meanRgb(sampler, x, y)
             r >= 225 && g in 70..160 && b in 110..200 && r - g >= 90
         } >= 2
     return pinkButton

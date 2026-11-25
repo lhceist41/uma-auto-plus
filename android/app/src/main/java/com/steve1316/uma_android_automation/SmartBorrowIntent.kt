@@ -300,7 +300,7 @@ data class SmartBorrowLocateResult(
     val failureReason: String? = null,
 ) {
     enum class Status {
-        /** No usable intent file, or image utils unavailable: nothing was read. */
+        /** No usable intent file: nothing was read. */
         INTENT_MISSING,
         NOT_ON_SUPPORT_FORMATION,
         FRIEND_SLOT_NOT_EMPTY,
@@ -521,7 +521,7 @@ data class SmartBorrowSelectResult(
     val passed: Boolean get() = status == Status.REHEARSAL_PASSED
 
     enum class Status {
-        /** No usable intent file, or image utils unavailable: nothing was read or tapped. */
+        /** No usable intent file: nothing was read or tapped. */
         INTENT_MISSING,
         NOT_ON_SUPPORT_FORMATION,
         FRIEND_SLOT_NOT_EMPTY,
