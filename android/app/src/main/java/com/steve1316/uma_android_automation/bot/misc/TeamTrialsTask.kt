@@ -35,8 +35,10 @@ import com.steve1316.uma_android_automation.utils.gameY
 import com.steve1316.uma_android_automation.utils.parseRpCount
 import com.steve1316.uma_android_automation.utils.quickModePillOn
 import com.steve1316.uma_android_automation.utils.readRpPips
+import com.steve1316.uma_android_automation.utils.teamRaceGreyed
 import com.steve1316.uma_android_automation.utils.teamTrialsClassResult
 import com.steve1316.uma_android_automation.utils.teamTrialsHighScoreBanner
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
@@ -132,6 +134,15 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
 
         /** The banner plays a ~2 second entry animation, so it is looked for that long. */
         const val BONUS_BANNER_WAIT_MS: Long = 2000
+
+        /** One grey frame may be the button fading in, and a false Tallying skips the day's matches, so it takes two Team Trials home frames in a row. */
+        internal fun tallyingConfirmed(
+            greyed: Boolean,
+            greyedAtIteration: Int?,
+            iteration: Int,
+        ): Boolean = greyed && greyedAtIteration == iteration - 1
+
+        const val TALLYING_REASON = "Team Trials is tallying this week's results; Team Race opens again after it ends."
     }
 
     private val opponentPick: OpponentPick =
@@ -149,6 +160,9 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
 
     /** Set when no further match will start; the task then walks back to Home. */
     private var finishReason: String? = null
+
+    /** Iteration whose Team Trials home showed Team Race greyed out; null when the last one did not. */
+    private var teamRaceGreyedAt: Int? = null
 
     override fun process(): TaskResult? {
         checkSafetyRails()?.let { return it }
@@ -361,12 +375,25 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         return parseRpCount(raw).also { MessageLog.i(TAG, "[TEAM_TRIALS] RP pips unreadable; counter OCR \"$raw\" -> $it.") }
     }
 
+    private fun teamRaceGreyedOn(bitmap: Bitmap): Boolean {
+        val label = ButtonTeamRace.findImageWithBitmap(game.imageUtils, bitmap) ?: return false
+        return teamRaceGreyed(sampler(bitmap), bitmap.width, bitmap.height, label.x.roundToInt(), label.y.roundToInt())
+    }
+
     private fun handleTeamTrialsHome(bitmap: Bitmap) {
         matchInProgress = false
         quickModeChecked = false
 
         if (finishReason == null && matchesCompleted >= maxMatchesPerSession) {
             finishReason = "Reached the per-session cap of $maxMatchesPerSession matches."
+        }
+        if (finishReason == null) {
+            val greyed = teamRaceGreyedOn(bitmap)
+            if (tallyingConfirmed(greyed, teamRaceGreyedAt, iterationsCompleted)) {
+                MessageLog.i(TAG, "[TEAM_TRIALS] Team Race is greyed out on two frames in a row; ending Team Trials for this run.")
+                finishReason = TALLYING_REASON
+            }
+            teamRaceGreyedAt = if (greyed) iterationsCompleted else null
         }
         if (finishReason == null) {
             val rp = readRp(bitmap)

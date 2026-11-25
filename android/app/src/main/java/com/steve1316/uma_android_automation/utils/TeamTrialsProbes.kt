@@ -68,6 +68,13 @@ object TeamTrialsGeometry {
     /** Its Next button, BOTTOM band: MuMu x 330-750, y 1562-1676. */
     const val CLASS_RESULT_NEXT_X = 540
     const val CLASS_RESULT_NEXT_Y = 1620
+
+    /**
+     * Team Race button body below its label, from the label's match centre: clear of art 22-42 px down across +-240 px.
+     * Measured on MuMu 1080x1920 frames: greyed on two weekly Tallying Mondays 151-162 and neutral, enabled 239-255.
+     */
+    val TEAM_RACE_BODY_DYS = intArrayOf(26, 32)
+    const val TEAM_RACE_BODY_HALF_WIDTH = 240
 }
 
 private fun isCardWhite(argb: Int): Boolean {
@@ -158,6 +165,36 @@ fun readRpPips(
         }
     }
     return lit
+}
+
+/**
+ * Whether the Team Race button is greyed out, as in the weekly Tallying period, when its label still matches but taps do
+ * nothing. [cx], [cy] are the label's match centre; false when the sampled body would leave the frame.
+ */
+fun teamRaceGreyed(
+    sampler: SparkPixelSampler,
+    width: Int,
+    height: Int,
+    cx: Int,
+    cy: Int,
+): Boolean {
+    val scale = width / 1080.0
+    val half = (TeamTrialsGeometry.TEAM_RACE_BODY_HALF_WIDTH * scale).roundToInt()
+    val ys = TeamTrialsGeometry.TEAM_RACE_BODY_DYS.map { cy + (it * scale).roundToInt() }
+    if (cx - half < 0 || cx + half >= width || ys.any { it < 0 || it >= height }) return false
+    val step = (10 * scale).roundToInt().coerceAtLeast(1)
+    var grey = 0
+    var total = 0
+    for (y in ys) {
+        for (x in cx - half..cx + half step step) {
+            val p = sampler.argb(x, y)
+            val lo = minOf(red(p), green(p), blue(p))
+            val hi = maxOf(red(p), green(p), blue(p))
+            if (hi - lo <= 15 && (red(p) + green(p) + blue(p)) / 3 in 130..185) grey++
+            total++
+        }
+    }
+    return grey >= total * 0.8
 }
 
 /** The "n/5" RP counter as OCR reads it ("3/5" -> 3); null unless it is a whole count out of 5. */
