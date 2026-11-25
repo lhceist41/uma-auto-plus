@@ -36,6 +36,13 @@ internal class GrandConcertCycle {
         advancedFromTurn = null
     }
 
+    /**
+     * Called after [noteDateRead]. A no-buy mark past the turn the next hook computes came from a visit labelled one turn ahead (a step
+     * reported a move it did not make); left there it would skip the real next turn's visit. Compared with [visitTurn], not the raw date:
+     * a failed read on the first turn after a concert leaves the pending day, and the mark must stay on the concert floor.
+     */
+    fun noBuyMarkAfterDateRead(mark: Int, dateDay: Int): Int = minOf(mark, visitTurn(dateDay))
+
     fun noteSongBought() {
         songsThisCycle++
     }

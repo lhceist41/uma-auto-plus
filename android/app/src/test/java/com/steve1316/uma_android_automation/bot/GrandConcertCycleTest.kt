@@ -113,6 +113,46 @@ class GrandConcertCycleTest {
     }
 
     @Test
+    fun `a date read pulls a no-buy mark set one turn ahead back to the read day`() {
+        // A training step that returned true without moving the turn (the Training screen never opened) labels the repeat visit on
+        // the same turn one ahead; its no-buy mark then blocked the real next turn's visit.
+        val cycle = GrandConcertCycle()
+        cycle.noteDateRead()
+        cycle.trackStep(35, { it }) { true }
+        val visit = cycle.visitTurn(35)
+        assertEquals(36, visit)
+        cycle.noteDateRead()
+        val mark = cycle.noBuyMarkAfterDateRead(visit, 35)
+        assertEquals(35, mark, "the date read shows the visit ran on turn 35")
+        assertEquals(mark, cycle.visitTurn(35), "the same-turn repeat stays blocked")
+        cycle.trackStep(35, { it }) { true }
+        assertEquals(36, cycle.visitTurn(35))
+        assertTrue(cycle.visitTurn(35) != mark, "the real turn-36 visit is open")
+
+        val read = GrandConcertCycle()
+        read.noteDateRead()
+        assertEquals(36, read.noBuyMarkAfterDateRead(36, 36), "a mark on the read day stays")
+        assertEquals(35, read.noBuyMarkAfterDateRead(35, 36), "a mark behind the read day stays")
+        assertEquals(-1, read.noBuyMarkAfterDateRead(-1, 36), "no mark stays none")
+    }
+
+    @Test
+    fun `a failed date read after a concert keeps the no-buy mark on the concert floor`() {
+        // The first turn after a concert is visited on the pending screen's stale date and labelled by the floor (37); a failed or low
+        // read leaves that date, and pulling the mark under the floor reopened the shop on the same turn.
+        for (pendingDay in listOf(35, 36)) {
+            val cycle = GrandConcertCycle()
+            cycle.noteConcertPerformed(pendingDay)
+            val visit = cycle.visitTurn(pendingDay)
+            assertEquals(37, visit)
+            cycle.noteDateRead()
+            val mark = cycle.noBuyMarkAfterDateRead(visit, pendingDay)
+            assertEquals(37, mark, "pending day $pendingDay")
+            assertEquals(mark, cycle.visitTurn(pendingDay), "pending day $pendingDay: the same-turn repeat stays blocked")
+        }
+    }
+
+    @Test
     fun `the campaign drives the cycle from the escort, the turn-advancing steps and the date read`() {
         val campaign = source("android/app/src/main/java/com/steve1316/uma_android_automation/bot/campaigns/GrandConcert.kt")
         val escort = campaign.indexOf("if (runConcertEscort()) {")
@@ -127,6 +167,9 @@ class GrandConcertCycleTest {
         assertTrue(declaration(campaign, "override fun executeAction(").contains("action == MainScreenAction.TRAIN"))
         assertTrue(declaration(campaign, "override fun handleRaceEventFallback(").contains("it.turnAdvanced"))
         assertTrue(method(campaign, "override fun updateDate(").contains("cycle.noteDateRead()"))
+        val updateDate = method(campaign, "override fun updateDate(")
+        val correction = updateDate.indexOf("lastNoBuyVisitDay = cycle.noBuyMarkAfterDateRead(lastNoBuyVisitDay, date.day)")
+        assertTrue(correction > updateDate.indexOf("super.updateDate(isOnMainScreen)"), "the mark is corrected from the date just read")
         assertTrue(campaign.contains("Entering the concert with \${cycle.songsThisCycle} new song(s) this cycle "), "log parsers match this line")
     }
 

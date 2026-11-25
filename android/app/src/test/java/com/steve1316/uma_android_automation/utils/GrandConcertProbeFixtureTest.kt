@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.utils
 
+import com.steve1316.uma_android_automation.bot.HypeTier
 import com.steve1316.uma_android_automation.bot.LessonCardKind
 import com.steve1316.uma_android_automation.bot.PerformancePointType
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -88,6 +89,15 @@ class GrandConcertProbeFixtureTest {
         @Test
         fun `the concert-pending screen does not read as Complete Career`() {
             assertFalse(grandConcertCareerCompleteScreenPresent(sampler("concert_pending")))
+        }
+
+        @Test
+        fun `the pending screen reads Great Hype and every other capture reads unknown`() {
+            assertEquals(HypeTier.GREAT, grandConcertPendingHypeTier(sampler("concert_pending")))
+            // The Bonuses Updated and Song Acquired green would vote Great on the band alone: the pending probe keeps them out.
+            for (name in allFixtures.filter { it != "concert_pending" }) {
+                assertEquals(HypeTier.UNKNOWN, grandConcertPendingHypeTier(sampler(name)), name)
+            }
         }
     }
 

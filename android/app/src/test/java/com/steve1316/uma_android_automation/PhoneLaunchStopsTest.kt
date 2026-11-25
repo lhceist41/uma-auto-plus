@@ -52,6 +52,8 @@ class PhoneLaunchStopsTest {
             val pending = body(gc, "    override fun checkCampaignSpecificConditions(): Boolean {")
             val stop = pending.indexOf("stopBeforeUnmeasuredFinale(bitmap.width, bitmap.height)")
             assertTrue(stop >= 0 && stop < pending.indexOf("runConcertEscort()"), "the finale check comes before the escort's first tap")
+            val hype = pending.indexOf("grandConcertPendingHypeTier(sampler, bitmap.width, bitmap.height)")
+            assertTrue(hype > stop && hype < pending.indexOf("runConcertEscort()"), "the Hype tier is read on the pending frame after the finale check, before the escort's first tap")
             val gate = body(gc, "    private fun stopBeforeUnmeasuredFinale(")
             assertTrue(gate.contains("if (finaleMeasuredOn(width, height)) return"))
             assertTrue(gate.contains("if (!finaleCannotBeRuledOut(date.dayObserved, date.day)) return"), "only a read turn of concerts 1-4 lets the escort run")

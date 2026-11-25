@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.utils
 
+import com.steve1316.uma_android_automation.bot.HypeTier
 import com.steve1316.uma_android_automation.bot.LessonCardKind
 import com.steve1316.uma_android_automation.bot.SparkPagerNav
 import com.steve1316.uma_android_automation.bot.SparkRowKind
@@ -97,6 +98,11 @@ class GrandConcertAndSparksOnTallPhoneTest {
                     grandConcertDialogHeaderPresent(s, w, h) && grandConcertScheduleShortfallPresent(s, w, h)
                 },
             "concert pending" to Probe(setOf("concert_pending", "concert4_pending", "grand_pending"), listOf(dialogToMiddle + middleToBottom, -middleToBottom)) { s, w, h -> grandConcertConcertPendingScreenPresent(s, w, h) },
+            "Great Hype" to Probe(setOf("grand_pending"), listOf(dialogToMiddle + middleToBottom, -middleToBottom)) { s, w, h -> grandConcertPendingHypeTier(s, w, h) == HypeTier.GREAT },
+            "Mild Hype" to
+                Probe(setOf("concert_pending", "concert4_pending"), listOf(dialogToMiddle + middleToBottom, -middleToBottom)) { s, w, h ->
+                    grandConcertPendingHypeTier(s, w, h) == HypeTier.MILD
+                },
             "concert start confirmation" to Probe(setOf("concert_confirm", "concert4_confirm", "grand_confirm_unchecked", "grand_confirm_checked"), listOf(towardTop, dialogToMiddle)) { s, w, h -> grandConcertConcertConfirmPresent(s, w, h) },
             "playback skip" to Probe(setOf("concert_playback"), listOf(-middleToBottom)) { s, w, h -> grandConcertPlaybackSkipPresent(s, w, h) },
             "result Next" to Probe(setOf("concert_success_banner", "grand_success", "grand_overview"), listOf(-middleToBottom)) { s, w, h -> grandConcertResultNextPresent(s, w, h) },

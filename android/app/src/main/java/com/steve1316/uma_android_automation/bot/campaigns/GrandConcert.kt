@@ -66,6 +66,7 @@ import com.steve1316.uma_android_automation.utils.grandConcertCutsceneCheckboxSt
 import com.steve1316.uma_android_automation.utils.grandConcertDialogHeaderPresent
 import com.steve1316.uma_android_automation.utils.grandConcertLessonSlotState
 import com.steve1316.uma_android_automation.utils.grandConcertOnStagePresent
+import com.steve1316.uma_android_automation.utils.grandConcertPendingHypeTier
 import com.steve1316.uma_android_automation.utils.grandConcertPlaybackMenuButtonPresent
 import com.steve1316.uma_android_automation.utils.grandConcertPlaybackMenuSkipPresent
 import com.steve1316.uma_android_automation.utils.grandConcertPlaybackSkipPresent
@@ -257,6 +258,7 @@ class GrandConcert(game: Game) : Campaign(game) {
                         trainee.skillPoints.takeIf { trainee.skillPointsReads > 0 },
                     )
                 }
+                observe { logHypeAtEntry(grandConcertPendingHypeTier(sampler, bitmap.width, bitmap.height)) }
             }
             MessageLog.i(
                 TAG,
@@ -290,6 +292,15 @@ class GrandConcert(game: Game) : Campaign(game) {
         // No concert pending: reset the budget so the next concert does not inherit a spent attempt.
         concertEscortAttempts = 0
         return false
+    }
+
+    /** The game's own answer to whether Great Success is secured, beside the bot's count, which is only a floor (free songs, restarts). */
+    private fun logHypeAtEntry(hype: HypeTier) {
+        val songs = cycle.songsThisCycle
+        MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Hype at entry: ${hype.label} (bot count $songs).")
+        if (hype == HypeTier.MILD && songs >= GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value) {
+            MessageLog.w(TAG, "[GRAND_CONCERT] [CONCERT] The screen shows Mild Hype but the bot counted $songs new song(s) this cycle.")
+        }
     }
 
     /**
@@ -967,6 +978,7 @@ class GrandConcert(game: Game) : Campaign(game) {
     override fun updateDate(isOnMainScreen: Boolean): Boolean {
         val changed = super.updateDate(isOnMainScreen)
         cycle.noteDateRead()
+        lastNoBuyVisitDay = cycle.noBuyMarkAfterDateRead(lastNoBuyVisitDay, date.day)
         return changed
     }
 

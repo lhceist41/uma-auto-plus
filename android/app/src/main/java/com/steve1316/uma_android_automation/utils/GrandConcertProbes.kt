@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.utils
 
+import com.steve1316.uma_android_automation.bot.HypeTier
 import com.steve1316.uma_android_automation.bot.LessonCardKind
 import com.steve1316.uma_android_automation.bot.PerformancePointType
 
@@ -803,6 +804,34 @@ fun grandConcertConcertPendingScreenPresent(
             r >= 225 && g <= 95 && b <= 95
         } >= 3
     return ribbon
+}
+
+/**
+ * The band behind the pending screen's tier text: Great Hype is a pale rainbow (green over blue by 46 or more), Mild Hype pale violet
+ * (blue over green by 10 or more, blue 230 or more). Measured on grandconcert/concert_pending and tallphone grand_pending (Great),
+ * tallphone concert_pending and concert4_pending (Mild); a vote, because sparkles move single points (one Mild point on an unmasked phone
+ * frame read blue over green by only 7).
+ */
+object GrandConcertPendingHype {
+    const val BAND_Y = 575
+    val BAND_XS = listOf(300, 320, 340, 740, 760, 780)
+    const val MIN_VOTES = 4
+}
+
+/** No Hype was never captured, so anything but the two measured bands reads UNKNOWN. Gated on the pending probe: the band alone matches green dialog buttons. */
+fun grandConcertPendingHypeTier(
+    sampler: SparkPixelSampler,
+    width: Int = 1080,
+    height: Int = 1920,
+): HypeTier {
+    if (!grandConcertConcertPendingScreenPresent(sampler, width, height)) return HypeTier.UNKNOWN
+    val top = sampler.onScreen(ScreenBand.TOP, width, height)
+    val band = GrandConcertPendingHype.BAND_XS.map { meanRgb(top, it, GrandConcertPendingHype.BAND_Y) }
+    return when {
+        band.count { (_, g, b) -> g - b >= 30 && b >= 120 } >= GrandConcertPendingHype.MIN_VOTES -> HypeTier.GREAT
+        band.count { (_, g, b) -> b - g >= 8 && b >= 215 } >= GrandConcertPendingHype.MIN_VOTES -> HypeTier.MILD
+        else -> HypeTier.UNKNOWN
+    }
 }
 
 /**
