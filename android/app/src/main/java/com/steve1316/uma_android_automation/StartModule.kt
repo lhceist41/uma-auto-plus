@@ -999,6 +999,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     private val context: Context = reactContext.applicationContext
+
+    /** Touched only by the JsEventForwarder thread, which is the only caller of [sendEvent]. */
     private var messageId = 1
 
     /** Bounded hand-off between MessageLog's lock-held EventBus post and the bridge worker. */
@@ -1034,7 +1036,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             reactContext?.startService(
                 MediaProjectionService.getStartIntent(reactContext!!, resultCode, data!!),
             )
-            sendEvent("MediaProjectionService", "Running")
+            enqueueJsEvent(JSEvent("MediaProjectionService", "Running", false))
             Log.d(TAG, "MediaProjectionService is now running.")
         }
     }
@@ -1178,7 +1180,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         EventBus.getDefault().unregister(this)
         Log.d(TAG, "Event Bus unregistered for StartModule")
         reactContext?.startService(MediaProjectionService.getStopIntent(reactContext!!))
-        sendEvent("MediaProjectionService", "Not Running")
+        enqueueJsEvent(JSEvent("MediaProjectionService", "Not Running", false))
     }
 
     /** This is called when the Stop button is pressed and will begin stopping the MediaProjection service. */
@@ -1652,7 +1654,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             }
         StatusBoard.queueProgress(currentRun, totalRuns, status, payload.toString())
         ProgressNotification.refresh()
-        sendEvent("RunQueueProgress", payload.toString())
+        enqueueJsEvent(JSEvent("RunQueueProgress", payload.toString(), false))
     }
 
     /**
@@ -3353,7 +3355,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      * @param eventName The name of the event to be picked up on as defined in the developer's JS frontend.
      * @param message The message string to pass on.
      */
-    fun sendEvent(eventName: String, message: String) {
+    private fun sendEvent(eventName: String, message: String) {
         val params = Arguments.createMap()
         params.putString("message", message)
         params.putInt("id", messageId++)
