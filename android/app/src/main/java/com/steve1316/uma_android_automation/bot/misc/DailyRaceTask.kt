@@ -22,6 +22,7 @@ import com.steve1316.uma_android_automation.components.ButtonMenuBarRaceSelected
 import com.steve1316.uma_android_automation.components.ButtonMultiRaceOff
 import com.steve1316.uma_android_automation.components.ButtonMultiRaceOn
 import com.steve1316.uma_android_automation.components.ButtonRaceConfirm
+import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.LabelDailyPrograms
 import com.steve1316.uma_android_automation.components.LabelDailyRacesHeader
 import com.steve1316.uma_android_automation.components.LabelDailySale
@@ -72,6 +73,9 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
 
         /** An Uma Outing popup after the game-day reset (Login Bonus or Gauge MAX). */
         UMA_OUTING_POPUP,
+
+        /** The game's login reward screens after the daily reset (Anniversary Countdown, Login Bonus), passed with their ">>". */
+        LOGIN_REWARD,
 
         /** Back on Home once the session is over. */
         COMPLETE,
@@ -279,6 +283,13 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
                 null
             }
 
+            DailyRaceScreenState.LOGIN_REWARD -> {
+                MessageLog.i(TAG, "[DAILY_RACES] Login reward screen after the daily reset; skipping it.")
+                if (!ButtonSkip.click(game.imageUtils)) MessageLog.w(TAG, "[WARN] Login reward skip button gone before the tap.")
+                game.wait(1.5)
+                null
+            }
+
             DailyRaceScreenState.COMPLETE -> {
                 val races = if (raceSequenceCommitted) ticketsHeld ?: 0 else 0
                 val reason = finishReason ?: "Multi-race done."
@@ -351,6 +362,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
 
         if (ButtonMenuBarHomeSelected.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.bottomHalf)) {
             return if (sessionOver) DailyRaceScreenState.COMPLETE else DailyRaceScreenState.HOME_SCREEN
+        }
+
+        // Last: only a frame no other state claims; these screens wait for a tap, so leaving them UNKNOWN trips the safety rail.
+        if (ButtonSkip.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
+            return DailyRaceScreenState.LOGIN_REWARD
         }
 
         return DailyRaceScreenState.UNKNOWN

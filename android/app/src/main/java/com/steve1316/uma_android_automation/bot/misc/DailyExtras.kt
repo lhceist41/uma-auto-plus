@@ -24,6 +24,7 @@ import com.steve1316.uma_android_automation.components.ButtonItemRequestShoesTab
 import com.steve1316.uma_android_automation.components.ButtonMenuBarHomeSelected
 import com.steve1316.uma_android_automation.components.ButtonOkDialog
 import com.steve1316.uma_android_automation.components.ButtonSelectAll
+import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabDaily
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabMain
 import com.steve1316.uma_android_automation.components.ButtonSpecialMissionsTabSpecial
@@ -33,6 +34,7 @@ import com.steve1316.uma_android_automation.components.DialogApplicationUpdated
 import com.steve1316.uma_android_automation.components.DialogConfirmExchange
 import com.steve1316.uma_android_automation.components.DialogExchangeComplete
 import com.steve1316.uma_android_automation.components.DialogObjects
+import com.steve1316.uma_android_automation.components.DialogObtainOutfit
 import com.steve1316.uma_android_automation.components.DialogRewardsCollected
 import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.LabelClubMenu
@@ -261,6 +263,9 @@ internal enum class ExtrasScreen {
     CONFIRM_REQUEST,
     PRESENTS,
     REWARDS_COLLECTED,
+
+    /** The Obtain Outfit popup a Collect All shows for an outfit reward, in place of Rewards Collected. */
+    OUTFIT_OBTAINED,
     MISSIONS,
     SPENDING_DIALOG,
     SHOP_MENU,
@@ -296,6 +301,9 @@ internal enum class ExtrasTarget {
     SELECT_ALL,
     RESET,
     EXCHANGE,
+
+    /** The ">>" of the game's login reward screens after the daily reset. */
+    SKIP,
 }
 
 /** The game side of [DailyExtras]. One implementation drives the game; the tests drive a scripted fake. */
@@ -445,8 +453,15 @@ internal class DailyExtras(
     private fun collect(home: ExtrasScreen): String {
         if (device.collectAllEnabled() == false) return "nothing to collect"
         if (!device.press(ExtrasTarget.COLLECT_ALL)) return "Collect All not found"
-        if (awaitScreen(ExtrasScreen.REWARDS_COLLECTED, polls = REWARD_POLLS) != ExtrasScreen.REWARDS_COLLECTED) return "nothing to collect"
-        device.press(ExtrasTarget.CLOSE)
+        when (awaitAny(ExtrasScreen.REWARDS_COLLECTED, ExtrasScreen.OUTFIT_OBTAINED, polls = REWARD_POLLS)) {
+            ExtrasScreen.REWARDS_COLLECTED -> device.press(ExtrasTarget.CLOSE)
+            ExtrasScreen.OUTFIT_OBTAINED -> {
+                device.press(ExtrasTarget.CLOSE)
+                // Other rewards of the same tap may still show Rewards Collected after it.
+                if (awaitAny(ExtrasScreen.REWARDS_COLLECTED, home, polls = REWARD_POLLS) == ExtrasScreen.REWARDS_COLLECTED) device.press(ExtrasTarget.CLOSE)
+            }
+            else -> return "nothing to collect"
+        }
         return if (awaitScreen(home) == home) "collected" else "collected, then lost the screen"
     }
 
@@ -583,8 +598,8 @@ internal class DailyExtras(
                     ExtrasScreen.MISSIONS, ExtrasScreen.SHOP_MENU, ExtrasScreen.DAILY_SALES -> device.press(ExtrasTarget.BACK)
                     ExtrasScreen.CONFIRM_REQUEST, ExtrasScreen.ITEM_REQUEST_PICKER, ExtrasScreen.SPENDING_DIALOG, ExtrasScreen.CONFIRM_EXCHANGE -> device.press(ExtrasTarget.CANCEL)
                     ExtrasScreen.ITEM_REQUEST_TOO_SOON -> device.press(ExtrasTarget.OK)
-                    // Close, Cancel and Back never accept anything; an unknown screen gets nothing else.
-                    else -> device.press(ExtrasTarget.CLOSE) || device.press(ExtrasTarget.CANCEL) || device.press(ExtrasTarget.BACK)
+                    // Close, Cancel, Back and the login rewards' ">>" never accept anything; an unknown screen gets nothing else.
+                    else -> device.press(ExtrasTarget.CLOSE) || device.press(ExtrasTarget.CANCEL) || device.press(ExtrasTarget.BACK) || device.press(ExtrasTarget.SKIP)
                 }
             rounds += "${screen ?: "unknown"}: ${if (pressed) "pressed" else "nothing to press"}"
             if (!pressed) device.pause(1.0)
@@ -667,12 +682,13 @@ private const val SHOP_BADGE_H = 100
 internal val SPENDING_DIALOG_NAMES =
     setOf("confirm_exchange", "confirm_restore_rp", "daily_sale", "purchase_alarm_clock", "purchase_carats", "purchase_daily_race_ticket", "shop")
 
-/** What a dialog title stands for: the Rewards Collected popup (when its header template missed), a Daily Sales purchase dialog, a spending dialog or the forced update prompt. */
+/** What a dialog title stands for: the Rewards Collected popup (when its header template missed), the Obtain Outfit popup, a Daily Sales purchase dialog, a spending dialog or the forced update prompt. */
 internal fun extrasDialogScreen(title: String?): ExtrasScreen? =
     when {
         title == null -> null
         title == DialogApplicationUpdated.title -> ExtrasScreen.GAME_UPDATE_PROMPT
         title == DialogRewardsCollected.title -> ExtrasScreen.REWARDS_COLLECTED
+        title == DialogObtainOutfit.title -> ExtrasScreen.OUTFIT_OBTAINED
         title == DialogConfirmExchange.title -> ExtrasScreen.CONFIRM_EXCHANGE
         title == DialogExchangeComplete.title -> ExtrasScreen.EXCHANGE_COMPLETE
         DialogObjects.items.any { it.title == title && it.name in SPENDING_DIALOG_NAMES } -> ExtrasScreen.SPENDING_DIALOG
@@ -730,6 +746,7 @@ internal class GameExtrasDevice(private val game: Game) : ExtrasDevice {
                 ExtrasTarget.SELECT_ALL -> ButtonSelectAll.click(imageUtils)
                 ExtrasTarget.RESET -> ButtonDailySalesReset.click(imageUtils)
                 ExtrasTarget.EXCHANGE -> ButtonExchange.click(imageUtils)
+                ExtrasTarget.SKIP -> ButtonSkip.click(imageUtils)
             }
         if (clicked) game.wait(1.0)
         return clicked

@@ -199,6 +199,10 @@ open class DialogHandler(val game: Game) {
                 dialog.close(game.imageUtils)
             }
 
+            "obtain_outfit" -> {
+                dialog.close(game.imageUtils)
+            }
+
             "session_error", "session_verification_error" -> {
                 stopForSessionError(dialog)
             }

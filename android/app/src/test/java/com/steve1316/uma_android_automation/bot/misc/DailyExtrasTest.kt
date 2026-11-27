@@ -12,6 +12,7 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_O
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_PICKER
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.ITEM_REQUEST_TOO_SOON
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.MISSIONS
+import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.OUTFIT_OBTAINED
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.PRESENTS
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.REWARDS_COLLECTED
 import com.steve1316.uma_android_automation.bot.misc.ExtrasScreen.SHOP_MENU
@@ -37,8 +38,11 @@ import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.PRESENTS_BUTTO
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.RESET
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.SELECT_ALL
 import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.SHOP_BUTTON
+import com.steve1316.uma_android_automation.bot.misc.ExtrasTarget.SKIP
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.DialogObjects
+import com.steve1316.uma_android_automation.components.DialogObtainOutfit
+import com.steve1316.uma_android_automation.components.DialogUtils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -54,6 +58,15 @@ private class FakeGame(
     var missionRewards: Boolean = true,
     /** Rewards waiting on the Titles tab. */
     var titlesRewards: Boolean = false,
+    /** Rewards waiting on the Main tab. */
+    var mainRewards: Boolean = false,
+    /** The tab whose Collect All grants an outfit: the game shows Obtain Outfit instead of Rewards Collected. */
+    val outfitOn: ExtrasTarget? = null,
+    /** Rewards Collected follows the Obtain Outfit popup, for other rewards of the same tap. */
+    val outfitThenRewards: Boolean = false,
+    /** After this tap the daily reset shows [loginRewardScreens] login reward screens that only Skip passes, then Home. */
+    val loginRewardsAfter: ExtrasTarget? = null,
+    val loginRewardScreens: Int = 2,
     /** The tab Missions opens on. */
     var openTab: ExtrasTarget = MISSIONS_TAB_DAILY,
     /** Tabs whose template never matches, as when the game draws them differently. */
@@ -108,6 +121,7 @@ private class FakeGame(
     private var errorShowing = false
     var elapsedMs = 0L
     private var homeArrivesAtMs = -1L
+    private var loginRewardsLeft = -1
     var framesSaved = 0
 
     override fun screen(): ExtrasScreen {
@@ -140,6 +154,10 @@ private class FakeGame(
             screen = UNKNOWN
             errorShowing = true
         }
+        if (target == loginRewardsAfter && loginRewardsLeft < 0) {
+            screen = UNKNOWN
+            loginRewardsLeft = loginRewardScreens
+        }
         return true
     }
 
@@ -166,7 +184,9 @@ private class FakeGame(
                     requested = picked
                     request = "running"
                 }
-            MISSIONS to COLLECT_ALL -> if (rewardsOn(tab)) REWARDS_COLLECTED.also { rewardsFrom = MISSIONS } else MISSIONS
+            MISSIONS to COLLECT_ALL -> if (rewardsOn(tab)) (if (tab == outfitOn) OUTFIT_OBTAINED else REWARDS_COLLECTED).also { rewardsFrom = MISSIONS } else MISSIONS
+            OUTFIT_OBTAINED to CLOSE -> if (outfitThenRewards) REWARDS_COLLECTED else MISSIONS.also { missionsCollected() }
+            UNKNOWN to SKIP -> if (loginRewardsLeft > 0) (if (--loginRewardsLeft == 0) HOME else UNKNOWN) else null
             // A tab template is the unselected look: it matches only on the other tabs.
             MISSIONS to MISSIONS_TAB_DAILY, MISSIONS to MISSIONS_TAB_MAIN, MISSIONS to MISSIONS_TAB_TITLES, MISSIONS to MISSIONS_TAB_SPECIAL ->
                 if (target == tab || target in tabsMissing) null else MISSIONS.also { tab = target }
@@ -192,10 +212,7 @@ private class FakeGame(
             REWARDS_COLLECTED to CLOSE ->
                 rewardsFrom.also {
                     if (it == MISSIONS) {
-                        if (tab == openTab) missionRewards = false
-                        if (tab == MISSIONS_TAB_TITLES) titlesRewards = false
-                        collectedMissions = true
-                        collectedTabs += tab
+                        missionsCollected()
                     } else {
                         presentBatches--
                         collectedPresents++
@@ -238,7 +255,15 @@ private class FakeGame(
 
     override fun costBar(): Pair<Int?, Int?> = (if (selected && barLateReads-- <= 0) barTotal else 0) to balance
 
-    private fun rewardsOn(on: ExtrasTarget): Boolean = (on == openTab && missionRewards) || (on == MISSIONS_TAB_TITLES && titlesRewards)
+    private fun rewardsOn(on: ExtrasTarget): Boolean = (on == openTab && missionRewards) || (on == MISSIONS_TAB_TITLES && titlesRewards) || (on == MISSIONS_TAB_MAIN && mainRewards)
+
+    private fun missionsCollected() {
+        if (tab == openTab) missionRewards = false
+        if (tab == MISSIONS_TAB_TITLES) titlesRewards = false
+        if (tab == MISSIONS_TAB_MAIN) mainRewards = false
+        collectedMissions = true
+        collectedTabs += tab
+    }
 
     override fun pause(seconds: Double) {
         elapsedMs += (seconds * 1000).toLong()
@@ -515,6 +540,47 @@ class DailyExtrasTest {
         assertEquals(listOf(MISSIONS_TAB_TITLES), game.collectedTabs)
         assertEquals(MISSIONS_TAB_MAIN, game.taps.filter { it == MISSIONS_TAB_MAIN }.single())
         assertEquals("Missions: collected on Titles", note)
+    }
+
+    @Test
+    fun `live 11-27, an outfit on Main shows Obtain Outfit, which is closed, Main counts as collected and every other tab is still visited`() {
+        val game = FakeGame(missionRewards = false, mainRewards = true, outfitOn = MISSIONS_TAB_MAIN, presentBatches = 0)
+        val note = runMissions(game)
+        assertEquals("Missions: collected on Main", note)
+        assertEquals(listOf(MISSIONS_TAB_MAIN), game.collectedTabs)
+        val after = game.taps.dropWhile { it != COLLECT_ALL }
+        assertEquals(listOf(COLLECT_ALL, CLOSE, MISSIONS_TAB_TITLES, MISSIONS_TAB_SPECIAL, MISSIONS_TAB_DAILY, BACK), after)
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `Rewards Collected after the Obtain Outfit popup is closed too, and the tab counts once`() {
+        val game = FakeGame(missionRewards = false, mainRewards = true, outfitOn = MISSIONS_TAB_MAIN, outfitThenRewards = true, presentBatches = 0)
+        val note = runMissions(game)
+        assertEquals("Missions: collected on Main", note)
+        assertEquals(listOf(MISSIONS_TAB_MAIN), game.collectedTabs)
+        assertEquals(listOf(COLLECT_ALL, CLOSE, CLOSE, MISSIONS_TAB_TITLES), game.taps.dropWhile { it != COLLECT_ALL }.take(4))
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `login reward screens after the daily reset are skipped on the way back to Home, and the step goes on`() {
+        val game = FakeGame(missionRewards = false, presentBatches = 0, loginRewardsAfter = CLOSE)
+        val notes = DailyExtras(game, collectRewards = true, clubRequest = false, requestItem = "Dirt Racing Shoes", clockMs = { game.elapsedMs }).run()
+        assertEquals(listOf("Presents: nothing to collect", "Missions: nothing to collect"), notes)
+        assertEquals(listOf(PRESENTS_BUTTON, CLOSE, SKIP, SKIP, MISSIONS_BUTTON), game.taps.take(5))
+        assertEquals(HOME, game.screen)
+    }
+
+    @Test
+    fun `the Obtain Outfit title reads as its popup through OCR slips, and no other dialog title moves to it`() {
+        assertEquals(OUTFIT_OBTAINED, extrasDialogScreen(DialogObtainOutfit.title))
+        for (read in listOf("Obtain Outfit", "Obtain 0utfit", "ObtainOutfit", "Obtain Outfit.")) {
+            assertEquals(DialogObtainOutfit.title, DialogUtils.matchDialogTitle(read), read)
+        }
+        for (dialog in DialogObjects.items.filter { it != DialogObtainOutfit }) {
+            assertTrue(DialogUtils.matchDialogTitle(dialog.title) != DialogObtainOutfit.title, dialog.title)
+        }
     }
 
     @Test

@@ -502,6 +502,7 @@ object DialogObjects {
             DialogNewScenario,
             DialogNoRetries,
             DialogNotices,
+            DialogObtainOutfit,
             DialogOpenSoon,
             DialogOptions,
             DialogOverwrite,
@@ -1292,6 +1293,15 @@ object DialogNotices : DialogInterface {
 
         return ButtonClose.click(imageUtils = imageUtils, tries = tries)
     }
+}
+
+/** Missions: a Collect All that grants an outfit shows this, with Close only, instead of Rewards Collected. */
+object DialogObtainOutfit : DialogInterface {
+    override val name: String = "obtain_outfit"
+    override val title: String = "Obtain Outfit"
+    override val closeButton: BaseComponentInterface = ButtonClose
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> = listOf(ButtonClose)
 }
 
 /** Shop (only when clicking inactive daily sales button). */
