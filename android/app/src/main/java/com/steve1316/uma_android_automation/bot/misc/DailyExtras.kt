@@ -50,6 +50,7 @@ import com.steve1316.uma_android_automation.components.LabelItemRequestSelectPro
 import com.steve1316.uma_android_automation.components.LabelMissionsHeader
 import com.steve1316.uma_android_automation.components.LabelPresentsHeader
 import com.steve1316.uma_android_automation.components.LabelRewardsCollectedHeader
+import com.steve1316.uma_android_automation.utils.editDistance
 import com.steve1316.uma_android_automation.utils.swipeCanonical
 import org.opencv.core.Point
 
@@ -108,13 +109,24 @@ private val QUEEN_ELIZABETH_II = normalizeItemName("Queen Elizabeth II Cup Winne
 /** ML Kit sometimes reads the Queen Elizabeth II Cup sash with its second "I" dropped. */
 private val QUEEN_ELIZABETH_DROPPED_ROMAN = normalizeItemName("Queen Elizabeth I Cup Winner's Sash")
 
+private val ITEM_ENDINGS = listOf("winnerssash", "racingshoes")
+
+/** [read] is [wanted] with one letter of its shared ending misread ("Winne's Sash"); the race or distance part that tells items apart must be read in full. */
+private fun endingMisread(read: String, wanted: String): Boolean {
+    val ending = ITEM_ENDINGS.firstOrNull(wanted::endsWith) ?: return false
+    val name = wanted.removeSuffix(ending)
+    return read.startsWith(name) && editDistance(read.removePrefix(name), ending) <= 1
+}
+
 /**
  * Whether an OCR'd row title is [target]. Two dropped leading characters still match (a crop edge can cut a first letter),
  * but not a read that is also a front crop of three or more letters of another catalog name ("ka Sho" fits Oka, Shuka and Kikuka).
+ * One misread letter in the shared "Winner's Sash" or "Racing Shoes" ending also matches.
  */
 internal fun matchItemName(ocr: String, target: String): Boolean {
     val read = normalizeItemName(ocr).let { if (it == QUEEN_ELIZABETH_DROPPED_ROMAN) QUEEN_ELIZABETH_II else it }
     val wanted = normalizeItemName(target)
+    if (endingMisread(read, wanted)) return true
     if (read.isEmpty() || !wanted.endsWith(read) || wanted.length - read.length > 2) return false
     if (read == wanted) return true
     return (ClubRequestItems.SHOES + ClubRequestItems.SASHES).map(::normalizeItemName).none { it != wanted && it.endsWith(read) && it.length - read.length >= 3 }

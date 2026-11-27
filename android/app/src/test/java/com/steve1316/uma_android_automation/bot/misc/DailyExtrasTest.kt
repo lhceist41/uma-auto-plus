@@ -45,6 +45,7 @@ import com.steve1316.uma_android_automation.components.DialogObtainOutfit
 import com.steve1316.uma_android_automation.components.DialogUtils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -485,6 +486,23 @@ class DailyExtrasTest {
     }
 
     @Test
+    fun `Confirm Request reading one letter of the item ending wrong is still confirmed`() {
+        val kikuka = "Kikuka Sho Winner's Sash"
+        val game = FakeGame(confirmShows = "Kikuka Sho Winne's Sash")
+        runClub(game, item = kikuka)
+        assertEquals(kikuka, game.requested)
+        assertTrue(CONFIRM in game.taps)
+    }
+
+    @Test
+    fun `Confirm Request reading a close sash with one error is never confirmed as Kikuka Sho`() {
+        val game = FakeGame(confirmShows = "Shuka Sho Winne's Sash")
+        runClub(game, item = "Kikuka Sho Winner's Sash")
+        assertNull(game.requested)
+        assertFalse(CONFIRM in game.taps)
+    }
+
+    @Test
     fun `an item missing from the picker cancels the picker`() {
         val game = FakeGame()
         val notes = runClub(game, item = "Imaginary Racing Shoes")
@@ -737,6 +755,53 @@ class DailyExtrasTest {
             for (lost in 0..2) {
                 val read = itemNameFromTitle(name.drop(lost))
                 assertTrue(read == null || read == name, "$name minus $lost read as $read")
+            }
+        }
+    }
+
+    @Test
+    fun `one misread letter in the shared ending still names the item`() {
+        assertTrue(matchItemName("Kikuka Sho Winne's Sash", "Kikuka Sho Winner's Sash"))
+        assertEquals("Kikuka Sho Winner's Sash", itemNameFromTitle("Kikuka Sho Winne's Sash"))
+        assertEquals("Dirt Racing Shoes", itemNameFromTitle("Dirt Racing Shoe"))
+        for (name in ClubRequestItems.SHOES + ClubRequestItems.SASHES) {
+            val ending = if (isSashName(name)) "Winner's Sash" else "Racing Shoes"
+            val race = name.removeSuffix(ending)
+            val endingReads = ending.indices.flatMap { i -> listOf(ending.removeRange(i, i + 1), ending.replaceRange(i, i + 1, "x"), ending.substring(0, i) + "x" + ending.substring(i)) }
+            for (end in endingReads) assertEquals(name, itemNameFromTitle(race + end), "$race + $end")
+        }
+    }
+
+    @Test
+    fun `a one-letter misread ending never turns the close pairs into each other`() {
+        val sashes = listOf("Oka Sho", "Shuka Sho", "Kikuka Sho").map { "$it Winner's Sash" }
+        val shoes = listOf("Mile", "Dirt", "Medium").map { "$it Racing Shoes" }
+        for ((group, lastWord) in listOf(sashes to "Sash", shoes to "Shoes")) {
+            for (shown in group) {
+                val misreads = listOf(shown.dropLast(1), shown.replaceFirst("n", "m"), shown.removeSuffix(lastWord) + lastWord.dropLast(1) + "z")
+                for (read in misreads) assertNotEquals(shown, read)
+                for (wanted in group.filter { it != shown }) {
+                    for (read in listOf(shown) + misreads) {
+                        assertFalse(matchItemName(read, wanted), "$read read as $wanted")
+                    }
+                }
+            }
+        }
+        for (read in listOf("ka Sho Winne's Sash", "uka Sho Winne's Sash", "Kikuka Sho Wine's Sash", "Kikuka Sno Winner's Sash", "Kikuka Sno Winne's Sash", "Dirt Racing Sash", "Kikuka Sho")) {
+            assertNull(itemNameFromTitle(read), read)
+        }
+    }
+
+    @Test
+    fun `no single dropped or changed letter of a catalog name reads as a different name`() {
+        val names = ClubRequestItems.SHOES + ClubRequestItems.SASHES
+        for (name in names) {
+            for (i in name.indices) {
+                val reads = listOf(name.removeRange(i, i + 1)) + ('a'..'z').map { name.replaceRange(i, i + 1, it.toString()) }
+                for (read in reads) {
+                    val named = itemNameFromTitle(read)
+                    assertTrue(named == null || named == name, "$read read as $named, not $name")
+                }
             }
         }
     }
