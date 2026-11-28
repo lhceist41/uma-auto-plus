@@ -17906,10 +17906,10 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Long",
                 mustRestBeforeSummer: true,
@@ -36398,10 +36398,10 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Power", "Wit", "Stamina", "Guts"],
+                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Medium",
                 mustRestBeforeSummer: true,
@@ -36413,27 +36413,27 @@ const basePresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
-            // URA Finale End Closer build: Speed 1100, Power 900, Wit 700, Stamina 600,
-            // Guts 400. Stamina 600 is the real floor for Tenno Sho (Spring) at 3200m;
-            // her Arima WIN at turn 72 is the wall.
+            // URA Finale End Closer build: Speed 1100, Stamina 800, Power 900, Wit 700,
+            // Guts 400. Stamina second with a Stamina spark and 800 clear the 3200m Tenno
+            // Sho (Spring) goal; her Arima WIN at turn 72 is the wall.
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1100,
-                trainingSprintStatTarget_staminaStatTarget: 600,
+                trainingSprintStatTarget_staminaStatTarget: 800,
                 trainingSprintStatTarget_powerStatTarget: 900,
                 trainingSprintStatTarget_gutsStatTarget: 400,
                 trainingSprintStatTarget_witStatTarget: 700,
                 trainingMileStatTarget_speedStatTarget: 1100,
-                trainingMileStatTarget_staminaStatTarget: 600,
+                trainingMileStatTarget_staminaStatTarget: 800,
                 trainingMileStatTarget_powerStatTarget: 900,
                 trainingMileStatTarget_gutsStatTarget: 400,
                 trainingMileStatTarget_witStatTarget: 700,
                 trainingMediumStatTarget_speedStatTarget: 1100,
-                trainingMediumStatTarget_staminaStatTarget: 600,
+                trainingMediumStatTarget_staminaStatTarget: 800,
                 trainingMediumStatTarget_powerStatTarget: 900,
                 trainingMediumStatTarget_gutsStatTarget: 400,
                 trainingMediumStatTarget_witStatTarget: 700,
                 trainingLongStatTarget_speedStatTarget: 1100,
-                trainingLongStatTarget_staminaStatTarget: 600,
+                trainingLongStatTarget_staminaStatTarget: 800,
                 trainingLongStatTarget_powerStatTarget: 900,
                 trainingLongStatTarget_gutsStatTarget: 400,
                 trainingLongStatTarget_witStatTarget: 700,
@@ -37280,12 +37280,13 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                // Speed > Power > Wit ~ Stamina > Guts on paper, but Wit+30% growth fills Wit for
-                // free, so Stamina takes the tie (>=400 by Kikuka, >=500 by Tenno Spring).
-                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                // Speed > Stamina > Power > Wit > Guts: Wit+30% growth fills Wit for free, and
+                // Stamina second plus a Stamina spark builds it early (>=400 by Kikuka, >=500 by
+                // Tenno Spring).
+                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Medium",
                 mustRestBeforeSummer: true,
@@ -39210,13 +39211,13 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                // Speed > Power > Stamina ~ Wit > Guts. Wit+20% growth plus the 900 target keep her
-                // out of Rushed territory without spending picks on it; Stamina 800 clears the 3200m
-                // Tenno Spring top3.
-                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                // Speed > Stamina > Power > Wit > Guts. Stamina second plus a Stamina spark builds
+                // the 800 the 3200m Tenno Spring top3 needs; Wit+20% growth plus the 900 target keep
+                // her out of Rushed territory without spending picks on it.
+                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Medium",
                 mustRestBeforeSummer: true,
@@ -50787,10 +50788,10 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Long",
                 mustRestBeforeSummer: true,
@@ -52486,10 +52487,10 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Power", "Wit", "Stamina", "Guts"],
+                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Medium",
                 mustRestBeforeSummer: true,
@@ -52503,22 +52504,22 @@ const basePresets: CharacterPreset[] = [
             },
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1100,
-                trainingSprintStatTarget_staminaStatTarget: 600,
+                trainingSprintStatTarget_staminaStatTarget: 800,
                 trainingSprintStatTarget_powerStatTarget: 900,
                 trainingSprintStatTarget_gutsStatTarget: 400,
                 trainingSprintStatTarget_witStatTarget: 700,
                 trainingMileStatTarget_speedStatTarget: 1100,
-                trainingMileStatTarget_staminaStatTarget: 600,
+                trainingMileStatTarget_staminaStatTarget: 800,
                 trainingMileStatTarget_powerStatTarget: 900,
                 trainingMileStatTarget_gutsStatTarget: 400,
                 trainingMileStatTarget_witStatTarget: 700,
                 trainingMediumStatTarget_speedStatTarget: 1100,
-                trainingMediumStatTarget_staminaStatTarget: 600,
+                trainingMediumStatTarget_staminaStatTarget: 800,
                 trainingMediumStatTarget_powerStatTarget: 900,
                 trainingMediumStatTarget_gutsStatTarget: 400,
                 trainingMediumStatTarget_witStatTarget: 700,
                 trainingLongStatTarget_speedStatTarget: 1100,
-                trainingLongStatTarget_staminaStatTarget: 600,
+                trainingLongStatTarget_staminaStatTarget: 800,
                 trainingLongStatTarget_powerStatTarget: 900,
                 trainingLongStatTarget_gutsStatTarget: 400,
                 trainingLongStatTarget_witStatTarget: 700,
@@ -58532,10 +58533,10 @@ const basePresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Stamina"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Medium",
                 mustRestBeforeSummer: true,

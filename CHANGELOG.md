@@ -39,6 +39,7 @@ New releases start with a one-line summary, then list what you need to do, what 
 ### Presets and game data
 
 - **Game data and new presets:** Shinko Windy (Wicked Punk) is in, so the bot knows her events, objectives and Grand Concert fan goals, and she has research-graded presets for all four scenarios (464 presets across 116 trainee cards). She runs as a dirt Mile Pace Chaser: her URA Finale preset races dirt from Junior on for the 3000 fans due at the start of her Classic year and aims at the four dirt Mile G1s her secret event asks for. Unity Cup and Trackblazer show a caution for her turf F aptitude.
+- **URA Finale and Grand Concert presets:** Eishin Flash, Inari One, Air Shakur and Biwa Hayahide (every card) now aim sparks at Speed and Stamina, so they build enough Stamina in time for their 3200m Tenno Sho (Spring) goal. Their URA Finale presets and Biwa Hayahide's Grand Concert presets also train Stamina second, and Inari One's Stamina target rises from 600 to 800.
 
 ## [1.9.0] - 2026-11-17
 
