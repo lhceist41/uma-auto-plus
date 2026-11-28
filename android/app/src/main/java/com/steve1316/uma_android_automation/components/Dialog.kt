@@ -318,6 +318,7 @@ object DialogUtils {
      */
     private fun handleDangerousDialogs(dialog: DialogInterface) {
         if (dialog == DialogApplicationUpdated) stopForGameUpdate()
+        if (dialog == DialogDataUpdate) stopForDataUpdate()
         if (dialog in dangerousDialogs) stopForPurchasePrompt(dialog)
     }
 
@@ -341,6 +342,19 @@ object DialogUtils {
     fun stopForGameUpdate(): Nothing {
         val reason = "The game asks to be updated from the store. Update the game, then press Start again."
         StartModule.queueStopKey = "GAME_UPDATE_REQUIRED"
+        StartModule.queueStopReason = reason
+        StartModule.queueStopRequested = true
+        MessageLog.e(TAG, "[DIALOG] $reason")
+        throw InterruptedException(reason)
+    }
+
+    /**
+     * Stops the run on the game's Data Update prompt. Its only button, Title Screen, leaves the loaded
+     * career, and the download screens after it are not recognised, so nothing is tapped.
+     */
+    fun stopForDataUpdate(): Nothing {
+        val reason = "The game has new data and needs to go back to its title screen to download it. Tap Title Screen in the game, let the download finish, then press Start again."
+        StartModule.queueStopKey = "DATA_UPDATE"
         StartModule.queueStopReason = reason
         StartModule.queueStopRequested = true
         MessageLog.e(TAG, "[DIALOG] $reason")
@@ -475,6 +489,7 @@ object DialogObjects {
             DialogContinueCareer,
             DialogDailySale,
             DialogDataDownload,
+            DialogDataUpdate,
             DialogDateChanged,
             DialogDisplaySettings,
             DialogDownloadError,
@@ -934,6 +949,15 @@ object DialogDataDownload : DialogInterface {
             ButtonCancel,
             ButtonOk,
         )
+}
+
+/** Anywhere: new game data is out. Its only button, "Title Screen", leaves the current screen, so it lists no button to press. */
+object DialogDataUpdate : DialogInterface {
+    override val name: String = "data_update"
+    override val title: String = "Data Update"
+    override val closeButton = null
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> = emptyList()
 }
 
 /** Anywhere */

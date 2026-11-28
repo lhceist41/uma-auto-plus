@@ -25,6 +25,7 @@ internal enum class BetweenRunDialog(val title: String) {
     CONNECTION_ERROR("Connection Error"),
     DOWNLOAD_ERROR("Download Error"),
     DATA_DOWNLOAD("Data Download"),
+    DATA_UPDATE("Data Update"),
     SESSION_ERROR("Session Error"),
     SESSION_VERIFICATION_ERROR("Session Verification Error"),
     PURCHASE_CARATS("Purchase Carats"),
@@ -107,7 +108,8 @@ internal const val CONNECTION_DEADLINE_MARGIN_MS = 60_000L
  * same [ConnectionOutageBudget] rules ([onConnectionError] records the error), but only while the
  * wait still fits before the navigation deadline, [msBeforeDeadline] from now. A session error
  * needs the game's title screen: Title Screen when [mayReturnToTitle], else a stop. The purchase
- * screens spend real money and the forced update prompt only opens the store, so those stop. The
+ * screens spend real money, the forced update prompt only opens the store and the Data Update
+ * prompt's download screens are not recognised, so those stop. The
  * Data Download prompt is answered with OK until its OK button was missed
  * [Game.DATA_DOWNLOAD_OK_MISS_LIMIT] looks in a row ([dataDownloadOkMisses]), then it stops.
  */
@@ -133,6 +135,7 @@ internal fun planBetweenRunDialog(
             if (mayReturnToTitle) BetweenRunDialogStep.ReturnToTitle else BetweenRunDialogStep.Fail(reasonKey = "SESSION_EXPIRED")
         BetweenRunDialog.PURCHASE_CARATS, BetweenRunDialog.AGE_CONFIRMATION -> BetweenRunDialogStep.Fail(reasonKey = "PURCHASE_PROMPT")
         BetweenRunDialog.APPLICATION_UPDATED -> BetweenRunDialogStep.Fail(reasonKey = "GAME_UPDATE_REQUIRED")
+        BetweenRunDialog.DATA_UPDATE -> BetweenRunDialogStep.Fail(reasonKey = "DATA_UPDATE")
     }
 
 /**

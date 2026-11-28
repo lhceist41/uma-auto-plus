@@ -17,6 +17,7 @@ import com.steve1316.uma_android_automation.components.ButtonShop
 import com.steve1316.uma_android_automation.components.DialogConnectionError
 import com.steve1316.uma_android_automation.components.DialogDailySale
 import com.steve1316.uma_android_automation.components.DialogDataDownload
+import com.steve1316.uma_android_automation.components.DialogDataUpdate
 import com.steve1316.uma_android_automation.components.DialogDateChanged
 import com.steve1316.uma_android_automation.components.DialogDownloadError
 import com.steve1316.uma_android_automation.components.DialogEventHome
@@ -95,6 +96,7 @@ class BetweenRunDialogsTest {
                     BetweenRunDialog.CONNECTION_ERROR to DialogConnectionError.title,
                     BetweenRunDialog.DOWNLOAD_ERROR to DialogDownloadError.title,
                     BetweenRunDialog.DATA_DOWNLOAD to DialogDataDownload.title,
+                    BetweenRunDialog.DATA_UPDATE to DialogDataUpdate.title,
                     BetweenRunDialog.SESSION_ERROR to DialogSessionError.title,
                     BetweenRunDialog.SESSION_VERIFICATION_ERROR to DialogSessionVerificationError.title,
                     BetweenRunDialog.PURCHASE_CARATS to DialogPurchaseCarats.title,

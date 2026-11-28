@@ -417,6 +417,8 @@ internal val REPORT_REASON_KEYS =
             ),
         "GAME_UPDATE_REQUIRED" to
             KeyText("the game asks to be updated from the store. The bot does not tap the prompt's store button.", "Update the game from the store and open it"),
+        "DATA_UPDATE" to
+            KeyText("the game has new data and needs to go back to its title screen to download it. The bot does not tap Title Screen.", "Tap Title Screen in the game and let the download finish"),
         "SESSION_EXPIRED" to KeyText("the game ended its session and needs to go back to its title screen.", "Tap Title Screen in the game and wait for its home screen"),
         "GAME_UNRECOVERABLE" to KeyText("the game stayed on a screen the bot does not know, even after UMA Auto+ tried to reopen it. $CLOSE_FROZEN_GAME.", null),
         "A11Y_GRANT_MISSING" to

@@ -18,6 +18,7 @@ New releases start with a one-line summary, then list what you need to do, what 
 - **Team Trials:** with the opponent setting on Bottom or Random, an opponent showing the "With Every Win!" bonus is picked instead. Top and Middle keep their row.
 - **Grand Concert:** when buying a technique, the bot prefers one that keeps the next song affordable, and the "buy nothing before the concert" hold now applies on the concert turn instead of the turn before.
 - **Errors:** a Session Error in a career or a daily mode, a Carat purchase or age check prompt, and a preset whose scenario this version does not play now stop the bot with a reason that says what to do. It taps nothing on the first two.
+- **Errors:** the game's Data Update prompt, shown when new game data is out, now stops the bot with its own reason, during a career and between runs. The bot taps nothing: tap Title Screen in the game, let the download finish, then press Start.
 - **Settings:** Export leaves out every bundled reference table, scenario events included.
 
 ### Fixed

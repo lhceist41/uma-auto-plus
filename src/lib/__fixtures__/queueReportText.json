@@ -1825,6 +1825,22 @@
             }
         },
         {
+            "name": "between runs: DATA_UPDATE",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "DATA_UPDATE"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the game has new data and needs to go back to its title screen to download it. The bot does not tap Title Screen.",
+                "nextAction": "Tap Title Screen in the game and let the download finish, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
             "name": "bot stop: data download prompt",
             "report": {
                 "kind": "STOPPED_BY_BOT",
@@ -1853,6 +1869,22 @@
                 "title": "Queue paused",
                 "reason": "The bot stopped the queue with 1 of 4 runs done: the game asks to be updated from the store. The bot does not tap the prompt's store button.",
                 "nextAction": "Update the game from the store and open it, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "bot stop: game data update",
+            "report": {
+                "kind": "STOPPED_BY_BOT",
+                "queueEnabled": true,
+                "totalRuns": 4,
+                "completedRuns": 1,
+                "resumable": true,
+                "reasonKey": "DATA_UPDATE"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The bot stopped the queue with 1 of 4 runs done: the game has new data and needs to go back to its title screen to download it. The bot does not tap Title Screen.",
+                "nextAction": "Tap Title Screen in the game and let the download finish, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
