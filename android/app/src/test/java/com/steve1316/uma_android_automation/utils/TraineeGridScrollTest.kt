@@ -291,6 +291,51 @@ class TraineeGridScrollTest {
             assertTrue(Regex("""failedReads = 0\n\s+passNames\.clear\(\)""").containsMatchIn(nav), "the second pass no longer starts a fresh name set")
         }
 
+        /** Nine pages read about 55 trainees on 1080x1920 and the result still said every cell was read. */
+        @Test
+        fun `the scan pages until the policy says stop and every bound follows the one page guard`() {
+            val nav = navigatorSource()
+            assertTrue(nav.contains("private val traineeMaxSwipes = RosterScanPolicy.MAX_PAGE_SWIPES"), "the page guard left the policy")
+            assertTrue(
+                nav.contains("scanEnd = RosterScanPolicy.pageEnd(page, traineeMaxSwipes, newThisPage, arrivedUnmeasured, delta, rowPx * 0.4f, msLeft)"),
+                "the scan loop no longer asks the policy where to stop",
+            )
+            assertFalse(Regex("""newThisPage == 0[^\n]*\)\s*break""").containsMatchIn(nav), "a page with no new names ends the scan by itself again")
+            assertTrue(nav.contains("for (i in 0..traineeMaxSwipes + 2)"), "the top anchor no longer follows the page guard")
+            assertTrue(nav.contains("maxPage = traineeMaxSwipes,"), "stored positions no longer follow the page guard")
+            assertTrue(nav.contains("if (!RosterScanPolicy.fitsAnotherPass(msLeft, passMs))"), "the second pass no longer checks the time left")
+        }
+
+        /** A scan cut short never read the rows below, so it may not claim every cell was read or that only another outfit is owned. */
+        @Test
+        fun `a scan stopped before the end says so before any other answer`() {
+            val nav = navigatorSource()
+            assertTrue(
+                nav.contains("if (ownedOutfit != null && !stoppedEarly && RosterScanPolicy.onlyExcludedOutfitOwned("),
+                "a stopped scan can claim only another outfit is owned",
+            )
+            val quality = nav.indexOf("val readQuality =")
+            val stopped = nav.indexOf("stoppedEarly ->", quality)
+            assertTrue(quality in 0 until stopped, "the read-quality text lost its stopped-early answer")
+            assertTrue(stopped < nav.indexOf("failedReads > 0 ->", quality), "stopped-early must be answered before failed reads")
+            assertTrue(stopped < nav.indexOf("Every tapped cell read", quality), "stopped-early must be answered before every-cell-read")
+            assertTrue(nav.indexOf("so this roster read is INCOMPLETE", stopped) in stopped until nav.indexOf("failedReads > 0 ->", quality), "the stopped text must call the read incomplete")
+            val action = nav.indexOf("recommendedAction =\n", stopped)
+            val tooLong = nav.indexOf("stoppedEarly && !stoppedRereading ->", action)
+            assertTrue(tooLong in action until nav.indexOf("stoppedEarly || failedReads > 0 ->", action), "the action lost its stopped-early answer")
+            // A re-read that ran out of time follows a first pass that reached the bottom: the list is not too long.
+            assertTrue(nav.contains("stoppedRereading = pass == 1"), "a stopped re-read is no longer told apart from a list too long to read")
+            assertEquals(1, Regex("""reasonKey = "TRAINEE_NOT_FOUND"""").findAll(nav).count(), "a stopped scan keeps the not-found key")
+        }
+
+        /** Whole-string similarity called Mejiro Ryan near Mejiro Dober and hid the only-another-outfit answer (2026-11-26). */
+        @Test
+        fun `the nearest cell is judged word by word`() {
+            val nav = navigatorSource()
+            assertTrue(nav.contains("val sim = TraineeNameMatcher.nearness(target, preview)"), "the nearest-cell tracking left nearness")
+            assertFalse(nav.contains("TraineeNameMatcher.similarity("), "the navigator judges near misses by whole-string similarity again")
+        }
+
         /** The trainee EVENT banner ("Trainee Event / ...") reads "Trainee" in the same header
          * band as the roster title; without the reject, a launch starting on an event dialog runs
          * a roster scan against it and taps grid cells into the event choices (live 2026-07-27). */

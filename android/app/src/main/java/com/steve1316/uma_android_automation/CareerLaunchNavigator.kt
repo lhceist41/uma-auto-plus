@@ -5873,7 +5873,7 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
     private val traineeRow0Fraction = 0.585f
     private val traineeRowStepFraction = 0.099f
     private val traineeGridRows = 2
-    private val traineeMaxSwipes = 8
+    private val traineeMaxSwipes = RosterScanPolicy.MAX_PAGE_SWIPES
     private val traineeMatchThreshold = 0.86
 
     /**
@@ -7092,9 +7092,9 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                 bestScore = score
                 bestLabel = preview
             }
-            // Nearest cell by plain similarity, tracked separately: score() answers "is
-            // this her" and answers 0.0 when it is not, so it cannot name a near miss.
-            val sim = TraineeNameMatcher.similarity(target, preview)
+            // Nearest cell tracked separately: score() answers "is this her" and answers 0.0
+            // when it is not, so it cannot name a near miss.
+            val sim = TraineeNameMatcher.nearness(target, preview)
             if (sim > nearestSim) {
                 nearestSim = sim
                 nearestLabel = preview
@@ -7129,9 +7129,20 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
             return null
         }
 
+        var scanEnd = RosterScanPolicy.PageEnd.CONTINUE
+        var passMs = 0L
+        var secondPassSkipped = false
+        // The re-read after failed reads stopped short; the first pass had reached the bottom.
+        var stoppedRereading = false
         for (pass in 0..1) {
             if (pass == 1) {
-                if (!RosterScanPolicy.needsSecondPass(failedReads, passIndex = 0)) break
+                if (scanEnd.stoppedEarly || !RosterScanPolicy.needsSecondPass(failedReads, passIndex = 0)) break
+                val msLeft = StartModule.NAV_DEADLINE_MS - (System.currentTimeMillis() - navigationStartedAtMs)
+                if (!RosterScanPolicy.fitsAnotherPass(msLeft, passMs)) {
+                    MessageLog.w(TAG, "[ROTATION] $failedReads cell read(s) failed on the first pass and a second pass does not fit before the launch deadline.")
+                    secondPassSkipped = true
+                    break
+                }
                 MessageLog.w(
                     TAG,
                     "[ROTATION] $failedReads cell read(s) failed on the first pass; re-anchoring and re-scanning once " +
@@ -7144,7 +7155,9 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                 failedReads = 0
                 passNames.clear()
             }
+            val passStartMs = System.currentTimeMillis()
             var lastPage = 0
+            var arrivedUnmeasured = false
             // Every page scans from row 0: the swipe moves about 1.2 rows (235px) while the tap rows are 190px apart, so a measured advance cannot prove a lower row was read. Name dedup absorbs the re-reads.
             val startRow = 0
             for (page in 0..traineeMaxSwipes) {
@@ -7157,29 +7170,43 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                     }
                 }
                 val newThisPage = newCells - newBefore
-                // No new trainees on this page = bottom reached (or the list won't scroll). Stop paging.
-                if (page > 0 && newThisPage == 0 && startRow < traineeGridRows) break
-                if (page < traineeMaxSwipes) {
-                    val swipe = swipeTraineeGridMeasured(pageDown = true)
-                    scanBitmap = swipe.after
-                    val rowPx = scanBitmap.height * traineeRowStepFraction
-                    val delta = swipe.deltaPx
-                    if (delta != null && Math.abs(delta) < rowPx * 0.4f) {
-                        // Still parked after the retries: the roster bottom. Stop without paying a
-                        // page of taps to discover it.
+                // Swiping after the last allowed page too tells a list that ends there from one cut short.
+                val swipe = swipeTraineeGridMeasured(pageDown = true)
+                scanBitmap = swipe.after
+                val rowPx = scanBitmap.height * traineeRowStepFraction
+                val delta = swipe.deltaPx
+                val msLeft = StartModule.NAV_DEADLINE_MS - (System.currentTimeMillis() - navigationStartedAtMs)
+                scanEnd = RosterScanPolicy.pageEnd(page, traineeMaxSwipes, newThisPage, arrivedUnmeasured, delta, rowPx * 0.4f, msLeft)
+                if (scanEnd == RosterScanPolicy.PageEnd.BOTTOM) {
+                    if (delta == null) {
+                        MessageLog.i(TAG, "[ROTATION] No new trainees after unmeasurable swipes; treating this as the bottom after ${seen.size} unique trainee(s).")
+                    } else {
                         MessageLog.i(TAG, "[ROTATION] Roster stopped moving (bottom reached after ${seen.size} unique trainee(s)).")
-                        break
                     }
-                    val advancedRows = if (delta == null) null else Math.round(delta / rowPx)
-                    if (advancedRows != null && advancedRows > traineeGridRows) {
-                        MessageLog.w(
-                            TAG,
-                            "[ROTATION] Roster advanced $advancedRows rows in one swipe (more than the $traineeGridRows-row scan " +
-                                "band); some rows were skipped and the scan may need a second pass to find the target.",
-                        )
-                    }
+                    break
+                }
+                if (scanEnd.stoppedEarly) {
+                    MessageLog.w(
+                        TAG,
+                        "[ROTATION] Roster scan stopped before the end of the list after ${seen.size} unique trainee(s) (page $page): " +
+                            (if (scanEnd == RosterScanPolicy.PageEnd.OUT_OF_TIME) "out of time." else "page limit."),
+                    )
+                    stoppedRereading = pass == 1
+                    break
+                }
+                arrivedUnmeasured = delta == null
+                val advancedRows = if (delta == null) null else Math.round(delta / rowPx)
+                if (advancedRows != null && advancedRows > traineeGridRows) {
+                    MessageLog.w(
+                        TAG,
+                        "[ROTATION] Roster advanced $advancedRows rows in one swipe (more than the $traineeGridRows-row scan " +
+                            "band); some rows were skipped and the scan may need a second pass to find the target.",
+                    )
                 }
             }
+            passMs = System.currentTimeMillis() - passStartMs
+            // A scan cut short is mid-list, where no parked last row exists.
+            if (scanEnd.stoppedEarly) break
             // On screens taller than 1080x1920 the list parks its last row below both scan rows, where no page reaches it.
             val lowestScanRowY =
                 gameY((1920 * (traineeRow0Fraction + (traineeGridRows - 1) * traineeRowStepFraction)).toDouble(), ScreenBand.MIDDLE, scanBitmap.width, scanBitmap.height)
@@ -7197,7 +7224,9 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
 
         // A plain preset skips outfits that have their own preset; owned only in one, she is not absent from the roster.
         val ownedOutfit = excludedOutfitSeen
-        if (ownedOutfit != null && RosterScanPolicy.onlyExcludedOutfitOwned(failedReads, ownedOutfit, nearestSim, NEAR_NAME_SIMILARITY)) {
+        // A scan cut short never read the rows below, where her plain outfit may be.
+        val stoppedEarly = scanEnd.stoppedEarly
+        if (ownedOutfit != null && !stoppedEarly && RosterScanPolicy.onlyExcludedOutfitOwned(failedReads, ownedOutfit, nearestSim, NEAR_NAME_SIMILARITY)) {
             MessageLog.e(
                 TAG,
                 "[ROTATION] '$target' is on the roster only as '$excludedBannerSeen', an outfit with its own preset, which this " +
@@ -7219,13 +7248,21 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
         // Say which answer this is. A clean scan that missed the target means she is not on the
         // roster; a scan with failed reads means the census is incomplete and "not owned" would be
         // an unsupported claim. The 2026-07-28 halt asserted the former while the latter was true.
-        // Three distinguishable answers, because they call for three different actions. The
+        // Distinguishable answers, because they call for different actions. The
         // 2026-07-28 12:39 halt printed the "genuinely does not contain her" line while her own
         // cell was on screen and correctly read, and sent the operator off to check ownership.
         val readQuality =
             when {
+                stoppedEarly ->
+                    (if (stoppedRereading) " WARNING: some cells did not read on the first pass, and the re-read" else " WARNING: the scan") +
+                        " stopped before the end of the trainee list (" +
+                        (if (scanEnd == RosterScanPolicy.PageEnd.OUT_OF_TIME) "out of time" else "page limit") +
+                        "), so this roster read is INCOMPLETE and does not prove the trainee is unowned." +
+                        (if (ownedOutfit != null) " Her '$excludedBannerSeen' outfit was read and skipped because it has its own preset." else "")
                 failedReads > 0 ->
-                    " WARNING: $failedReads cell(s) never read even after a re-anchored second pass, so this roster read is " +
+                    " WARNING: $failedReads cell(s) never read " +
+                        (if (secondPassSkipped) "and no time was left for a second pass" else "even after a re-anchored second pass") +
+                        ", so this roster read is " +
                         "INCOMPLETE and does not prove the trainee is unowned." +
                         (if (ownedOutfit != null) " Her '$excludedBannerSeen' outfit was read and skipped because it has its own preset." else "")
                 nearestSim >= NEAR_NAME_SIMILARITY ->
@@ -7234,8 +7271,9 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
                         "check that cell's text against the rotation's inGameName before changing the roster." +
                         (if (ownedOutfit != null) " Her '$excludedBannerSeen' outfit was read and skipped because it has its own preset." else "")
                 else ->
-                    " Every tapped cell read and nothing on the roster resembles her (closest was '$nearestLabel' at " +
-                        "${"%.3f".format(nearestSim)}), so she is most likely not in the roster."
+                    " Every tapped cell read and nothing on the roster resembles her" +
+                        (if (nearestLabel.isNotEmpty()) " (closest was '$nearestLabel' at ${"%.3f".format(nearestSim)})" else "") +
+                        ", so she is most likely not in the roster."
             }
         return TransitionResult.Failed(
             reason = "Trainee '$target' not found after scanning ${seen.size} unique roster trainee(s); best was '$bestLabel' @ ${"%.3f".format(
@@ -7245,7 +7283,9 @@ class CareerLaunchNavigator(private val context: Context) : AutoCloseable {
             isRecoverable = true,
             recommendedAction =
                 when {
-                    failedReads > 0 ->
+                    stoppedEarly && !stoppedRereading ->
+                        "The trainee list is too long to read in one launch. Sort or filter the list in the game so this trainee is near the top, or select the trainee manually and restart."
+                    stoppedEarly || failedReads > 0 ->
                         "The roster scan could not read every cell, so this is not proof she is unowned. Retry the queue; if it repeats, select the trainee manually and restart."
                     nearestSim >= NEAR_NAME_SIMILARITY ->
                         "A near-identical name was read at $nearestCell. Compare it with the rotation's inGameName; select the trainee manually and restart to continue meanwhile."

@@ -134,6 +134,31 @@ object TraineeNameMatcher {
     }
 
     /**
+     * [similarity] over only the windows where every target word resembles its aligned banner word:
+     * how close a cell comes to being her misread. Whole-string similarity calls a different trainee
+     * of the same family near ("Mejiro Dober" vs "[Down the Line] Mejiro Ryan" scores 0.879), which
+     * hid the only-another-outfit answer on a 50-trainee roster (live 2026-11-26).
+     */
+    fun nearness(target: String, read: String): Double {
+        val targetTokens = tokens(target)
+        val readTokens = tokens(read)
+        if (targetTokens.isEmpty() || readTokens.size < targetTokens.size) return similarity(target, read)
+        var best = 0.0
+        for (window in windows(readTokens, targetTokens.size)) {
+            if (targetTokens.indices.any { !resemblesWord(targetTokens[it], window[it]) }) continue
+            best = maxOf(best, service.score(targetTokens.joinToString(" "), window.joinToString(" ")))
+        }
+        return best
+    }
+
+    /**
+     * An edit cap alone, looser than [sameWord], so a misread stays near, but a shared stem ("Matikanetannhauser",
+     * "Matikanefukukitaru") is not. No Jaro-Winkler floor: it drops one-letter misreads of short or first-letter
+     * words ("Curren ahan", "l Condor Pasa").
+     */
+    private fun resemblesWord(target: String, read: String): Boolean = edits(target, read, anywhere = false) <= maxOf(1, target.length / 3)
+
+    /**
      * Every contiguous [size]-token window of [tokens].
      *
      * The old code took only the LAST window, on the assumption that the character name ends the

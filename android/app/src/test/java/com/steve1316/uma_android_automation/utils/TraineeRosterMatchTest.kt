@@ -181,4 +181,155 @@ class TraineeRosterMatchTest {
             assertEquals("[Azure Amazon] Hishi Amazon 1", nearest)
         }
     }
+
+    /**
+     * Near misses against the 50 cells of account 2's 2026-11-26 14:02 scan, verbatim. Whole-string
+     * similarity put "[Down the Line] Mejiro Ryan" at 0.879 to "Mejiro Dober", which hid the answer
+     * that she is owned only as Sapphire Sojourn and blamed name matching instead.
+     */
+    @Nested
+    @DisplayName("near misses (2026-11-26 roster)")
+    inner class NearnessTests {
+        private val near = 0.70
+
+        /** Banner as logged, paired with the character it shows. */
+        private val roster1126 =
+            listOf(
+                "[Red Strifel Gold Ship" to "Gold Ship",
+                "(Stone-Piercing Blue] Grass Wonder" to "Grass Wonder",
+                "[Empress Road] Air Groove" to "Air Groove",
+                "[ScrambletZone] Mayano Top Gun" to "Mayano Top Gun",
+                "[Down the Line] Mejiro Ryan" to "Mejiro Ryan",
+                "[tach-nologyl Agnes Tachyon" to "Agnes Tachyon",
+                "[Get to Winning!] Winning Ticket" to "Winning Ticket",
+                "[Blossom in Learningl Sakura Bakushin O" to "Sakura Bakushin O",
+                "[RisingFortunel Matikanefukukitaru" to "Matikanefukukitaru",
+                "[Poinsettia Ribbon] Nice Nature" to "Nice Nature",
+                "[King of Emeralds] King Halo" to "King Halo",
+                "[Hopp'nHappy Heart] Special Week" to "Special Week",
+                "[Innocent Silence] Silence Suzuka" to "Silence Suzuka",
+                "(Formula R] Maruzensky" to "Maruzensky",
+                "[HottSummer Night Maruzensky" to "Maruzensky",
+                "[Ashen Miracle] Oguri Cap" to "Oguri Cap",
+                "[Wild Top Gear] Vodka" to "Vodka",
+                "[Peak Blue] Daiwa Scarlet" to "Daiwa Scarlet",
+                "[Wild Frontier] Taiki Shuttle" to "Taiki Shuttle",
+                "(Frontline Elegance] Mejiro McQueen" to "Mejiro McQueen",
+                "[ElAN\u00famero 1] El Condor Pasa" to "El Condor Pasa",
+                "[Maverick] Narita Brian" to "Narita Brian",
+                "[Quercus Civilis] Air Groove" to "Air Groove",
+                "[Reeling in the Big Onel Seiun Sky" to "Seiun Sky",
+                "[Creeping Shadow] Manhattan Cafe" to "Manhattan Cafe",
+                "[Rosy Dreams] Rice Shower" to "Rice Shower",
+                "[Murmuring Stream] Super Creek" to "Super Creek",
+                "(Bestest Prize D] Haru Urara" to "Haru Urara",
+                "[Gilded Shrine to Gloryl Kitasan Black" to "Kitasan Black",
+                "[Flare] Aston Machan" to "Aston Machan",
+                "[Special Dreamer] Special Week" to "Special Week",
+                "[Succ\u00e8s \u00c9toil\u0117] Fuji Kiseki" to "Fuji Kiseki",
+                "(Starlight Beat] Oguri Cap" to "Oguri Cap",
+                "[End of the Skies] Mejiro McQueen" to "Mejiro McQueen",
+                "[Kukulkan Warrior] El Condor Pasa" to "El Condor Pasa",
+                "[O Sole Suo!] T.M. Opera O" to "T.M. Opera O",
+                "[Emperor's Path] Symboli Rudolf" to "Symboli Rudolf",
+                "(Fast as Lightning Tamamo Cross" to "Tamamo Cross",
+                "[Rouge Caroler] Biwa Hayahide" to "Biwa Hayahide",
+                "[Buono t Alla Moda] Hishi Akebono" to "Hishi Akebono",
+                "[Precise Chocolatier] Eishin Flash" to "Eishin Flash",
+                "[Princess of Pink] Kawakami Princess" to "Kawakami Princess",
+                "[Rocket*Star] Seeking the Pearl" to "Seeking the Pearl",
+                "[Desperate Measures] Nakayama Festa" to "Nakayama Festa",
+                "[New Year > New Uraral] Haru Urara" to "Haru Urara",
+                "[Iron Ambition] Bamboo Memory" to "Bamboo Memory",
+                "[Turbulent Blue] Meisho Doto" to "Meisho Doto",
+                "(Sapphire Sojourn] Mejiro Dober" to "Mejiro Dober",
+                "[Run & Win] Nice Nature" to "Nice Nature",
+                "[Clippety-Tippety-Clopl Matikanetannhauser" to "Matikanetannhauser",
+            )
+
+        private fun maxNearness(target: String, excludeOutfits: List<String>) =
+            roster1126.map { it.first }.filter { b -> excludeOutfits.none { TraineeNameMatcher.hasOutfit(b, it) } }.maxOf { TraineeNameMatcher.nearness(target, it) }
+
+        @Test
+        fun `a different trainee sharing a family name or letters is not a near miss`() {
+            val pairs =
+                listOf(
+                    "Mejiro Dober" to "[Down the Line] Mejiro Ryan",
+                    "Mejiro Dober" to "[End of the Skies] Mejiro McQueen",
+                    "Shinko Windy" to "[Gilded Shrine to Gloryl Kitasan Black",
+                    "Shinko Windy" to "[Reeling in the Big Onel Seiun Sky",
+                    "Biwa Hayahide" to "[Peak Blue] Daiwa Scarlet",
+                    "Nakayama Festa" to "[Creeping Shadow] Manhattan Cafe",
+                    "Matikanetannhauser" to "[RisingFortunel Matikanefukukitaru",
+                )
+            for ((target, banner) in pairs) {
+                assertTrue(TraineeNameMatcher.similarity(target, banner) >= near, "precondition: whole-string similarity calls $banner near $target")
+                assertTrue(TraineeNameMatcher.nearness(target, banner) < near, "$banner must not be near $target")
+            }
+        }
+
+        @Test
+        fun `a misread of her own name stays near`() {
+            assertEquals(0.0, TraineeNameMatcher.score("Biwa Hayahide", "[Rouge Caroler] Bwa Hayahide"), "precondition: the match misses it")
+            assertTrue(TraineeNameMatcher.nearness("Biwa Hayahide", "[Rouge Caroler] Bwa Hayahide") >= near)
+            assertTrue(TraineeNameMatcher.nearness("Mejiro Dober", "[Off the Line] Mejro Dobe") >= near)
+            assertEquals("[Azure Amazon] Hishi Amazon 1", roster.maxByOrNull { TraineeNameMatcher.nearness("Hishi Amazon", it) })
+        }
+
+        /** A one-letter misread of her plain cell must keep the only-another-outfit answer closed: that cell is still on the roster. */
+        @Test
+        fun `a one-letter misread of her own plain cell stays near, so a read sibling outfit does not claim she owns only that`() {
+            val cases =
+                listOf(
+                    Triple("Curren Chan", "Ma Chérie of the New Moon", "[Fille Éclair] Curren ahan"),
+                    Triple("El Condor Pasa", "Kukulkan Warrior", "[El☆Número 1] l Condor Pasa"),
+                    Triple("El Condor Pasa", "Kukulkan Warrior", "[El☆Número 1] Ea Condor Pasa"),
+                    Triple("Biwa Hayahide", "Rouge Caroler", "[pf. Winning Equation...] wiwa Hayahide"),
+                    Triple("Admire Vega", "Full-Color Fangirling", "[Starry Nocturne] Admire gega"),
+                )
+            for ((target, sibling, misread) in cases) {
+                val excludes = listOf(sibling)
+                val cells = roster1126.map { it.first } + "[$sibling] $target" + misread
+                assertTrue(TraineeNameMatcher.score(target, misread) < threshold, "precondition: the scan misses '$misread'")
+                val seen = cells.firstNotNullOfOrNull { TraineeNameMatcher.excludedOutfitOf(target, it, excludes, threshold) }
+                assertEquals(sibling, seen, "precondition: her sibling outfit is read")
+                assertTrue(TraineeNameMatcher.nearness(target, misread) >= near, "'$misread' must stay near $target")
+                val nearest = cells.filter { b -> excludes.none { TraineeNameMatcher.hasOutfit(b, it) } }.maxOf { TraineeNameMatcher.nearness(target, it) }
+                assertFalse(RosterScanPolicy.onlyExcludedOutfitOwned(0, seen, nearest, near), "$target with '$misread' on the roster")
+            }
+        }
+
+        @Test
+        fun `no character on the roster is near another character's name`() {
+            for ((_, character) in roster1126.distinctBy { it.second }) {
+                for ((banner, other) in roster1126) {
+                    if (other == character) continue
+                    assertTrue(TraineeNameMatcher.nearness(character, banner) < near, "$banner came out near $character")
+                }
+            }
+        }
+
+        @Test
+        fun `every roster cell is near its own character`() {
+            for ((banner, character) in roster1126) assertTrue(TraineeNameMatcher.nearness(character, banner) >= near, "$banner not near $character")
+        }
+
+        @Test
+        fun `Mejiro Dober owned only as Sapphire Sojourn is reported as that, not as a name-matching miss`() {
+            val excludes = listOf("Sapphire Sojourn")
+            val seen = roster1126.firstNotNullOfOrNull { TraineeNameMatcher.excludedOutfitOf("Mejiro Dober", it.first, excludes, threshold) }
+            assertEquals("Sapphire Sojourn", seen)
+            assertTrue(roster1126.map { it.first }.filter { b -> excludes.none { TraineeNameMatcher.hasOutfit(b, it) } }.maxOf { TraineeNameMatcher.similarity("Mejiro Dober", it) } >= near, "precondition: the old gate closed")
+            assertTrue(RosterScanPolicy.onlyExcludedOutfitOwned(0, seen, maxNearness("Mejiro Dober", excludes), near))
+        }
+
+        @Test
+        fun `Shinko Windy, who is not owned, stays not found and reads as nothing resembling her`() {
+            assertNull(roster1126.firstNotNullOfOrNull { TraineeNameMatcher.excludedOutfitOf("Shinko Windy", it.first, emptyList(), threshold) })
+            assertTrue(roster1126.none { TraineeNameMatcher.score("Shinko Windy", it.first) >= threshold })
+            val nearest = maxNearness("Shinko Windy", emptyList())
+            assertTrue(nearest < near, "a cell came out near Shinko Windy at $nearest")
+            assertFalse(RosterScanPolicy.onlyExcludedOutfitOwned(0, null, nearest, near))
+        }
+    }
 }
