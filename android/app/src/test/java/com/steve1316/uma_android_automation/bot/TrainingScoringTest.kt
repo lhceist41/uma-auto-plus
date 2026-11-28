@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.bot.Training.Companion.SKIP_HIGH_FAILURE_CHANCE
 import com.steve1316.uma_android_automation.bot.Training.Companion.admitIrregularTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateMiscScore
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateRawTrainingScore
@@ -9,6 +10,7 @@ import com.steve1316.uma_android_automation.bot.Training.Companion.getFinaleStat
 import com.steve1316.uma_android_automation.bot.Training.Companion.getRemainingFinaleRaces
 import com.steve1316.uma_android_automation.bot.Training.Companion.getScenarioStatCap
 import com.steve1316.uma_android_automation.bot.Training.Companion.goalFloorOverride
+import com.steve1316.uma_android_automation.bot.Training.Companion.goalFloorRest
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreFriendshipTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreUnityCupTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.selectBestTrainingWithHintPriority
@@ -455,6 +457,106 @@ class TrainingScoringTest {
         assertFalse(usesStatEfficiencyScoring("Unity Cup", classicLateJuly))
         assertTrue(usesStatEfficiencyScoring("URA Finale", classicLateJuly))
         assertTrue(usesStatEfficiencyScoring("Grand Concert", classicLateJuly))
+    }
+
+    // ============================================================================
+    // goalFloorRest Tests (rest when the floor's STAMINA is over the failure chance limit)
+    // ============================================================================
+
+    // A live Eishin Flash URA turn 51 (goal Tenno Sho (Spring) 3200m at turn 56): Energy 29, every facility but Wit over the 15% limit.
+    private val tennoSpringFloor = LongGoalStaminaFloor("Tenno Sho (Spring)", 3200, 56, 355, 450)
+    private val seniorEarlyFebruary = GameDate(year = DateYear.SENIOR, month = DateMonth.FEBRUARY, phase = DatePhase.EARLY)
+
+    private fun restWit(): TrainingOption = createDefaultTrainingOption(name = StatName.WIT, statGains = statGainsToMap(intArrayOf(5, 0, 0, 0, 19)), failureChance = 3)
+
+    private fun restStamina(skipReason: String? = SKIP_HIGH_FAILURE_CHANCE, staminaGain: Int = 21): TrainingOption =
+        createDefaultTrainingOption(name = StatName.STAMINA, statGains = statGainsToMap(intArrayOf(0, staminaGain, 0, 10, 0)), failureChance = 24).copy(skipReason = skipReason)
+
+    private fun restConfig(
+        stamina: Int = 228,
+        floor: LongGoalStaminaFloor? = tennoSpringFloor,
+        date: GameDate = seniorEarlyFebruary,
+        scenario: String = "URA Finale",
+        blacklist: List<StatName?> = emptyList(),
+    ): TrainingConfig =
+        createDefaultConfig(
+            trainingOptions = listOf(restWit()),
+            currentStats = mapOf(StatName.SPEED to 796, StatName.STAMINA to stamina, StatName.POWER to 394, StatName.GUTS to 320, StatName.WIT to 631),
+            preferredDistance = "Medium",
+            currentDate = date,
+            scenario = scenario,
+            blacklist = blacklist,
+            longGoalStaminaFloor = floor,
+        )
+
+    @Test
+    @DisplayName("Under the floor with STAMINA over the failure limit at low Energy, the turn rests instead of the Wit that passed")
+    fun testGoalFloorRestFiresOnTheLiveWitLoopTurn() {
+        assertEquals(51, seniorEarlyFebruary.day, "fixture turn must be 5 turns before the turn-56 goal")
+        assertTrue(goalFloorRest(restConfig(), restStamina(), restWit(), energy = 29))
+        assertTrue(goalFloorRest(restConfig(), restStamina(skipReason = "$SKIP_HIGH_FAILURE_CHANCE (risky)"), restWit(), energy = 29), "the risky-limit skip is the same failure gate")
+    }
+
+    @Test
+    @DisplayName("One turn before the goal there is no turn left to train after a rest, so the pick stands; two turns out still rests")
+    fun testGoalFloorRestNeedsTwoTurns() {
+        val oneOut = restConfig(stamina = 246, floor = tennoSpringFloor.copy(floor = 450), date = GameDate(year = DateYear.SENIOR, month = DateMonth.APRIL, phase = DatePhase.EARLY))
+        assertEquals(55, oneOut.currentDate.day)
+        assertFalse(goalFloorRest(oneOut, restStamina(), restWit(), energy = 34))
+        val twoOut = restConfig(stamina = 246, floor = tennoSpringFloor.copy(floor = 426), date = GameDate(year = DateYear.SENIOR, month = DateMonth.MARCH, phase = DatePhase.LATE))
+        assertEquals(54, twoOut.currentDate.day)
+        assertTrue(goalFloorRest(twoOut, restStamina(), restWit(), energy = 34))
+    }
+
+    @Test
+    @DisplayName("Stamina at or above the floor, or no floor at all, never rests")
+    fun testGoalFloorRestFloorBoundary() {
+        assertFalse(goalFloorRest(restConfig(stamina = 355), restStamina(), restWit(), energy = 29))
+        assertTrue(goalFloorRest(restConfig(stamina = 354), restStamina(), restWit(), energy = 29))
+        assertFalse(goalFloorRest(restConfig(floor = null), restStamina(), restWit(), energy = 29))
+    }
+
+    @Test
+    @DisplayName("STAMINA left out for any reason but the failure limit, blacklisted, missing or with a gain under 10 never rests")
+    fun testGoalFloorRestOnlyForTheFailureGate() {
+        assertFalse(goalFloorRest(restConfig(), restStamina(skipReason = Training.SKIP_UNREADABLE_FAILURE_CHANCE), restWit(), energy = 29), "an unread chance is not proof a rest helps")
+        assertFalse(goalFloorRest(restConfig(), restStamina(skipReason = "low gain with charm"), restWit(), energy = 29))
+        assertFalse(goalFloorRest(restConfig(), restStamina(skipReason = "irregular: not admitted"), restWit(), energy = 29))
+        assertFalse(goalFloorRest(restConfig(), restStamina(skipReason = null), restWit(), energy = 29))
+        assertFalse(goalFloorRest(restConfig(blacklist = listOf(StatName.STAMINA)), restStamina(), restWit(), energy = 29))
+        assertFalse(goalFloorRest(restConfig(), null, restWit(), energy = 29), "a restricted STAMINA is in neither map")
+        assertFalse(goalFloorRest(restConfig(), restStamina(staminaGain = 9), restWit(), energy = 29))
+        assertFalse(goalFloorRest(restConfig(), restWit(), restWit(), energy = 29), "a non-STAMINA option passed as the skipped STAMINA is ignored")
+    }
+
+    @Test
+    @DisplayName("Junior friendship mode and the Unity Cup gauge mode never rest for the floor")
+    fun testGoalFloorRestOnlyInStatEfficiencyMode() {
+        // Stamina 100 sits under both floors, so only the scoring-mode check can refuse these turns.
+        val kikuka = LongGoalStaminaFloor("Kikuka Sho", 3000, 44, 120, 300)
+        val junior = restConfig(stamina = 100, date = GameDate(year = DateYear.JUNIOR, month = DateMonth.NOVEMBER, phase = DatePhase.EARLY), floor = kikuka)
+        assertFalse(goalFloorRest(junior, restStamina(), restWit(), energy = 29))
+        val classic = restConfig(stamina = 100, date = GameDate(year = DateYear.CLASSIC, month = DateMonth.JANUARY, phase = DatePhase.EARLY), floor = kikuka)
+        assertTrue(goalFloorRest(classic, restStamina(), restWit(), energy = 29), "the same inputs rest once the Classic year switches to ratio scoring")
+        val unityClassic = restConfig(stamina = 100, date = classicLateJuly, scenario = "Unity Cup")
+        assertFalse(goalFloorRest(unityClassic, restStamina(), restWit(), energy = 29))
+        assertTrue(goalFloorRest(restConfig(stamina = 100, date = classicLateJuly), restStamina(), restWit(), energy = 29), "the same Classic turn rests in URA Finale")
+        assertTrue(goalFloorRest(restConfig(stamina = 100, scenario = "Unity Cup"), restStamina(), restWit(), energy = 29), "Unity Cup rests from the Senior year")
+    }
+
+    @Test
+    @DisplayName("At Energy where the curve gives 0% a rest cannot lower the chance (Practice Poor), so the pick stands")
+    fun testGoalFloorRestNeedsEnergyARestCanFix() {
+        assertFalse(goalFloorRest(restConfig(), restStamina(), restWit(), energy = 50))
+        assertFalse(goalFloorRest(restConfig(), restStamina(), restWit(), energy = 100))
+        assertTrue(goalFloorRest(restConfig(), restStamina(), restWit(), energy = 49))
+    }
+
+    @Test
+    @DisplayName("No gate-passing pick (the bot already rests) or a STAMINA pick never adds a floor rest")
+    fun testGoalFloorRestNeedsANonStaminaPick() {
+        assertFalse(goalFloorRest(restConfig(), restStamina(), null, energy = 29))
+        assertFalse(goalFloorRest(restConfig(), restStamina(), restStamina(skipReason = null), energy = 29))
     }
 
     // ============================================================================

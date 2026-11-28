@@ -13,7 +13,8 @@ New releases start with a one-line summary, then list what you need to do, what 
 ### Changed
 
 - **Rewards and Club:** Buy the Daily Sales selects every item as soon as the list opens instead of scrolling through it first, since Daily Sales items always cost Monies. It still buys nothing if the total cannot be read or is more than the Monies you hold.
-- **Training:** when Speed's failure chance is over every limit, the bot now reads the other trainings before resting, so one within its limit (usually Wit) can still be trained. It rests only when none is.
+- **Training:** when Speed's failure chance is over every limit, the bot now reads the other trainings before resting, so one within its limit (usually Wit) can still be trained. It rests only when none is, except before a long goal race as described below.
+- **Training:** from the Classic year (in Unity Cup, from the Senior year), a trainee heading for a 3000m or longer goal race who is still short of the Stamina it needs now rests when tiredness puts Stamina training over the failure chance limit, instead of training something else, as long as the race is at least two turns away.
 - **Team Trials:** with the opponent setting on Bottom or Random, an opponent showing the "With Every Win!" bonus is picked instead. Top and Middle keep their row.
 - **Grand Concert:** when buying a technique, the bot prefers one that keeps the next song affordable, and the "buy nothing before the concert" hold now applies on the concert turn instead of the turn before.
 - **Errors:** a Session Error in a career or a daily mode, a Carat purchase or age check prompt, and a preset whose scenario this version does not play now stop the bot with a reason that says what to do. It taps nothing on the first two.

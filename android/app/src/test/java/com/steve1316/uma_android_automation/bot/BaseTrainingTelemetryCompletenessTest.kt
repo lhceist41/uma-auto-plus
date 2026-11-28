@@ -138,8 +138,9 @@ class BaseTrainingTelemetryCompletenessTest {
 
         @Test
         fun `exactly one recordTrainingSelection remains at each of P01-P04 and one new event at P05 and P06`() {
-            // 4 in recommendTraining (P01 ANALYSIS, P02 FORCED_FROM_SKIPPED, P03, P04) + 2 new (P05 forceStat, P06 Finale Wit).
-            assertEquals(6, Regex("recordTrainingSelection\\(").findAll(training).count(), "no duplicate events introduced")
+            // 4 in recommendTraining (P01 ANALYSIS, P02 FORCED_FROM_SKIPPED, P03, P04) + 2 new (P05 forceStat, P06 Finale Wit)
+            // + the goal-floor rest in recommendTraining, which records selected=null before the turn rests.
+            assertEquals(7, Regex("recordTrainingSelection\\(").findAll(training).count(), "no duplicate events introduced")
         }
 
         @Test
@@ -162,7 +163,7 @@ class BaseTrainingTelemetryCompletenessTest {
 
             // Whole-function ordering: the empty-map decision resolves first, then (in its else) the record
             // fires, then executeTraining runs. That is what makes this a committed-choice record.
-            val isEmpty = handleBody.indexOf("if (trainingMap.isEmpty()) {")
+            val isEmpty = handleBody.indexOf("if (trainingMap.isEmpty() || goalFloorRestThisTurn) {")
             val recordAbs = handleBody.indexOf("reason = \"forced training override:")
             assertTrue(isEmpty in 0 until recordAbs, "the forced record is emitted after the empty-map decision, not before it")
             assertTrue(recordAbs in 0 until execute, "the committed pick is recorded before the training mutation")
@@ -172,7 +173,7 @@ class BaseTrainingTelemetryCompletenessTest {
         fun `the forceStat selection branch no longer records a TrainingSelection before the empty-map decision`() {
             // Pre-repair bug guard: a record here mislabels an empty-map forced-Wit rest as a training.
             val branchStart = handleBody.indexOf("forceStat override active")
-            val isEmpty = handleBody.indexOf("if (trainingMap.isEmpty()) {")
+            val isEmpty = handleBody.indexOf("if (trainingMap.isEmpty() || goalFloorRestThisTurn) {")
             assertTrue(branchStart in 0 until isEmpty, "the forceStat selection branch precedes the empty-map decision")
             assertFalse(
                 handleBody.substring(branchStart, isEmpty).contains("recordTrainingSelection"),
@@ -184,7 +185,7 @@ class BaseTrainingTelemetryCompletenessTest {
         fun `the empty-map recovery region emits no forced-override TrainingSelection`() {
             // Forced Finale Wit (P06) may record on its successful tap, but a pre-summer forced Wit that falls
             // through to recoverEnergy() must not, so the P05 forced-override reason is absent from this block.
-            val isEmpty = handleBody.indexOf("if (trainingMap.isEmpty()) {")
+            val isEmpty = handleBody.indexOf("if (trainingMap.isEmpty() || goalFloorRestThisTurn) {")
             val commit = handleBody.indexOf("Now select the training option with the highest weight.")
             assertTrue(isEmpty in 0 until commit, "the empty-map block precedes the committed branch")
             assertFalse(

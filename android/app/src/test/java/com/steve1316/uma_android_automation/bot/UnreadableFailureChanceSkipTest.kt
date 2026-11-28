@@ -104,7 +104,7 @@ class UnreadableFailureChanceSkipTest {
         val start = source.indexOf("fun handleTrainingWithOutcome(")
         val body = source.substring(start, source.indexOf("fun executeTraining(trainingSelected: StatName?)", start))
         val analyze = body.indexOf("analyzeTrainings()")
-        val empty = body.indexOf("if (trainingMap.isEmpty()) {")
+        val empty = body.indexOf("if (trainingMap.isEmpty() || goalFloorRestThisTurn) {")
         val finaleWit = body.indexOf("if ((trainWitDuringFinale && campaign.date.day > 72) || campaign.date.day == 75) {")
         assertTrue(analyze in 0 until empty && empty < finaleWit, "an empty training map after analysis goes to the Finale Wit or rest branch")
     }

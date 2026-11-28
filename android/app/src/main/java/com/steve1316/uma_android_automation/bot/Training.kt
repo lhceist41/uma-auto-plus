@@ -87,6 +87,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
     /** List of training names that are restricted or unavailable. */
     private var restrictedTrainingNames: MutableSet<StatName> = mutableSetOf()
 
+    /** Set by [recommendTraining] when [goalFloorRest] fires, so [handleTrainingWithOutcome] rests although trainings passed the gate. */
+    private var goalFloorRestPending: Boolean = false
+
+    /** The day a goal-floor rest did not advance the turn; that day trains the gate-passing pick as before. */
+    private var goalFloorRestFailedDay: Int? = null
+
     /**
      * List of analysis results cached for reuse during the current turn. [processAnalysisResults] filters them per call without
      * changing them, so the Trackblazer irregular pre-screen's read also serves the turn's regular analysis.
@@ -410,6 +416,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
         /** Skip reason for a training whose failure chance could not be read. */
         const val SKIP_UNREADABLE_FAILURE_CHANCE = "unreadable failure chance"
+
+        /** Skip reason for a training over its failure chance limit; the risky-training limit appends " (risky)". */
+        const val SKIP_HIGH_FAILURE_CHANCE = "high failure chance"
 
         /**
          * Estimated failure chance at the given energy: non-Wit facilities follow ~2% per energy point below 50 and 0% at
@@ -942,6 +951,29 @@ class Training(private val game: Game, private val campaign: Campaign) {
             if (StatName.STAMINA in config.blacklist) return null
             val stamina = trainingScores.keys.firstOrNull { it.name == StatName.STAMINA } ?: return null
             return stamina.takeIf { (it.statGains[StatName.STAMINA] ?: 0) >= GOAL_FLOOR_MIN_GAIN }
+        }
+
+        /** Fewest turns before the goal at which the floor still rests: a rest the turn before leaves no turn to train the Stamina. */
+        const val GOAL_FLOOR_REST_MIN_TURNS: Int = 2
+
+        /**
+         * True when the turn should rest instead of [best]: a long-goal floor the trainee is under, Year-2+ scoring, the goal at
+         * least [GOAL_FLOOR_REST_MIN_TURNS] turns away, and [skippedStamina] left out only by the failure-chance limit with a main
+         * gain of at least [GOAL_FLOOR_MIN_GAIN] while [energy] is low enough for a rest to lower that chance. Without it the
+         * low-failure Wit (about +5 Energy) passes the gate turn after turn and Energy never climbs back to where Stamina trains.
+         */
+        fun goalFloorRest(config: TrainingConfig, skippedStamina: TrainingOption?, best: TrainingOption?, energy: Int): Boolean {
+            val floor = config.longGoalStaminaFloor ?: return false
+            if (best == null || best.name == StatName.STAMINA) return false
+            if (!usesStatEfficiencyScoring(config.scenario, config.currentDate)) return false
+            if (floor.goalTurn - config.currentDate.day < GOAL_FLOOR_REST_MIN_TURNS) return false
+            if ((config.currentStats[StatName.STAMINA] ?: 0) >= floor.floor) return false
+            if (StatName.STAMINA in config.blacklist) return false
+            val stamina = skippedStamina?.takeIf { it.name == StatName.STAMINA } ?: return false
+            if (stamina.skipReason?.startsWith(SKIP_HIGH_FAILURE_CHANCE) != true) return false
+            if ((stamina.statGains[StatName.STAMINA] ?: 0) < GOAL_FLOOR_MIN_GAIN) return false
+            // At or above the Energy where the curve reaches 0%, a high chance comes from something a rest does not cure (Practice Poor).
+            return estimateFailureChanceFromEnergy(energy, StatName.STAMINA) > 0
         }
 
         /** Level-based amplifier for a stat's priority weight: 1.0 when disabled, for rank 4-5, or at level 1; at Lvl 5 rank 1 = 1.75x, rank 2 = 1.25x, rank 3 = 1.10x. */
@@ -2222,10 +2254,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             TAG,
                             "[TRAINING] Skipping ${result.name} training due to failure chance (${result.failureChance}%) exceeding risky threshold ($riskyTrainingMaxFailureChance%) despite high main stat gain of $mainStatGain.",
                         )
-                        "high failure chance (risky)"
+                        "$SKIP_HIGH_FAILURE_CHANCE (risky)"
                     } else {
                         MessageLog.i(TAG, "[TRAINING] Skipping ${result.name} training due to failure chance (${result.failureChance}%) exceeding threshold ($maximumFailureChance%).")
-                        "high failure chance"
+                        SKIP_HIGH_FAILURE_CHANCE
                     }
 
                 // Store the skipped training for logging purposes.
@@ -2396,9 +2428,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
      * 3. **Mid/Late Game Rule**: Uses ratio-based stat efficiency scoring for Year 2 and beyond.
      *
      * @param forceSelection If true, the best training option will be selected even if it exceeds the failure chance threshold.
+     * @param allowGoalFloorRest If true, [goalFloorRest] may return null and leave [goalFloorRestPending] set; only [handleTrainingWithOutcome] acts on it.
      * @return The name of the recommended training option, or null if no suitable option is found.
      */
-    fun recommendTraining(forceSelection: Boolean = false, isIrregularEvaluation: Boolean = false): StatName? {
+    fun recommendTraining(forceSelection: Boolean = false, isIrregularEvaluation: Boolean = false, allowGoalFloorRest: Boolean = false): StatName? {
+        goalFloorRestPending = false
+
         // Build skillHintsPerLocation from the training map.
         val skillHintsPerLocation: Map<StatName, Int> = StatName.entries.associateWith { trainingMap[it]?.numSkillHints ?: 0 }
 
@@ -2483,7 +2518,23 @@ class Training(private val game: Game, private val campaign: Campaign) {
         // Year-2+ adds only a small bonus via calculateMiscScore). trainingScores holds only gate-passing trainings. See issue #372.
         val scored: TrainingOption? = selectBestTrainingWithHintPriority(trainingScores, enablePrioritizeSkillHints)
         val goalFloorPick: TrainingOption? = goalFloorOverride(trainingConfig, trainingScores, scored)
-        val best: TrainingOption? = goalFloorPick ?: scored
+        val gatePassingBest: TrainingOption? = goalFloorPick ?: scored
+        goalFloorRestPending =
+            allowGoalFloorRest && goalFloorRestFailedDay != campaign.date.day &&
+            goalFloorRest(trainingConfig, skippedTrainingMap[StatName.STAMINA], gatePassingBest, campaign.trainee.energy)
+        val best: TrainingOption? = if (goalFloorRestPending) null else gatePassingBest
+        if (goalFloorRestPending) {
+            trainingConfig.longGoalStaminaFloor?.let { floor ->
+                val skippedStamina = skippedTrainingMap[StatName.STAMINA]
+                MessageLog.i(
+                    TAG,
+                    "[TRAINING] [GOAL_FLOOR] ${floor.raceName} ${floor.distanceMeters}m at turn ${floor.goalTurn}: Stamina " +
+                        "${trainingConfig.currentStats[StatName.STAMINA] ?: 0} is below the floor ${floor.floor} (full ${floor.fullFloor}) and STAMINA " +
+                        "(+${skippedStamina?.statGains?.get(StatName.STAMINA) ?: 0}) is over the failure chance limit at ${skippedStamina?.failureChance}% " +
+                        "(Energy ${campaign.trainee.energy}), resting instead of ${gatePassingBest?.name}.",
+                )
+            }
+        }
         if (goalFloorPick != null) {
             trainingConfig.longGoalStaminaFloor?.let { floor ->
                 MessageLog.i(
@@ -2503,6 +2554,18 @@ class Training(private val game: Game, private val campaign: Campaign) {
         // DecisionTracer: build the runner-up list only when a tracer is attached (it can exist in normal release play when factual
         // recording is enabled); the null-safe call skips the allocation otherwise.
         val tracer = campaign.decisionTracer
+
+        if (goalFloorRestPending) {
+            lastSelectionSource = SelectionSource.ANALYSIS
+            tracer?.recordTrainingSelection(
+                selected = null,
+                source = SelectionSource.ANALYSIS,
+                reason = "goal floor: Stamina under ${trainingConfig.longGoalStaminaFloor?.floor} for ${trainingConfig.longGoalStaminaFloor?.raceName} " +
+                    "and over the failure chance limit, resting instead of ${gatePassingBest?.name}",
+                runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = null),
+            )
+            return null
+        }
 
         if (best != null) {
             lastSelectionSource = SelectionSource.ANALYSIS
@@ -2963,10 +3026,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     MessageLog.i(TAG, "[TRAINING] forceStat override active — selecting $forceStat without running recommendTraining.")
                     forceStat
                 } else {
-                    recommendTraining()
+                    recommendTraining(allowGoalFloorRest = true)
                 }
+            val goalFloorRestThisTurn = forceStat == null && goalFloorRestPending
+            goalFloorRestPending = false
 
-            if (trainingMap.isEmpty()) {
+            if (trainingMap.isEmpty() || goalFloorRestThisTurn) {
                 // Check if we should force Wit training during the Finale instead of recovering energy.
                 // Always force Wit on turn 75 since recovering energy on the very last turn is completely useless.
                 if ((trainWitDuringFinale && campaign.date.day > 72) || campaign.date.day == 75) {
@@ -3013,15 +3078,20 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     game.wait(1.0)
 
                     if (campaign.checkMainScreen()) {
-                        if (restrictedTrainingNames.size == StatName.entries.size || (restrictedTrainingNames.size + blacklist.size) >= StatName.entries.size) {
+                        if (goalFloorRestThisTurn) {
+                            MessageLog.v(TAG, "[TRAINING] [GOAL_FLOOR] Will recover energy so STAMINA can pass the failure chance limit before the goal race.")
+                        } else if (restrictedTrainingNames.size == StatName.entries.size || (restrictedTrainingNames.size + blacklist.size) >= StatName.entries.size) {
                             MessageLog.v(TAG, "[TRAINING] Will recover energy due to all available trainings being restricted or blacklisted.")
                         } else {
                             MessageLog.v(TAG, "[TRAINING] Will recover energy due to either failure chance was high enough to do so or no failure chances were detected via OCR.")
                         }
+                        val recoveryReason = if (goalFloorRestThisTurn) "Stamina under the goal floor and over the failure chance limit." else "No training worth taking this turn."
                         advanced = campaign.recoverEnergy()
-                        if (advanced) campaign.decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "No training worth taking this turn.")
+                        if (advanced) campaign.decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", recoveryReason)
+                        if (!advanced && goalFloorRestThisTurn) goalFloorRestFailedDay = campaign.date.day
                     } else {
                         MessageLog.w(TAG, "[WARN] handleTraining:: Could not head back to the Main screen in order to recover energy.")
+                        if (goalFloorRestThisTurn) goalFloorRestFailedDay = campaign.date.day
                     }
                 }
             } else {
